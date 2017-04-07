@@ -151,12 +151,17 @@ endif
 boot		:= arch/arm64/boot
 KBUILD_IMAGE	:= $(boot)/$(KBUILD_TARGET)
 
-all:	$(KBUILD_TARGET)
+KBUILD_DTBO_IMG := dtbo.img
+
+all:	$(KBUILD_DTBO_IMG) $(KBUILD_TARGET)
 
 Image: vmlinux
 	$(Q)$(MAKE) $(build)=$(boot) $(boot)/$@
 
 Image.%: Image
+	$(Q)$(MAKE) $(build)=$(boot) $(boot)/$@
+
+dtbo.img: $(boot)/dts/dtboimg.cfg dtbs
 	$(Q)$(MAKE) $(build)=$(boot) $(boot)/$@
 
 zinstall install:
@@ -171,6 +176,9 @@ vdso_install:
 # We use MRPROPER_FILES and CLEAN_FILES now
 archclean:
 	$(Q)$(MAKE) $(clean)=$(boot)
+
+CLEAN_FILES += $(boot)/Image $(boot)/Image.* $(boot)/dtbo.img
+MRPROPER_FILES += $(boot)/Image $(boot)/Image.* $(boot)/dtbo.img
 
 ifeq ($(KBUILD_EXTMOD),)
 # We need to generate vdso-offsets.h before compiling certain files in kernel/.
