@@ -882,3 +882,7 @@ config MULTIPLE_KSWAPD
 	 (echo <num> > /proc/sys/vm/kswapd_threads)
 
 	 Values not in the range of 1..16 are ignored.
+
+config VMSTAT_INTERVAL
+	int "Default interval in seconds to update vmstat"
+	default 1
