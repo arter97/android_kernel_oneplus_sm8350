@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2016-2020, The Linux Foundation. All rights reserved. */
+/* Copyright (c) 2016-2021, The Linux Foundation. All rights reserved. */
 
 #define pr_fmt(fmt) "%s " fmt, KBUILD_MODNAME
 
@@ -254,6 +254,20 @@ static inline void enable_tcs_irq(struct rsc_drv *drv, int tcs_id, bool enable)
 	else
 		data &= ~BIT(tcs_id);
 	write_tcs_reg(drv, RSC_DRV_IRQ_ENABLE, 0, data);
+}
+
+static int rsc_suspend(struct device *dev)
+{
+	return 0;
+}
+
+static int rsc_resume(struct device *dev)
+{
+	struct rsc_drv *drv = (struct rsc_drv *)dev_get_drvdata(dev);
+
+	write_tcs_reg(drv, RSC_DRV_IRQ_ENABLE, 0, drv->tcs[ACTIVE_TCS].mask);
+
+	return 0;
 }
 
 /**
@@ -932,6 +946,11 @@ static int rpmh_rsc_probe(struct platform_device *pdev)
 	return devm_of_platform_populate(&pdev->dev);
 }
 
+static const struct dev_pm_ops rpmh_rsc_dev_pm_ops = {
+	.poweroff_noirq = rsc_suspend,
+	.restore_noirq = rsc_resume,
+};
+
 static const struct of_device_id rpmh_drv_match[] = {
 	{ .compatible = "qcom,rpmh-rsc", },
 	{ }
@@ -943,6 +962,7 @@ static struct platform_driver rpmh_driver = {
 	.probe = rpmh_rsc_probe,
 	.driver = {
 		  .name = "rpmh",
+		  .pm = &rpmh_rsc_dev_pm_ops,
 		  .of_match_table = rpmh_drv_match,
 		  .suppress_bind_attrs = true,
 	},
