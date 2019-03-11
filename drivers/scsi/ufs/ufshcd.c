@@ -8946,12 +8946,26 @@ static int ufshcd_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 	/* enable the host irq as host controller would be active soon */
 	ufshcd_enable_irq(hba);
 
-#if !defined(CONFIG_SCSI_UFSHCD_QTI)
+
+#if defined(CONFIG_SCSI_UFSHCD_QTI)
+	if (hba->restore) {
+		/* Configure UTRL and UTMRL base address registers */
+		ufshcd_writel(hba, lower_32_bits(hba->utrdl_dma_addr),
+			      REG_UTP_TRANSFER_REQ_LIST_BASE_L);
+		ufshcd_writel(hba, upper_32_bits(hba->utrdl_dma_addr),
+			      REG_UTP_TRANSFER_REQ_LIST_BASE_H);
+		ufshcd_writel(hba, lower_32_bits(hba->utmrdl_dma_addr),
+			      REG_UTP_TASK_REQ_LIST_BASE_L);
+		ufshcd_writel(hba, upper_32_bits(hba->utmrdl_dma_addr),
+			      REG_UTP_TASK_REQ_LIST_BASE_H);
+		/* Commit the registers */
+		mb();
+	}
+#else
 	ret = ufshcd_vreg_set_hpm(hba);
 	if (ret)
 		goto disable_irq_and_vops_clks;
 #endif
-
 	/*
 	 * Call vendor specific resume callback. As these callbacks may access
 	 * vendor specific host controller register space call them when the
@@ -8961,6 +8975,10 @@ static int ufshcd_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 	if (ret)
 #if defined(CONFIG_SCSI_UFSHCD_QTI)
 		goto disable_irq_and_vops_clks;
+
+	/* Resuming from hibernate, assume that link was OFF */
+	if (hba->restore)
+		ufshcd_set_link_off(hba);
 #else
 		goto disable_vreg;
 #endif
@@ -9052,6 +9070,12 @@ disable_vreg:
 #endif
 out:
 	hba->pm_op_in_progress = 0;
+
+#if defined(CONFIG_SCSI_UFSHCD_QTI)
+	if (hba->restore)
+		hba->restore = false;
+#endif
+
 	if (ret)
 		ufshcd_update_reg_hist(&hba->ufs_stats.resume_err, (u32)ret);
 	return ret;
@@ -9213,6 +9237,26 @@ int ufshcd_runtime_idle(struct ufs_hba *hba)
 }
 EXPORT_SYMBOL(ufshcd_runtime_idle);
 
+#if defined(CONFIG_SCSI_UFSHCD_QTI)
+int ufshcd_system_freeze(struct ufs_hba *hba)
+{
+	return ufshcd_system_suspend(hba);
+}
+EXPORT_SYMBOL(ufshcd_system_freeze);
+
+int ufshcd_system_restore(struct ufs_hba *hba)
+{
+	hba->restore = true;
+	return ufshcd_system_resume(hba);
+}
+EXPORT_SYMBOL(ufshcd_system_restore);
+
+int ufshcd_system_thaw(struct ufs_hba *hba)
+{
+	return ufshcd_system_resume(hba);
+}
+EXPORT_SYMBOL(ufshcd_system_thaw);
+#endif /* CONFIG_SCSI_UFSHCD_QTI */
 /**
  * ufshcd_shutdown - shutdown routine
  * @hba: per adapter instance
