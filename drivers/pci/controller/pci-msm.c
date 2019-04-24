@@ -875,6 +875,7 @@ struct msm_pcie_dev_t {
 	void *ipc_log_long;
 	void *ipc_log_dump;
 	bool use_pinctrl;
+	bool keep_powerdown_phy;
 	struct pinctrl *pinctrl;
 	struct pinctrl_state *pins_default;
 	struct pinctrl_state *pins_sleep;
@@ -3386,6 +3387,11 @@ static int msm_pcie_clk_init(struct msm_pcie_dev_t *dev)
 
 		regulator_disable(dev->gdsc);
 	}
+
+	/* Clear power down bit to enable PHY */
+	if (dev->keep_powerdown_phy && dev->phy_power_down_offset)
+		msm_pcie_write_mask(dev->phy + dev->phy_power_down_offset, 0,
+									BIT(4));
 
 	for (i = 0; i < MSM_PCIE_MAX_RESET; i++) {
 		reset_info = &dev->reset[i];
@@ -6440,6 +6446,19 @@ static int msm_pcie_probe(struct platform_device *pdev)
 	if (ret)
 		PCIE_DBG(pcie_dev,
 				"PCIe:RC%d didn't register pipeclock source\n", rc_idx);
+
+	pcie_dev->keep_powerdown_phy =
+		of_property_read_bool(of_node,
+				"qcom,keep-powerdown-phy");
+
+	/* Power down PHY to avoid leakage at 1.8V LDO */
+	if (pcie_dev->keep_powerdown_phy &&
+				pcie_dev->phy_power_down_offset) {
+		msm_pcie_clk_init(pcie_dev);
+		msm_pcie_write_reg(pcie_dev->phy,
+				pcie_dev->phy_power_down_offset, 0);
+		msm_pcie_clk_deinit(pcie_dev);
+	}
 
 	if (pcie_dev->boot_option & MSM_PCIE_NO_PROBE_ENUMERATION) {
 		PCIE_DBG(pcie_dev,
