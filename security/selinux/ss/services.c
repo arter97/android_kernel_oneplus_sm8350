@@ -443,6 +443,7 @@ mls_ops:
 	return s[0];
 }
 
+#ifdef CONFIG_AUDIT
 /*
  * security_dump_masked_av - dumps masked permissions during
  * security_compute_av due to RBAC, MLS/Constraint and Type bounds.
@@ -533,6 +534,7 @@ out:
 
 	return;
 }
+#endif
 
 /*
  * security_boundary_permission - drops violated permissions
@@ -585,9 +587,11 @@ static void type_attribute_bounds_av(struct policydb *policydb,
 	/* mask violated permissions */
 	avd->allowed &= ~masked;
 
+#ifdef CONFIG_AUDIT
 	/* audit masked permissions */
 	security_dump_masked_av(policydb, scontext, tcontext,
 				tclass, masked, "bounds");
+#endif
 }
 
 /*
@@ -722,13 +726,14 @@ static void context_struct_compute_av(struct policydb *policydb,
 				 tclass, avd);
 }
 
-static int security_validtrans_handle_fail(struct selinux_state *state,
+static inline int security_validtrans_handle_fail(struct selinux_state *state,
 					struct selinux_policy *policy,
 					struct sidtab_entry *oentry,
 					struct sidtab_entry *nentry,
 					struct sidtab_entry *tentry,
 					u16 tclass)
 {
+#ifdef CONFIG_AUDIT
 	struct policydb *p = &policy->policydb;
 	struct sidtab *sidtab = policy->sidtab;
 	char *o = NULL, *n = NULL, *t = NULL;
@@ -748,6 +753,7 @@ out:
 	kfree(o);
 	kfree(n);
 	kfree(t);
+#endif
 
 	if (!enforcing_enabled(state))
 		return 0;
@@ -922,6 +928,7 @@ int security_bounded_transition(struct selinux_state *state,
 		index = type->bounds;
 	}
 
+#ifdef CONFIG_AUDIT
 	if (rc) {
 		char *old_name = NULL;
 		char *new_name = NULL;
@@ -941,6 +948,7 @@ int security_bounded_transition(struct selinux_state *state,
 		kfree(new_name);
 		kfree(old_name);
 	}
+#endif
 out:
 	rcu_read_unlock();
 
@@ -1653,7 +1661,7 @@ int security_context_to_sid_force(struct selinux_state *state,
 					    sid, SECSID_NULL, GFP_KERNEL, 1);
 }
 
-static int compute_sid_handle_invalid_context(
+static inline int compute_sid_handle_invalid_context(
 	struct selinux_state *state,
 	struct selinux_policy *policy,
 	struct sidtab_entry *sentry,
@@ -1661,6 +1669,7 @@ static int compute_sid_handle_invalid_context(
 	u16 tclass,
 	struct context *newcontext)
 {
+#ifdef CONFIG_AUDIT
 	struct policydb *policydb = &policy->policydb;
 	struct sidtab *sidtab = policy->sidtab;
 	char *s = NULL, *t = NULL, *n = NULL;
@@ -1687,6 +1696,8 @@ out:
 	kfree(s);
 	kfree(t);
 	kfree(n);
+#endif
+
 	if (!enforcing_enabled(state))
 		return 0;
 	return -EACCES;
@@ -2000,17 +2011,21 @@ static inline int convert_context_handle_invalid_context(
 	struct policydb *policydb,
 	struct context *context)
 {
+#ifdef CONFIG_AUDIT
 	char *s;
 	u32 len;
+#endif
 
 	if (enforcing_enabled(state))
 		return -EINVAL;
 
+#ifdef CONFIG_AUDIT
 	if (!context_struct_to_string(policydb, context, &s, &len)) {
 		pr_warn("SELinux:  Context %s would be invalid if enforcing\n",
 			s);
 		kfree(s);
 	}
+#endif
 	return 0;
 }
 
@@ -2030,8 +2045,10 @@ static int convert_context(struct context *oldc, struct context *newc, void *p)
 	struct type_datum *typdatum;
 	struct user_datum *usrdatum;
 	char *s;
-	u32 len;
 	int rc;
+#ifdef CONFIG_AUDIT
+	u32 len;
+#endif
 
 	args = p;
 
@@ -2130,6 +2147,7 @@ static int convert_context(struct context *oldc, struct context *newc, void *p)
 
 	return 0;
 bad:
+#ifdef CONFIG_AUDIT
 	/* Map old representation to string and save it. */
 	rc = context_struct_to_string(args->oldp, oldc, &s, &len);
 	if (rc)
@@ -2139,6 +2157,9 @@ bad:
 	newc->len = len;
 	pr_info("SELinux:  Context %s became invalid (unmapped).\n",
 		newc->str);
+#else
+	context_destroy(newc);
+#endif
 	return 0;
 }
 
@@ -3225,9 +3246,11 @@ int security_sid_mls_copy(struct selinux_state *state,
 	struct context *context1;
 	struct context *context2;
 	struct context newcon;
+	int rc;
+#ifdef CONFIG_AUDIT
 	char *s;
 	u32 len;
-	int rc;
+#endif
 
 	if (!selinux_initialized(state)) {
 		*new_sid = sid;
@@ -3276,6 +3299,7 @@ retry:
 		rc = convert_context_handle_invalid_context(state, policydb,
 							&newcon);
 		if (rc) {
+#ifdef CONFIG_AUDIT
 			if (!context_struct_to_string(policydb, &newcon, &s,
 						      &len)) {
 				struct audit_buffer *ab;
@@ -3290,6 +3314,7 @@ retry:
 				audit_log_end(ab);
 				kfree(s);
 			}
+#endif
 			goto out_unlock;
 		}
 	}
