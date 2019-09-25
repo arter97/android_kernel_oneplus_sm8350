@@ -49,6 +49,14 @@ struct ion_buffer {
 	struct list_head attachments;
 };
 
+/* refer to include/linux/pm.h */
+#ifdef CONFIG_HIBERNATION
+struct ion_pm_ops {
+	int (*freeze)(struct ion_heap *heap);
+	int (*restore)(struct ion_heap *heap);
+};
+#endif
+
 /**
  * struct ion_heap_ops - ops to operate on a given heap
  * @allocate:		allocate memory
@@ -69,6 +77,9 @@ struct ion_heap_ops {
 	void (*free)(struct ion_buffer *buffer);
 	int (*shrink)(struct ion_heap *heap, gfp_t gfp_mask, int nr_to_scan);
 	long (*get_pool_size)(struct ion_heap *heap);
+#ifdef CONFIG_HIBERNATION
+	struct ion_pm_ops pm;
+#endif
 };
 
 /**
