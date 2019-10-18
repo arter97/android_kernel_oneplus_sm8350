@@ -725,6 +725,13 @@ static struct mhi_controller *mhi_register_controller(struct pci_dev *pci_dev)
 	mhi_cntrl->iova_stop = memblock_end_of_DRAM();
 
 	/*
+	 * Certain devices would send M1 events to MHI as they may not have
+	 * autonomous M2 support. MHI host can skip registering for link
+	 * inactivity timeouts in that case.
+	 */
+	mhi_dev->allow_m1 = of_property_read_bool(of_node, "mhi,allow-m1");
+
+	/*
 	 * Certain devices do not require a forced suspend/resume cycle at
 	 * mission mode entry after boot as they do not need to switch to
 	 * separate phy settings in order to enable low power modes
@@ -807,6 +814,9 @@ static struct mhi_controller *mhi_register_controller(struct pci_dev *pci_dev)
 	mhi_cntrl->fw_image = firmware_info->fw_image;
 	mhi_cntrl->edl_image = firmware_info->edl_image;
 
+	if (mhi_dev->allow_m1)
+		goto skip_offload;
+
 	mhi_cntrl->offload_wq = alloc_ordered_workqueue("offload_wq",
 						WQ_MEM_RECLAIM | WQ_HIGHPRI);
 	if (!mhi_cntrl->offload_wq)
@@ -826,6 +836,7 @@ static struct mhi_controller *mhi_register_controller(struct pci_dev *pci_dev)
 	if (sysfs_create_group(&mhi_cntrl->mhi_dev->dev.kobj, &mhi_qcom_group))
 		MHI_CNTRL_ERR("Error while creating the sysfs group\n");
 
+skip_offload:
 	return mhi_cntrl;
 
 error_free_wq:

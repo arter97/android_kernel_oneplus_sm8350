@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-/* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.*/
+/* Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.*/
 
 #ifndef _MHI_QCOM_
 #define _MHI_QCOM_
@@ -61,6 +61,7 @@ struct mhi_dev {
 	void *arch_info;
 	bool powered_on;
 	bool skip_forced_suspend;
+	bool allow_m1;
 	dma_addr_t iova_start;
 	dma_addr_t iova_stop;
 	enum mhi_suspend_mode suspend_mode;
