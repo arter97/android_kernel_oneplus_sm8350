@@ -768,7 +768,7 @@ int nfs4_init_cp_state(struct nfsd_net *nn, struct nfsd4_copy *copy)
 	if (new_id < 0)
 		return 0;
 	copy->cp_stateid.si_opaque.so_id = new_id;
-	copy->cp_stateid.si_opaque.so_clid.cl_boot = nn->boot_time;
+	copy->cp_stateid.si_opaque.so_clid.cl_boot = (u32)nn->boot_time;
 	copy->cp_stateid.si_opaque.so_clid.cl_id = nn->s2s_cp_cl_id;
 	return 1;
 }
@@ -1884,7 +1884,7 @@ STALE_CLIENTID(clientid_t *clid, struct nfsd_net *nn)
 	 */
 	if (clid->cl_boot == (u32)nn->boot_time)
 		return 0;
-	dprintk("NFSD stale clientid (%08x/%08x) boot_time %08lx\n",
+	dprintk("NFSD stale clientid (%08x/%08x) boot_time %08llx\n",
 		clid->cl_boot, clid->cl_id, nn->boot_time);
 	return 1;
 }
@@ -2244,7 +2244,7 @@ static void gen_confirm(struct nfs4_client *clp, struct nfsd_net *nn)
 
 static void gen_clid(struct nfs4_client *clp, struct nfsd_net *nn)
 {
-	clp->cl_clientid.cl_boot = nn->boot_time;
+	clp->cl_clientid.cl_boot = (u32)nn->boot_time;
 	clp->cl_clientid.cl_id = nn->clientid_counter++;
 	gen_confirm(clp, nn);
 }
@@ -5212,9 +5212,9 @@ nfsd4_end_grace(struct nfsd_net *nn)
  */
 static bool clients_still_reclaiming(struct nfsd_net *nn)
 {
-	unsigned long now = get_seconds();
-	unsigned long double_grace_period_end = nn->boot_time +
-						2 * nn->nfsd4_lease;
+	unsigned long now = (unsigned long) ktime_get_real_seconds();
+	unsigned long double_grace_period_end = (unsigned long)nn->boot_time +
+					   2 * (unsigned long)nn->nfsd4_lease;
 
 	if (nn->track_reclaim_completes &&
 			atomic_read(&nn->nr_reclaim_complete) ==
@@ -7673,7 +7673,7 @@ static int nfs4_state_create_net(struct net *net)
 		INIT_LIST_HEAD(&nn->sessionid_hashtbl[i]);
 	nn->conf_name_tree = RB_ROOT;
 	nn->unconf_name_tree = RB_ROOT;
-	nn->boot_time = get_seconds();
+	nn->boot_time = ktime_get_real_seconds();
 	nn->grace_ended = false;
 	nn->nfsd4_manager.block_opens = true;
 	INIT_LIST_HEAD(&nn->nfsd4_manager.list);
