@@ -500,15 +500,18 @@ xfs_qm_scall_setqlim(
 		 */
 		if (newlim->d_fieldmask & QC_SPC_TIMER) {
 			q->qi_btimelimit = newlim->d_spc_timer;
-			ddq->d_btimer = cpu_to_be32(newlim->d_spc_timer);
+			ddq->d_btimer = cpu_to_be32(lower_32_bits(newlim->d_spc_timer));
+			ddq->d_btimer_high = (u8)upper_32_bits(newlim->d_spc_timer);
 		}
 		if (newlim->d_fieldmask & QC_INO_TIMER) {
 			q->qi_itimelimit = newlim->d_ino_timer;
-			ddq->d_itimer = cpu_to_be32(newlim->d_ino_timer);
+			ddq->d_itimer = cpu_to_be32(lower_32_bits(newlim->d_ino_timer));
+			ddq->d_itimer_high = (u8)upper_32_bits(newlim->d_ino_timer);
 		}
 		if (newlim->d_fieldmask & QC_RT_SPC_TIMER) {
 			q->qi_rtbtimelimit = newlim->d_rt_spc_timer;
 			ddq->d_rtbtimer = cpu_to_be32(newlim->d_rt_spc_timer);
+			ddq->d_rtbtimer_high = (u8)upper_32_bits(newlim->d_rt_spc_timer);
 		}
 		if (newlim->d_fieldmask & QC_SPC_WARNS)
 			q->qi_bwarnlimit = newlim->d_spc_warns;
@@ -623,8 +626,10 @@ xfs_qm_scall_getquota_fill_qc(
 	dst->d_ino_softlimit = be64_to_cpu(dqp->q_core.d_ino_softlimit);
 	dst->d_space = XFS_FSB_TO_B(mp, dqp->q_res_bcount);
 	dst->d_ino_count = dqp->q_res_icount;
-	dst->d_spc_timer = be32_to_cpu(dqp->q_core.d_btimer);
-	dst->d_ino_timer = be32_to_cpu(dqp->q_core.d_itimer);
+	dst->d_spc_timer = be32_to_cpu(dqp->q_core.d_btimer) +
+			   ((u64)dqp->q_core.d_btimer_high << 32);
+	dst->d_ino_timer = be32_to_cpu(dqp->q_core.d_itimer) +
+			   ((u64)dqp->q_core.d_itimer_high << 32);
 	dst->d_ino_warns = be16_to_cpu(dqp->q_core.d_iwarns);
 	dst->d_spc_warns = be16_to_cpu(dqp->q_core.d_bwarns);
 	dst->d_rt_spc_hardlimit =
@@ -632,7 +637,8 @@ xfs_qm_scall_getquota_fill_qc(
 	dst->d_rt_spc_softlimit =
 		XFS_FSB_TO_B(mp, be64_to_cpu(dqp->q_core.d_rtb_softlimit));
 	dst->d_rt_space = XFS_FSB_TO_B(mp, dqp->q_res_rtbcount);
-	dst->d_rt_spc_timer = be32_to_cpu(dqp->q_core.d_rtbtimer);
+	dst->d_rt_spc_timer = be32_to_cpu(dqp->q_core.d_rtbtimer) +
+			   ((u64)dqp->q_core.d_rtbtimer_high << 32);
 	dst->d_rt_spc_warns = be16_to_cpu(dqp->q_core.d_rtbwarns);
 
 	/*
