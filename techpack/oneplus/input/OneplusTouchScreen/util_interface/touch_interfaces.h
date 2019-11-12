@@ -45,12 +45,8 @@ int touch_i2c_write_block(struct i2c_client *client, u16 addr, unsigned short le
 int touch_i2c_read(struct i2c_client *client, char *writebuf, int writelen, char *readbuf, int readlen);
 int touch_i2c_write(struct i2c_client *client, char *writebuf, int writelen);
 
-int init_touch_interfaces(struct device *dev, bool flag_register_16bit);
 int touch_i2c_continue_read(struct i2c_client *client, unsigned short length, unsigned char *data);
 int touch_i2c_continue_write(struct i2c_client *client, unsigned short length, unsigned char *data);
-int32_t spi_read_write(struct spi_device *client, uint8_t * buf, size_t len, uint8_t * rbuf, SPI_RW rw);
-int32_t CTP_SPI_READ(struct spi_device *client, uint8_t * buf, uint16_t len);
-int32_t CTP_SPI_WRITE(struct spi_device *client, uint8_t * buf, uint16_t len);
 ssize_t tp_test_write(void *data_start, size_t max_count, const char *buf, size_t count, ssize_t * pos);
 
 #endif
