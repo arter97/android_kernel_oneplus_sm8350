@@ -28,9 +28,6 @@
 //#include <linux/oneplus/boot_mode.h>
 #include <linux/workqueue.h>
 
-#include "util_interface/touch_interfaces.h"
-#include "tp_devices.h"
-
 #ifdef TPD_DEVICE
 extern unsigned int tp_debug;
 #define TPD_INFO(a, arg...)  pr_err("[TP]"TPD_DEVICE ": " a, ##arg)
@@ -52,6 +49,9 @@ extern unsigned int tp_debug;
 		printk(a, ##arg);\
 	}while(0)
 #endif
+
+#include "util_interface/touch_interfaces.h"
+#include "tp_devices.h"
 
 #define EFTM (250)
 #define FW_UPDATE_COMPLETE_TIMEOUT  msecs_to_jiffies(40*1000)

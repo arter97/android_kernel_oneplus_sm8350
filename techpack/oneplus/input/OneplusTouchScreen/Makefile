@@ -9,7 +9,6 @@
 touchscreen-objs += \
 	samsung/s6sy792/sec_drivers_s6sy792.o \
 	samsung/sec_common.o \
-	util_interface/touch_interfaces.o \
 	synaptics/syna_tcm_oncell/synaptics_tcm_oncell.o \
 	synaptics/syna_tcm_oncell/synaptics_tcm_device.o \
 	synaptics/syna_tcm_oncell/synaptics_tcm_recovery.o \
