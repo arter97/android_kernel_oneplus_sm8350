@@ -109,12 +109,10 @@ static inline size_t size_vstruct(size_t nelem, size_t elem_size, size_t base)
 static inline unsigned long etnaviv_timeout_to_jiffies(
 	const struct drm_etnaviv_timespec *timeout)
 {
-	struct timespec64 ts, to = {
-		.tv_sec = timeout->tv_sec,
-		.tv_nsec = timeout->tv_nsec,
-	};
+	struct timespec64 ts, to;
 
 	ktime_get_ts64(&ts);
+	set_normalized_timespec64(&to, timeout->tv_sec, timeout->tv_nsec);
 
 	/* timeouts before "now" have already expired */
 	if (timespec64_compare(&to, &ts) <= 0)
