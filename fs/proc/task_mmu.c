@@ -1877,7 +1877,7 @@ cont:
 
 		list_add(&page->lru, &page_list);
 		inc_node_page_state(page, NR_ISOLATED_ANON +
-				page_is_file_cache(page));
+				page_is_file_lru(page));
 		isolated++;
 		if (isolated >= SWAP_CLUSTER_MAX)
 			break;

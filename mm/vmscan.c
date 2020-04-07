@@ -953,7 +953,7 @@ static int __remove_mapping(struct address_space *mapping, struct page *page,
 		 * exceptional entries and shadow exceptional entries in the
 		 * same address_space.
 		 */
-		if (reclaimed && page_is_file_cache(page) &&
+		if (reclaimed && page_is_file_lru(page) &&
 		    !mapping_exiting(mapping) && !dax_mapping(mapping))
 			shadow = workingset_eviction(page, target_memcg);
 		__delete_from_page_cache(page, shadow);
@@ -1077,7 +1077,7 @@ static void page_check_dirty_writeback(struct page *page,
 	 * Anonymous pages are not handled by flushers and must be written
 	 * from reclaim context. Do not stall reclaim based on them
 	 */
-	if (!page_is_file_cache(page) ||
+	if (!page_is_file_lru(page) ||
 	    (PageAnon(page) && !PageSwapBacked(page))) {
 		*dirty = false;
 		*writeback = false;
@@ -1353,7 +1353,7 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 			 * the rest of the LRU for clean pages and see
 			 * the same dirty pages again (PageReclaim).
 			 */
-			if (page_is_file_cache(page) &&
+			if (page_is_file_lru(page) &&
 			    (!current_is_kswapd() || !PageReclaim(page) ||
 			     (pgdat &&
 				!test_bit(PGDAT_DIRTY, &pgdat->flags)))) {
@@ -1486,7 +1486,7 @@ free_it:
 		 */
 		if (!pgdat)
 			dec_node_page_state(page, NR_ISOLATED_ANON +
-					page_is_file_cache(page));
+					page_is_file_lru(page));
 		continue;
 
 activate_locked_split:
@@ -1505,7 +1505,7 @@ activate_locked:
 			try_to_free_swap(page);
 		VM_BUG_ON_PAGE(PageActive(page), page);
 		if (!PageMlocked(page)) {
-			int type = page_is_file_cache(page);
+			int type = page_is_file_lru(page);
 			SetPageActive(page);
 			stat->nr_activate[type] += nr_pages;
 			count_memcg_page_event(page, PGACTIVATE);
@@ -1543,7 +1543,7 @@ unsigned long reclaim_clean_pages_from_list(struct zone *zone,
 	LIST_HEAD(clean_pages);
 
 	list_for_each_entry_safe(page, next, page_list, lru) {
-		if (page_is_file_cache(page) && !PageDirty(page) &&
+		if (page_is_file_lru(page) && !PageDirty(page) &&
 		    !__PageMovable(page) && !PageUnevictable(page)) {
 			ClearPageActive(page);
 			list_move(&page->lru, &clean_pages);
@@ -1584,7 +1584,7 @@ unsigned long reclaim_pages_from_list(struct list_head *page_list,
 		page = lru_to_page(page_list);
 		list_del(&page->lru);
 		dec_node_page_state(page, NR_ISOLATED_ANON +
-				page_is_file_cache(page));
+				page_is_file_lru(page));
 		putback_lru_page(page);
 	}
 
@@ -2134,7 +2134,7 @@ static void shrink_active_list(unsigned long nr_to_scan,
 			 * IO, plus JVM can create lots of anon VM_EXEC pages,
 			 * so we ignore them here.
 			 */
-			if ((vm_flags & VM_EXEC) && page_is_file_cache(page)) {
+			if ((vm_flags & VM_EXEC) && page_is_file_lru(page)) {
 				list_add(&page->lru, &l_active);
 				continue;
 			}
