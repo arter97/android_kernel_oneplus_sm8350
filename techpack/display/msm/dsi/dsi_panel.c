@@ -5055,6 +5055,9 @@ int dsi_panel_get_mode(struct dsi_panel *panel,
 			mode->panel_mode = panel->panel_mode;
 		}
 
+		mode->splash_dms = of_property_read_bool(child_np,
+				"qcom,mdss-dsi-splash-dms-switch-to-this-timing");
+
 #ifdef CONFIG_PXLW_IRIS
 		if (iris_is_chip_supported()) {
 			dsi_panel_parse_adfr(mode, utils);
