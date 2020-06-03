@@ -2690,7 +2690,7 @@ void filemap_map_pages(struct vm_fault *vmf,
 				vmf->flags |= FAULT_FLAG_PREFAULT_OLD;
 		}
 
-		if (alloc_set_pte(vmf, NULL, page))
+		if (alloc_set_pte(vmf, page))
 			goto unlock;
 		unlock_page(page);
 		goto next;
