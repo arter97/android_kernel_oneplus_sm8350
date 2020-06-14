@@ -261,6 +261,8 @@ clk_rcg2_recalc_rate(struct clk_hw *hw, unsigned long parent_rate)
 	unsigned long rrate = 0, prate;
 
 	if (rcg->flags & RCG_UPDATE_BEFORE_PLL) {
+		if (!parent)
+			return -EINVAL;
 		prate =  clk_hw_get_rate(parent);
 		if (prate != parent_rate)
 			parent_rate = prate;
