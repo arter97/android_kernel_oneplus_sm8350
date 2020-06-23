@@ -2509,6 +2509,7 @@
 
 			timing@wqhd_sdc_60 {
 				#include "dsi-panel-samsung-amb670yf01-dsc-cmd-common.dtsi"
+				qcom,mdss-dsi-splash-dms-switch-to-this-timing;
 				qcom,mdss-mdp-transfer-time-us = <7700>;
 				qcom,mdss-dsi-panel-framerate = <60>;
 				qcom,mdss-dsi-panel-clockrate = <1372000000>;
