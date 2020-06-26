@@ -3090,6 +3090,14 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 				if (err)
 					goto out_page;
 
+				/*
+				 * XXX: Move to lru_cache_add() when it
+				 * supports new vs putback
+				 */
+				spin_lock_irq(&page_pgdat(page)->lru_lock);
+				lru_note_cost_page(page);
+				spin_unlock_irq(&page_pgdat(page)->lru_lock);
+
 				lru_cache_add(page);
 				swap_readpage(page, true);
 			}
