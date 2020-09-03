@@ -5644,7 +5644,7 @@ int dsi_display_dev_probe(struct platform_device *pdev)
 		if (!panel_node)
 			DSI_WARN("default panel not found\n");
 
-		if (0)
+		if (IS_ENABLED(CONFIG_DSI_PARSER) && !display->trusted_vm_env)
 			firm_req = !request_firmware_nowait(
 				THIS_MODULE, 1, "dsi_prop",
 				&pdev->dev, GFP_KERNEL, display,
