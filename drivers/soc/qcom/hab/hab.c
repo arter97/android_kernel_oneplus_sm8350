@@ -124,7 +124,9 @@ void hab_ctx_free(struct kref *ref)
 		pr_debug("potential leak exp %d vcid %X recovered\n",
 				exp->export_id, exp->vcid_local);
 		habmem_hyp_revoke(exp->payload, exp->payload_count);
+		write_unlock_bh(&ctx->exp_lock);
 		habmem_remove_export(exp);
+		write_lock_bh(&ctx->exp_lock);
 	}
 	write_unlock_bh(&ctx->exp_lock);
 
