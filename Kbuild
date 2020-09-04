@@ -361,6 +361,9 @@ endif
 ifeq ($(CONFIG_REMOVE_PKT_LOG), n)
 HDD_OBJS += $(HDD_SRC_DIR)/wlan_hdd_sysfs_pktlog.o
 endif
+ifeq ($(CONFIG_WLAN_DL_MODES), y)
+HDD_OBJS += $(HDD_SRC_DIR)/wlan_hdd_sysfs_dl_modes.o
+endif
 HDD_OBJS += $(HDD_SRC_DIR)/wlan_hdd_sysfs_policy_mgr.o
 HDD_OBJS += $(HDD_SRC_DIR)/wlan_hdd_sysfs_dp_aggregation.o
 endif
@@ -719,7 +722,13 @@ CLD_WMI_ROAM_OBJS +=	$(WMI_DIR)/src/wmi_unified_roam_tlv.o \
 			$(WMI_DIR)/src/wmi_unified_roam_api.o
 endif
 
-CLD_WMI_OBJS :=	$(CLD_WMI_ROAM_OBJS)
+ifeq ($(CONFIG_CP_STATS), y)
+CLD_WMI_MC_CP_STATS_OBJS :=	$(WMI_DIR)/src/wmi_unified_mc_cp_stats_tlv.o \
+				$(WMI_DIR)/src/wmi_unified_mc_cp_stats_api.o
+endif
+
+CLD_WMI_OBJS :=	$(CLD_WMI_ROAM_OBJS) \
+		$(CLD_WMI_MC_CP_STATS_OBJS)
 
 ############ Qca-wifi-host-cmn ############
 QDF_OS_DIR :=	qdf
@@ -1439,7 +1448,7 @@ TARGET_IF_OBJ := $(TARGET_IF_DIR)/core/src/target_if_main.o \
 		$(TARGET_IF_DIR)/mlme/vdev_mgr/src/target_if_vdev_mgr_rx_ops.o \
 		$(TARGET_IF_DIR)/mlme/psoc/src/target_if_psoc_timer_tx_ops.o
 
-ifeq ($(CONFIG_FEATURE_VDEV_RSP_WAKELOCK), y)
+ifeq ($(CONFIG_FEATURE_VDEV_OPS_WAKELOCK), y)
 TARGET_IF_OBJ += $(TARGET_IF_DIR)/mlme/psoc/src/target_if_psoc_wake_lock.o
 endif
 
@@ -1557,6 +1566,11 @@ endif
 ifeq ($(CONFIG_WLAN_CFR_ENABLE), y)
 WMI_OBJS += $(WMI_OBJ_DIR)/wmi_unified_cfr_tlv.o
 WMI_OBJS += $(WMI_OBJ_DIR)/wmi_unified_cfr_api.o
+endif
+
+ifeq ($(CONFIG_CP_STATS), y)
+WMI_OBJS += $(WMI_OBJ_DIR)/wmi_unified_cp_stats_api.o
+WMI_OBJS += $(WMI_OBJ_DIR)/wmi_unified_cp_stats_tlv.o
 endif
 
 ########### FWLOG ###########
@@ -2537,6 +2551,9 @@ cppflags-$(CONFIG_DIRECT_BUF_RX_ENABLE) += -DDBR_MULTI_SRNG_ENABLE
 endif
 cppflags-$(CONFIG_WMI_CMD_STRINGS) += -DWMI_CMD_STRINGS
 cppflags-$(CONFIG_WLAN_FEATURE_TWT) += -DWLAN_SUPPORT_TWT
+ifdef CONFIG_WLAN_TWT_SAP_STA_COUNT
+ccflags-y += -DWLAN_TWT_SAP_STA_COUNT=$(CONFIG_WLAN_TWT_SAP_STA_COUNT)
+endif
 cppflags-$(CONFIG_WLAN_DISABLE_EXPORT_SYMBOL) += -DWLAN_DISABLE_EXPORT_SYMBOL
 cppflags-$(CONFIG_WIFI_POS_CONVERGED) += -DWIFI_POS_CONVERGED
 cppflags-$(CONFIG_WIFI_POS_LEGACY) += -DFEATURE_OEM_DATA_SUPPORT
@@ -2547,6 +2564,7 @@ cppflags-$(CONFIG_WLAN_LOGGING_SOCK_SVC) += -DWLAN_LOGGING_SOCK_SVC_ENABLE
 cppflags-$(CONFIG_WLAN_LOGGING_BUFFERS_DYNAMICALLY) += -DWLAN_LOGGING_BUFFERS_DYNAMICALLY
 cppflags-$(CONFIG_WLAN_FEATURE_FILS) += -DWLAN_FEATURE_FILS_SK
 cppflags-$(CONFIG_CP_STATS) += -DQCA_SUPPORT_CP_STATS
+cppflags-$(CONFIG_CP_STATS) += -DQCA_SUPPORT_MC_CP_STATS
 cppflags-$(CONFIG_DCS) += -DDCS_INTERFERENCE_DETECTION
 cppflags-$(CONFIG_FEATURE_INTEROP_ISSUES_AP) += -DWLAN_FEATURE_INTEROP_ISSUES_AP
 cppflags-$(CONFIG_FEATURE_MEMDUMP_ENABLE) += -DWLAN_FEATURE_MEMDUMP_ENABLE
@@ -2683,6 +2701,7 @@ cppflags-$(CONFIG_WLAN_SYSFS_MEM_STATS) += -DCONFIG_WLAN_SYSFS_MEM_STATS
 cppflags-$(CONFIG_WLAN_SYSFS_DCM) += -DWLAN_SYSFS_DCM
 cppflags-$(CONFIG_WLAN_SYSFS_HE_BSS_COLOR) += -DWLAN_SYSFS_HE_BSS_COLOR
 cppflags-$(CONFIG_WLAN_SYSFS_STA_INFO) += -DWLAN_SYSFS_STA_INFO
+cppflags-$(CONFIG_WLAN_DL_MODES) += -DCONFIG_WLAN_DL_MODES
 
 ifeq ($(CONFIG_LEAK_DETECTION), y)
 cppflags-y += \
@@ -3194,7 +3213,7 @@ cppflags-$(CONFIG_RXDMA_ERR_PKT_DROP) += -DRXDMA_ERR_PKT_DROP
 cppflags-$(CONFIG_MAX_ALLOC_PAGE_SIZE) += -DMAX_ALLOC_PAGE_SIZE
 cppflags-$(CONFIG_DELIVERY_TO_STACK_STATUS_CHECK) += -DDELIVERY_TO_STACK_STATUS_CHECK
 
-cppflags-$(CONFIG_LITHIUM) += -DWAR_TXDMA_LIMITATION
+cppflags-$(CONFIG_LITHIUM) += -DFIX_TXDMA_LIMITATION
 cppflags-$(CONFIG_LITHIUM) += -DFEATURE_AST
 cppflags-$(CONFIG_LITHIUM) += -DPEER_PROTECTED_ACCESS
 cppflags-$(CONFIG_LITHIUM) += -DSERIALIZE_QUEUE_SETUP
@@ -3209,7 +3228,7 @@ cppflags-$(CONFIG_REGISTER_OP_DEBUG) += -DHAL_REGISTER_WRITE_DEBUG
 cppflags-$(CONFIG_ENABLE_QDF_PTR_HASH_DEBUG) += -DENABLE_QDF_PTR_HASH_DEBUG
 #Enable STATE MACHINE HISTORY
 cppflags-$(CONFIG_SM_ENG_HIST) += -DSM_ENG_HIST_ENABLE
-cppflags-$(CONFIG_FEATURE_VDEV_RSP_WAKELOCK) += -DFEATURE_VDEV_RSP_WAKELOCK
+cppflags-$(CONFIG_FEATURE_VDEV_OPS_WAKELOCK) += -DFEATURE_VDEV_OPS_WAKELOCK
 
 # Vendor Commands
 cppflags-$(CONFIG_FEATURE_RSSI_MONITOR) += -DFEATURE_RSSI_MONITOR
@@ -3545,6 +3564,8 @@ cppflags-$(CONFIG_RX_FISA) += -DWLAN_SUPPORT_RX_FISA
 
 cppflags-$(CONFIG_RX_DEFRAG_DO_NOT_REINJECT) += -DRX_DEFRAG_DO_NOT_REINJECT
 
+cppflags-$(CONFIG_HANDLE_BC_EAP_TX_FRM) += -DHANDLE_BROADCAST_EAPOL_TX_FRAME
+
 cppflags-$(CONFIG_MORE_TX_DESC) += -DTX_TO_NPEERS_INC_TX_DESCS
 
 ccflags-$(CONFIG_HASTINGS_BT_WAR) += -DHASTINGS_BT_WAR
@@ -3602,13 +3623,25 @@ endif
 # If the module name is wlan, leave MULTI_IF_NAME undefined and the code will
 # treat the driver as the primary driver.
 #
-# If DYNAMIC_SINGLE_CHIP is defined, which means there are multiple possible
-# drivers, but only 1 driver will be loaded at a time(WLAN dynamic detect),
-# leave MULTI_IF_NAME undefined, no matter what the module name is, then
+# If DYNAMIC_SINGLE_CHIP is defined and MULTI_IF_NAME is undefined, which means
+# there are multiple possible drivers, but only 1 driver will be loaded at
+# a time(WLAN dynamic detect), no matter what the module name is, then
 # host driver will only append DYNAMIC_SINGLE_CHIP to the path of
 # firmware/mac/ini file.
+#
+# If DYNAMIC_SINGLE_CHIP & MULTI_IF_NAME defined, which means there are
+# multiple possible drivers, we also can load multiple drivers together.
+# And we can use DYNAMIC_SINGLE_CHIP to distingush the ko name, and use
+# MULTI_IF_NAME to make cnss2 platform driver to figure out which wlanhost
+# driver attached. Moreover, as the first priority, host driver will only
+# append DYNAMIC_SINGLE_CHIP to the path of firmware/mac/ini file.
+
 ifneq ($(DYNAMIC_SINGLE_CHIP),)
 ccflags-y += -DDYNAMIC_SINGLE_CHIP=\"$(DYNAMIC_SINGLE_CHIP)\"
+ifneq ($(MULTI_IF_NAME),)
+ccflags-y += -DMULTI_IF_NAME=\"$(MULTI_IF_NAME)\"
+endif
+#
 else
 
 ifneq ($(MODNAME), wlan)

@@ -24,7 +24,7 @@
 #include <cds_sched.h>
 
 /* Timeout in ms to wait for a DP rx thread */
-#define DP_RX_THREAD_WAIT_TIMEOUT 200
+#define DP_RX_THREAD_WAIT_TIMEOUT 1000
 
 #define DP_RX_TM_DEBUG 0
 #if DP_RX_TM_DEBUG
@@ -517,12 +517,12 @@ static int dp_rx_thread_loop(void *arg)
 	int status;
 	struct dp_rx_tm_handle_cmn *tm_handle_cmn;
 
-	tm_handle_cmn = rx_thread->rtm_handle_cmn;
-
 	if (!arg) {
 		dp_err("bad Args passed");
 		return 0;
 	}
+
+	tm_handle_cmn = rx_thread->rtm_handle_cmn;
 
 	qdf_set_user_nice(qdf_get_current_task(), -1);
 	qdf_set_wake_up_idle(true);
@@ -821,6 +821,7 @@ void dp_rx_thread_flush_by_vdev_id(struct dp_rx_thread *rx_thread,
 	}
 	qdf_nbuf_queue_head_unlock(&rx_thread->nbuf_queue);
 
+	qdf_event_reset(&rx_thread->vdev_del_event);
 	qdf_set_bit(RX_VDEV_DEL_EVENT, &rx_thread->event_flag);
 	qdf_wake_up_interruptible(&rx_thread->wait_q);
 

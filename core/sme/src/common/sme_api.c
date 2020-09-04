@@ -1192,7 +1192,7 @@ QDF_STATUS sme_get_valid_channels(uint32_t *ch_freq_list, uint32_t *list_len)
 #ifdef WLAN_CONV_SPECTRAL_ENABLE
 static QDF_STATUS sme_register_spectral_cb(struct mac_context *mac_ctx)
 {
-	struct spectral_legacy_cbacks spectral_cb;
+	struct spectral_legacy_cbacks spectral_cb = {0};
 	QDF_STATUS status;
 
 	spectral_cb.vdev_get_chan_freq = sme_get_oper_chan_freq;
@@ -2175,12 +2175,6 @@ QDF_STATUS sme_process_msg(struct mac_context *mac, struct scheduler_msg *pMsg)
 		break;
 	case eWNI_SME_STATS_EXT_EVENT:
 		status = sme_stats_ext_event(mac, pMsg->bodyptr);
-		qdf_mem_free(pMsg->bodyptr);
-		break;
-	case eWNI_SME_GET_PEER_INFO_EXT_IND:
-		if (mac->sme.pget_peer_info_ext_ind_cb)
-			mac->sme.pget_peer_info_ext_ind_cb(pMsg->bodyptr,
-				mac->sme.pget_peer_info_ext_cb_context);
 		qdf_mem_free(pMsg->bodyptr);
 		break;
 	case eWNI_SME_FW_STATUS_IND:
@@ -6230,6 +6224,8 @@ QDF_STATUS sme_config_fast_roaming(mac_handle_t mac_handle, uint8_t session_id,
 	enum roam_offload_state state;
 	QDF_STATUS status;
 	bool supplicant_disabled_roaming;
+	uint32_t set_val = 0;
+	enum roam_offload_state  cur_state;
 
 	/*
 	 * supplicant_disabled_roaming flag is altered when supplicant sends
@@ -6247,6 +6243,20 @@ QDF_STATUS sme_config_fast_roaming(mac_handle_t mac_handle, uint8_t session_id,
 			return QDF_STATUS_SUCCESS;
 		return  QDF_STATUS_E_FAILURE;
 	}
+	cur_state = mlme_get_roam_state(mac_ctx->psoc, session_id);
+	if (cur_state == WLAN_ROAM_INIT) {
+		if (!is_fast_roam_enabled)
+			set_val =
+			WMI_VDEV_ROAM_11KV_CTRL_DISABLE_FW_TRIGGER_ROAMING;
+		status = csr_send_roam_disable_cfg_msg(mac_ctx, session_id,
+						       set_val);
+
+		if (!QDF_IS_STATUS_SUCCESS(status)) {
+			sme_err("ROAM: update fast roaming failed, status: %d",
+				status);
+		}
+	}
+	mac_ctx->mlme_cfg->sta.usr_disabled_roaming = !is_fast_roam_enabled;
 
 	supplicant_disabled_roaming =
 		mlme_get_supplicant_disabled_roaming(mac_ctx->psoc,
@@ -7823,56 +7833,6 @@ QDF_STATUS sme_get_link_speed(mac_handle_t mac_handle,
 	mac->sme.link_speed_cb = cb;
 	status = wma_get_link_speed(wma_handle, req);
 	sme_release_global_lock(&mac->sme);
-	return status;
-}
-
-QDF_STATUS sme_get_peer_info_ext(mac_handle_t mac_handle,
-		struct sir_peer_info_ext_req *req,
-		void *context,
-		void (*callbackfn)(struct sir_peer_info_ext_resp *param,
-			void *pcontext))
-{
-	QDF_STATUS status;
-	QDF_STATUS qdf_status;
-	struct mac_context *mac = MAC_CONTEXT(mac_handle);
-	struct scheduler_msg message = {0};
-
-	status = sme_acquire_global_lock(&mac->sme);
-	if (QDF_STATUS_SUCCESS == status) {
-		if (!callbackfn) {
-			QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
-				"%s: Indication Call back is NULL",
-				__func__);
-			sme_release_global_lock(&mac->sme);
-			return QDF_STATUS_E_FAILURE;
-		}
-
-		mac->sme.pget_peer_info_ext_ind_cb = callbackfn;
-		mac->sme.pget_peer_info_ext_cb_context = context;
-
-		/* serialize the req through MC thread */
-		message.bodyptr =
-			qdf_mem_malloc(sizeof(struct sir_peer_info_ext_req));
-		if (!message.bodyptr) {
-			sme_release_global_lock(&mac->sme);
-			return QDF_STATUS_E_NOMEM;
-		}
-		qdf_mem_copy(message.bodyptr,
-				req,
-				sizeof(struct sir_peer_info_ext_req));
-		message.type = WMA_GET_PEER_INFO_EXT;
-		qdf_status = scheduler_post_message(QDF_MODULE_ID_SME,
-						    QDF_MODULE_ID_WMA,
-						    QDF_MODULE_ID_WMA,
-						    &message);
-		if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
-			QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
-				"%s: Post get rssi msg fail", __func__);
-			qdf_mem_free(message.bodyptr);
-			status = QDF_STATUS_E_FAILURE;
-		}
-		sme_release_global_lock(&mac->sme);
-	}
 	return status;
 }
 
@@ -14108,6 +14068,7 @@ QDF_STATUS sme_fast_reassoc(mac_handle_t mac_handle,
 	if (QDF_IS_STATUS_ERROR(sme_acquire_global_lock(&mac->sme)))
 		return QDF_STATUS_E_FAILURE;
 
+	mlme_set_supplicant_disabled_roaming(mac->psoc, vdev_id, 0);
 	status = csr_fast_reassoc(mac_handle, profile, bssid, ch_freq, vdev_id,
 				  connected_bssid);
 
@@ -15265,6 +15226,8 @@ void sme_set_he_testbed_def(mac_handle_t mac_handle, uint8_t vdev_id)
 	if (QDF_IS_STATUS_ERROR(status))
 		sme_err("Failed to set enable bcast probe resp in FW, %d",
 			status);
+
+	mac_ctx->mlme_cfg->sta.usr_disabled_roaming = true;
 }
 
 void sme_reset_he_caps(mac_handle_t mac_handle, uint8_t vdev_id)

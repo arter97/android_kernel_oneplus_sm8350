@@ -224,6 +224,7 @@ ifeq ($(CONFIG_QCOM_TDLS), y)
 endif
 	CONFIG_WLAN_SYSFS_TEMPERATURE := y
 	CONFIG_WLAN_THERMAL_CFG := y
+	CONFIG_WLAN_DL_MODES := y
 endif
 
 CONFIG_WLAN_POWER_DEBUG := y
@@ -1117,6 +1118,8 @@ CONFIG_MORE_TX_DESC := y
 
 endif
 
+CONFIG_HANDLE_BC_EAP_TX_FRM := y
+
 ifeq ($(CONFIG_BAND_6GHZ), y)
 
 CONFIG_6G_SCAN_CHAN_SORT_ALGO := y
@@ -1148,8 +1151,8 @@ CONFIG_CM_ENABLE := n
 #Flag to enable roam offload compilation of connection manager module
 CONFIG_CM_ROAM_OFFLOAD := n
 
-#Enable VDEV Response wakelock feature
-CONFIG_FEATURE_VDEV_RSP_WAKELOCK := y
+#Enable VDEV OPS wakelock feature
+CONFIG_FEATURE_VDEV_OPS_WAKELOCK := y
 
 # Enable RX buffer pool support
 ifeq ($(CONFIG_CNSS_QCA6750), y)
@@ -1157,3 +1160,6 @@ CONFIG_WLAN_FEATURE_RX_BUFFER_POOL := y
 CONFIG_DP_RX_BUFFER_POOL_SIZE := 128
 CONFIG_DP_RX_BUFFER_POOL_ALLOC_THRES := 5
 endif
+
+#Enable Hang Event
+CONFIG_WLAN_HANG_EVENT := y

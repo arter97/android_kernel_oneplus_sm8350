@@ -2109,8 +2109,7 @@ QDF_STATUS wma_process_roaming_config(tp_wma_handle wma_handle,
 
 		if (roam_req->reason == REASON_ROAM_STOP_ALL ||
 		    roam_req->reason == REASON_DISCONNECTED ||
-		    roam_req->reason == REASON_ROAM_SYNCH_FAILED ||
-		    roam_req->reason == REASON_SUPPLICANT_DISABLED_ROAMING) {
+		    roam_req->reason == REASON_ROAM_SYNCH_FAILED) {
 			mode = WMI_ROAM_SCAN_MODE_NONE;
 		} else {
 			if (csr_is_roam_offload_enabled(mac))
@@ -2888,6 +2887,7 @@ static void wma_update_phymode_on_roam(tp_wma_handle wma, uint8_t *bssid,
 	wma_debug("LFR3: new phymode %d", bss_phymode);
 }
 
+#ifndef ROAM_OFFLOAD_V1
 /**
  * wma_post_roam_sync_failure: Send roam sync failure ind to fw
  * @wma: wma handle
@@ -2910,6 +2910,14 @@ static void wma_post_roam_sync_failure(tp_wma_handle wma, uint8_t vdev_id)
 		wma_process_roaming_config(wma, roam_req);
 	}
 }
+#else
+static void wma_post_roam_sync_failure(tp_wma_handle wma, uint8_t vdev_id)
+{
+	wlan_cm_roam_stop_req(wma->psoc, vdev_id, REASON_ROAM_SYNCH_FAILED);
+	wma_debug("In cleanup: RSO Command:%d, reason %d vdev %d",
+		  ROAM_SCAN_OFFLOAD_STOP, REASON_ROAM_SYNCH_FAILED, vdev_id);
+}
+#endif
 
 int wma_mlme_roam_synch_event_handler_cb(void *handle, uint8_t *event,
 					 uint32_t len)
@@ -3549,11 +3557,12 @@ wma_get_trigger_detail_str(struct wmi_roam_trigger_info *roam_info, char *buf)
 		 * Use roam_info->current_rssi get the RSSI of current AP after
 		 * roam scan is triggered. This avoids discrepency with the
 		 * next rssi threshold value printed in roam scan details.
-		 * roam_info->rssi_trig_data.threshold gives the rssi of AP
-		 * before the roam scan was triggered.
+		 * roam_info->rssi_trig_data.threshold gives the rssi threshold
+		 * for the Low Rssi/Periodic scan trigger.
 		 */
 		buf_cons = qdf_snprint(temp, buf_left,
-				       " Current AP RSSI: %d",
+				       " Cur_Rssi threshold:%d Current AP RSSI: %d",
+				       roam_info->rssi_trig_data.threshold,
 				       roam_info->current_rssi);
 		temp += buf_cons;
 		buf_left -= buf_cons;
@@ -3660,12 +3669,12 @@ wma_log_roam_scan_candidates(struct wmi_roam_candidate_info *ap,
 	uint16_t i;
 	char time[TIME_STRING_LEN], time2[TIME_STRING_LEN];
 
-	wma_nofl_info("%40s%40s", LINE_STR, LINE_STR);
-	wma_nofl_info("%13s %16s %8s %4s %4s %5s/%3s %3s/%3s %7s %6s %6s %16s %6s",
-		     "AP BSSID", "TSTAMP", "CH", "TY", "ETP", "RSSI",
-		     "SCR", "CU%", "SCR", "TOT_SCR", "REASON", "SOURCE",
-		     "BT_TIMESTAMP", "TIMEOUT(msec)");
-	wma_nofl_info("%40s%40s", LINE_STR, LINE_STR);
+	wma_nofl_info("%62s%62s", LINE_STR, LINE_STR);
+	wma_nofl_info("%13s %16s %8s %4s %4s %5s/%3s %3s/%3s %7s %7s %6s %12s %20s",
+		      "AP BSSID", "TSTAMP", "CH", "TY", "ETP", "RSSI",
+		      "SCR", "CU%", "SCR", "TOT_SCR", "BL_RSN", "BL_SRC",
+		      "BL_TSTAMP", "BL_TIMEOUT(ms)");
+	wma_nofl_info("%62s%62s", LINE_STR, LINE_STR);
 
 	if (num_entries > MAX_ROAM_CANDIDATE_AP)
 		num_entries = MAX_ROAM_CANDIDATE_AP;
@@ -3673,13 +3682,14 @@ wma_log_roam_scan_candidates(struct wmi_roam_candidate_info *ap,
 	for (i = 0; i < num_entries; i++) {
 		mlme_get_converted_timestamp(ap->timestamp, time);
 		mlme_get_converted_timestamp(ap->bl_timestamp, time2);
-		wma_nofl_info(QDF_MAC_ADDR_STR " %17s %4d %-4s %4d %3d/%-4d %2d/%-4d %5d %5d %5d %17s %5d",
-			 QDF_MAC_ADDR_ARRAY(ap->bssid.bytes), time, ap->freq,
-			 ((ap->type == 0) ? "C_AP" :
-			  ((ap->type == 2) ? "R_AP" : "P_AP")),
-			 ap->etp, ap->rssi, ap->rssi_score, ap->cu_load,
-			 ap->cu_score, ap->total_score, ap->bl_reason,
-			 ap->bl_source, time2, ap->bl_original_timeout);
+		wma_nofl_info(QDF_MAC_ADDR_STR " %17s %4d %-4s %4d %3d/%-4d %2d/%-4d %5d %7d %7d   %17s %9d",
+			      QDF_MAC_ADDR_ARRAY(ap->bssid.bytes), time,
+			      ap->freq,
+			      ((ap->type == 0) ? "C_AP" :
+			       ((ap->type == 2) ? "R_AP" : "P_AP")),
+			      ap->etp, ap->rssi, ap->rssi_score, ap->cu_load,
+			      ap->cu_score, ap->total_score, ap->bl_reason,
+			      ap->bl_source, time2, ap->bl_original_timeout);
 		ap++;
 	}
 }
@@ -4158,18 +4168,18 @@ QDF_STATUS wma_roam_scan_fill_self_caps(tp_wma_handle wma_handle,
 	 * Instead of making another infra, send the RSN-CAPS in MSB of
 	 * beacon Caps.
 	 */
-	roam_offload_params->capability = *((uint32_t *)(&roam_req->rsn_caps));
+	roam_offload_params->capability = *((uint16_t *)(&roam_req->rsn_caps));
 	roam_offload_params->capability <<= RSN_CAPS_SHIFT;
 	roam_offload_params->capability |= ((*pCfgValue16) & 0xFFFF);
 
 	roam_offload_params->ht_caps_info =
-		*(uint32_t *)&mac->mlme_cfg->ht_caps.ht_cap_info;
+		*(uint16_t *)&mac->mlme_cfg->ht_caps.ht_cap_info;
 
 	roam_offload_params->ampdu_param =
-		*(uint32_t *)&mac->mlme_cfg->ht_caps.ampdu_params;
+		*(uint8_t *)&mac->mlme_cfg->ht_caps.ampdu_params;
 
 	roam_offload_params->ht_ext_cap =
-		*(uint32_t *)&mac->mlme_cfg->ht_caps.ext_cap_info;
+		*(uint16_t *)&mac->mlme_cfg->ht_caps.ext_cap_info;
 
 	val_len = ROAM_OFFLOAD_NUM_MCS_SET;
 	if (wlan_mlme_get_cfg_str((uint8_t *)roam_offload_params->mcsset,

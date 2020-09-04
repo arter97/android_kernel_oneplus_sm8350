@@ -92,11 +92,14 @@ static struct __qdf_device g_qdf_ctx;
 
 static uint8_t cds_multicast_logging;
 
+#define DRIVER_VER_LEN (11)
+#define HANG_EVENT_VER_LEN (1)
+
 struct cds_hang_event_fixed_param {
-	uint32_t tlv_header;
-	uint32_t recovery_reason;
-	char driver_version[11];
-	char hang_event_version[3];
+	uint16_t tlv_header;
+	uint8_t recovery_reason;
+	char driver_version[DRIVER_VER_LEN];
+	char hang_event_version[HANG_EVENT_VER_LEN];
 } qdf_packed;
 
 #ifdef QCA_WIFI_QCA8074
@@ -577,10 +580,10 @@ static int cds_hang_event_notifier_call(struct notifier_block *block,
 	cmd->recovery_reason = gp_cds_context->recovery_reason;
 
 	qdf_mem_copy(&cmd->driver_version, QWLAN_VERSIONSTR,
-		     sizeof(QWLAN_VERSIONSTR));
+		     DRIVER_VER_LEN);
 
 	qdf_mem_copy(&cmd->hang_event_version, QDF_HANG_EVENT_VERSION,
-		     sizeof(QDF_HANG_EVENT_VERSION));
+		     HANG_EVENT_VER_LEN);
 
 	cds_hang_data->offset += total_len;
 	return NOTIFY_OK;
@@ -1308,6 +1311,8 @@ QDF_STATUS cds_close(struct wlan_objmgr_psoc *psoc)
 
 	qdf_flush_work(&gp_cds_context->cds_recovery_work);
 
+	cds_shutdown_notifier_purge();
+
 	qdf_status = wma_wmi_work_close();
 	if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
 		cds_err("Failed to close wma_wmi_work");
@@ -1340,8 +1345,6 @@ QDF_STATUS cds_close(struct wlan_objmgr_psoc *psoc)
 
 	ucfg_pmo_psoc_update_dp_handle(psoc, NULL);
 	wlan_psoc_set_dp_handle(psoc, NULL);
-
-	cds_shutdown_notifier_purge();
 
 	if (true == wma_needshutdown()) {
 		cds_err("Failed to shutdown wma");

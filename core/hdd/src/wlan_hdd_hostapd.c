@@ -893,14 +893,16 @@ QDF_STATUS hdd_chan_change_notify(struct hdd_adapter *adapter,
 		break;
 	case CH_WIDTH_160MHZ:
 		chandef.width = NL80211_CHAN_WIDTH_160;
+		if (chan_change.chan_params.mhz_freq_seg1)
+			chandef.center_freq1 =
+				chan_change.chan_params.mhz_freq_seg1;
 		break;
 	default:
 		break;
 	}
 
 	if ((chan_change.chan_params.ch_width == CH_WIDTH_80MHZ) ||
-	    (chan_change.chan_params.ch_width == CH_WIDTH_80P80MHZ) ||
-	    (chan_change.chan_params.ch_width == CH_WIDTH_160MHZ)) {
+	    (chan_change.chan_params.ch_width == CH_WIDTH_80P80MHZ)) {
 		if (chan_change.chan_params.mhz_freq_seg0)
 			chandef.center_freq1 =
 				chan_change.chan_params.mhz_freq_seg0;
@@ -1530,6 +1532,18 @@ static void hdd_fill_station_info(struct hdd_adapter *adapter,
 	stainfo->dhcp_phase = DHCP_PHASE_ACK;
 	stainfo->dhcp_nego_status = DHCP_NEGO_STOP;
 
+	/* Save assoc request IEs */
+	if (event->ies_len) {
+		qdf_mem_free(stainfo->assoc_req_ies.data);
+		stainfo->assoc_req_ies.len = 0;
+		stainfo->assoc_req_ies.data = qdf_mem_malloc(event->ies_len);
+		if (stainfo->assoc_req_ies.data) {
+			qdf_mem_copy(stainfo->assoc_req_ies.data, event->ies,
+				     event->ies_len);
+			stainfo->assoc_req_ies.len = event->ies_len;
+		}
+	}
+
 	cache_sta_info =
 		hdd_get_sta_info_by_mac(&adapter->cache_sta_info_list,
 					event->staMac.bytes,
@@ -2085,6 +2099,7 @@ QDF_STATUS hdd_hostapd_sap_event_cb(struct sap_event *sap_event,
 		}
 
 		qdf_atomic_set(&adapter->ch_switch_in_progress, 0);
+		hdd_stop_tsf_sync(adapter);
 		break;
 	case eSAP_DFS_CAC_INTERRUPTED:
 		/*
@@ -3214,11 +3229,10 @@ QDF_STATUS wlan_hdd_get_channel_for_sap_restart(
 		return QDF_STATUS_E_FAILURE;
 	}
 
-	intf_ch_freq = wlansap_get_chan_band_restrict(sap_context);
-	if (intf_ch_freq) {
-		csa_reason = CSA_REASON_BAND_RESTRICTED;
+	intf_ch_freq = wlansap_get_chan_band_restrict(sap_context, &csa_reason);
+	if (intf_ch_freq)
 		goto sap_restart;
-	}
+
 	/*
 	 * If STA+SAP sessions are on DFS channel and STA+SAP SCC is
 	 * enabled on DFS channel then move the SAP out of DFS channel
@@ -5959,7 +5973,6 @@ static int __wlan_hdd_cfg80211_stop_ap(struct wiphy *wiphy,
 			}
 		}
 		clear_bit(SOFTAP_BSS_STARTED, &adapter->event_flags);
-		hdd_stop_tsf_sync(adapter);
 
 		/*BSS stopped, clear the active sessions for this device mode*/
 		policy_mgr_decr_session_set_pcl(hdd_ctx->psoc,
@@ -6650,8 +6663,6 @@ static int __wlan_hdd_cfg80211_start_ap(struct wiphy *wiphy,
 			hdd_err("Error Start bss Failed");
 			goto err_start_bss;
 		}
-
-		hdd_start_tsf_sync(adapter);
 
 		if (wdev->chandef.chan->center_freq !=
 				params->chandef.chan->center_freq)
