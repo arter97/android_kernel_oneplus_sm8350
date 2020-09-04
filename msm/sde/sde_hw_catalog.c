@@ -194,6 +194,7 @@ enum sde_prop {
 	DIM_LAYER,
 	SMART_DMA_REV,
 	IDLE_PC,
+	WAKEUP_WITH_TOUCH,
 	DEST_SCALER,
 	SMART_PANEL_ALIGN_MODE,
 	MACROTILE_MODE,
@@ -560,6 +561,8 @@ static struct sde_prop_type sde_prop[] = {
 	{DIM_LAYER, "qcom,sde-has-dim-layer", false, PROP_TYPE_BOOL},
 	{SMART_DMA_REV, "qcom,sde-smart-dma-rev", false, PROP_TYPE_STRING},
 	{IDLE_PC, "qcom,sde-has-idle-pc", false, PROP_TYPE_BOOL},
+	{WAKEUP_WITH_TOUCH, "qcom,sde-wakeup-with-touch", false,
+			PROP_TYPE_BOOL},
 	{DEST_SCALER, "qcom,sde-has-dest-scaler", false, PROP_TYPE_BOOL},
 	{SMART_PANEL_ALIGN_MODE, "qcom,sde-smart-panel-align-mode",
 			false, PROP_TYPE_U32},
@@ -2236,6 +2239,10 @@ static int sde_intf_parse_dt(struct device_node *np,
 		}
 
 		if (SDE_HW_MAJOR(sde_cfg->hwversion) >=
+				SDE_HW_MAJOR(SDE_HW_VER_500))
+			set_bit(SDE_INTF_STATUS, &intf->features);
+
+		if (SDE_HW_MAJOR(sde_cfg->hwversion) >=
 				SDE_HW_MAJOR(SDE_HW_VER_700))
 			set_bit(SDE_INTF_TE_ALIGN_VSYNC, &intf->features);
 	}
@@ -3741,6 +3748,8 @@ static void _sde_top_parse_dt_helper(struct sde_mdss_cfg *cfg,
 	cfg->has_src_split = PROP_VALUE_ACCESS(props->values, SRC_SPLIT, 0);
 	cfg->has_dim_layer = PROP_VALUE_ACCESS(props->values, DIM_LAYER, 0);
 	cfg->has_idle_pc = PROP_VALUE_ACCESS(props->values, IDLE_PC, 0);
+	cfg->wakeup_with_touch = PROP_VALUE_ACCESS(props->values,
+			WAKEUP_WITH_TOUCH, 0);
 	cfg->pipe_order_type = PROP_VALUE_ACCESS(props->values,
 			PIPE_ORDER_VERSION, 0);
 	cfg->has_base_layer = PROP_VALUE_ACCESS(props->values, BASE_LAYER, 0);
@@ -4742,6 +4751,7 @@ static int _sde_hardware_pre_caps(struct sde_mdss_cfg *sde_cfg, uint32_t hw_rev)
 		sde_cfg->has_sui_blendstage = true;
 		sde_cfg->vbif_disable_inner_outer_shareable = true;
 		sde_cfg->mdss_hw_block_size = 0x158;
+		sde_cfg->rc_lm_flush_override = true;
 	} else if (IS_SHIMA_TARGET(hw_rev)) {
 		sde_cfg->has_cwb_support = true;
 		sde_cfg->has_wb_ubwc = true;

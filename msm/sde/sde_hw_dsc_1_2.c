@@ -156,7 +156,8 @@ static void sde_hw_dsc_config(struct sde_hw_dsc *hw_dsc,
 
 	data = (dsc->initial_lines & 0xff);
 	data |= ((mode & DSC_MODE_VIDEO) ? 1 : 0) << 9;
-	data |= (ich_reset_override ? 1 : 0) << 10;
+	if (ich_reset_override)
+		data |= 0xC00; // set bit 10 and 11
 	data |= (_dsc_calc_ob_max_addr(hw_dsc, slice_count_per_enc) << 18);
 
 	SDE_REG_WRITE(dsc_c, ENC_DF_CTRL + idx, data);
@@ -191,7 +192,7 @@ static void sde_hw_dsc_config(struct sde_hw_dsc *hw_dsc,
 			(dsc->config.slice_chunk_size) & 0xffff);
 
 	data = (dsc->config.initial_xmit_delay & 0xffff) |
-		((dsc->config.initial_dec_delay & 0x3ff) << 16);
+		((dsc->config.initial_dec_delay & 0xffff) << 16);
 
 	SDE_REG_WRITE(dsc_c, DSC_HRD_DELAYS + idx, data);
 

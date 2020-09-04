@@ -2403,7 +2403,8 @@ static void _sde_encoder_input_handler_register(
 	struct sde_encoder_virt *sde_enc = to_sde_encoder_virt(drm_enc);
 	int rc;
 
-	if (!sde_encoder_check_curr_mode(drm_enc, MSM_DISPLAY_CMD_MODE))
+	if (!sde_encoder_check_curr_mode(drm_enc, MSM_DISPLAY_CMD_MODE) ||
+		!sde_enc->input_event_enabled)
 		return;
 
 	if (sde_enc->input_handler && !sde_enc->input_handler->private) {
@@ -2424,7 +2425,8 @@ static void _sde_encoder_input_handler_unregister(
 {
 	struct sde_encoder_virt *sde_enc = to_sde_encoder_virt(drm_enc);
 
-	if (!sde_encoder_check_curr_mode(drm_enc, MSM_DISPLAY_CMD_MODE))
+	if (!sde_encoder_check_curr_mode(drm_enc, MSM_DISPLAY_CMD_MODE) ||
+		!sde_enc->input_event_enabled)
 		return;
 
 	if (sde_enc->input_handler && sde_enc->input_handler->private) {
@@ -3411,12 +3413,14 @@ static void _sde_encoder_kickoff_phys(struct sde_encoder_virt *sde_enc)
 	struct sde_kms *sde_kms = NULL;
 	struct sde_crtc_misr_info crtc_misr_info = {false, 0};
 	bool is_regdma_blocking = false, is_vid_mode = false;
+	struct sde_crtc *sde_crtc;
 
 	if (!sde_enc) {
 		SDE_ERROR("invalid encoder\n");
 		return;
 	}
 
+	sde_crtc = to_sde_crtc(sde_enc->crtc);
 	if (sde_encoder_check_curr_mode(&sde_enc->base, MSM_DISPLAY_VIDEO_MODE))
 		is_vid_mode = true;
 
@@ -3484,9 +3488,12 @@ static void _sde_encoder_kickoff_phys(struct sde_encoder_virt *sde_enc)
 				sde_enc->misr_frame_count);
 
 	sde_crtc_get_misr_info(sde_enc->crtc, &crtc_misr_info);
-	if (crtc_misr_info.misr_enable)
+	if (crtc_misr_info.misr_enable && sde_crtc &&
+				sde_crtc->misr_reconfigure) {
 		sde_crtc_misr_setup(sde_enc->crtc, true,
 				crtc_misr_info.misr_frame_count);
+		sde_crtc->misr_reconfigure = false;
+	}
 
 	_sde_encoder_trigger_start(sde_enc->cur_master);
 
@@ -4171,7 +4178,7 @@ int sde_encoder_helper_reset_mixers(struct sde_encoder_phys *phys_enc,
 		/* only enable border color on LM */
 		if (phys_enc->hw_ctl->ops.setup_blendstage)
 			phys_enc->hw_ctl->ops.setup_blendstage(
-				phys_enc->hw_ctl, hw_lm->idx, NULL);
+				phys_enc->hw_ctl, hw_lm->idx, NULL, false);
 	}
 
 	if (!lm_valid) {
@@ -4677,6 +4684,8 @@ static int sde_encoder_setup_display(struct sde_encoder_virt *sde_enc,
 	    (disp_info->capabilities & MSM_DISPLAY_CAP_VID_MODE))
 		sde_enc->idle_pc_enabled = sde_kms->catalog->has_idle_pc;
 
+	sde_enc->input_event_enabled = sde_kms->catalog->wakeup_with_touch;
+
 	mutex_lock(&sde_enc->enc_lock);
 	for (i = 0; i < disp_info->num_of_h_tiles && !ret; i++) {
 		/*
@@ -4843,7 +4852,8 @@ struct drm_encoder *sde_encoder_init_with_ops(
 		sde_enc->rsc_client = NULL;
 	}
 
-	if (disp_info->capabilities & MSM_DISPLAY_CAP_CMD_MODE) {
+	if (disp_info->capabilities & MSM_DISPLAY_CAP_CMD_MODE &&
+		sde_enc->input_event_enabled) {
 		ret = _sde_encoder_input_handler(sde_enc);
 		if (ret)
 			SDE_ERROR(

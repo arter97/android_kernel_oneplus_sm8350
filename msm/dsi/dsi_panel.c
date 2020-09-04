@@ -33,7 +33,7 @@
 #define MAX_PANEL_JITTER		10
 #define DEFAULT_PANEL_PREFILL_LINES	25
 #define HIGH_REFRESH_RATE_THRESHOLD_TIME_US	500
-#define MIN_PREFILL_LINES      35
+#define MIN_PREFILL_LINES      40
 
 static void dsi_dce_prepare_pps_header(char *buf, u32 pps_delay_ms)
 {
@@ -509,7 +509,8 @@ static int dsi_panel_update_backlight(struct dsi_panel *panel,
 	u32 bl_lvl)
 {
 	int rc = 0;
-	struct mipi_dsi_device *dsi;
+	unsigned long mode_flags = 0;
+	struct mipi_dsi_device *dsi = NULL;
 
 	if (!panel || (bl_lvl > 0xffff)) {
 		DSI_ERR("invalid params\n");
@@ -517,6 +518,10 @@ static int dsi_panel_update_backlight(struct dsi_panel *panel,
 	}
 
 	dsi = &panel->mipi_device;
+	if (unlikely(panel->bl_config.lp_mode)) {
+		mode_flags = dsi->mode_flags;
+		dsi->mode_flags |= MIPI_DSI_MODE_LPM;
+	}
 
 	if (panel->bl_config.bl_inverted_dbv)
 		bl_lvl = (((bl_lvl & 0xff) << 8) | (bl_lvl >> 8));
@@ -524,6 +529,9 @@ static int dsi_panel_update_backlight(struct dsi_panel *panel,
 	rc = mipi_dsi_dcs_set_display_brightness(dsi, bl_lvl);
 	if (rc < 0)
 		DSI_ERR("failed to update dcs backlight:%d\n", bl_lvl);
+
+	if (unlikely(panel->bl_config.lp_mode))
+		dsi->mode_flags = mode_flags;
 
 	return rc;
 }
@@ -2036,6 +2044,87 @@ error:
 	return rc;
 }
 
+int dsi_panel_get_io_resources(struct dsi_panel *panel,
+		struct msm_io_res *io_res)
+{
+	struct list_head temp_head;
+	struct msm_io_mem_entry *io_mem, *pos, *tmp;
+	struct list_head *mem_list = &io_res->mem;
+	int i, rc = 0, address_count, pin_count;
+	u32 *pins = NULL, *address = NULL;
+	u32 base, size;
+	struct dsi_parser_utils *utils = &panel->utils;
+
+	INIT_LIST_HEAD(&temp_head);
+
+	address_count = utils->count_u32_elems(utils->data,
+				"qcom,dsi-panel-gpio-address");
+	if (address_count != 2) {
+		DSI_DEBUG("panel gpio address not defined\n");
+		return 0;
+	}
+
+	address =  kzalloc(sizeof(u32) * address_count, GFP_KERNEL);
+	if (!address)
+		return -ENOMEM;
+
+	rc = utils->read_u32_array(utils->data, "qcom,dsi-panel-gpio-address",
+				address, address_count);
+	if (rc) {
+		DSI_ERR("panel gpio address not defined correctly\n");
+		goto end;
+	}
+	base = address[0];
+	size = address[1];
+
+	pin_count = utils->count_u32_elems(utils->data,
+				"qcom,dsi-panel-gpio-pins");
+	if (pin_count < 0) {
+		DSI_ERR("panel gpio pins not defined\n");
+		rc = pin_count;
+		goto end;
+	}
+
+	pins =  kzalloc(sizeof(u32) * pin_count, GFP_KERNEL);
+	if (!pins) {
+		rc = -ENOMEM;
+		goto end;
+	}
+
+	rc = utils->read_u32_array(utils->data, "qcom,dsi-panel-gpio-pins",
+				pins, pin_count);
+	if (rc) {
+		DSI_ERR("panel gpio pins not defined correctly\n");
+		goto end;
+	}
+
+	for (i = 0; i < pin_count; i++) {
+		io_mem = kzalloc(sizeof(*io_mem), GFP_KERNEL);
+		if (!io_mem) {
+			rc = -ENOMEM;
+			goto parse_fail;
+		}
+
+		io_mem->base = base + (pins[i] * size);
+		io_mem->size = size;
+
+		list_add(&io_mem->list, &temp_head);
+	}
+
+	list_splice(&temp_head, mem_list);
+	goto end;
+
+parse_fail:
+	list_for_each_entry_safe(pos, tmp, &temp_head, list) {
+		list_del(&pos->list);
+		kzfree(pos);
+	}
+end:
+	kzfree(pins);
+	kzfree(address);
+	return rc;
+}
+
 static int dsi_panel_parse_gpios(struct dsi_panel *panel)
 {
 	int rc = 0;
@@ -2144,10 +2233,11 @@ static int dsi_panel_parse_bl_config(struct dsi_panel *panel)
 {
 	int rc = 0;
 	u32 val = 0;
-	const char *bl_type;
-	const char *data;
+	const char *bl_type = NULL;
+	const char *data = NULL;
+	const char *state = NULL;
 	struct dsi_parser_utils *utils = &panel->utils;
-	char *bl_name;
+	char *bl_name = NULL;
 
 	if (!strcmp(panel->type, "primary"))
 		bl_name = "qcom,mdss-dsi-bl-pmic-control-type";
@@ -2216,6 +2306,15 @@ static int dsi_panel_parse_bl_config(struct dsi_panel *panel)
 
 	panel->bl_config.bl_inverted_dbv = utils->read_bool(utils->data,
 		"qcom,mdss-dsi-bl-inverted-dbv");
+
+	state = utils->get_property(utils->data, "qcom,bl-dsc-cmd-state", NULL);
+	if (!state || !strcmp(state, "dsi_hs_mode"))
+		panel->bl_config.lp_mode = false;
+	else if (!strcmp(state, "dsi_lp_mode"))
+		panel->bl_config.lp_mode = true;
+	else
+		DSI_ERR("bl-dsc-cmd-state command state unrecognized-%s\n",
+			state);
 
 	if (panel->bl_config.type == DSI_BACKLIGHT_PWM) {
 		rc = dsi_panel_parse_bl_pwm_config(panel);
