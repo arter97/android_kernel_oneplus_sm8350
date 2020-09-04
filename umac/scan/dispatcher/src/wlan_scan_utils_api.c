@@ -1269,21 +1269,47 @@ static int util_scan_scm_calc_nss_supported_by_ap(
 {
 	struct htcap_cmn_ie *htcap;
 	struct wlan_ie_vhtcaps *vhtcaps;
-	uint8_t rx_mcs_map;
+	struct wlan_ie_hecaps *hecaps;
+	uint16_t rx_mcs_map = 0;
 
 	htcap = (struct htcap_cmn_ie *)
 		util_scan_entry_htcap(scan_params);
 	vhtcaps = (struct wlan_ie_vhtcaps *)
 		util_scan_entry_vhtcap(scan_params);
-	if (vhtcaps) {
+	hecaps = (struct wlan_ie_hecaps *)
+		util_scan_entry_hecap(scan_params);
+
+	if (hecaps) {
+		/* Using rx mcs map related to 80MHz or lower as in some
+		 * cases higher mcs may suuport lesser NSS than that
+		 * of lowe mcs. Thus giving max NSS capability.
+		 */
+		rx_mcs_map =
+			qdf_cpu_to_le16(hecaps->mcs_bw_map[0].rx_mcs_map);
+	} else if (vhtcaps) {
 		rx_mcs_map = vhtcaps->rx_mcs_map;
-		if ((rx_mcs_map & 0xC0) != 0xC0)
+	}
+
+	if (hecaps || vhtcaps) {
+		if ((rx_mcs_map & 0xC000) != 0xC000)
+			return 8;
+
+		if ((rx_mcs_map & 0x3000) != 0x3000)
+			return 7;
+
+		if ((rx_mcs_map & 0x0C00) != 0x0C00)
+			return 6;
+
+		if ((rx_mcs_map & 0x0300) != 0x0300)
+			return 5;
+
+		if ((rx_mcs_map & 0x00C0) != 0x00C0)
 			return 4;
 
-		if ((rx_mcs_map & 0x30) != 0x30)
+		if ((rx_mcs_map & 0x0030) != 0x0030)
 			return 3;
 
-		if ((rx_mcs_map & 0x0C) != 0x0C)
+		if ((rx_mcs_map & 0x000C) != 0x000C)
 			return 2;
 	} else if (htcap) {
 		if (htcap->mcsset[3])
@@ -1725,6 +1751,7 @@ static uint32_t util_gen_new_ie(uint8_t *ie, uint32_t ielen,
 	/* new ssid */
 	tmp_new = util_scan_find_ie(WLAN_ELEMID_SSID, sub_copy, subie_len);
 	if (tmp_new) {
+		scm_debug(" SSID %.*s", tmp_new[1], &tmp_new[2]);
 		qdf_mem_copy(pos, tmp_new, tmp_new[1] + 2);
 		pos += (tmp_new[1] + 2);
 	}
@@ -1763,7 +1790,18 @@ static uint32_t util_gen_new_ie(uint8_t *ie, uint32_t ielen,
 					 */
 					qdf_mem_copy(pos, tmp, tmp[1] + 2);
 					pos += tmp[1] + 2;
-					tmp[0] = 0xff;
+					tmp[0] = 0;
+				} else {
+					qdf_mem_copy(pos, tmp_old,
+						     tmp_old[1] + 2);
+					pos += tmp_old[1] + 2;
+				}
+			} else if (tmp_old[0] == WLAN_ELEMID_EXTN_ELEM) {
+				if (tmp_old[2] == tmp[2]) {
+					/* same ie, copy from subelement */
+					qdf_mem_copy(pos, tmp, tmp[1] + 2);
+					pos += tmp[1] + 2;
+					tmp[0] = 0;
 				} else {
 					qdf_mem_copy(pos, tmp_old,
 						     tmp_old[1] + 2);
@@ -1773,7 +1811,7 @@ static uint32_t util_gen_new_ie(uint8_t *ie, uint32_t ielen,
 				/* copy ie from subelement into new ie */
 				qdf_mem_copy(pos, tmp, tmp[1] + 2);
 				pos += tmp[1] + 2;
-				tmp[0] = 0xff;
+				tmp[0] = 0;
 			}
 		}
 

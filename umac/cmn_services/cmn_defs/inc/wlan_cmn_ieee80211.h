@@ -43,6 +43,7 @@
 #define MBO_OCE_OUI 0x506f9a16
 #define MBO_OCE_OUI_SIZE 4
 #define REDUCED_WAN_METRICS_ATTR 103
+#define OCE_DISALLOW_ASSOC_ATTR  0x4
 #define AP_TX_PWR_ATTR 107
 #define OCE_SUBNET_ID_ATTR 108
 #define OCE_SUBNET_ID_LEN 6
@@ -939,6 +940,42 @@ struct wlan_ie_vhtop {
 	uint16_t vhtop_basic_mcs_set;
 } qdf_packed;
 
+#define WLAN_HE_PHYCAP_160_SUPPORT BIT(2)
+#define WLAN_HE_PHYCAP_80_80_SUPPORT BIT(3)
+#define WLAN_HE_MACCAP_LEN 6
+#define WLAN_HE_PHYCAP_LEN 11
+#define WLAN_HE_MAX_MCS_MAPS 3
+/**
+ * struct wlan_ie_hecaps - HT capabilities
+ * @elem_id: HE caps IE
+ * @elem_len: HE caps IE len
+ * @elem_id_extn: HE caps extension id
+ * @he_mac_cap: HE mac capabilities
+ * @he_phy_cap: HE phy capabilities
+ * @phy_cap_bytes: HT phy capability bytes
+ * @supported_ch_width_set: Supported channel width set
+ * @mcs_bw_map: MCS NSS map per bandwidth
+ * @rx_mcs_map: RX MCS map
+ * @tx_mcs_map: TX MCS map
+ */
+struct wlan_ie_hecaps {
+	uint8_t elem_id;
+	uint8_t elem_len;
+	uint8_t elem_id_extn;
+	uint8_t he_mac_cap[WLAN_HE_MACCAP_LEN];
+	union {
+		uint8_t phy_cap_bytes[WLAN_HE_PHYCAP_LEN];
+		struct {
+			uint32_t reserved:1;
+			uint32_t supported_ch_width_set:7;
+		} qdf_packed;
+	} qdf_packed he_phy_cap;
+	struct {
+		uint16_t rx_mcs_map;
+		uint16_t tx_mcs_map;
+	} qdf_packed mcs_bw_map[WLAN_HE_MAX_MCS_MAPS];
+} qdf_packed;
+
 /**
  * struct he_oper_6g_param: 6 Ghz params for HE
  * @primary_channel: HE 6GHz Primary channel number
@@ -1575,6 +1612,53 @@ wlan_parse_oce_subnet_id_ie(uint8_t *mbo_oce_ie)
 
 		if (attribute_id == OCE_SUBNET_ID_ATTR)
 			return true;
+
+		ie += (attribute_len + 2);
+		len -= attribute_len;
+	}
+
+	return false;
+}
+
+/**
+ * wlan_parse_oce_assoc_disallowed_ie() - parse oce assoc disallowed IE
+ * @mbo_oce_ie: MBO/OCE ie ptr
+ * @reason: reason for disallowing assoc.
+ *
+ * API, function to parse OCE assoc disallowed param from the OCE MBO IE
+ *
+ * Return: true if assoc disallowed field is present in the IE
+ */
+static inline bool
+wlan_parse_oce_assoc_disallowed_ie(uint8_t *mbo_oce_ie, uint8_t *reason)
+{
+	uint8_t len, attribute_len, attribute_id;
+	uint8_t *ie;
+
+	if (!mbo_oce_ie)
+		return false;
+
+	ie = mbo_oce_ie;
+	len = ie[1];
+	ie += 2;
+
+	if (len <= MBO_OCE_OUI_SIZE)
+		return false;
+
+	ie += MBO_OCE_OUI_SIZE;
+	len -= MBO_OCE_OUI_SIZE;
+
+	while (len > 2) {
+		attribute_id = ie[0];
+		attribute_len = ie[1];
+		len -= 2;
+		if (attribute_len > len)
+			return false;
+
+		if (attribute_id == OCE_DISALLOW_ASSOC_ATTR) {
+			*reason = ie[2];
+			return true;
+		}
 
 		ie += (attribute_len + 2);
 		len -= attribute_len;

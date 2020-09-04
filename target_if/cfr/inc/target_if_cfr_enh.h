@@ -93,6 +93,64 @@
 
 #define STREAMFS_NUM_SUBBUF_PINE 255
 
+/* enum macrx_freeze_tlv_version: Reported by uCode in enh_dma_header
+ * MACRX_FREEZE_TLV_VERSION_1: Single MU UL user info reported by MAC
+ * MACRX_FREEZE_TLV_VERSION_2: Upto 4 MU UL user info reported by MAC
+ * MACRX_FREEZE_TLV_VERSION_3: Upto 37 MU UL user info reported by MAC
+ */
+enum macrx_freeze_tlv_version {
+	MACRX_FREEZE_TLV_VERSION_1 = 1,
+	MACRX_FREEZE_TLV_VERSION_2 = 2,
+	MACRX_FREEZE_TLV_VERSION_3 = 3,
+	MACRX_FREEZE_TLV_VERSION_MAX
+};
+
+/* Max 4 users in MU case for Maple */
+#define MAPLE_CFR_MU_USERS 4
+
+#define MAPLE_MAX_HEADER_LENGTH_WORDS 16
+
+#define MAPLE_MAX_DATA_LENGTH_BYTES 4096
+
+/* Max size :
+ * sizeof(csi_cfr_header) + 64 bytes(cfr uCode header) +
+ * 4096 bytes(cfr payload)
+ */
+#define STREAMFS_MAX_SUBBUF_MAPLE \
+	(sizeof(struct csi_cfr_header) + \
+	 (MAPLE_MAX_HEADER_LENGTH_WORDS * 4) + \
+	 MAPLE_MAX_DATA_LENGTH_BYTES)
+
+/* The number 470 has come up by considering the 2MB benchmark
+ * for Relay FS buffer pool. For Cascade, dakota and HK, the
+ * Relay FS buffer pool has been considered as 2MB and based
+ * on that the number of sub buffers are 1100, 2200 and 255.
+ * For Cypress and pine, since the buffer size has increased
+ * to 16K, if we would have considered to keep the relay FS
+ * buffer pool size as 2MB then the number of sub buffers /
+ * CFR records would have been lesser in number (around 130)
+ * So, the decision had been taken to keep the sub buffer
+ * count to 255 and as result the relay fs buffer pool size
+ * in case of Cypress and Pine exceeded 4MB.
+ *
+ * In case of Maple, since the Buffer size is small (4470B)
+ * we have decided to maintain the relay fs buffer pool size
+ * as 2MB, as a result the number of sub buffers has become
+ * 470.
+ *
+ * RelayFS memory required:
+ * Max sub buffer size * Number of sub buffers
+ *
+ * Cascade: (2200B  * 1100) ~= 2MB
+ * Dakota:  (1100B  * 2200) ~= 2MB
+ * Hawkeye: (8200B  * 255 ) ~= 2MB
+ * Cypress: (16438B * 255 ) ~= 4MB
+ * Pine   : (16894B * 255 ) ~= 4MB
+ * Maple  : (4470B *  470 ) ~= 2MB
+ *
+ */
+#define STREAMFS_NUM_SUBBUF_MAPLE 470
+
 /*
  * @tag: ucode fills this with 0xBA
  *
@@ -169,6 +227,11 @@
  * @freeze_data_incl: Indicates whether CFR header contains
  * MACRX_FREEZE_CAPTURE_CHANNEL TLV
  *
+ * @freeze_tlv_version: Indicates the version of freeze_tlv
+ *			1 - HSP, Cypress
+ *			2 - Maple/Spruce/Moselle
+ *			3 - Pine
+ *
  * @decimation_factor: FFT bins decimation
  * @mu_rx_num_users: Number of users in UL-MU-PPDU
  */
@@ -191,21 +254,95 @@ struct whal_cfir_enhanced_hdr {
 
 	uint16_t total_bytes;
 
-	uint16_t header_version  :4,
-		 target_id       :4,
-		 cfr_fmt         :1,
-		 rsvd2           :1,
-		 mu_rx_data_incl :1,
-		 freeze_data_incl:1,
-		 rsvd3           :4;
+	uint16_t header_version     :4,
+		 target_id          :4,
+		 cfr_fmt            :1,
+		 rsvd2              :1,
+		 mu_rx_data_incl    :1,
+		 freeze_data_incl   :1,
+		 freeze_tlv_version :4;
 
 	uint16_t mu_rx_num_users   :8,
 		 decimation_factor :4,
-		 rsvd4		   :4;
+		 rsvd3             :4;
 
-	uint16_t rsvd5;
+	uint16_t rsvd4;
 };
 
+/*
+ * freeze_tlv v1/v2 used by Hastings/Cypress/Maple/Spruce/Moselle supports upto
+ * 4 UL MU users
+ *
+ * @freeze:
+ *		0: Allow channel capture
+ *		1: Freeze channel capture
+ *
+ * @capture_reason: Field only valid when the freeze field is 1. Indicates why
+ * the MAC asked to capture the channel
+ *		0: freeze_reason_TM
+ *		1: freeze_reason_FTM
+ *		2: freeze_reason_ACK_resp_to_TM_FTM
+ *		3: freeze_reason_TA_RA_TYPE_FILTER
+ *		4: freeze readon NDP_NDP
+ *		5: freeze_reason_ALL_PACKET
+ *
+ * @packet_type: Packet type of captured packets.
+ *		0: Management
+ *		1: Control
+ *		2: Data
+ *		3: Extension
+ *
+ * @packet_sub_type: packet subtype of the captured packets.
+ * @sw_peer_id_valid: It is valid only when the freeze field is set to 1.
+ *		0: no TA address search on the received frame has been
+ *		   performed. This is due to the frame not having a TA address
+ *		   (like ACK frame), or the received frame being from an other
+ *		   AP to which this device is not associated.
+ *		1: field sw_peer_id will contain valid information.
+ *		   This implies that a (successful) address search has been
+ *		   performed on the TA address of the received frame.
+ *
+ * @sw_peer_id: Valid only when sw_peer_id_valid field is set. It is an
+ * identifier that allows SW to double check that the CSI info stored belongs
+ * to the device with this SW identifier.
+ *
+ * @phy_ppdu_id: ppdu_id of ppdu which has channel capture performed. Field
+ * only valid when the freeze field is set to 1.
+ *
+ * @packet_ta_lower_16: Packet’s lower 16bits transmit address in MAC header.
+ *
+ * @packet_ta_mid_16: Packet’s middle 16bits transmit address in MAC header.
+ *
+ * @packet_ta_upper_16: Packet’s upper 16bits transmit address in MAC header.
+ *
+ * @packet_ra_lower_16: Packet’s lower 16bits receive address in MAC header.
+ *
+ * @packet_ra_mid_16: Packet’s middle 16bits receive address in MAC header.
+ *
+ * @packet_ra_upper_16: Packet’s upper 16bits receive address in MAC header.
+ *
+ * @tsf_timestamp_15_0: MAC side 64bit TSF timestamp when this TLV is sent to
+ * PHY. Bits [15:0].
+ *
+ * @tsf_timestamp_31_16: MAC side 64bit TSF timestamp when this TLV is sent to
+ * PHY. Bits [31:16].
+ *
+ * @tsf_timestamp_47_32: MAC side 64bit TSF timestamp when this TLV is sent to
+ * PHY. Bits [47:32].
+ *
+ * @tsf_timestamp_63_48: MAC side 64bit TSF timestamp when this TLV is sent to
+ * PHY. Bits [63:48].
+ *
+ * @user_index_or_user_mask_5_0: When freeze_tlv_version is 1, this field from
+ * MAC, indicate to PHY which user's channel information need to be uploaded.
+ * When freeze_tlv_version is 2 & MU_SUPPORT_IN_TLV is 1, this field indicates
+ * bitmap of users upto 4 to which channel capture need to be uploaded. And if
+ * freeze_tlv_version is 2 & MU_SUPPORT_IN_TLV is 0, this field indicate to PHY
+ * which user's channel information need to be uploaded
+ *
+ * @directed: Indicate the frame is directed to us or not when NDPA/NDP capture
+ * or FTM/TM/ACK capture. 1=directed. For other modes, it is 0.
+ */
 struct macrx_freeze_capture_channel {
 	uint16_t freeze                          :  1, //[0]
 		 capture_reason                  :  3, //[3:1]
@@ -230,7 +367,83 @@ struct macrx_freeze_capture_channel {
 		 reserved_13                     :  9; //[15:7]
 };
 
-struct macrx_freeze_capture_channel_v2 {
+/*
+ * freeze_tlv v3 used by Pine
+ *
+ * @freeze:
+ *		0: Allow channel capture
+ *		1: Freeze channel capture
+ *
+ * @capture_reason: Field only valid when the freeze field is 1. Indicates why
+ * the MAC asked to capture the channel
+ *		0: freeze_reason_TM
+ *		1: freeze_reason_FTM
+ *		2: freeze_reason_ACK_resp_to_TM_FTM
+ *		3: freeze_reason_TA_RA_TYPE_FILTER
+ *		4: freeze readon NDP_NDP
+ *		5: freeze_reason_ALL_PACKET
+ *
+ * @packet_type: Packet type of captured packets.
+ *		0: Management
+ *		1: Control
+ *		2: Data
+ *		3: Extension
+ *
+ * @packet_sub_type: packet subtype of the captured packets.
+ *
+ * @directed: Indicate the frame is directed to us or not when NDPA/NDP capture
+ * or FTM/TM/ACK capture. 1=directed. For other modes, it is 0.
+ *
+ * @sw_peer_id_valid: It is valid only when the freeze field is set to 1.
+ *		0: no TA address search on the received frame has been
+ *		   performed. This is due to the frame not having a TA address
+ *		   (like ACK frame), or the received frame being from an other
+ *		   AP to which this device is not associated.
+ *		1: field sw_peer_id will contain valid information.
+ *		   This implies that a (successful) address search has been
+ *		   performed on the TA address of the received frame.
+ *
+ * @sw_peer_id: Valid only when sw_peer_id_valid field is set. It is an
+ * identifier that allows SW to double check that the CSI info stored belongs
+ * to the device with this SW identifier.
+ *
+ * @phy_ppdu_id: ppdu_id of ppdu which has channel capture performed. Field
+ * only valid when the freeze field is set to 1.
+ *
+ * @packet_ta_lower_16: Packet’s lower 16bits transmit address in MAC header.
+ *
+ * @packet_ta_mid_16: Packet’s middle 16bits transmit address in MAC header.
+ *
+ * @packet_ta_upper_16: Packet’s upper 16bits transmit address in MAC header.
+ *
+ * @packet_ra_lower_16: Packet’s lower 16bits receive address in MAC header.
+ *
+ * @packet_ra_mid_16: Packet’s middle 16bits receive address in MAC header.
+ *
+ * @packet_ra_upper_16: Packet’s upper 16bits receive address in MAC header.
+ *
+ * @tsf_timestamp_15_0: MAC side 64bit TSF timestamp when this TLV is sent to
+ * PHY. Bits [15:0].
+ *
+ * @tsf_timestamp_31_16: MAC side 64bit TSF timestamp when this TLV is sent to
+ * PHY. Bits [31:16].
+ *
+ * @tsf_timestamp_47_32: MAC side 64bit TSF timestamp when this TLV is sent to
+ * PHY. Bits [47:32].
+ *
+ * @tsf_63_48_or_user_mask_36_32: Indicates to PHY which user's channel info
+ * need to be uploaded. Only valid in UL MU case with MU_SUPPORT_IN_TLV = 1.
+ * Otherwise this indicates to PHY MSBs 63:48 of the MAC side 64bit TSF
+ * timestamp when this TLV is sent to PHY.
+ *
+ * @user_index_or_user_mask_15_0: Indicate to PHY which user's channel info
+ * need to be uploaded in UL MU case with MU_SUPPORT_IN_TLV = 1. Otherwise it
+ * indicate PHY which user’s channel information need to be uploaded.
+ *
+ * @user_mask_31_16: Indicate to PHY which user’s channel information need to
+ * be uploaded. Only valid in UL MU case with MU_SUPPORT_IN_TLV = 1.
+ */
+struct macrx_freeze_capture_channel_v3 {
 	uint16_t freeze                          :  1, //[0]
 		 capture_reason                  :  3, //[3:1]
 		 packet_type                     :  2, //[5:4]

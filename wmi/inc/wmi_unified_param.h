@@ -3869,6 +3869,7 @@ struct rx_reorder_queue_remove_params {
  * @num_peer_adv_stats: number of peer adv stats
  * @num_mib_stats: number of mib stats
  * @num_mib_extd_stats: number of extended mib stats
+ * @num_peer_stats_info_ext: number of peer extended stats info
  * @last_event: specify if the current event is the last event
  */
 typedef struct {
@@ -3886,6 +3887,7 @@ typedef struct {
 	uint32_t num_peer_adv_stats;
 	uint32_t num_mib_stats;
 	uint32_t num_mib_extd_stats;
+	uint32_t num_peer_stats_info_ext;
 	uint32_t last_event;
 } wmi_host_stats_event;
 
@@ -4682,6 +4684,7 @@ typedef enum {
 	wmi_roam_cap_report_event_id,
 	wmi_vdev_bcn_latency_event_id,
 	wmi_vdev_disconnect_event_id,
+	wmi_peer_create_conf_event_id,
 	wmi_events_max,
 } wmi_conv_event_id;
 

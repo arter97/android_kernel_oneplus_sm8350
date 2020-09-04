@@ -485,6 +485,21 @@ struct cdp_rx_mic_err_info {
 };
 
 /**
+ * struct cdp_mscs_params - MSCS parameters obtained
+ * from handshake
+ * @user_pri_bitmap - User priority bitmap
+ * @user_pri_limit - User priority limit
+ * @classifier_type - TCLAS Classifier type
+ * @classifier_mask - TCLAS Classifier mask
+ */
+struct cdp_mscs_params {
+	uint8_t user_pri_bitmap;
+	uint8_t user_pri_limit;
+	uint8_t classifier_type;
+	uint8_t classifier_mask;
+};
+
+/**
  * struct cdp_sec_type - security type information
  */
 enum cdp_sec_type {
@@ -1019,6 +1034,7 @@ enum cdp_peer_param_type {
  * @CDP_MONITOR_CHANNEL: monitor channel
  * @CDP_MONITOR_FREQUENCY: monitor frequency
  * @CDP_CONFIG_BSS_COLOR: configure bss color
+ * @CDP_SET_ATF_STATS_ENABLE: set ATF stats flag
  */
 enum cdp_pdev_param_type {
 	CDP_CONFIG_DEBUG_SNIFFER,
@@ -1048,6 +1064,7 @@ enum cdp_pdev_param_type {
 	CDP_MONITOR_CHANNEL,
 	CDP_MONITOR_FREQUENCY,
 	CDP_CONFIG_BSS_COLOR,
+	CDP_SET_ATF_STATS_ENABLE,
 };
 
 /*
@@ -1104,6 +1121,7 @@ enum cdp_pdev_param_type {
  * @cdp_pdev_param_fltr_mcast: filter multicast data
  * @cdp_pdev_param_fltr_none: filter no data
  * @cdp_pdev_param_monitor_chan: monitor channel
+ * @cdp_pdev_param_atf_stats_enable: ATF stats enable
  *
  * @cdp_psoc_param_en_rate_stats: set rate stats enable/disable
  * @cdp_psoc_param_en_nss_cfg: set nss cfg
@@ -1165,6 +1183,7 @@ typedef union cdp_config_param_t {
 	uint32_t cdp_pdev_param_osif_drop;
 	uint32_t cdp_pdev_param_en_perpkt_txstats;
 	uint32_t cdp_pdev_param_tx_pending;
+	bool cdp_pdev_param_atf_stats_enable;
 
 	/* psoc params */
 	bool cdp_psoc_param_en_rate_stats;
@@ -1600,6 +1619,7 @@ struct cdp_delayed_tx_completion_ppdu_user {
  * @ppdu_cookie: 16-bit ppdu_cookie
  * @sa_is_training: smart antenna training packets indication
  * @rssi_chain: rssi chain per bandwidth
+ * @usr_ack_rssi: overall per user ack rssi
  * @sa_tx_antenna: antenna in which packet is transmitted
  * @sa_max_rates: smart antenna tx feedback info max rates
  * @sa_goodput: smart antenna tx feedback info goodput
@@ -1613,6 +1633,7 @@ struct cdp_delayed_tx_completion_ppdu_user {
  * @mon_procd: to indicate user processed in ppdu of the sched cmd
  * @debug_copied: flag to indicate bar frame copied
  * @peer_last_delayed_ba: flag to indicate peer last delayed ba
+ * @phy_tx_time_us: Phy TX duration for the User
  */
 struct cdp_tx_completion_ppdu_user {
 	uint32_t completion_status:8,
@@ -1667,10 +1688,10 @@ struct cdp_tx_completion_ppdu_user {
 	/*ack rssi for separate chains*/
 	uint32_t ack_rssi[CDP_RSSI_CHAIN_LEN];
 	bool ack_rssi_valid;
+	uint32_t usr_ack_rssi;
 	uint32_t user_pos;
 	uint32_t mu_group_id;
 	uint32_t rix;
-	struct cdp_stats_cookie *cookie;
 	uint8_t is_ppdu_cookie_valid;
 	uint16_t ppdu_cookie;
 	uint8_t sa_is_training;
@@ -1708,6 +1729,8 @@ struct cdp_tx_completion_ppdu_user {
 	bool mon_procd;
 	bool debug_copied;
 	bool peer_last_delayed_ba;
+
+	uint16_t phy_tx_time_us;
 };
 
 /**
@@ -1853,12 +1876,15 @@ struct cdp_tx_mgmt_comp_info {
  * @bss_color: 6 bit value for full bss color
  * @doppler: value for doppler (will be 0 most of the times)
  * @spatial_reuse: value for spatial reuse used in radiotap HE header
+ * @usr_nss_sum: Sum of user nss
+ * @usr_ru_tones_sum: Sum of user ru_tones
  * @bar_ppdu_id: BAR ppdu_id
  * @bar_tx_duration: BAR tx duration
  * @bar_ppdu_start_timestamp: BAR start timestamp
  * @bar_ppdu_end_timestamp: BAR end timestamp
  * @tlv_bitmap: tlv_bitmap for the PPDU
  * @sched_cmdid: schedule command id
+ * @phy_ppdu_tx_time_us: Phy per PPDU TX duration
  * @user: per-User stats (array of per-user structures)
  */
 struct cdp_tx_completion_ppdu {
@@ -1894,12 +1920,15 @@ struct cdp_tx_completion_ppdu {
 	uint8_t bss_color;
 	uint8_t doppler;
 	uint8_t spatial_reuse;
+	uint8_t usr_nss_sum;
+	uint32_t usr_ru_tones_sum;
 	uint32_t bar_ppdu_id;
 	uint32_t bar_tx_duration;
 	uint32_t bar_ppdu_start_timestamp;
 	uint32_t bar_ppdu_end_timestamp;
 	uint32_t tlv_bitmap;
 	uint16_t sched_cmdid;
+	uint16_t phy_ppdu_tx_time_us;
 	struct cdp_tx_completion_ppdu_user user[];
 };
 
@@ -2146,7 +2175,6 @@ struct cdp_rx_indication_ppdu {
 	uint8_t fcs_error_mpdus;
 	uint16_t frame_ctrl;
 	int8_t rssi_chain[SS_COUNT][MAX_BW];
-	struct cdp_stats_cookie *cookie;
 	struct cdp_rx_su_evm_info evm_info;
 	uint32_t rx_antenna;
 	uint8_t num_users;

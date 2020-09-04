@@ -34,7 +34,25 @@
 #define CMN_NOISE_FLOOR       (-96)
 #define NUM_CHAINS_FW_TO_HOST(n) ((1 << ((n) + 1)) - 1)
 
+#define CFR_INVALID_SNR 0x80
+
 static u_int32_t end_magic = 0xBEAFDEAD;
+
+/**
+ * snr_to_signal_strength() - Convert SNR(dB) to signal strength(dBm)
+ * @snr: SNR in dB
+ *
+ * Return: signal strength in dBm
+ */
+static inline
+u_int32_t snr_to_signal_strength(uint8_t snr)
+{
+	/* SNR value 0x80 indicates -128dB which is not a valid value */
+	return (snr != CFR_INVALID_SNR) ?
+		(((int8_t)snr) + CMN_NOISE_FLOOR) :
+		((int8_t)snr);
+}
+
 /**
  * get_lut_entry() - Retrieve LUT entry using cookie number
  * @pcfr: PDEV CFR object
@@ -216,16 +234,16 @@ static void dump_freeze_tlv(void *freeze_tlv, uint32_t cookie)
 }
 
 /**
- * dump_freeze_tlv_v2() - Dump freeze TLV v2 sent in enhanced DMA header
+ * dump_freeze_tlv_v3() - Dump freeze TLV v2 sent in enhanced DMA header
  * @freeze_tlv: Freeze TLV sent from MAC to PHY
  * @cookie: Index into lookup table
  *
  * Return: none
  */
-static void dump_freeze_tlv_v2(void *freeze_tlv, uint32_t cookie)
+static void dump_freeze_tlv_v3(void *freeze_tlv, uint32_t cookie)
 {
-	struct macrx_freeze_capture_channel_v2 *freeze =
-		(struct macrx_freeze_capture_channel_v2 *)freeze_tlv;
+	struct macrx_freeze_capture_channel_v3 *freeze =
+		(struct macrx_freeze_capture_channel_v3 *)freeze_tlv;
 
 	cfr_debug("<DBRCOMP><FREEZE><%u>\n"
 		  "freeze: %d capture_reason: %d packet_type: 0x%x\n"
@@ -331,7 +349,7 @@ static void dump_metadata(struct csi_cfr_header *header, uint32_t cookie)
 		  "cfr_capture_type = %d\n"
 		  "sts_count = %d\n"
 		  "num_rx_chain = %d\n"
-		  "timestamp = 0x%x\n"
+		  "timestamp = %llu\n"
 		  "length = %d\n"
 		  "is_mu_ppdu = %d\n"
 		  "num_users = %d\n",
@@ -406,7 +424,8 @@ static void dump_enh_dma_hdr(struct whal_cfir_enhanced_hdr *dma_hdr,
 			  "peer_id: %d ppdu_id: 0x%04x total_bytes: %d\n"
 			  "header_version: %d target_id: %d cfr_fmt: %d\n"
 			  "mu_rx_data_incl: %d freeze_data_incl: %d\n"
-			  "mu_rx_num_users: %d decimation_factor: %d\n",
+			  "mu_rx_num_users: %d decimation_factor: %d\n"
+			  "freeze_tlv_version: %d\n",
 			  cookie,
 			  dma_hdr->tag,
 			  dma_hdr->length,
@@ -426,11 +445,13 @@ static void dump_enh_dma_hdr(struct whal_cfir_enhanced_hdr *dma_hdr,
 			  dma_hdr->mu_rx_data_incl,
 			  dma_hdr->freeze_data_incl,
 			  dma_hdr->mu_rx_num_users,
-			  dma_hdr->decimation_factor);
+			  dma_hdr->decimation_factor,
+			  dma_hdr->freeze_tlv_version);
 
 		if (dma_hdr->freeze_data_incl) {
-			if (header->chip_type == CFR_CAPTURE_RADIO_PINE)
-				dump_freeze_tlv_v2(freeze_tlv, cookie);
+			if (dma_hdr->freeze_tlv_version ==
+					MACRX_FREEZE_TLV_VERSION_3)
+				dump_freeze_tlv_v3(freeze_tlv, cookie);
 			else
 				dump_freeze_tlv(freeze_tlv, cookie);
 		}
@@ -447,7 +468,8 @@ static void dump_enh_dma_hdr(struct whal_cfir_enhanced_hdr *dma_hdr,
 			"peer_id: %d ppdu_id: 0x%04x total_bytes: %d\n"
 			"header_version: %d target_id: %d cfr_fmt: %d\n"
 			"mu_rx_data_incl: %d freeze_data_incl: %d\n"
-			"mu_rx_num_users: %d decimation_factor: %d\n",
+			"mu_rx_num_users: %d decimation_factor: %d\n"
+			"freeze_tlv_version: %d\n",
 			cookie,
 			dma_hdr->tag,
 			dma_hdr->length,
@@ -467,7 +489,8 @@ static void dump_enh_dma_hdr(struct whal_cfir_enhanced_hdr *dma_hdr,
 			dma_hdr->mu_rx_data_incl,
 			dma_hdr->freeze_data_incl,
 			dma_hdr->mu_rx_num_users,
-			dma_hdr->decimation_factor);
+			dma_hdr->decimation_factor,
+			dma_hdr->freeze_tlv_version);
 	}
 }
 
@@ -795,7 +818,7 @@ void target_if_cfr_rx_tlv_process(struct wlan_objmgr_pdev *pdev, void *nbuf)
 
 	for (i = 0; i < MAX_CHAIN; i++)
 		meta->chain_rssi[i] =
-			cdp_rx_ppdu->per_chain_rssi[i] + CMN_NOISE_FLOOR;
+			snr_to_signal_strength(cdp_rx_ppdu->per_chain_rssi[i]);
 
 	if (cdp_rx_ppdu->u.ppdu_type != CDP_RX_TYPE_SU) {
 		for (i = 0 ; i < meta->num_mu_users; i++) {
@@ -932,9 +955,9 @@ static bool enh_cfr_dbr_event_handler(struct wlan_objmgr_pdev *pdev,
 	if (dma_hdr.mu_rx_data_incl) {
 		uint8_t freeze_tlv_len;
 
-		if (pcfr->chip_type == CFR_CAPTURE_RADIO_PINE) {
+		if (dma_hdr.freeze_tlv_version == MACRX_FREEZE_TLV_VERSION_3) {
 			freeze_tlv_len =
-				sizeof(struct macrx_freeze_capture_channel_v2);
+				sizeof(struct macrx_freeze_capture_channel_v3);
 		} else {
 			freeze_tlv_len =
 				sizeof(struct macrx_freeze_capture_channel);
@@ -1135,6 +1158,8 @@ static void enh_prepare_cfr_header_txstatus(wmi_cfr_peer_tx_event_param
 
 	if (target_type == TARGET_TYPE_QCN9000)
 		header->chip_type      = CFR_CAPTURE_RADIO_PINE;
+	else if (target_type == TARGET_TYPE_QCA5018)
+		header->chip_type      = CFR_CAPTURE_RADIO_MAPLE;
 	else
 		header->chip_type      = CFR_CAPTURE_RADIO_CYP;
 
@@ -1331,6 +1356,8 @@ target_if_peer_capture_event(ol_scn_t sc, uint8_t *data, uint32_t datalen)
 
 	if (target_type == TARGET_TYPE_QCN9000)
 		header->chip_type      = CFR_CAPTURE_RADIO_PINE;
+	else if (target_type == TARGET_TYPE_QCA5018)
+		header->chip_type      = CFR_CAPTURE_RADIO_MAPLE;
 	else
 		header->chip_type      = CFR_CAPTURE_RADIO_CYP;
 
@@ -1575,15 +1602,13 @@ void target_if_cfr_update_global_cfg(struct wlan_objmgr_pdev *pdev)
 	struct pdev_cfr *pcfr;
 	struct ta_ra_cfr_cfg *curr_cfg = NULL;
 	struct ta_ra_cfr_cfg *glbl_cfg = NULL;
-	unsigned long *modified_in_this_session;
 
 	pcfr = wlan_objmgr_pdev_get_comp_private_obj(pdev,
 						     WLAN_UMAC_COMP_CFR);
-	modified_in_this_session =
-		(unsigned long *)&pcfr->rcc_param.modified_in_curr_session;
 
 	for (grp_id = 0; grp_id < MAX_TA_RA_ENTRIES; grp_id++) {
-		if (qdf_test_bit(grp_id, modified_in_this_session)) {
+		if (qdf_test_bit(grp_id,
+				 &pcfr->rcc_param.modified_in_curr_session)) {
 			/* Populating global config based on user's input */
 			glbl_cfg = &pcfr->global[grp_id];
 			curr_cfg = &pcfr->rcc_param.curr[grp_id];
@@ -1703,7 +1728,7 @@ QDF_STATUS cfr_enh_init_pdev(struct wlan_objmgr_psoc *psoc,
 		/* Update global configuration */
 		target_if_cfr_update_global_cfg(pdev);
 	} else {
-		cfr_err("Sending WMI to configure default has failed\n");
+		cfr_err("Sending WMI to configure default has failed");
 		return status;
 	}
 
@@ -1716,6 +1741,11 @@ QDF_STATUS cfr_enh_init_pdev(struct wlan_objmgr_psoc *psoc,
 		pcfr->num_subbufs = STREAMFS_NUM_SUBBUF_PINE;
 		pcfr->chip_type = CFR_CAPTURE_RADIO_PINE;
 		pcfr->max_mu_users = PINE_CFR_MU_USERS;
+	} else if (target_type == TARGET_TYPE_QCA5018) {
+		pcfr->subbuf_size = STREAMFS_MAX_SUBBUF_MAPLE;
+		pcfr->num_subbufs = STREAMFS_NUM_SUBBUF_MAPLE;
+		pcfr->chip_type = CFR_CAPTURE_RADIO_MAPLE;
+		pcfr->max_mu_users = MAPLE_CFR_MU_USERS;
 	} else {
 		pcfr->subbuf_size = STREAMFS_MAX_SUBBUF_CYP;
 		pcfr->num_subbufs = STREAMFS_NUM_SUBBUF_CYP;
