@@ -26,7 +26,7 @@
 #include <soc/qcom/subsystem_notif.h>
 #include "ipa_qmi_service.h"
 #include <linux/rmnet_ipa_fd_ioctl.h>
-#include "ipa.h"
+#include <linux/ipa.h>
 #include <uapi/linux/msm_rmnet.h>
 #include <net/rmnet_config.h>
 #include "ipa_mhi_proxy.h"
@@ -2798,8 +2798,8 @@ static const struct of_device_id rmnet_ipa_dt_match[] = {
 MODULE_DEVICE_TABLE(of, rmnet_ipa_dt_match);
 
 static const struct dev_pm_ops rmnet_ipa_pm_ops = {
-	.suspend_noirq = rmnet_ipa_ap_suspend,
-	.resume_noirq = rmnet_ipa_ap_resume,
+	.suspend_late = rmnet_ipa_ap_suspend,
+	.resume_early = rmnet_ipa_ap_resume,
 };
 
 static struct platform_driver rmnet_ipa_driver = {
@@ -4642,6 +4642,7 @@ int rmnet_ipa3_query_per_client_stats(
 		return -EINVAL;
 	}
 
+	teth_ptr = &rmnet_ipa3_ctx->tether_device[data->device_type];
 	if (data->num_clients == 1) {
 		/* Check if the client info is valid.*/
 		lan_clnt_idx1 = rmnet_ipa3_get_lan_client_info(
@@ -4653,7 +4654,6 @@ int rmnet_ipa3_query_per_client_stats(
 			return -EINVAL;
 		}
 
-		teth_ptr = &rmnet_ipa3_ctx->tether_device[data->device_type];
 		lan_client = &teth_ptr->lan_client[lan_clnt_idx1];
 
 		/*
@@ -4724,7 +4724,7 @@ int rmnet_ipa3_query_per_client_stats(
 		return rc;
 	}
 
-	if (resp->per_client_stats_list_valid) {
+	if (resp->per_client_stats_list_valid && teth_ptr) {
 		for (i = 0; i < resp->per_client_stats_list_len
 				&& i < IPA_MAX_NUM_HW_PATH_CLIENTS; i++) {
 			/* Subtract the header bytes from the DL bytes. */
