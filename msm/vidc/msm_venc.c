@@ -32,8 +32,6 @@
 #define DEFAULT_QP 0xA
 #define DEFAULT_QP_PACKED 0xA0A0A
 #define MIN_CHROMA_QP_OFFSET -12
-#define MAX_CHROMA_QP_OFFSET 0
-#define DEFAULT_CHROMA_QP_OFFSET 0
 #define MAX_INTRA_REFRESH_MBS ((7680 * 4320) >> 8)
 #define MAX_LTR_FRAME_COUNT 10
 #define MAX_NUM_B_FRAMES 1
@@ -927,8 +925,8 @@ static struct msm_vidc_ctrl msm_venc_ctrls[] = {
 		.name = "Chroma QP Index Offset",
 		.type = V4L2_CTRL_TYPE_INTEGER,
 		.minimum = MIN_CHROMA_QP_OFFSET,
-		.maximum = MAX_CHROMA_QP_OFFSET,
-		.default_value = DEFAULT_CHROMA_QP_OFFSET,
+		.maximum = INT_MAX,
+		.default_value = INT_MAX,
 		.step = 1,
 	},
 	{
@@ -1039,6 +1037,11 @@ static struct msm_vidc_format_desc venc_input_formats[] = {
 		.fourcc = V4L2_PIX_FMT_SDE_Y_CBCR_H2V2_P010_VENUS,
 	},
 	{
+		.name = "YCbCr Semiplanar 4:2:0 128 aligned",
+		.description = "Y/CbCr 4:2:0 128 aligned",
+		.fourcc = V4L2_PIX_FMT_NV12_128,
+	},
+	{
 		.name = "YCbCr Semiplanar 4:2:0 512 aligned",
 		.description = "Y/CbCr 4:2:0 512 aligned",
 		.fourcc = V4L2_PIX_FMT_NV12_512,
@@ -1071,6 +1074,14 @@ struct msm_vidc_format_constraint enc_pix_format_constraints[] = {
 		.y_buffer_alignment = 256,
 		.uv_max_stride = 8192,
 		.uv_buffer_alignment = 256,
+	},
+	{
+		.fourcc = V4L2_PIX_FMT_NV12_128,
+		.num_planes = 2,
+		.y_max_stride = 8192,
+		.y_buffer_alignment = 128,
+		.uv_max_stride = 8192,
+		.uv_buffer_alignment = 32,
 	},
 	{
 		.fourcc = V4L2_PIX_FMT_NV12_512,
@@ -3381,7 +3392,7 @@ int msm_venc_set_chroma_qp_offset(struct msm_vidc_inst *inst)
 	hdev = inst->core->device;
 
 	chr = get_ctrl(inst, V4L2_CID_MPEG_VIDEO_H264_CHROMA_QP_INDEX_OFFSET);
-	if (chr->val != MIN_CHROMA_QP_OFFSET)
+	if (chr->val == INT_MAX || (chr->val != 0 && chr->val != -12))
 		return 0;
 
 	f = &inst->fmts[INPUT_PORT].v4l2_fmt;

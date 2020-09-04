@@ -17,7 +17,7 @@
 #define MIN_NUM_DEC_CAPTURE_BUFFERS 4
 /* Y=16(0-9bits), Cb(10-19bits)=Cr(20-29bits)=128, black by default */
 #define DEFAULT_VIDEO_CONCEAL_COLOR_BLACK 0x8020010
-#define MAX_VP9D_INST_COUNT 6
+#define MAX_VP9D_INST_COUNT 3
 
 static const char *const mpeg_video_h264_profile[] = {
 	"Baseline",
@@ -432,6 +432,15 @@ static struct msm_vidc_ctrl msm_vdec_ctrls[] = {
 		.minimum = 0,
 		.maximum = 0,
 		.default_value = 0,
+		.step = 1,
+	},
+	{
+		.id = V4L2_CID_MPEG_VIDC_VDEC_HEIF_MODE,
+		.name = "HEIF Decoder",
+		.type = V4L2_CTRL_TYPE_BOOLEAN,
+		.minimum = V4L2_MPEG_MSM_VIDC_DISABLE,
+		.maximum = V4L2_MPEG_MSM_VIDC_ENABLE,
+		.default_value = V4L2_MPEG_MSM_VIDC_DISABLE,
 		.step = 1,
 	},
 };
@@ -948,6 +957,15 @@ int msm_vdec_s_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 		break;
 	case V4L2_CID_MPEG_VIDC_VIDEO_LOWLATENCY_HINT:
 		break;
+	case V4L2_CID_MPEG_VIDC_VDEC_HEIF_MODE:
+		if(get_v4l2_codec(inst) != V4L2_PIX_FMT_HEVC)
+			break;
+		inst->flags &= ~VIDC_TURBO;
+		if (ctrl->val)
+			inst->flags |= VIDC_TURBO;
+		if (inst->state < MSM_VIDC_LOAD_RESOURCES)
+			msm_vidc_calculate_buffer_counts(inst);
+		break;
 	default:
 		s_vpr_e(inst->sid, "Unknown control %#x\n", ctrl->id);
 		break;
@@ -1195,10 +1213,9 @@ int msm_vdec_set_secure_mode(struct msm_vidc_inst *inst)
 	if (ctrl->val) {
 		if (!(codec == V4L2_PIX_FMT_HEVC ||
 			codec == V4L2_PIX_FMT_H264 ||
-			codec == V4L2_PIX_FMT_VP9 ||
-			codec == V4L2_PIX_FMT_MPEG2)) {
+			codec == V4L2_PIX_FMT_VP9)) {
 			s_vpr_e(inst->sid,
-				"%s: Secure allowed for HEVC/H264/VP9/MPEG2\n",
+				"%s: Secure allowed for HEVC/H264/VP9\n",
 				__func__);
 			return -EINVAL;
 		}
@@ -1327,6 +1344,7 @@ int msm_vdec_set_priority(struct msm_vidc_inst *inst)
 int msm_vdec_set_seqchng_at_syncframe(struct msm_vidc_inst *inst)
 {
 	int rc = 0;
+	u32 codec;
 	struct hfi_device *hdev;
 	struct hfi_enable hfi_property;
 
@@ -1340,6 +1358,13 @@ int msm_vdec_set_seqchng_at_syncframe(struct msm_vidc_inst *inst)
 	if (!hfi_property.enable)
 		return 0;
 
+	codec = get_v4l2_codec(inst);
+	if (!(codec == V4L2_PIX_FMT_HEVC || codec == V4L2_PIX_FMT_H264)) {
+		s_vpr_e(inst->sid,
+			"%s:  low latency hint supported for HEVC/H264\n",
+				__func__);
+		return -EINVAL;
+	}
 	s_vpr_h(inst->sid, "%s: %#x\n", __func__, hfi_property.enable);
 	rc = call_hfi_op(hdev, session_set_property, inst->session,
 		HFI_PROPERTY_PARAM_VDEC_SEQCHNG_AT_SYNCFRM, &hfi_property,
