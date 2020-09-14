@@ -81,5 +81,6 @@ struct clk_register_data {
 
 int clk_runtime_get_regmap(struct clk_regmap *rclk);
 void clk_runtime_put_regmap(struct clk_regmap *rclk);
+void clk_restore_critical_clocks(struct device *dev);
 
 #endif
