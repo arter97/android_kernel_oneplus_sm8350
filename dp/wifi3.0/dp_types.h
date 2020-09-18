@@ -28,7 +28,7 @@
 #include <qdf_lro.h>
 #include <queue.h>
 #include <htt_common.h>
-
+#include <htt_stats.h>
 #include <cdp_txrx_cmn.h>
 #ifdef DP_MOB_DEFS
 #include <cds_ieee80211_common.h>
@@ -122,6 +122,11 @@
 #define PHYB_2G_LMAC_ID 2
 #define PHYB_2G_TARGET_PDEV_ID 2
 
+/* Flags for skippig s/w tid classification */
+#define DP_TX_HW_DSCP_TID_MAP_VALID 0x1
+#define DP_TXRX_HLOS_TID_OVERRIDE_ENABLED 0x2
+#define DP_TX_MESH_ENABLED 0x4
+
 enum rx_pktlog_mode {
 	DP_RX_PKTLOG_DISABLED = 0,
 	DP_RX_PKTLOG_FULL,
@@ -169,11 +174,12 @@ enum dp_peer_state {
 };
 
 /**
- * enum for modules ids of peer reference
+ * enum for modules ids of
  */
-enum dp_peer_mod_id {
+enum dp_mod_id {
 	DP_MOD_ID_TX_COMP,
 	DP_MOD_ID_RX,
+	DP_MOD_ID_HTT_COMP,
 	DP_MOD_ID_RX_ERR,
 	DP_MOD_ID_TX_PPDU_STATS,
 	DP_MOD_ID_RX_PPDU_STATS,
@@ -182,10 +188,17 @@ enum dp_peer_mod_id {
 	DP_MOD_ID_TX_MULTIPASS,
 	DP_MOD_ID_TX_CAPTURE,
 	DP_MOD_ID_NSS_OFFLOAD,
-	DP_MOD_ID_PEER_CONFIG,
+	DP_MOD_ID_CONFIG,
 	DP_MOD_ID_HTT,
 	DP_MOD_ID_IPA,
 	DP_MOD_ID_AST,
+	DP_MOD_ID_MCAST2UCAST,
+	DP_MOD_ID_CHILD,
+	DP_MOD_ID_MESH,
+	DP_MOD_ID_TX_EXCEPTION,
+	DP_MOD_ID_TDLS,
+	DP_MOD_ID_MISC,
+	DP_MOD_ID_MSCS,
 	DP_MOD_ID_MAX,
 };
 
@@ -424,7 +437,7 @@ struct dp_tx_ext_desc_pool_s {
  * @nbuf: Buffer Address
  * @msdu_ext_desc: MSDU extension descriptor
  * @id: Descriptor ID
- * @vdev: vdev over which the packet was transmitted
+ * @vdev_id: vdev_id of vdev over which the packet was transmitted
  * @pdev: Handle to pdev
  * @pool_id: Pool ID - used when releasing the descriptor
  * @flags: Flags to track the state of descriptor and special frame handling
@@ -446,14 +459,14 @@ struct dp_tx_desc_s {
 	uint16_t flags;
 	uint32_t id;
 	qdf_dma_addr_t dma_addr;
-	struct dp_vdev *vdev;
+	uint8_t vdev_id;
+	uint8_t tx_status;
+	uint16_t peer_id;
 	struct dp_pdev *pdev;
 	uint8_t tx_encap_type;
 	uint8_t frm_type;
 	uint8_t pkt_offset;
 	uint8_t  pool_id;
-	uint16_t peer_id;
-	uint16_t tx_status;
 	struct dp_tx_ext_desc_elem_s *msdu_ext_desc;
 	void *me_buffer;
 	void *tso_desc;
@@ -594,6 +607,9 @@ struct dp_srng {
 	uint8_t cached;
 	int irq;
 	uint32_t num_entries;
+#ifdef DP_MEM_PRE_ALLOC
+	uint8_t is_mem_prealloc;
+#endif
 };
 
 struct dp_rx_reorder_array_elem {
@@ -1439,7 +1455,7 @@ struct dp_soc {
 	/* rdk rate statistics context at soc level*/
 	struct cdp_soc_rate_stats_ctx *rate_stats_ctx;
 	/* rdk rate statistics control flag */
-	bool wlanstats_enabled;
+	bool rdkstats_enabled;
 
 	/* 8021p PCP-TID map values */
 	uint8_t pcp_tid_map[PCP_TID_MAP_MAX];
@@ -1508,6 +1524,10 @@ struct dp_soc {
 	struct dp_last_op_info last_op_info;
 	TAILQ_HEAD(, dp_peer) inactive_peer_list;
 	qdf_spinlock_t inactive_peer_list_lock;
+	TAILQ_HEAD(, dp_vdev) inactive_vdev_list;
+	qdf_spinlock_t inactive_vdev_list_lock;
+	/* lock to protect vdev_id_map table*/
+	qdf_spinlock_t vdev_map_lock;
 };
 
 #ifdef IPA_OFFLOAD
@@ -1702,6 +1722,42 @@ struct dp_rx_mon_enh_trailer_data {
 	uint16_t protocol_tag;
 };
 #endif /* WLAN_RX_PKT_CAPTURE_ENH */
+
+#ifdef HTT_STATS_DEBUGFS_SUPPORT
+/* Number of debugfs entries created for HTT stats */
+#define PDEV_HTT_STATS_DBGFS_SIZE HTT_DBG_NUM_EXT_STATS
+
+/* struct pdev_htt_stats_dbgfs_priv - Structure to maintain debugfs information
+ * of HTT stats
+ * @pdev: dp pdev of debugfs entry
+ * @stats_id: stats id of debugfs entry
+ */
+struct pdev_htt_stats_dbgfs_priv {
+	struct dp_pdev *pdev;
+	uint16_t stats_id;
+};
+
+/* struct pdev_htt_stats_dbgfs_cfg - PDEV level data structure for debugfs
+ * support for HTT stats
+ * @debugfs_entry: qdf_debugfs directory entry
+ * @m: qdf debugfs file handler
+ * @pdev_htt_stats_dbgfs_ops: File operations of entry created
+ * @priv: HTT stats debugfs private object
+ * @htt_stats_dbgfs_event: HTT stats event for debugfs support
+ * @lock: HTT stats debugfs lock
+ * @htt_stats_dbgfs_msg_process: Function callback to print HTT stats
+ */
+struct pdev_htt_stats_dbgfs_cfg {
+	qdf_dentry_t debugfs_entry[PDEV_HTT_STATS_DBGFS_SIZE];
+	qdf_debugfs_file_t m;
+	struct qdf_debugfs_fops
+			pdev_htt_stats_dbgfs_ops[PDEV_HTT_STATS_DBGFS_SIZE - 1];
+	struct pdev_htt_stats_dbgfs_priv priv[PDEV_HTT_STATS_DBGFS_SIZE - 1];
+	qdf_event_t htt_stats_dbgfs_event;
+	qdf_mutex_t lock;
+	void (*htt_stats_dbgfs_msg_process)(void *data, A_INT32 len);
+};
+#endif /* HTT_STATS_DEBUGFS_SUPPORT */
 
 /* PDEV level structure for data path */
 struct dp_pdev {
@@ -2077,6 +2133,10 @@ struct dp_pdev {
 
 	/* Maintains first status buffer's paddr of a PPDU */
 	uint64_t status_buf_addr;
+#ifdef HTT_STATS_DEBUGFS_SUPPORT
+	/* HTT stats debugfs params */
+	struct pdev_htt_stats_dbgfs_cfg *dbgfs_cfg;
+#endif
 };
 
 struct dp_peer;
@@ -2119,6 +2179,9 @@ struct dp_vdev {
 	/* Multicast enhancement enabled */
 	uint8_t mcast_enhancement_en;
 
+	/* IGMP multicast enhancement enabled */
+	uint8_t igmp_mcast_enhanc_en;
+
 	/* HW TX Checksum Enabled Flag */
 	uint8_t csum_enabled;
 
@@ -2140,6 +2203,12 @@ struct dp_vdev {
 
 	/* Address search type to be set in TX descriptor */
 	uint8_t search_type;
+
+	/*
+	 * Flag to indicate if s/w tid classification should be
+	 * skipped
+	 */
+	uint8_t skip_sw_tid_classification;
 
 	/* AST hash value for BSS peer in HW valid for STA VAP*/
 	uint16_t bss_ast_hash;
@@ -2301,6 +2370,9 @@ struct dp_vdev {
 #endif
 	/* callback to collect connectivity stats */
 	ol_txrx_stats_rx_fp stats_cb;
+	uint32_t num_peers;
+	/* entry to inactive_list*/
+	TAILQ_ENTRY(dp_vdev) inactive_list_elem;
 
 #ifdef WLAN_SUPPORT_RX_FISA
 	/**
@@ -2314,7 +2386,7 @@ struct dp_vdev {
 	 * peer is created for VDEV
 	 */
 	qdf_atomic_t ref_cnt;
-	uint32_t num_peers;
+	qdf_atomic_t mod_refs[DP_MOD_ID_MAX];
 };
 
 
@@ -2395,10 +2467,12 @@ struct dp_peer_ast_params {
 	uint8_t flowQ;
 };
 
+#ifdef WLAN_SUPPORT_MSCS
+/*MSCS Procedure based macros */
 #define IEEE80211_MSCS_MAX_ELEM_SIZE    5
 #define IEEE80211_TCLAS_MASK_CLA_TYPE_4  4
 /*
- * struct dp_peer_mscs_node_stats - MSCS database obtained from
+ * struct dp_peer_mscs_parameter - MSCS database obtained from
  * MSCS Request and Response in the control path. This data is used
  * by the AP to find out what priority to set based on the tuple
  * classification during packet processing.
@@ -2413,6 +2487,7 @@ struct dp_peer_mscs_parameter {
 	uint8_t user_priority_limit;
 	uint8_t classifier_mask;
 };
+#endif
 
 /* Peer structure for data path state */
 struct dp_peer {
@@ -2498,7 +2573,7 @@ struct dp_peer {
 	uint8_t peer_based_pktlog_filter;
 
 	/* rdk statistics context */
-	struct cdp_peer_rate_stats_ctx *wlanstats_ctx;
+	struct cdp_peer_rate_stats_ctx *rdkstats_ctx;
 	/* average sojourn time */
 	qdf_ewma_tx_lag avg_sojourn_msdu[CDP_DATA_TID_MAX];
 
@@ -2530,8 +2605,10 @@ struct dp_peer {
 	qdf_atomic_t mod_refs[DP_MOD_ID_MAX];
 
 	uint8_t peer_state;
+#ifdef WLAN_SUPPORT_MSCS
 	struct dp_peer_mscs_parameter mscs_ipv4_parameter, mscs_ipv6_parameter;
 	bool mscs_active;
+#endif
 };
 
 /*
