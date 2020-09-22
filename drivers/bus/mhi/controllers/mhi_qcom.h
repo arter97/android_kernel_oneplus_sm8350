@@ -60,6 +60,7 @@ struct mhi_dev {
 	int resn;
 	void *arch_info;
 	bool powered_on;
+	bool skip_forced_suspend;
 	dma_addr_t iova_start;
 	dma_addr_t iova_stop;
 	enum mhi_suspend_mode suspend_mode;
