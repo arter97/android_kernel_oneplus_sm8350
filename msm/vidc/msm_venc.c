@@ -42,6 +42,7 @@
 #define LEGACY_CBR_BUF_SIZE 500
 #define CBR_PLUS_BUF_SIZE 1000
 #define MAX_GOP 0xFFFFFFF
+#define MAX_QPRANGE_BOOST 0x3333
 
 #define MIN_NUM_ENC_OUTPUT_BUFFERS 4
 #define MIN_NUM_ENC_CAPTURE_BUFFERS 5
@@ -954,6 +955,15 @@ static struct msm_vidc_ctrl msm_venc_ctrls[] = {
 		.minimum = 0,
 		.maximum = 100,
 		.default_value = 25,
+		.step = 1,
+	},
+	{
+		.id = V4L2_CID_MPEG_VIDC_VENC_QPRANGE_BOOST,
+		.name = "Bitrate boost QP range",
+		.type = V4L2_CTRL_TYPE_INTEGER,
+		.minimum = 0,
+		.maximum = MAX_QPRANGE_BOOST,
+		.default_value = 0,
 		.step = 1,
 	},
 	{
@@ -2021,6 +2031,7 @@ int msm_venc_s_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 	case V4L2_CID_MPEG_VIDEO_H264_CHROMA_QP_INDEX_OFFSET:
 	case V4L2_CID_MPEG_VIDC_VENC_BITRATE_SAVINGS:
 	case V4L2_CID_MPEG_VIDC_VENC_BITRATE_BOOST:
+	case V4L2_CID_MPEG_VIDC_VENC_QPRANGE_BOOST:
 	case V4L2_CID_MPEG_VIDC_SUPERFRAME:
 		s_vpr_h(sid, "Control set: ID : 0x%x Val : %d\n",
 			ctrl->id, ctrl->val);
@@ -2993,7 +3004,8 @@ int msm_venc_set_qp_range(struct msm_vidc_inst *inst)
 	hdev = inst->core->device;
 
 	if (!(inst->client_set_ctrls & CLIENT_SET_MIN_QP) &&
-		!(inst->client_set_ctrls & CLIENT_SET_MAX_QP)) {
+		!(inst->client_set_ctrls & CLIENT_SET_MAX_QP) &&
+		!inst->boost_qp_enabled) {
 		s_vpr_h(inst->sid,
 			"%s: Client didn't set QP range\n", __func__);
 		return 0;
@@ -3003,10 +3015,18 @@ int msm_venc_set_qp_range(struct msm_vidc_inst *inst)
 	qp_range.max_qp.layer_id = MSM_VIDC_ALL_LAYER_ID;
 
 	ctrl = get_ctrl(inst, V4L2_CID_MPEG_VIDEO_HEVC_MIN_QP);
-	qp_range.min_qp.qp_packed = ctrl->val;
+	if (inst->boost_qp_enabled &&
+		!(inst->client_set_ctrls & CLIENT_SET_MIN_QP))
+		qp_range.min_qp.qp_packed = inst->boost_min_qp;
+	else
+		qp_range.min_qp.qp_packed = ctrl->val;
 
 	ctrl = get_ctrl(inst, V4L2_CID_MPEG_VIDEO_HEVC_MAX_QP);
-	qp_range.max_qp.qp_packed = ctrl->val;
+	if (inst->boost_qp_enabled &&
+		!(inst->client_set_ctrls & CLIENT_SET_MAX_QP))
+		qp_range.max_qp.qp_packed = inst->boost_max_qp;
+	else
+		qp_range.max_qp.qp_packed = ctrl->val;
 
 	s_vpr_h(inst->sid, "%s: layers %#x qp_min %#x qp_max %#x\n",
 			__func__, qp_range.min_qp.layer_id,
@@ -3485,6 +3505,7 @@ int msm_venc_set_bitrate_boost_margin(struct msm_vidc_inst *inst, u32 enable)
 	struct hfi_device *hdev;
 	struct v4l2_ctrl *ctrl = NULL;
 	struct hfi_bitrate_boost_margin boost_margin;
+	int minqp, maxqp;
 
 	if (!inst || !inst->core) {
 		d_vpr_e("%s: invalid params %pK\n", __func__, inst);
@@ -3498,6 +3519,7 @@ int msm_venc_set_bitrate_boost_margin(struct msm_vidc_inst *inst, u32 enable)
 	}
 
 	ctrl = get_ctrl(inst, V4L2_CID_MPEG_VIDC_VENC_BITRATE_BOOST);
+
 	/* Mapped value to 0, 25 or 50*/
 	if (ctrl->val >= 50)
 		boost_margin.margin = 50;
@@ -3511,6 +3533,18 @@ setprop:
 		sizeof(boost_margin));
 	if (rc)
 		s_vpr_e(inst->sid, "%s: set property failed\n", __func__);
+
+	/* Boost QP range is only enabled when bitrate boost is enabled
+	 * and boost QP range is set by client
+	 */
+	ctrl = get_ctrl(inst, V4L2_CID_MPEG_VIDC_VENC_QPRANGE_BOOST);
+	if (enable && ctrl->val) {
+		minqp = ctrl->val & 0xFF;
+		maxqp = (ctrl->val >> 8) & 0xFF;
+		inst->boost_qp_enabled = true;
+		inst->boost_min_qp = minqp | (minqp << 8) | (minqp << 16);
+		inst->boost_max_qp = maxqp | (maxqp << 8) | (maxqp << 16);
+	}
 
 	return rc;
 }
@@ -4005,6 +4039,9 @@ int msm_venc_check_dynamic_flip_constraints(struct msm_vidc_inst *inst)
 		/* Reject dynamic flip with scalar enabled */
 		s_vpr_e(inst->sid, "Unsupported dynamic flip with scalar\n");
 		rc = -EINVAL;
+	} else if (handle_vpss_restrictions(inst)) {
+		s_vpr_e(inst->sid, "Unsupported resolution for dynamic flip\n");
+		rc = -EINVAL;
 	}
 
 	return rc;
@@ -4127,7 +4164,7 @@ int msm_venc_set_vui_timing_info(struct msm_vidc_inst *inst)
 	struct hfi_device *hdev;
 	struct v4l2_ctrl *ctrl;
 	struct hfi_vui_timing_info timing_info;
-	bool cfr;
+	bool cfr, native_recorder;
 	u32 codec;
 
 	if (!inst || !inst->core) {
@@ -4140,8 +4177,13 @@ int msm_venc_set_vui_timing_info(struct msm_vidc_inst *inst)
 	if (codec != V4L2_PIX_FMT_H264 && codec != V4L2_PIX_FMT_HEVC)
 		return 0;
 
+	native_recorder = false;
+	ctrl = get_ctrl(inst, V4L2_CID_MPEG_VIDC_VENC_NATIVE_RECORDER);
+	if (ctrl->val == V4L2_MPEG_MSM_VIDC_ENABLE)
+		native_recorder = true;
+
 	ctrl = get_ctrl(inst, V4L2_CID_MPEG_VIDC_VIDEO_VUI_TIMING_INFO);
-	if (ctrl->val == V4L2_MPEG_MSM_VIDC_DISABLE)
+	if (ctrl->val == V4L2_MPEG_MSM_VIDC_DISABLE && native_recorder == false)
 		return 0;
 
 	switch (inst->rc_type) {
@@ -4786,6 +4828,69 @@ int check_blur_restrictions(struct msm_vidc_inst *inst)
 	return 0;
 }
 
+int handle_vpss_restrictions(struct msm_vidc_inst *inst)
+{
+	struct v4l2_ctrl *rotation = NULL;
+	struct v4l2_ctrl *hflip = NULL;
+	struct v4l2_ctrl *vflip = NULL;
+	struct v4l2_format *f;
+	struct msm_vidc_vpss_capability *vpss_caps;
+	u32 vpss_caps_count;
+	bool rotation_flip_enable = false;
+	u32 i,input_height, input_width;
+
+	if (!inst || !inst->core) {
+		d_vpr_e("%s: invalid params %pK\n", __func__, inst);
+		return -EINVAL;
+	}
+
+	f = &inst->fmts[INPUT_PORT].v4l2_fmt;
+	input_height = f->fmt.pix_mp.height;
+	input_width = f->fmt.pix_mp.width;
+
+	vpss_caps = inst->core->resources.vpss_caps;
+	vpss_caps_count = inst->core->resources.vpss_caps_count;
+
+	/* check customer specified VPSS resolutions */
+	if (vpss_caps) {
+		for (i = 0; i < vpss_caps_count; i++) {
+			if (input_width == vpss_caps[i].width &&
+				input_height == vpss_caps[i].height) {
+				s_vpr_h(inst->sid,
+					"supported resolution found for VPSS, width = %d, height = %d\n",
+					input_width, input_height);
+				return 0;
+			}
+		}
+	}
+
+	/* check rotation and flip contraint for VPSS
+	 * any rotation or flip sessions with non-multiple of 8
+	 * resolution is rejected.
+	 */
+	rotation = get_ctrl(inst, V4L2_CID_ROTATE);
+	hflip = get_ctrl(inst, V4L2_CID_HFLIP);
+	vflip = get_ctrl(inst, V4L2_CID_VFLIP);
+	if (rotation->val != 0 ||
+		hflip->val != V4L2_MPEG_MSM_VIDC_DISABLE ||
+		vflip->val != V4L2_MPEG_MSM_VIDC_DISABLE)
+		rotation_flip_enable = true;
+
+	if (rotation_flip_enable) {
+		if ((input_width & 7) != 0) {
+			s_vpr_e(inst->sid, "Unsupported width = %d for VPSS\n",
+				input_width);
+			return -ENOTSUPP;
+		}
+		if ((input_height & 7) != 0) {
+			s_vpr_e(inst->sid, "Unsupported height = %d for VPSS\n",
+				input_height);
+			return -ENOTSUPP;
+		}
+	}
+	return 0;
+}
+
 int msm_venc_set_properties(struct msm_vidc_inst *inst)
 {
 	int rc = 0;
@@ -4797,6 +4902,9 @@ int msm_venc_set_properties(struct msm_vidc_inst *inst)
 	if (rc)
 		goto exit;
 	rc = handle_all_intra_restrictions(inst);
+	if (rc)
+		goto exit;
+	rc = handle_vpss_restrictions(inst);
 	if (rc)
 		goto exit;
 	rc = msm_venc_set_frame_size(inst);

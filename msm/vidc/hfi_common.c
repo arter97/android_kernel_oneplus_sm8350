@@ -2292,7 +2292,6 @@ static int venus_hfi_session_process_batch(void *sess,
 	int rc = 0, c = 0;
 	struct hal_session *session = sess;
 	struct venus_hfi_device *device = &venus_hfi_dev;
-	struct hfi_cmd_session_sync_process_packet pkt;
 
 	mutex_lock(&device->lock);
 
@@ -2318,15 +2317,6 @@ static int venus_hfi_session_process_batch(void *sess,
 			goto err_etbs_and_ftbs;
 		}
 	}
-
-	rc = call_hfi_pkt_op(device, session_sync_process, &pkt, session->sid);
-	if (rc) {
-		s_vpr_e(session->sid, "Failed to create sync packet\n");
-		goto err_etbs_and_ftbs;
-	}
-
-	if (__iface_cmdq_write(device, &pkt, session->sid))
-		rc = -ENOTEMPTY;
 
 err_etbs_and_ftbs:
 	mutex_unlock(&device->lock);
@@ -4003,16 +3993,17 @@ static int venus_hfi_get_fw_info(void *dev, struct hal_fw_info *fw_info)
 			smem_table_ptr + smem_image_index_venus,
 			VENUS_VERSION_LENGTH);
 
-	while (version[i++] != 'V' && i < VENUS_VERSION_LENGTH)
+	while (version[i] != 'V' && version[i] != 'v' &&
+			++i < VENUS_VERSION_LENGTH)
 		;
 
-	if (i == VENUS_VERSION_LENGTH - 1) {
+	if (i >= VENUS_VERSION_LENGTH - 1) {
 		d_vpr_e("Venus version string is not proper\n");
 		fw_info->version[0] = '\0';
 		goto fail_version_string;
 	}
 
-	for (i--; i < VENUS_VERSION_LENGTH && j < VENUS_VERSION_LENGTH - 1; i++)
+	for (; i < VENUS_VERSION_LENGTH && j < VENUS_VERSION_LENGTH - 1; i++)
 		fw_info->version[j++] = version[i];
 	fw_info->version[j] = '\0';
 
