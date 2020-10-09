@@ -1221,12 +1221,20 @@ static inline QDF_STATUS dp_send_mgmt_packet_to_stack(struct dp_soc *soc,
 {
 	uint32_t *nbuf_data;
 	struct ieee80211_frame *wh;
+	qdf_frag_t addr;
 
 	if (!nbuf)
 		return QDF_STATUS_E_INVAL;
 
+	/* Get addr pointing to80211 header */
+	addr = dp_rx_mon_get_nbuf_80211_hdr(nbuf);
+	if (qdf_unlikely(!addr)) {
+		qdf_nbuf_free(nbuf);
+		return QDF_STATUS_E_INVAL;
+	}
+
 	/*check if this is not a mgmt packet*/
-	wh = (struct ieee80211_frame *)qdf_nbuf_data(nbuf);
+	wh = (struct ieee80211_frame *)addr;
 	if (((wh->i_fc[0] & IEEE80211_FC0_TYPE_MASK) !=
 	     IEEE80211_FC0_TYPE_MGT) &&
 	     ((wh->i_fc[0] & IEEE80211_FC0_TYPE_MASK) !=
@@ -1636,8 +1644,7 @@ dp_rx_pdev_mon_cmn_buffers_alloc(struct dp_pdev *pdev, int mac_id)
 	mac_for_pdev = dp_get_lmac_id_for_pdev_id(pdev->soc, mac_id, pdev_id);
 	status = dp_rx_pdev_mon_status_buffers_alloc(pdev, mac_for_pdev);
 	if (!QDF_IS_STATUS_SUCCESS(status)) {
-		dp_err("%s: dp_rx_pdev_mon_status_desc_pool_alloc() failed",
-		       __func__);
+		dp_err("dp_rx_pdev_mon_status_desc_pool_alloc() failed");
 		goto fail;
 	}
 
@@ -1647,8 +1654,7 @@ dp_rx_pdev_mon_cmn_buffers_alloc(struct dp_pdev *pdev, int mac_id)
 	status = dp_rx_pdev_mon_buf_buffers_alloc(pdev, mac_for_pdev,
 						  delayed_replenish);
 	if (!QDF_IS_STATUS_SUCCESS(status)) {
-		dp_err("%s: dp_rx_pdev_mon_buf_desc_pool_alloc() failed\n",
-		       __func__);
+		dp_err("dp_rx_pdev_mon_buf_desc_pool_alloc() failed");
 		goto mon_stat_buf_dealloc;
 	}
 
@@ -1828,8 +1834,7 @@ dp_rx_pdev_mon_cmn_desc_pool_alloc(struct dp_pdev *pdev, int mac_id)
 	/* Allocate sw rx descriptor pool for monitor status ring */
 	status = dp_rx_pdev_mon_status_desc_pool_alloc(pdev, mac_for_pdev);
 	if (!QDF_IS_STATUS_SUCCESS(status)) {
-		dp_err("%s: dp_rx_pdev_mon_status_desc_pool_alloc() failed",
-		       __func__);
+		dp_err("dp_rx_pdev_mon_status_desc_pool_alloc() failed");
 		goto fail;
 	}
 
@@ -1839,16 +1844,14 @@ dp_rx_pdev_mon_cmn_desc_pool_alloc(struct dp_pdev *pdev, int mac_id)
 	/* Allocate sw rx descriptor pool for monitor RxDMA buffer ring */
 	status = dp_rx_pdev_mon_buf_desc_pool_alloc(pdev, mac_for_pdev);
 	if (!QDF_IS_STATUS_SUCCESS(status)) {
-		dp_err("%s: dp_rx_pdev_mon_buf_desc_pool_alloc() failed\n",
-		       __func__);
+		dp_err("dp_rx_pdev_mon_buf_desc_pool_alloc() failed");
 		goto mon_status_dealloc;
 	}
 
 	/* Allocate link descriptors for the monitor link descriptor ring */
 	status = dp_hw_link_desc_pool_banks_alloc(soc, mac_for_pdev);
 	if (!QDF_IS_STATUS_SUCCESS(status)) {
-		dp_err("%s: dp_hw_link_desc_pool_banks_alloc() failed",
-		       __func__);
+		dp_err("dp_hw_link_desc_pool_banks_alloc() failed");
 		goto mon_buf_dealloc;
 	}
 	return status;

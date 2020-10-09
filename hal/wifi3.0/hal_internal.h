@@ -209,6 +209,7 @@ enum hal_srng_dir {
 #define hal_srng_lock_t qdf_spinlock_t
 #define SRNG_LOCK_INIT(_lock) qdf_spinlock_create(_lock)
 #define SRNG_LOCK(_lock) qdf_spin_lock_bh(_lock)
+#define SRNG_TRY_LOCK(_lock) qdf_spin_trylock_bh(_lock)
 #define SRNG_UNLOCK(_lock) qdf_spin_unlock_bh(_lock)
 #define SRNG_LOCK_DESTROY(_lock) qdf_spinlock_destroy(_lock)
 
@@ -611,6 +612,14 @@ struct hal_hw_txrx_ops {
 					      uint32_t num_rings,
 					      uint32_t *remap1,
 					      uint32_t *remap2);
+	uint32_t (*hal_rx_flow_setup_cmem_fse)(
+				struct hal_soc *soc, uint32_t cmem_ba,
+				uint32_t table_offset, uint8_t *rx_flow);
+	uint32_t (*hal_rx_flow_get_cmem_fse_ts)(struct hal_soc *soc,
+						uint32_t fse_offset);
+	void (*hal_rx_flow_get_cmem_fse)(struct hal_soc *soc,
+					 uint32_t fse_offset,
+					 uint32_t *fse, qdf_size_t len);
 };
 
 /**
