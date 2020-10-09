@@ -95,6 +95,55 @@ static int hdd_get_bandwidth_level(void *data)
 	return ret;
 }
 
+#ifdef DP_MEM_PRE_ALLOC
+
+/**
+ * hdd_get_consistent_mem_unaligned() - API to get consistent unaligned mem
+ * @size: Size of memory required
+ * @paddr: Pointer to paddr to be filled in by API
+ * @ring_type: Pointer to ring type for which consistent memory is needed
+ *
+ * Return: Virtual address of consistent memory on success, else null
+ */
+static
+void *hdd_get_consistent_mem_unaligned(size_t size,
+				       qdf_dma_addr_t *paddr,
+				       uint32_t ring_type)
+{
+	return dp_prealloc_get_consistent_mem_unaligned(size, paddr,
+							ring_type);
+}
+
+/**
+ * hdd_put_consistent_mem_unaligned() - API to put consistent unaligned mem
+ * @vaddr: Virtual address of memory
+ *
+ * Return: None
+ */
+static
+void hdd_put_consistent_mem_unaligned(void *vaddr)
+{
+	dp_prealloc_put_consistent_mem_unaligned(vaddr);
+}
+
+#else
+static
+void *hdd_get_consistent_mem_unaligned(size_t size,
+				       qdf_dma_addr_t *paddr,
+				       uint32_t ring_type)
+{
+	hdd_err_rl("prealloc not support!");
+
+	return NULL;
+}
+
+static
+void hdd_put_consistent_mem_unaligned(void *vaddr)
+{
+	hdd_err_rl("prealloc not support!");
+}
+#endif
+
 /**
  * hdd_set_recovery_in_progress() - API to set recovery in progress
  * @data: Context
@@ -172,6 +221,10 @@ static void hdd_hif_init_driver_state_callbacks(void *data,
 	cbk->is_driver_unloading = hdd_is_driver_unloading;
 	cbk->is_target_ready = hdd_is_target_ready;
 	cbk->get_bandwidth_level = hdd_get_bandwidth_level;
+	cbk->prealloc_get_consistent_mem_unaligned =
+		hdd_get_consistent_mem_unaligned;
+	cbk->prealloc_put_consistent_mem_unaligned =
+		hdd_put_consistent_mem_unaligned;
 }
 
 #ifdef FORCE_WAKE
@@ -405,7 +458,7 @@ static int hdd_init_qdf_ctx(struct device *dev, void *bdev,
 	qdf_dev->bus_type = bus_type;
 	qdf_dev->bid = bid;
 
-	if (cds_smmu_mem_map_setup(qdf_dev, ucfg_ipa_is_present()) !=
+	if (cds_smmu_mem_map_setup(qdf_dev, ucfg_ipa_is_ready()) !=
 		QDF_STATUS_SUCCESS) {
 		hdd_err("cds_smmu_mem_map_setup() failed");
 		return -EFAULT;
@@ -492,6 +545,13 @@ static int __hdd_soc_probe(struct device *dev,
 	if (errno)
 		goto unlock;
 
+	status = dp_prealloc_init();
+
+	if (status != QDF_STATUS_SUCCESS) {
+		errno = qdf_status_to_os_return(status);
+		goto unlock;
+	}
+
 	hdd_ctx = hdd_context_create(dev);
 	if (IS_ERR(hdd_ctx)) {
 		errno = PTR_ERR(hdd_ctx);
@@ -525,6 +585,7 @@ hdd_context_destroy:
 	hdd_context_destroy(hdd_ctx);
 
 assert_fail_count:
+	dp_prealloc_deinit();
 	probe_fail_cnt++;
 	hdd_err("consecutive probe failures:%u", probe_fail_cnt);
 	QDF_BUG(probe_fail_cnt < SSR_MAX_FAIL_CNT);
@@ -658,6 +719,12 @@ static int hdd_soc_recovery_reinit(struct device *dev,
 	struct osif_psoc_sync *psoc_sync;
 	int errno;
 
+	/* if driver is unloading, there is no need to do SSR */
+	if (qdf_is_driver_unloading()) {
+		hdd_info("driver is unloading, avoid SSR");
+		return 0;
+	}
+
 	/* SSR transition is initiated at the beginning of soc shutdown */
 	errno = osif_psoc_sync_trans_resume(dev, &psoc_sync);
 	QDF_BUG(!errno);
@@ -665,12 +732,11 @@ static int hdd_soc_recovery_reinit(struct device *dev,
 		return errno;
 
 	errno = __hdd_soc_recovery_reinit(dev, bdev, bid, bus_type);
-	if (errno)
-		return errno;
+
 
 	osif_psoc_sync_trans_stop(psoc_sync);
 
-	return 0;
+	return errno;
 }
 
 static void __hdd_soc_remove(struct device *dev)
@@ -711,6 +777,8 @@ static void __hdd_soc_remove(struct device *dev)
 
 	cds_set_driver_in_bad_state(false);
 	cds_set_unload_in_progress(false);
+
+	dp_prealloc_deinit();
 
 	pr_info("%s: Driver De-initialized\n", WLAN_MODULE_NAME);
 }
@@ -892,6 +960,12 @@ static void hdd_soc_recovery_shutdown(struct device *dev)
 	struct osif_psoc_sync *psoc_sync;
 	int errno;
 
+	/* if driver is unloading, there is no need to do SSR */
+	if (qdf_is_driver_unloading()) {
+		hdd_info("driver is unloading, avoid SSR");
+		return;
+	}
+
 	errno = osif_psoc_sync_trans_start_wait(dev, &psoc_sync);
 	if (errno)
 		return;
@@ -1066,10 +1140,8 @@ static int __wlan_hdd_bus_suspend(struct wow_enable_params wow_params)
 	}
 
 	err = wlan_hdd_validate_context(hdd_ctx);
-	if (err) {
-		hdd_err("Invalid hdd context: %d", err);
+	if (err)
 		return err;
-	}
 
 	hif_ctx = cds_get_context(QDF_MODULE_ID_HIF);
 	if (!hif_ctx) {
@@ -1198,10 +1270,8 @@ int wlan_hdd_bus_suspend_noirq(void)
 	}
 
 	errno = wlan_hdd_validate_context(hdd_ctx);
-	if (errno) {
-		hdd_err("Invalid HDD context: errno %d", errno);
+	if (errno)
 		return errno;
-	}
 
 	hif_ctx = cds_get_context(QDF_MODULE_ID_HIF);
 	if (!hif_ctx) {
@@ -1282,10 +1352,8 @@ int wlan_hdd_bus_resume(void)
 	}
 
 	status = wlan_hdd_validate_context(hdd_ctx);
-	if (status) {
-		hdd_err("Invalid hdd context");
+	if (status)
 		return status;
-	}
 
 	hif_ctx = cds_get_context(QDF_MODULE_ID_HIF);
 	if (!hif_ctx) {
@@ -1378,10 +1446,8 @@ int wlan_hdd_bus_resume_noirq(void)
 	}
 
 	status = wlan_hdd_validate_context(hdd_ctx);
-	if (status) {
-		hdd_err("Invalid HDD context: %d", status);
+	if (status)
 		return status;
-	}
 
 	hif_ctx = cds_get_context(QDF_MODULE_ID_HIF);
 	if (!hif_ctx)
@@ -1528,6 +1594,16 @@ static int wlan_hdd_runtime_resume(struct device *dev)
 
 	hdd_ctx = cds_get_context(QDF_MODULE_ID_HDD);
 
+	/*
+	 * In__hdd_soc_remove, runtime_sync_resume is called before setting
+	 * unload_in_progress flag. wlan_hdd_validate_context will cause
+	 * resume fail, if driver load/unload in-progress, so not doing
+	 * wlan_hdd_validate_context, have only SSR in progress check.
+	 */
+	if (!hdd_ctx) {
+		hdd_err("hdd_ctx is NULL");
+		return 0;
+	}
 	if (cds_is_driver_recovering()) {
 		hdd_debug("Recovery in progress, state:0x%x",
 			  cds_get_driver_state());
