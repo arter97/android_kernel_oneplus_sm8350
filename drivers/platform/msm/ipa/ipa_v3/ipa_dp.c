@@ -18,7 +18,6 @@
 #include "ipahal_fltrt.h"
 
 #define IPA_GSI_EVENT_RP_SIZE 8
-#define IPA_WAN_AGGR_PKT_CNT 1
 #define IPA_WAN_NAPI_MAX_FRAMES (NAPI_WEIGHT / IPA_WAN_AGGR_PKT_CNT)
 #define IPA_WAN_PAGE_ORDER 3
 #define IPA_LAN_AGGR_PKT_CNT 1
@@ -1203,7 +1202,7 @@ int ipa3_setup_sys_pipe(struct ipa_sys_connect_params *sys_in, u32 *clnt_hdl)
 	if (ipa3_assign_policy(sys_in, ep->sys)) {
 		IPAERR("failed to sys ctx for client %d\n", sys_in->client);
 		result = -ENOMEM;
-		goto fail_gen2;
+		goto fail_napi;
 	}
 
 	ep->valid = 1;
@@ -1220,17 +1219,17 @@ int ipa3_setup_sys_pipe(struct ipa_sys_connect_params *sys_in, u32 *clnt_hdl)
 		ep->sys->status_stat =
 			kzalloc(sizeof(struct ipa3_status_stats), GFP_KERNEL);
 		if (!ep->sys->status_stat)
-			goto fail_gen2;
+			goto fail_napi;
 	}
 
 	if (!ep->skip_ep_cfg) {
 		if (ipa3_cfg_ep(ipa_ep_idx, &sys_in->ipa_ep_cfg)) {
 			IPAERR("fail to configure EP.\n");
-			goto fail_gen2;
+			goto fail_napi;
 		}
 		if (ipa3_cfg_ep_status(ipa_ep_idx, &ep->status)) {
 			IPAERR("fail to configure status of EP.\n");
-			goto fail_gen2;
+			goto fail_napi;
 		}
 		IPADBG("ep %d configuration successful\n", ipa_ep_idx);
 	} else {
@@ -1240,7 +1239,7 @@ int ipa3_setup_sys_pipe(struct ipa_sys_connect_params *sys_in, u32 *clnt_hdl)
 	result = ipa_gsi_setup_channel(sys_in, ep);
 	if (result) {
 		IPAERR("Failed to setup GSI channel\n");
-		goto fail_gen2;
+		goto fail_napi;
 	}
 
 	*clnt_hdl = ipa_ep_idx;
@@ -1251,7 +1250,7 @@ int ipa3_setup_sys_pipe(struct ipa_sys_connect_params *sys_in, u32 *clnt_hdl)
 			IPAERR("failed to alloc repl for client %d\n",
 					sys_in->client);
 			result = -ENOMEM;
-			goto fail_gen2;
+			goto fail_napi;
 		}
 		atomic_set(&ep->sys->repl->pending, 0);
 		ep->sys->repl->capacity = ep->sys->rx_pool_sz + 1;
@@ -1276,7 +1275,7 @@ int ipa3_setup_sys_pipe(struct ipa_sys_connect_params *sys_in, u32 *clnt_hdl)
 			IPAERR("failed to alloc repl for client %d\n",
 					sys_in->client);
 			result = -ENOMEM;
-			goto fail_gen2;
+			goto fail_napi;
 		}
 		atomic_set(&ep->sys->page_recycle_repl->pending, 0);
 		ep->sys->page_recycle_repl->capacity =
@@ -1381,6 +1380,11 @@ fail_page_recycle_repl:
 		ep->sys->page_recycle_repl->capacity = 0;
 		kfree(ep->sys->page_recycle_repl);
 	}
+fail_napi:
+	/* Delete NAPI TX object. */
+	if (ipa3_ctx->tx_napi_enable &&
+		(IPA_CLIENT_IS_PROD(sys_in->client)))
+		netif_napi_del(&ep->sys->napi_tx);
 fail_gen2:
 	ipa_pm_deregister(ep->sys->pm_hdl);
 fail_pm:
@@ -3403,14 +3407,18 @@ void ipa3_lan_rx_cb(void *priv, enum ipa_dp_evt_type evt, unsigned long data)
 	unsigned int src_pipe;
 	u32 metadata;
 	u8 ucp;
+	void (*client_notify)(void *client_priv, enum ipa_dp_evt_type evt,
+		       unsigned long data);
+	void *client_priv;
 
 	ipahal_pkt_status_parse_thin(rx_skb->data, &status);
 	src_pipe = status.endp_src_idx;
 	metadata = status.metadata;
 	ucp = status.ucp;
 	ep = &ipa3_ctx->ep[src_pipe];
-	if (unlikely(src_pipe >= ipa3_ctx->ipa_num_pipes)) {
-		IPAERR_RL("drop pipe=%d\n", src_pipe);
+	if (unlikely(src_pipe >= ipa3_ctx->ipa_num_pipes) ||
+		unlikely(atomic_read(&ep->disconnect_in_progress))) {
+		IPAERR("drop pipe=%d\n", src_pipe);
 		dev_kfree_skb_any(rx_skb);
 		return;
 	}
@@ -3432,12 +3440,19 @@ void ipa3_lan_rx_cb(void *priv, enum ipa_dp_evt_type evt, unsigned long data)
 			metadata, *(u32 *)rx_skb->cb);
 	IPADBG_LOW("ucp: %d\n", *(u8 *)(rx_skb->cb + 4));
 
+	spin_lock(&ipa3_ctx->disconnect_lock);
 	if (likely((!atomic_read(&ep->disconnect_in_progress)) &&
-				ep->valid && ep->client_notify))
-		ep->client_notify(ep->priv, IPA_RECEIVE,
+				ep->valid && ep->client_notify)) {
+		client_notify = ep->client_notify;
+		client_priv = ep->priv;
+		spin_unlock(&ipa3_ctx->disconnect_lock);
+		client_notify(client_priv, IPA_RECEIVE,
 				(unsigned long)(rx_skb));
-	else
+	} else {
+		spin_unlock(&ipa3_ctx->disconnect_lock);
 		dev_kfree_skb_any(rx_skb);
+	}
+
 }
 
 static void ipa3_recycle_rx_wrapper(struct ipa3_rx_pkt_wrapper *rx_pkt)
@@ -5273,7 +5288,7 @@ int ipa3_rx_poll(u32 clnt_hdl, int weight)
 	}
 
 	wan_def_sys = ipa3_ctx->ep[ipa_ep_idx].sys;
-	remain_aggr_weight = weight / IPA_WAN_AGGR_PKT_CNT;
+	remain_aggr_weight = weight / ipa3_ctx->ipa_wan_aggr_pkt_cnt;
 	if (remain_aggr_weight > IPA_WAN_NAPI_MAX_FRAMES) {
 		IPAERR("NAPI weight is higher than expected\n");
 		IPAERR("expected %d got %d\n",
@@ -5307,7 +5322,7 @@ start_poll:
 			break;
 		}
 	}
-	cnt += weight - remain_aggr_weight * IPA_WAN_AGGR_PKT_CNT;
+	cnt += weight - remain_aggr_weight * ipa3_ctx->ipa_wan_aggr_pkt_cnt;
 	/* call repl_hdlr before napi_reschedule / napi_complete */
 	ep->sys->repl_hdlr(ep->sys);
 	/* When not able to replenish enough descriptors, keep in polling
