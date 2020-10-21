@@ -34,6 +34,8 @@
 #define DSI_CLOCK_BITRATE_RADIX 10
 #define MAX_TE_SOURCE_ID  2
 
+#define SEC_PANEL_NAME_MAX_LEN  256
+
 static char dsi_display_primary[MAX_CMDLINE_PARAM_LEN];
 static char dsi_display_secondary[MAX_CMDLINE_PARAM_LEN];
 static struct dsi_display_boot_param boot_displays[MAX_DSI_ACTIVE_DISPLAY] = {
@@ -1521,12 +1523,15 @@ static ssize_t debugfs_alter_esd_check_mode(struct file *file,
 		goto error;
 	}
 
-	if (!esd_config->esd_enabled)
+	if (!esd_config->esd_enabled) {
+		rc = -EINVAL;
 		goto error;
+	}
 
 	if (!strcmp(buf, "te_signal_check\n")) {
 		if (display->panel->panel_mode == DSI_OP_VIDEO_MODE) {
 			DSI_INFO("TE based ESD check for Video Mode panels is not allowed\n");
+			rc = -EINVAL;
 			goto error;
 		}
 		DSI_INFO("ESD check is switched to TE mode by user\n");
@@ -1769,9 +1774,15 @@ static int dsi_display_debugfs_init(struct dsi_display *display)
 	int rc = 0;
 	struct dentry *dir, *dump_file, *misr_data;
 	char name[MAX_NAME_SIZE];
+	char panel_name[SEC_PANEL_NAME_MAX_LEN];
+	char secondary_panel_str[] = "_secondary";
 	int i;
 
-	dir = debugfs_create_dir(display->name, NULL);
+	strlcpy(panel_name, display->name, SEC_PANEL_NAME_MAX_LEN);
+	if (strcmp(display->display_type, "secondary") == 0)
+		strlcat(panel_name, secondary_panel_str, SEC_PANEL_NAME_MAX_LEN);
+
+	dir = debugfs_create_dir(panel_name, NULL);
 	if (IS_ERR_OR_NULL(dir)) {
 		rc = PTR_ERR(dir);
 		DSI_ERR("[%s] debugfs create dir failed, rc = %d\n",
@@ -5079,7 +5090,7 @@ static int _dsi_display_dev_init(struct dsi_display *display)
 		return -EINVAL;
 	}
 
-	if (!display->panel_node)
+	if (!display->panel_node && !display->fw)
 		return 0;
 
 	mutex_lock(&display->display_lock);
@@ -5384,7 +5395,7 @@ static int dsi_display_bind(struct device *dev,
 				drm, display);
 		return -EINVAL;
 	}
-	if (!display->panel_node)
+	if (!display->panel_node && !display->fw)
 		return 0;
 
 	if (!display->fw)
@@ -5694,7 +5705,13 @@ static void dsi_display_firmware_display(const struct firmware *fw,
 			fw->size);
 
 		display->fw = fw;
-		display->name = "dsi_firmware_display";
+
+		if (!strcmp(display->display_type, "primary"))
+			display->name = "dsi_firmware_display";
+
+		else if (!strcmp(display->display_type, "secondary"))
+			display->name = "dsi_firmware_display_secondary";
+
 	} else {
 		DSI_INFO("no firmware available, fallback to device node\n");
 	}
@@ -5785,10 +5802,17 @@ int dsi_display_dev_probe(struct platform_device *pdev)
 	if (!boot_disp->boot_disp_en &&
 			IS_ENABLED(CONFIG_DSI_PARSER) &&
 			!display->trusted_vm_env) {
-		firm_req = !request_firmware_nowait(
-			THIS_MODULE, 1, "dsi_prop",
-			&pdev->dev, GFP_KERNEL, display,
-			dsi_display_firmware_display);
+		if (!strcmp(display->display_type, "primary"))
+			firm_req = !request_firmware_nowait(
+				THIS_MODULE, 1, "dsi_prop",
+				&pdev->dev, GFP_KERNEL, display,
+				dsi_display_firmware_display);
+
+		else if (!strcmp(display->display_type, "secondary"))
+			firm_req = !request_firmware_nowait(
+				THIS_MODULE, 1, "dsi_prop_sec",
+				&pdev->dev, GFP_KERNEL, display,
+				dsi_display_firmware_display);
 	}
 
 	if (!firm_req) {
@@ -5847,7 +5871,8 @@ int dsi_display_get_num_of_displays(void)
 	for (i = 0; i < MAX_DSI_ACTIVE_DISPLAY; i++) {
 		struct dsi_display *display = boot_displays[i].disp;
 
-		if (display && display->panel_node)
+		if ((display && display->panel_node) ||
+					(display && display->fw))
 			count++;
 	}
 
@@ -5866,7 +5891,8 @@ int dsi_display_get_active_displays(void **display_array, u32 max_display_count)
 	for (index = 0; index < MAX_DSI_ACTIVE_DISPLAY; index++) {
 		struct dsi_display *display = boot_displays[index].disp;
 
-		if (display && display->panel_node)
+		if ((display && display->panel_node) ||
+					(display && display->fw))
 			display_array[count++] = display;
 	}
 
