@@ -68,6 +68,9 @@ cdp_dump_flow_pool_info(struct cdp_soc_t *soc)
 #ifdef FEATURE_WDS
 #include "dp_txrx_wds.h"
 #endif
+#ifdef WLAN_SUPPORT_MSCS
+#include "dp_mscs.h"
+#endif
 #ifdef ATH_SUPPORT_IQUE
 #include "dp_txrx_me.h"
 #endif
@@ -1358,7 +1361,12 @@ dp_srng_configure_interrupt_thresholds(struct dp_soc *soc,
 				       int ring_type, int ring_num,
 				       int num_entries)
 {
-	if (ring_type == WBM2SW_RELEASE && (ring_num == 3)) {
+	if (ring_type == REO_DST) {
+		ring_params->intr_timer_thres_us =
+			wlan_cfg_get_int_timer_threshold_rx(soc->wlan_cfg_ctx);
+		ring_params->intr_batch_cntr_thres_entries =
+			wlan_cfg_get_int_batch_threshold_rx(soc->wlan_cfg_ctx);
+	} else if (ring_type == WBM2SW_RELEASE && (ring_num == 3)) {
 		ring_params->intr_timer_thres_us =
 				wlan_cfg_get_int_timer_threshold_other(soc->wlan_cfg_ctx);
 		ring_params->intr_batch_cntr_thres_entries =
@@ -7770,6 +7778,22 @@ void dp_print_napi_stats(struct dp_soc *soc)
 	hif_print_napi_stats(soc->hif_handle);
 }
 
+#ifdef QCA_PEER_EXT_STATS
+/**
+ * dp_txrx_host_peer_ext_stats_clr: Reinitialize the txrx peer ext stats
+ *
+ */
+static inline void dp_txrx_host_peer_ext_stats_clr(struct dp_peer *peer)
+{
+	if (peer->pext_stats)
+		qdf_mem_zero(peer->pext_stats, sizeof(*peer->pext_stats));
+}
+#else
+static inline void dp_txrx_host_peer_ext_stats_clr(struct dp_peer *peer)
+{
+}
+#endif
+
 /**
  * dp_txrx_host_peer_stats_clr): Reinitialize the txrx peer stats
  * @soc: Datapath soc
@@ -7790,7 +7814,10 @@ dp_txrx_host_peer_stats_clr(struct dp_soc *soc,
 		rx_tid = &peer->rx_tid[tid];
 		DP_STATS_CLR(rx_tid);
 	}
+
 	DP_STATS_CLR(peer);
+
+	dp_txrx_host_peer_ext_stats_clr(peer);
 
 #if defined(FEATURE_PERPKT_INFO) && WDI_EVENT_ENABLE
 	dp_wdi_event_handler(WDI_EVENT_UPDATE_DP_STATS, peer->vdev->pdev->soc,
@@ -10152,10 +10179,10 @@ dp_peer_teardown_wifi3(struct cdp_soc_t *soc_hdl, uint8_t vdev_id,
 		return QDF_STATUS_E_FAILURE;
 	}
 
+	dp_peer_update_state(soc, peer, DP_PEER_STATE_LOGICAL_DELETE);
+
 	qdf_spin_lock_bh(&soc->ast_lock);
 	dp_peer_delete_ast_entries(soc, peer);
-
-	dp_peer_update_state(soc, peer, DP_PEER_STATE_LOGICAL_DELETE);
 	qdf_spin_unlock_bh(&soc->ast_lock);
 
 	dp_peer_unref_delete(peer, DP_MOD_ID_CDP);
@@ -10938,6 +10965,12 @@ static struct cdp_cfr_ops dp_ops_cfr = {
 };
 #endif
 
+#ifdef WLAN_SUPPORT_MSCS
+static struct cdp_mscs_ops dp_ops_mscs = {
+	.mscs_peer_lookup_n_get_priority = dp_mscs_peer_lookup_n_get_priority,
+};
+#endif
+
 #ifdef FEATURE_RUNTIME_PM
 /**
  * dp_runtime_suspend() - ensure DP is ready to runtime suspend
@@ -11589,6 +11622,9 @@ static struct cdp_ops dp_txrx_ops = {
 #endif
 #if defined(WLAN_CFR_ENABLE) && defined(WLAN_ENH_CFR_ENABLE)
 	.cfr_ops = &dp_ops_cfr,
+#endif
+#ifdef WLAN_SUPPORT_MSCS
+	.mscs_ops = &dp_ops_mscs,
 #endif
 };
 
