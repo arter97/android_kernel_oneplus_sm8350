@@ -255,6 +255,8 @@ char *lim_msg_str(uint32_t msgType)
 		return "eWNI_SME_DEAUTH_CNF";
 	case eWNI_SME_ADDTS_REQ:
 		return "eWNI_SME_ADDTS_REQ";
+	case eWNI_SME_MSCS_REQ:
+		return "eWNI_SME_MSCS_REQ";
 	case eWNI_SME_ADDTS_RSP:
 		return "eWNI_SME_ADDTS_RSP";
 	case eWNI_SME_DELTS_REQ:
@@ -299,6 +301,8 @@ char *lim_msg_str(uint32_t msgType)
 		return "eWNI_SME_SET_HW_MODE_RESP";
 	case eWNI_SME_HW_MODE_TRANS_IND:
 		return "eWNI_SME_HW_MODE_TRANS_IND";
+	case SIR_LIM_PROCESS_DEFERRED_QUEUE:
+		return "SIR_LIM_PROCESS_DEFERRED_QUEUE";
 	default:
 		return "Unknown";
 	}

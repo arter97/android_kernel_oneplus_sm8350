@@ -7874,10 +7874,6 @@ static void update_profile_fils_info(struct mac_context *mac,
 	qdf_mem_copy(des_profile->fils_con_info,
 			src_profile->fils_con_info,
 			sizeof(struct wlan_fils_connection_info));
-
-	wlan_cm_update_mlme_fils_connection_info(mac->psoc,
-						 des_profile->fils_con_info,
-						 vdev_id);
 	des_profile->hlp_ie =
 		qdf_mem_malloc(src_profile->hlp_ie_len);
 	if (!des_profile->hlp_ie)
@@ -11177,7 +11173,8 @@ csr_roam_get_scan_filter_from_profile(struct mac_context *mac_ctx,
 
 	csr_update_fils_scan_filter(filter, profile);
 
-	csr_update_adaptive_11r_scan_filter(mac_ctx, filter);
+	filter->enable_adaptive_11r =
+		wlan_mlme_adaptive_11r_enabled(mac_ctx->psoc);
 	csr_update_scan_filter_dot11mode(mac_ctx, filter);
 
 	return QDF_STATUS_SUCCESS;
@@ -16995,7 +16992,10 @@ csr_update_roam_scan_offload_request(struct mac_context *mac_ctx,
 	req_buf->roam_triggers.trigger_bitmap =
 		mlme_get_roam_trigger_bitmap(mac_ctx->psoc, session->vdev_id);
 	req_buf->roam_triggers.roam_score_delta =
-			mac_ctx->mlme_cfg->roam_scoring.roam_score_delta;
+		mac_ctx->mlme_cfg->roam_scoring.roam_score_delta;
+	req_buf->roam_triggers.roam_scan_scheme_bitmap =
+		wlan_cm_get_roam_scan_scheme_bitmap(mac_ctx->psoc,
+						    session->vdev_id);
 
 	req_buf->RoamKeyMgmtOffloadEnabled = session->RoamKeyMgmtOffloadEnabled;
 	req_buf->pmkid_modes.fw_okc =
