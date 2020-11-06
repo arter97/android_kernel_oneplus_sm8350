@@ -1984,18 +1984,20 @@ static int venus_hfi_session_end(void *sess)
 	struct venus_hfi_device *device = &venus_hfi_dev;
 	int rc = 0;
 
-	if (!__is_session_valid(device, session, __func__))
-		return -EINVAL;
-
 	mutex_lock(&device->lock);
+	if (!__is_session_valid(device, session, __func__)) {
+		rc = -EINVAL;
+		goto exit;
+	}
+
 	if (msm_vidc_fw_coverage) {
 		if (__sys_set_coverage(device, msm_vidc_fw_coverage,
 				session->sid))
 			s_vpr_e(session->sid, "Fw_coverage msg ON failed\n");
 	}
 	rc = __send_session_cmd(session, HFI_CMD_SYS_SESSION_END);
+exit:
 	mutex_unlock(&device->lock);
-
 	return rc;
 }
 
@@ -2294,6 +2296,7 @@ static int venus_hfi_session_process_batch(void *sess,
 	int rc = 0, c = 0;
 	struct hal_session *session = sess;
 	struct venus_hfi_device *device = &venus_hfi_dev;
+	bool is_last_frame = false;
 
 	mutex_lock(&device->lock);
 
@@ -2303,7 +2306,8 @@ static int venus_hfi_session_process_batch(void *sess,
 	}
 
 	for (c = 0; c < num_ftbs; ++c) {
-		rc = __session_ftb(session, &ftbs[c], true);
+		is_last_frame = (c + 1 == num_ftbs);
+		rc = __session_ftb(session, &ftbs[c], !is_last_frame);
 		if (rc) {
 			s_vpr_e(session->sid,
 				"Failed to queue batched ftb: %d\n", rc);
@@ -2312,7 +2316,8 @@ static int venus_hfi_session_process_batch(void *sess,
 	}
 
 	for (c = 0; c < num_etbs; ++c) {
-		rc = __session_etb(session, &etbs[c], true);
+		is_last_frame = (c + 1 == num_etbs);
+		rc = __session_etb(session, &etbs[c], !is_last_frame);
 		if (rc) {
 			s_vpr_e(session->sid,
 				"Failed to queue batched etb: %d\n", rc);
