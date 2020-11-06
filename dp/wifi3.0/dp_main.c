@@ -2061,8 +2061,10 @@ static void dp_interrupt_timer(void *arg)
 	int budget = 0xffff, i;
 	uint32_t remaining_quota = budget;
 	uint64_t start_time;
-	uint32_t lmac_id;
-	uint8_t dp_intr_id;
+	uint32_t lmac_id = DP_MON_INVALID_LMAC_ID;
+	uint8_t dp_intr_id = wlan_cfg_get_num_contexts(soc->wlan_cfg_ctx);
+	uint32_t lmac_iter;
+	int max_mac_rings = wlan_cfg_get_num_mac_rings(pdev->wlan_cfg_ctx);
 
 	/*
 	 * this logic makes all data path interfacing rings (UMAC/LMAC)
@@ -2083,32 +2085,36 @@ static void dp_interrupt_timer(void *arg)
 	if (!qdf_atomic_read(&soc->cmn_init_done))
 		return;
 
-	if (pdev->mon_chan_band == REG_BAND_UNKNOWN) {
-		qdf_timer_mod(&soc->int_timer, DP_INTR_POLL_TIMER_MS);
-		return;
+	if (pdev->mon_chan_band != REG_BAND_UNKNOWN) {
+		lmac_id = pdev->ch_band_lmac_id_mapping[pdev->mon_chan_band];
+		if (qdf_likely(lmac_id != DP_MON_INVALID_LMAC_ID)) {
+			dp_intr_id = soc->mon_intr_id_lmac_map[lmac_id];
+			dp_srng_record_timer_entry(soc, dp_intr_id);
+		}
 	}
 
-	lmac_id = pdev->ch_band_lmac_id_mapping[pdev->mon_chan_band];
-	if (qdf_unlikely(lmac_id == DP_MON_INVALID_LMAC_ID)) {
-		qdf_timer_mod(&soc->int_timer, DP_INTR_POLL_TIMER_MS);
-		return;
-	}
-
-	dp_intr_id = soc->mon_intr_id_lmac_map[lmac_id];
-	dp_srng_record_timer_entry(soc, dp_intr_id);
 	start_time = qdf_get_log_timestamp();
+	dp_is_hw_dbs_enable(soc, &max_mac_rings);
 
 	while (yield == DP_TIMER_NO_YIELD) {
-		work_done = dp_mon_process(soc, &soc->intr_ctx[dp_intr_id],
-					   lmac_id, remaining_quota);
-		if (work_done) {
-			budget -=  work_done;
-			if (budget <= 0) {
-				yield = DP_TIMER_WORK_EXHAUST;
-				goto budget_done;
+		for (lmac_iter = 0; lmac_iter < max_mac_rings; lmac_iter++) {
+			if (lmac_iter == lmac_id)
+				work_done = dp_mon_process(soc,
+						    &soc->intr_ctx[dp_intr_id],
+						    lmac_iter, remaining_quota);
+			else
+				work_done = dp_mon_drop_packets_for_mac(pdev,
+							       lmac_iter,
+							       remaining_quota);
+			if (work_done) {
+				budget -=  work_done;
+				if (budget <= 0) {
+					yield = DP_TIMER_WORK_EXHAUST;
+					goto budget_done;
+				}
+				remaining_quota = budget;
+				total_work_done += work_done;
 			}
-			remaining_quota = budget;
-			total_work_done += work_done;
 		}
 
 		yield = dp_should_timer_irq_yield(soc, total_work_done,
@@ -2123,7 +2129,8 @@ budget_done:
 	else
 		qdf_timer_mod(&soc->int_timer, DP_INTR_POLL_TIMER_MS);
 
-	dp_srng_record_timer_exit(soc, dp_intr_id);
+	if (lmac_id != DP_MON_INVALID_LMAC_ID)
+		dp_srng_record_timer_exit(soc, dp_intr_id);
 }
 
 #ifdef WLAN_FEATURE_DP_EVENT_HISTORY
@@ -6556,6 +6563,38 @@ dp_peer_authorize(struct cdp_soc_t *soc_hdl, uint8_t vdev_id,
 	return status;
 }
 
+static void dp_flush_monitor_rings(struct dp_soc *soc)
+{
+	struct dp_pdev *pdev = soc->pdev_list[0];
+	hal_soc_handle_t hal_soc = soc->hal_soc;
+	uint32_t lmac_id;
+	uint32_t hp, tp;
+	uint8_t dp_intr_id;
+	int budget;
+	void *mon_dst_srng;
+
+	if (pdev->mon_chan_band == REG_BAND_UNKNOWN)
+		return;
+
+	lmac_id = pdev->ch_band_lmac_id_mapping[pdev->mon_chan_band];
+	if (qdf_unlikely(lmac_id == DP_MON_INVALID_LMAC_ID))
+		return;
+
+	dp_intr_id = soc->mon_intr_id_lmac_map[lmac_id];
+	mon_dst_srng = dp_rxdma_get_mon_dst_ring(pdev, lmac_id);
+
+	/* reap full ring */
+	budget = wlan_cfg_get_dma_mon_stat_ring_size(pdev->wlan_cfg_ctx);
+
+	hal_get_sw_hptp(hal_soc, mon_dst_srng, &tp, &hp);
+	dp_info("Before reap: Monitor DST ring HP %u TP %u", hp, tp);
+
+	dp_mon_process(soc, &soc->intr_ctx[dp_intr_id], lmac_id, budget);
+
+	hal_get_sw_hptp(hal_soc, mon_dst_srng, &tp, &hp);
+	dp_info("After reap: Monitor DST ring HP %u TP %u", hp, tp);
+}
+
 /**
  * dp_vdev_unref_delete() - check and process vdev delete
  * @soc : DP specific soc pointer
@@ -6594,8 +6633,10 @@ void dp_vdev_unref_delete(struct dp_soc *soc, struct dp_vdev *vdev,
 		vdev, QDF_MAC_ADDR_REF(vdev->mac_addr.raw));
 
 	if (wlan_op_mode_monitor == vdev->opmode) {
-		if (soc->intr_mode == DP_INTR_POLL)
+		if (soc->intr_mode == DP_INTR_POLL) {
 			qdf_timer_sync_cancel(&soc->int_timer);
+			dp_flush_monitor_rings(soc);
+		}
 		pdev->monitor_vdev = NULL;
 		goto free_vdev;
 	}
@@ -10593,6 +10634,8 @@ static uint32_t dp_get_cfg(struct cdp_soc_t *soc, enum cdp_dp_cfg cfg)
 	case cfg_dp_pktlog_buffer_size:
 		value = dpsoc->wlan_cfg_ctx->pktlog_buffer_size;
 		break;
+	case cfg_dp_wow_check_rx_pending:
+		value = dpsoc->wlan_cfg_ctx->wow_check_rx_pending_enable;
 	default:
 		value =  0;
 	}
@@ -11418,6 +11461,7 @@ static struct cdp_ipa_ops dp_ops_ipa = {
 	.ipa_set_doorbell_paddr = dp_ipa_set_doorbell_paddr,
 	.ipa_op_response = dp_ipa_op_response,
 	.ipa_register_op_cb = dp_ipa_register_op_cb,
+	.ipa_deregister_op_cb = dp_ipa_deregister_op_cb,
 	.ipa_get_stat = dp_ipa_get_stat,
 	.ipa_tx_data_frame = dp_tx_send_ipa_data_frame,
 	.ipa_enable_autonomy = dp_ipa_enable_autonomy,
@@ -11430,7 +11474,8 @@ static struct cdp_ipa_ops dp_ops_ipa = {
 	.ipa_disable_pipes = dp_ipa_disable_pipes,
 	.ipa_set_perf_level = dp_ipa_set_perf_level,
 	.ipa_rx_intrabss_fwd = dp_ipa_rx_intrabss_fwd,
-	.ipa_tx_buf_smmu_mapping = dp_ipa_tx_buf_smmu_mapping
+	.ipa_tx_buf_smmu_mapping = dp_ipa_tx_buf_smmu_mapping,
+	.ipa_tx_buf_smmu_unmapping = dp_ipa_tx_buf_smmu_unmapping
 };
 #endif
 
