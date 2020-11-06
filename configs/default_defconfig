@@ -45,6 +45,7 @@ ifeq ($(CONFIG_CNSS_QCA6490), y)
 	CONFIG_HASTINGS_BT_WAR := y
 	CONFIG_WDI3_IPA_OVER_GSI :=y
 	CONFIG_PCIE_GEN_SWITCH := y
+	CONFIG_GENERIC_SHADOW_REGISTER_ACCESS_ENABLE :=y
 endif
 
 ifeq ($(CONFIG_CNSS_QCA6750), y)
@@ -1160,9 +1161,6 @@ CONFIG_DEBUG_RX_RING_BUFFER := y
 
 #Enable Hash debug
 CONFIG_RX_HASH_DEBUG := y
-
-#Enable connection manager
-CONFIG_CM_ENABLE := n
 
 #Flag to enable roam offload compilation of connection manager module
 CONFIG_CM_ROAM_OFFLOAD := y
