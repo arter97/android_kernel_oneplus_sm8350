@@ -192,6 +192,8 @@ struct dsi_display_ext_bridge {
  * @is_active:        status of the display
  * @trusted_vm_env:   Set to true, it the executing VM is Trusted VM.
  *                    Set to false, otherwise.
+ * @tx_cmd_buf_ndx:   Index to the DSI debugfs TX CMD buffer.
+ * @cmd_set:	      Debugfs TX cmd set.
  */
 struct dsi_display {
 	struct platform_device *pdev;
@@ -287,6 +289,9 @@ struct dsi_display {
 	bool is_active;
 
 	bool trusted_vm_env;
+
+	int tx_cmd_buf_ndx;
+	struct dsi_panel_cmd_set cmd_set;
 };
 
 int dsi_display_dev_probe(struct platform_device *pdev);
@@ -406,6 +411,16 @@ void dsi_display_put_mode(struct dsi_display *display,
  * Return: error code.
  */
 int dsi_display_get_default_lms(void *dsi_display, u32 *num_lm);
+
+/**
+ * dsi_display_get_qsync_min_fps() - get qsync min fps for given fps
+ * @display:            Handle to display.
+ * @mode_fps:           Fps value of current mode
+ *
+ * Return: error code.
+ */
+int dsi_display_get_qsync_min_fps(void *dsi_display, u32 mode_fps);
+
 
 /**
  * dsi_display_find_mode() - retrieve cached DSI mode given relevant params

@@ -36,6 +36,7 @@
 
 #define SEC_PANEL_NAME_MAX_LEN  256
 
+u8 dbgfs_tx_cmd_buf[SZ_4K];
 static char dsi_display_primary[MAX_CMDLINE_PARAM_LEN];
 static char dsi_display_secondary[MAX_CMDLINE_PARAM_LEN];
 static struct dsi_display_boot_param boot_displays[MAX_DSI_ACTIVE_DISPLAY] = {
@@ -1014,10 +1015,9 @@ int dsi_display_cmd_transfer(struct drm_connector *connector,
 		u32 cmd_buf_len)
 {
 	struct dsi_display *dsi_display = display;
-	struct dsi_cmd_desc cmd;
-	u8 cmd_payload[MAX_CMD_PAYLOAD_SIZE];
-	int rc = 0;
-	bool state = false;
+	int rc = 0, cnt = 0, i = 0;
+	bool state = false, transfer = false;
+	struct dsi_panel_cmd_set *set;
 
 	if (!dsi_display || !cmd_buf) {
 		DSI_ERR("[DSI] invalid params\n");
@@ -1026,12 +1026,8 @@ int dsi_display_cmd_transfer(struct drm_connector *connector,
 
 	DSI_DEBUG("[DSI] Display command transfer\n");
 
-	rc = dsi_display_cmd_prepare(cmd_buf, cmd_buf_len,
-			&cmd, cmd_payload, MAX_CMD_PAYLOAD_SIZE);
-	if (rc) {
-		DSI_ERR("[DSI] command prepare failed. rc %d\n", rc);
-		return rc;
-	}
+	if ((cmd_buf[1]) || (cmd_buf[3] & MIPI_DSI_MSG_LASTCOMMAND))
+		transfer = true;
 
 	mutex_lock(&dsi_display->display_lock);
 	rc = dsi_display_ctrl_get_host_init_state(dsi_display, &state);
@@ -1053,8 +1049,59 @@ int dsi_display_cmd_transfer(struct drm_connector *connector,
 		goto end;
 	}
 
-	rc = dsi_display->host.ops->transfer(&dsi_display->host,
-			&cmd.msg);
+	/*
+	 * Reset the dbgfs buffer if the commands sent exceed the available
+	 * buffer size. For video mode, limiting the buffer size to 2K to
+	 * ensure no performance issues.
+	 */
+	if (dsi_display->panel->panel_mode == DSI_OP_CMD_MODE) {
+		if ((dsi_display->tx_cmd_buf_ndx + cmd_buf_len) > SZ_4K) {
+			memset(dbgfs_tx_cmd_buf, 0, SZ_4K);
+			dsi_display->tx_cmd_buf_ndx = 0;
+		}
+	} else {
+		if ((dsi_display->tx_cmd_buf_ndx + cmd_buf_len) > SZ_2K) {
+			memset(dbgfs_tx_cmd_buf, 0, SZ_4K);
+			dsi_display->tx_cmd_buf_ndx = 0;
+		}
+	}
+
+	memcpy(&dbgfs_tx_cmd_buf[dsi_display->tx_cmd_buf_ndx], cmd_buf,
+			cmd_buf_len);
+	dsi_display->tx_cmd_buf_ndx += cmd_buf_len;
+	if (transfer) {
+		struct dsi_cmd_desc *cmds;
+
+		set = &dsi_display->cmd_set;
+		set->count = 0;
+		dsi_panel_get_cmd_pkt_count(dbgfs_tx_cmd_buf,
+				dsi_display->tx_cmd_buf_ndx, &cnt);
+		dsi_panel_alloc_cmd_packets(set, cnt);
+		dsi_panel_create_cmd_packets(dbgfs_tx_cmd_buf,
+				dsi_display->tx_cmd_buf_ndx, cnt, set->cmds);
+		cmds = set->cmds;
+		dsi_display->tx_cmd_buf_ndx = 0;
+
+		for (i = 0; i < cnt; i++) {
+			if (cmds->last_command)
+				cmds->msg.flags |= MIPI_DSI_MSG_LASTCOMMAND;
+			rc = dsi_display->host.ops->transfer(&dsi_display->host,
+					&cmds->msg);
+			if (rc < 0) {
+				DSI_ERR("failed to send command, rc=%d\n", rc);
+				break;
+			}
+			if (cmds->post_wait_ms)
+				usleep_range(cmds->post_wait_ms*1000,
+						((cmds->post_wait_ms*1000)+10));
+			cmds++;
+		}
+
+		memset(dbgfs_tx_cmd_buf, 0, SZ_4K);
+		dsi_panel_destroy_cmd_packets(set);
+		dsi_panel_dealloc_cmd_packets(set);
+	}
+
 end:
 	mutex_unlock(&dsi_display->display_lock);
 	return rc;
@@ -1071,7 +1118,19 @@ static void _dsi_display_continuous_clk_ctrl(struct dsi_display *display,
 
 	display_for_each_ctrl(i, display) {
 		ctrl = &display->ctrl[i];
-		dsi_ctrl_set_continuous_clk(ctrl->ctrl, enable);
+
+		/*
+		 * For phy ver 4.0 chipsets, configure DSI controller and
+		 * DSI PHY to force clk lane to HS mode always whereas
+		 * for other phy ver chipsets, configure DSI controller only.
+		 */
+		if (ctrl->phy->hw.ops.set_continuous_clk) {
+			dsi_ctrl_hs_req_sel(ctrl->ctrl, true);
+			dsi_ctrl_set_continuous_clk(ctrl->ctrl, enable);
+			dsi_phy_set_continuous_clk(ctrl->phy, enable);
+		} else {
+			dsi_ctrl_set_continuous_clk(ctrl->ctrl, enable);
+		}
 	}
 }
 
@@ -6460,7 +6519,10 @@ int dsi_display_get_info(struct drm_connector *connector,
 	info->max_width = 1920;
 	info->max_height = 1080;
 	info->qsync_min_fps =
-		display->panel->qsync_min_fps;
+		display->panel->qsync_caps.qsync_min_fps;
+	info->has_qsync_min_fps_list =
+		(display->panel->qsync_caps.qsync_min_fps_list_len > 0) ?
+		true : false;
 	info->poms_align_vsync = display->panel->poms_align_vsync;
 
 	switch (display->panel->panel_mode) {
@@ -6920,6 +6982,25 @@ int dsi_display_get_default_lms(void *dsi_display, u32 *num_lm)
 	mutex_unlock(&display->display_lock);
 
 	return rc;
+}
+
+int dsi_display_get_qsync_min_fps(void *display_dsi, u32 mode_fps)
+{
+	struct dsi_display *display = (struct dsi_display *)display_dsi;
+	struct dsi_panel *panel;
+	u32 i;
+
+	if (display == NULL || display->panel == NULL)
+		return -EINVAL;
+
+	panel = display->panel;
+	for (i = 0; i < panel->dfps_caps.dfps_list_len; i++) {
+		if (panel->dfps_caps.dfps_list[i] == mode_fps)
+			return panel->qsync_caps.qsync_min_fps_list[i];
+	}
+	SDE_EVT32(mode_fps);
+	DSI_DEBUG("Invalid mode_fps %d\n", mode_fps);
+	return -EINVAL;
 }
 
 int dsi_display_find_mode(struct dsi_display *display,
@@ -7769,7 +7850,7 @@ static int dsi_display_qsync(struct dsi_display *display, bool enable)
 	int i;
 	int rc = 0;
 
-	if (!display->panel->qsync_min_fps) {
+	if (!display->panel->qsync_caps.qsync_min_fps) {
 		DSI_ERR("%s:ERROR: qsync set, but no fps\n", __func__);
 		return 0;
 	}
@@ -7797,7 +7878,7 @@ static int dsi_display_qsync(struct dsi_display *display, bool enable)
 	}
 
 exit:
-	SDE_EVT32(enable, display->panel->qsync_min_fps, rc);
+	SDE_EVT32(enable, display->panel->qsync_caps.qsync_min_fps, rc);
 	mutex_unlock(&display->display_lock);
 	return rc;
 }

@@ -374,6 +374,14 @@ struct sde_connector_ops {
 	 */
 	void (*set_allowed_mode_switch)(struct drm_connector *connector,
 			void *display);
+
+	/**
+	 * get_qsync_min_fps - Get qsync min fps from qsync-min-fps-list
+	 * @display: Pointer to private display structure
+	 * @mode_fps: Fps value in dfps list
+	 * Returns: Qsync min fps value on success
+	 */
+	int (*get_qsync_min_fps)(void *display, u32 mode_fps);
 };
 
 /**
@@ -473,6 +481,7 @@ struct sde_connector_dyn_hdr_metadata {
  * @hdr_capable: external hdr support present
  * @cmd_rx_buf: the return buffer of response of command transfer
  * @rx_len: the length of dcs command received buffer
+ * @cached_edid: cached edid data for the connector
  */
 struct sde_connector {
 	struct drm_connector base;
@@ -542,6 +551,8 @@ struct sde_connector {
 
 	u8 cmd_rx_buf[MAX_CMD_RECEIVE_SIZE];
 	int rx_len;
+
+	struct edid *cached_edid;
 };
 
 /**
