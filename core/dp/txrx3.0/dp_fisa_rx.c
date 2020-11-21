@@ -145,6 +145,18 @@ static void print_flow_tuple(struct cdp_rx_flow_tuple_info *flow_tuple)
 	dp_info("l4_protocol 0x%x", flow_tuple->l4_protocol);
 }
 
+static bool
+dp_fisa_is_ipsec_connection(struct cdp_rx_flow_tuple_info *flow_tuple_info)
+{
+	if (flow_tuple_info->dest_port == IPSEC_PORT ||
+	    flow_tuple_info->dest_port == IPSEC_NAT_PORT ||
+	    flow_tuple_info->src_port == IPSEC_PORT ||
+	    flow_tuple_info->src_port == IPSEC_NAT_PORT)
+		return true;
+
+	return false;
+}
+
 /**
  * get_flow_tuple_from_nbuf() - Get the flow tuple from msdu
  * @hal_soc_hdl: Handle to hal soc
@@ -188,6 +200,11 @@ get_flow_tuple_from_nbuf(hal_soc_handle_t hal_soc_hdl,
 
 	flow_tuple_info->dest_port = qdf_ntohs(tcph->dest);
 	flow_tuple_info->src_port = qdf_ntohs(tcph->source);
+	if (dp_fisa_is_ipsec_connection(flow_tuple_info))
+		flow_tuple_info->is_exception = 1;
+	else
+		flow_tuple_info->is_exception = 0;
+
 	flow_tuple_info->l4_protocol = iph->protocol;
 	dp_fisa_debug("l4_protocol %d", flow_tuple_info->l4_protocol);
 
@@ -1286,6 +1303,7 @@ dp_rx_fisa_flush_udp_flow(struct dp_vdev *vdev,
 	}
 
 	qdf_nbuf_set_next(fisa_flow->head_skb, NULL);
+	QDF_NBUF_CB_RX_NUM_ELEMENTS_IN_LIST(fisa_flow->head_skb) = 1;
 	if (fisa_flow->last_skb)
 		qdf_nbuf_set_next(fisa_flow->last_skb, NULL);
 
@@ -1723,6 +1741,11 @@ QDF_STATUS dp_fisa_rx(struct dp_soc *soc, struct dp_vdev *vdev,
 		fisa_flow = dp_rx_get_fisa_flow(dp_fisa_rx_hdl, vdev,
 						head_nbuf);
 
+		/* Do not FISA aggregate IPSec packets */
+		if (fisa_flow &&
+		    fisa_flow->rx_flow_tuple_info.is_exception)
+			goto pull_nbuf;
+
 		/* Fragmented skb do not handle via fisa
 		 * get that flow and deliver that flow to rx_thread
 		 */
@@ -1751,6 +1774,7 @@ pull_nbuf:
 				     head_nbuf);
 
 deliver_nbuf: /* Deliver without FISA */
+		QDF_NBUF_CB_RX_NUM_ELEMENTS_IN_LIST(head_nbuf) = 1;
 		qdf_nbuf_set_next(head_nbuf, NULL);
 		hex_dump_skb_data(head_nbuf, false);
 		if (!vdev->osif_rx || QDF_STATUS_SUCCESS !=
