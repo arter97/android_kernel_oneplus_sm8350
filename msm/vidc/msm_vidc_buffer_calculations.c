@@ -913,6 +913,8 @@ u32 msm_vidc_calculate_dec_input_frame_size(struct msm_vidc_inst *inst, u32 buff
 	if (inst->core->platform_data->vpu_ver == VPU_VERSION_AR50_LITE) {
 		base_res_mbs = inst->capability.cap[CAP_MBS_PER_FRAME].max;
 		div_factor = 1;
+		if (num_mbs < NUM_MBS_720P)
+			base_res_mbs = base_res_mbs * 2;
 	}
 	/* For HEIF image, use the actual resolution to calc buffer size */
 	if (is_heif_decoder(inst)) {
@@ -1082,6 +1084,9 @@ u32 msm_vidc_calculate_enc_output_extra_size(struct msm_vidc_inst *inst)
 
 	if (inst->prop.extradata_ctrls & EXTRADATA_ADVANCED)
 		size += sizeof(struct msm_vidc_metadata_ltr_payload);
+
+	if (inst->prop.extradata_ctrls & EXTRADATA_ENC_FRAME_QP)
+		size += sizeof(struct msm_vidc_frame_qp_payload);
 
 	/* Add size for extradata none */
 	if (size)
