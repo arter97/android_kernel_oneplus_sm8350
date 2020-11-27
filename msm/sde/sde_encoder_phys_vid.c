@@ -26,9 +26,6 @@
 #define to_sde_encoder_phys_vid(x) \
 	container_of(x, struct sde_encoder_phys_vid, base)
 
-/* maximum number of consecutive kickoff errors */
-#define KICKOFF_MAX_ERRORS	2
-
 /* Poll time to do recovery during active region */
 #define POLL_TIME_USEC_FOR_LN_CNT 500
 #define MAX_POLL_CNT 10
@@ -877,11 +874,14 @@ static int _sde_encoder_phys_vid_wait_for_vblank(
 	u32 event = SDE_ENCODER_FRAME_EVENT_ERROR |
 		SDE_ENCODER_FRAME_EVENT_SIGNAL_RELEASE_FENCE |
 		SDE_ENCODER_FRAME_EVENT_SIGNAL_RETIRE_FENCE;
+	struct drm_connector *conn;
 
 	if (!phys_enc) {
 		pr_err("invalid encoder\n");
 		return -EINVAL;
 	}
+
+	conn = phys_enc->connector;
 
 	wait_info.wq = &phys_enc->pending_kickoff_wq;
 	wait_info.atomic_cnt = &phys_enc->pending_kickoff_cnt;
@@ -893,9 +893,15 @@ static int _sde_encoder_phys_vid_wait_for_vblank(
 
 	if (notify && (ret == -ETIMEDOUT) &&
 	    atomic_add_unless(&phys_enc->pending_retire_fence_cnt, -1, 0) &&
-	    phys_enc->parent_ops.handle_frame_done)
+	    phys_enc->parent_ops.handle_frame_done) {
 		phys_enc->parent_ops.handle_frame_done(
 			phys_enc->parent, phys_enc, event);
+
+		if (sde_encoder_recovery_events_enabled(phys_enc->parent))
+			sde_connector_event_notify(conn,
+				DRM_EVENT_SDE_HW_RECOVERY,
+				sizeof(uint8_t), SDE_RECOVERY_HARD_RESET);
+	}
 
 	SDE_EVT32(DRMID(phys_enc->parent), event, notify, ret,
 			ret ? SDE_EVTLOG_FATAL : 0);
@@ -922,7 +928,6 @@ static int sde_encoder_phys_vid_prepare_for_kickoff(
 	struct sde_hw_ctl *ctl;
 	bool recovery_events;
 	struct drm_connector *conn;
-	int event;
 	int rc;
 
 	if (!phys_enc || !params || !phys_enc->hw_ctl) {
@@ -964,15 +969,11 @@ static int sde_encoder_phys_vid_prepare_for_kickoff(
 		 * if the recovery event is registered by user, don't panic
 		 * trigger panic on first timeout if no listener registered
 		 */
-		if (recovery_events) {
-			event = vid_enc->error_count > KICKOFF_MAX_ERRORS ?
-				SDE_RECOVERY_HARD_RESET : SDE_RECOVERY_CAPTURE;
-			sde_connector_event_notify(conn,
-					DRM_EVENT_SDE_HW_RECOVERY,
-					sizeof(uint8_t), event);
-		} else {
+		if (recovery_events)
+			sde_connector_event_notify(conn, DRM_EVENT_SDE_HW_RECOVERY,
+					sizeof(uint8_t), SDE_RECOVERY_CAPTURE);
+		else
 			SDE_DBG_DUMP("panic");
-		}
 
 		/* request a ctl reset before the next flush */
 		phys_enc->enable_state = SDE_ENC_ERR_NEEDS_HW_RESET;
