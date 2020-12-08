@@ -4482,6 +4482,7 @@ static int msm_comm_qbuf_to_hfi(struct msm_vidc_inst *inst,
 		rc = -EINVAL;
 	}
 	if (rc) {
+		mbuf->flags |= MSM_VIDC_FLAG_DEFERRED;
 		s_vpr_e(inst->sid, "%s: Failed to qbuf: %d\n", __func__, rc);
 		goto err_bad_input;
 	}
@@ -4517,8 +4518,10 @@ void msm_vidc_batch_handler(struct work_struct *work)
 		__func__);
 
 	rc = msm_comm_qbufs_batch(inst, NULL);
-	if (rc)
+	if (rc) {
 		s_vpr_e(inst->sid, "%s: batch qbufs failed\n", __func__);
+		msm_vidc_queue_v4l2_event(inst, V4L2_EVENT_MSM_VIDC_SYS_ERROR);
+	}
 
 exit:
 	put_inst(inst);
@@ -4765,7 +4768,6 @@ int msm_comm_qbufs_batch(struct msm_vidc_inst *inst,
 {
 	int rc = 0;
 	struct msm_vidc_buffer *buf;
-	struct vb2_buffer *vb2;
 	int do_bw_calc = 0;
 
 	do_bw_calc = mbuf ? mbuf->vvb.vb2_buf.type == INPUT_MPLANE : 0;
@@ -4790,11 +4792,6 @@ int msm_comm_qbufs_batch(struct msm_vidc_inst *inst,
 		if (rc) {
 			s_vpr_e(inst->sid, "%s: Failed batch qbuf to hfi: %d\n",
 				__func__, rc);
-			if (buf != mbuf) {
-				vb2 = &buf->vvb.vb2_buf;
-				vb2_buffer_done(vb2, VB2_BUF_STATE_DONE);
-				msm_vidc_queue_v4l2_event(inst, V4L2_EVENT_MSM_VIDC_SYS_ERROR);
-			}
 			break;
 		}
 loop_end:
