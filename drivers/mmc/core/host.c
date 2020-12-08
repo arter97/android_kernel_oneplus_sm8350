@@ -224,11 +224,15 @@ int mmc_of_parse(struct mmc_host *host)
 	bool cd_cap_invert, cd_gpio_invert = false;
 #if defined(CONFIG_SDC_QTI)
 	const char *lower_bus_speed = NULL;
-	struct device_node *np = dev->of_node;
+	struct device_node *np;
 #endif
 
 	if (!dev || !dev_fwnode(dev))
 		return 0;
+
+#if defined(CONFIG_SDC_QTI)
+	np = dev->of_node;
+#endif
 
 	/* "bus-width" is translated to MMC_CAP_*_BIT_DATA flags */
 	if (device_property_read_u32(dev, "bus-width", &bus_width) < 0) {
@@ -461,6 +465,20 @@ int mmc_of_parse_voltage(struct device_node *np, u32 *mask)
 EXPORT_SYMBOL(mmc_of_parse_voltage);
 
 /**
+ * mmc_first_nonreserved_index() - get the first index that is not reserved
+ */
+static int mmc_first_nonreserved_index(void)
+{
+	int max;
+
+	max = of_alias_get_highest_id("sdhc");
+	if (max < 0)
+		return 0;
+
+	return max + 1;
+}
+
+/**
  *	mmc_alloc_host - initialise the per-host structure.
  *	@extra: sizeof private data structure
  *	@dev: pointer to host device model structure
@@ -471,6 +489,7 @@ struct mmc_host *mmc_alloc_host(int extra, struct device *dev)
 {
 	int err;
 	struct mmc_host *host;
+	int alias_id, min_idx, max_idx;
 
 	host = kzalloc(sizeof(struct mmc_host) + extra, GFP_KERNEL);
 	if (!host)
@@ -479,7 +498,16 @@ struct mmc_host *mmc_alloc_host(int extra, struct device *dev)
 	/* scanning will be enabled when we're ready */
 	host->rescan_disable = 1;
 
-	err = ida_simple_get(&mmc_host_ida, 0, 0, GFP_KERNEL);
+	alias_id = of_alias_get_id(dev->of_node, "sdhc");
+	if (alias_id >= 0) {
+		min_idx = alias_id;
+		max_idx = alias_id + 1;
+	} else {
+		min_idx = mmc_first_nonreserved_index();
+		max_idx = 0;
+	}
+
+	err = ida_simple_get(&mmc_host_ida, min_idx, max_idx, GFP_KERNEL);
 	if (err < 0) {
 		kfree(host);
 		return NULL;

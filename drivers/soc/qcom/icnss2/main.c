@@ -554,10 +554,6 @@ static int icnss_driver_event_server_arrive(struct icnss_priv *priv,
 
 	set_bit(ICNSS_WLFW_CONNECTED, &priv->state);
 
-	ret = icnss_hw_power_on(priv);
-	if (ret)
-		goto clear_server;
-
 	ret = wlfw_ind_register_send_sync_msg(priv);
 	if (ret < 0) {
 		if (ret == -EALREADY) {
@@ -565,46 +561,50 @@ static int icnss_driver_event_server_arrive(struct icnss_priv *priv,
 			goto qmi_registered;
 		}
 		ignore_assert = true;
-		goto err_power_on;
+		goto clear_server;
 	}
 
 	if (priv->device_id == WCN6750_DEVICE_ID) {
 		ret = wlfw_host_cap_send_sync(priv);
 		if (ret < 0)
-			goto err_power_on;
+			goto clear_server;
 	}
 
 	if (priv->device_id == ADRASTEA_DEVICE_ID) {
 		if (!priv->msa_va) {
 			icnss_pr_err("Invalid MSA address\n");
 			ret = -EINVAL;
-			goto err_power_on;
+			goto clear_server;
 		}
 
 		ret = wlfw_msa_mem_info_send_sync_msg(priv);
 		if (ret < 0) {
 			ignore_assert = true;
-			goto err_power_on;
+			goto clear_server;
 		}
 
 		ret = wlfw_msa_ready_send_sync_msg(priv);
 		if (ret < 0) {
 			ignore_assert = true;
-			goto err_power_on;
+			goto clear_server;
 		}
 	}
 
 	ret = wlfw_cap_send_sync_msg(priv);
 	if (ret < 0) {
 		ignore_assert = true;
-		goto err_power_on;
+		goto clear_server;
 	}
+
+	ret = icnss_hw_power_on(priv);
+	if (ret)
+		goto clear_server;
 
 	if (priv->device_id == WCN6750_DEVICE_ID) {
 		ret = wlfw_device_info_send_msg(priv);
 		if (ret < 0) {
 			ignore_assert = true;
-			goto err_power_on;
+			goto  device_info_failure;
 		}
 
 		priv->mem_base_va = devm_ioremap(&priv->pdev->dev,
@@ -612,7 +612,7 @@ static int icnss_driver_event_server_arrive(struct icnss_priv *priv,
 							 priv->mem_base_size);
 		if (!priv->mem_base_va) {
 			icnss_pr_err("Ioremap failed for bar address\n");
-			goto err_power_on;
+			goto device_info_failure;
 		}
 
 		icnss_pr_dbg("Non-Secured Bar Address pa: %pa, va: 0x%pK\n",
@@ -642,7 +642,7 @@ static int icnss_driver_event_server_arrive(struct icnss_priv *priv,
 
 	return ret;
 
-err_power_on:
+device_info_failure:
 	icnss_hw_power_off(priv);
 clear_server:
 	icnss_clear_server(priv);
@@ -986,6 +986,19 @@ static int icnss_qdss_trace_save_hdlr(struct icnss_priv *priv,
 	return ret;
 }
 
+static inline int icnss_atomic_dec_if_greater_one(atomic_t *v)
+{
+	int dec, c = atomic_read(v);
+
+	do {
+		dec = c - 1;
+		if (unlikely(dec < 1))
+			break;
+	} while (!atomic_try_cmpxchg(v, &c, dec));
+
+	return dec;
+}
+
 static int icnss_event_soc_wake_request(struct icnss_priv *priv, void *data)
 {
 	int ret = 0;
@@ -1176,8 +1189,7 @@ static int icnss_driver_event_pd_service_down(struct icnss_priv *priv,
 	if (priv->force_err_fatal)
 		ICNSS_ASSERT(0);
 
-	if (priv->device_id == ADRASTEA_DEVICE_ID)
-		icnss_send_hang_event_data(priv);
+	icnss_send_hang_event_data(priv);
 
 	if (priv->early_crash_ind) {
 		icnss_pr_dbg("PD Down ignored as early indication is processed: %d, state: 0x%lx\n",
@@ -1842,6 +1854,30 @@ enable_pdr:
 	return 0;
 }
 
+static int icnss_trigger_ssr_smp2p(struct icnss_priv *priv)
+{
+	unsigned int value = 0;
+	int ret;
+
+	if (IS_ERR(priv->smp2p_info.smem_state))
+		return -EINVAL;
+
+	value |= priv->smp2p_info.seq++;
+	value <<= ICNSS_SMEM_SEQ_NO_POS;
+	value |= ICNSS_TRIGGER_SSR;
+	ret = qcom_smem_state_update_bits(
+			priv->smp2p_info.smem_state,
+			ICNSS_SMEM_VALUE_MASK,
+			value);
+	if (ret)
+		icnss_pr_dbg("Error in SMP2P sent ret: %d\n", ret);
+
+	icnss_pr_dbg("Initiate Root PD restart. SMP2P sent value: 0x%X\n",
+		     value);
+	set_bit(ICNSS_HOST_TRIGGERED_PDR, &priv->state);
+	return ret;
+}
+
 static int icnss_tcdev_get_max_state(struct thermal_cooling_device *tcdev,
 					unsigned long *thermal_state)
 {
@@ -2365,7 +2401,6 @@ EXPORT_SYMBOL(icnss_force_wake_request);
 int icnss_force_wake_release(struct device *dev)
 {
 	struct icnss_priv *priv = dev_get_drvdata(dev);
-	int count = 0;
 
 	if (!dev)
 		return -ENODEV;
@@ -2375,14 +2410,13 @@ int icnss_force_wake_release(struct device *dev)
 		return -EINVAL;
 	}
 
-	if (atomic_read(&priv->soc_wake_ref_count) > 1) {
-		count = atomic_dec_return(&priv->soc_wake_ref_count);
+	icnss_pr_dbg("Calling SOC Wake response");
+
+	if (icnss_atomic_dec_if_greater_one(&priv->soc_wake_ref_count)) {
 		icnss_pr_dbg("SOC previous release pending, Ref count: %d",
-			     count);
+			     atomic_read(&priv->soc_wake_ref_count));
 		return 0;
 	}
-
-	icnss_pr_dbg("Calling SOC Wake response");
 
 	icnss_soc_wake_event_post(priv, ICNSS_SOC_WAKE_RELEASE_EVENT,
 				  0, NULL);
@@ -2687,6 +2721,9 @@ int icnss_trigger_recovery(struct device *dev)
 		ret = -EPERM;
 		goto out;
 	}
+
+	if (priv->device_id == WCN6750_DEVICE_ID)
+		return icnss_trigger_ssr_smp2p(priv);
 
 	if (!test_bit(ICNSS_PDR_REGISTERED, &priv->state)) {
 		icnss_pr_err("PD restart not enabled to trigger recovery: state: 0x%lx\n",
@@ -3229,6 +3266,7 @@ static int icnss_probe(struct platform_device *pdev)
 
 	priv->pdev = pdev;
 	priv->device_id = device_id->driver_data;
+	priv->is_chain1_supported = true;
 	INIT_LIST_HEAD(&priv->vreg_list);
 	INIT_LIST_HEAD(&priv->clk_list);
 	icnss_allow_recursive_recovery(dev);

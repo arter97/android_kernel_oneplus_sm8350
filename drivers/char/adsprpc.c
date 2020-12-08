@@ -45,6 +45,7 @@
 #include "adsprpc_compat.h"
 #include "adsprpc_shared.h"
 #include <soc/qcom/ramdump.h>
+#include <soc/qcom/minidump.h>
 #include <linux/delay.h>
 #include <linux/debugfs.h>
 #include <linux/pm_qos.h>
@@ -319,6 +320,8 @@ struct fastrpc_buf {
 	uint32_t flags;
 	int type;		/* One of "fastrpc_buf_type" */
 	bool in_use;	/* Used only for persistent header buffers */
+	struct timespec64 buf_start_time;
+	struct timespec64 buf_end_time;
 };
 
 struct fastrpc_ctx_lst;
@@ -518,6 +521,8 @@ struct fastrpc_mmap {
 	int uncached;
 	int secure;
 	uintptr_t attr;
+	struct timespec64 map_start_time;
+	struct timespec64 map_end_time;
 };
 
 enum fastrpc_perfkeys {
@@ -1114,6 +1119,7 @@ static void fastrpc_mmap_free(struct fastrpc_mmap *map, uint32_t flags)
 	struct fastrpc_file *fl;
 	int vmid, cid = -1, err = 0;
 	struct fastrpc_session_ctx *sess;
+	struct md_region md_entry;
 
 	if (!map)
 		return;
@@ -1156,6 +1162,17 @@ static void fastrpc_mmap_free(struct fastrpc_mmap *map, uint32_t flags)
 			ADSPRPC_ERR(
 				"failed to free remote heap allocation, device is not initialized\n");
 			return;
+		}
+		if (msm_minidump_enabled()) {
+			scnprintf(md_entry.name, sizeof(md_entry.name), "CMA_%d", fl->tgid);
+			md_entry.virt_addr = map->va;
+			md_entry.phys_addr = map->phys;
+			md_entry.size = map->size;
+			if (msm_minidump_remove_region(&md_entry) < 0) {
+				ADSPRPC_ERR(
+					"Failed to remove CMA from Minidump for tgid: %d, phys: 0x%llx, size: %zu\n",
+					fl->tgid, map->phys, map->size);
+			}
 		}
 		trace_fastrpc_dma_free(-1, map->phys, map->size);
 		if (map->phys) {
@@ -1224,6 +1241,7 @@ static int fastrpc_mmap_create(struct fastrpc_file *fl, int fd,
 	unsigned long flags;
 	int err = 0, vmid, sgl_index = 0;
 	struct scatterlist *sgl = NULL;
+	struct md_region md_entry;
 
 	VERIFY(err, cid >= ADSP_DOMAIN_ID && cid < NUM_CHANNELS);
 	if (err) {
@@ -1246,6 +1264,7 @@ static int fastrpc_mmap_create(struct fastrpc_file *fl, int fd,
 	map->fl = fl;
 	map->fd = fd;
 	map->attr = attr;
+	ktime_get_real_ts64(&map->map_start_time);
 	if (mflags == ADSP_MMAP_HEAP_ADDR ||
 				mflags == ADSP_MMAP_REMOTE_HEAP_ADDR) {
 		map->apps = me;
@@ -1260,6 +1279,17 @@ static int fastrpc_mmap_create(struct fastrpc_file *fl, int fd,
 		map->phys = (uintptr_t)region_phys;
 		map->size = len;
 		map->va = (uintptr_t)region_vaddr;
+		if (msm_minidump_enabled()) {
+			scnprintf(md_entry.name, sizeof(md_entry.name), "CMA_%d", fl->tgid);
+			md_entry.virt_addr = map->va;
+			md_entry.phys_addr = map->phys;
+			md_entry.size = map->size;
+			if (msm_minidump_add_region(&md_entry) >= 0) {
+				ADSPRPC_ERR(
+					"Failed to add CMA to Minidump for tgid: %d, phys: 0x%llx, size: %zu\n",
+					fl->tgid, map->phys, map->size);
+			}
+		}
 	} else if (mflags == FASTRPC_DMAHANDLE_NOMAP) {
 		VERIFY(err, !IS_ERR_OR_NULL(map->buf = dma_buf_get(fd)));
 		if (err) {
@@ -1455,6 +1485,8 @@ static int fastrpc_mmap_create(struct fastrpc_file *fl, int fd,
 	*ppmap = map;
 
 bail:
+	if (map)
+		ktime_get_real_ts64(&map->map_end_time);
 	if (err && map)
 		fastrpc_mmap_free(map, 0);
 	return err;
@@ -1569,6 +1601,7 @@ static int fastrpc_buf_alloc(struct fastrpc_file *fl, size_t size,
 	buf->flags = rflags;
 	buf->raddr = 0;
 	buf->type = buf_type;
+	ktime_get_real_ts64(&buf->buf_start_time);
 	buf->virt = dma_alloc_attrs(fl->sctx->smmu.dev, buf->size,
 						(dma_addr_t *)&buf->phys,
 						GFP_KERNEL, buf->dma_attr);
@@ -1618,6 +1651,8 @@ static int fastrpc_buf_alloc(struct fastrpc_file *fl, size_t size,
 	}
 	*obuf = buf;
  bail:
+	if (buf)
+		ktime_get_real_ts64(&buf->buf_end_time);
 	if (err && buf)
 		fastrpc_buf_free(buf, 0);
 	return err;

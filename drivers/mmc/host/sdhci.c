@@ -3726,20 +3726,37 @@ bool sdhci_cqe_irq(struct sdhci_host *host, u32 intmask, int *cmd_error,
 	if (!host->cqe_on)
 		return false;
 
-	if (intmask & (SDHCI_INT_INDEX | SDHCI_INT_END_BIT | SDHCI_INT_CRC))
+	if (intmask & (SDHCI_INT_INDEX | SDHCI_INT_END_BIT | SDHCI_INT_CRC)) {
 		*cmd_error = -EILSEQ;
-	else if (intmask & SDHCI_INT_TIMEOUT)
+#if defined(CONFIG_SDC_QTI)
+		if (intmask & SDHCI_INT_CRC)
+			host->mmc->err_stats[MMC_ERR_CMD_CRC]++;
+#endif
+	} else if (intmask & SDHCI_INT_TIMEOUT) {
 		*cmd_error = -ETIMEDOUT;
-	else
+#if defined(CONFIG_SDC_QTI)
+		host->mmc->err_stats[MMC_ERR_CMD_TIMEOUT]++;
+#endif
+	} else
 		*cmd_error = 0;
 
-	if (intmask & (SDHCI_INT_DATA_END_BIT | SDHCI_INT_DATA_CRC))
+	if (intmask & (SDHCI_INT_DATA_END_BIT | SDHCI_INT_DATA_CRC)) {
 		*data_error = -EILSEQ;
-	else if (intmask & SDHCI_INT_DATA_TIMEOUT)
+#if defined(CONFIG_SDC_QTI)
+		if (intmask & SDHCI_INT_DATA_CRC)
+			host->mmc->err_stats[MMC_ERR_DAT_CRC]++;
+#endif
+	} else if (intmask & SDHCI_INT_DATA_TIMEOUT) {
 		*data_error = -ETIMEDOUT;
-	else if (intmask & SDHCI_INT_ADMA_ERROR)
+#if defined(CONFIG_SDC_QTI)
+		host->mmc->err_stats[MMC_ERR_DAT_TIMEOUT]++;
+#endif
+	} else if (intmask & SDHCI_INT_ADMA_ERROR) {
 		*data_error = -EIO;
-	else
+#if defined(CONFIG_SDC_QTI)
+		host->mmc->err_stats[MMC_ERR_ADMA]++;
+#endif
+	} else
 		*data_error = 0;
 
 	/* Clear selected interrupts. */
@@ -4013,9 +4030,6 @@ int sdhci_setup_host(struct sdhci_host *host)
 		pr_err("%s: Unknown controller version (%d). You may experience problems.\n",
 		       mmc_hostname(mmc), host->version);
 	}
-
-	if (host->quirks & SDHCI_QUIRK_BROKEN_CQE)
-		mmc->caps2 &= ~MMC_CAP2_CQE;
 
 	if (host->quirks & SDHCI_QUIRK_FORCE_DMA)
 		host->flags |= SDHCI_USE_SDMA;
@@ -4556,6 +4570,12 @@ int __sdhci_add_host(struct sdhci_host *host)
 	unsigned int flags = WQ_UNBOUND | WQ_MEM_RECLAIM | WQ_HIGHPRI;
 	struct mmc_host *mmc = host->mmc;
 	int ret;
+
+	if ((mmc->caps2 & MMC_CAP2_CQE) &&
+	    (host->quirks & SDHCI_QUIRK_BROKEN_CQE)) {
+		mmc->caps2 &= ~MMC_CAP2_CQE;
+		mmc->cqe_ops = NULL;
+	}
 
 	host->complete_wq = alloc_workqueue("sdhci", flags, 0);
 	if (!host->complete_wq)

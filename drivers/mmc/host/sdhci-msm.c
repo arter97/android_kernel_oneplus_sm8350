@@ -4064,6 +4064,22 @@ static ssize_t err_stats_show(struct device *dev,
 		host->mmc->err_stats[MMC_ERR_TUNING]);
 	strlcat(buf, tmp, PAGE_SIZE);
 
+	scnprintf(tmp, sizeof(tmp), "# CMDQ RED Errors: %d\n",
+		host->mmc->err_stats[MMC_ERR_CMDQ_RED]);
+	strlcat(buf, tmp, PAGE_SIZE);
+
+	scnprintf(tmp, sizeof(tmp), "# CMDQ GCE Errors: %d\n",
+		host->mmc->err_stats[MMC_ERR_CMDQ_GCE]);
+	strlcat(buf, tmp, PAGE_SIZE);
+
+	scnprintf(tmp, sizeof(tmp), "# CMDQ ICCE Errors: %d\n",
+		host->mmc->err_stats[MMC_ERR_CMDQ_ICCE]);
+	strlcat(buf, tmp, PAGE_SIZE);
+
+	scnprintf(tmp, sizeof(tmp), "# CMDQ Request Timedout: %d\n",
+		host->mmc->err_stats[MMC_ERR_CMDQ_REQ_TIMEOUT]);
+	strlcat(buf, tmp, PAGE_SIZE);
+
 	scnprintf(tmp, sizeof(tmp), "# Request Timedout Error: %d\n",
 		host->mmc->err_stats[MMC_ERR_REQ_TIMEOUT]);
 	strlcat(buf, tmp, PAGE_SIZE);
@@ -4072,9 +4088,23 @@ static ssize_t err_stats_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(err_stats);
 
+static ssize_t dbg_state_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	int dbg_en = 0;
+
+#if defined(CONFIG_MMC_IPC_LOGGING)
+	dbg_en = 1;
+#endif
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", dbg_en);
+}
+static DEVICE_ATTR_RO(dbg_state);
+
 static struct attribute *sdhci_msm_sysfs_attrs[] = {
 	&dev_attr_err_state.attr,
 	&dev_attr_err_stats.attr,
+	&dev_attr_dbg_state.attr,
 	NULL
 };
 
@@ -4144,6 +4174,11 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	 * the data associated with the version info.
 	 */
 	var_info = of_device_get_match_data(&pdev->dev);
+
+	if (!var_info) {
+		dev_err(&pdev->dev, "Compatible string not found\n");
+		goto pltfm_free;
+	}
 
 	msm_host->mci_removed = var_info->mci_removed;
 	msm_host->restore_dll_config = var_info->restore_dll_config;
