@@ -1374,6 +1374,15 @@ config POWER_STATE
 		node for communication required for handling deep sleep and hibernate
 		modes.
 
+config MSM_PIL_SSR_SLATE
+	tristate "MSM Subsystem SLATE Support"
+	depends on MSM_PIL && MSM_SUBSYSTEM_RESTART
+	help
+	  Support for booting and shutting down SLATE SOC which is
+	  an external SOC. This driver communicates with SLATE SOC
+	  via pair of IPC GPIOs for inward and outward signals between MSM
+	  and SLATE SOC.
+
 source "drivers/soc/qcom/icnss2/Kconfig"
 
 source "drivers/soc/qcom/gnsssirf/Kconfig"
