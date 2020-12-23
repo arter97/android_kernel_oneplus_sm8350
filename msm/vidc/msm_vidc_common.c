@@ -1337,6 +1337,7 @@ static int msm_vidc_comm_update_ctrl(struct msm_vidc_inst *inst,
 {
 	struct v4l2_ctrl *ctrl = NULL;
 	int rc = 0;
+	bool is_menu = false;
 
 	ctrl = v4l2_ctrl_find(&inst->ctrl_handler, id);
 	if (!ctrl) {
@@ -1345,33 +1346,32 @@ static int msm_vidc_comm_update_ctrl(struct msm_vidc_inst *inst,
 		return -EINVAL;
 	}
 
-	/* For menu type, keep original menu_skip_mask(step) */
 	if (ctrl->type == V4L2_CTRL_TYPE_MENU)
-		cap->step_size = (u32)ctrl->step;
+		is_menu = true;
 
+	/**
+	 * For menu controls the step value is interpreted
+	 * as a menu_skip_mask.
+	 */
 	rc = v4l2_ctrl_modify_range(ctrl, cap->min, cap->max,
-			cap->step_size, cap->default_value);
+			is_menu ? ctrl->menu_skip_mask : cap->step_size,
+			cap->default_value);
 	if (rc) {
 		s_vpr_e(inst->sid,
-			"%s: failed: control name %s, min %d, max %d, step %d, default_value %d\n",
+			"%s: failed: control name %s, min %d, max %d, %s %x, default_value %d\n",
 			__func__, ctrl->name, cap->min, cap->max,
-			cap->step_size, cap->default_value);
+			is_menu ? "menu_skip_mask" : "step",
+			is_menu ? ctrl->menu_skip_mask : cap->step_size,
+			cap->default_value);
 		goto error;
 	}
-	/*
-	 * v4l2_ctrl_modify_range() is not updating default_value,
-	 * so use v4l2_ctrl_s_ctrl() to update it.
-	 */
-	rc = v4l2_ctrl_s_ctrl(ctrl, cap->default_value);
-	if (rc) {
-		s_vpr_e(inst->sid, "%s: failed s_ctrl: %s with value %d\n",
-			__func__, ctrl->name, cap->default_value);
-		goto error;
-	}
+
 	s_vpr_h(inst->sid,
-		"Updated control: %s: min %lld, max %lld, step %lld, default value = %lld\n",
+		"Updated control: %s: min %lld, max %lld, %s %x, default value = %lld\n",
 		ctrl->name, ctrl->minimum, ctrl->maximum,
-		ctrl->step, ctrl->default_value);
+		is_menu ? "menu_skip_mask" : "step",
+		is_menu ? ctrl->menu_skip_mask : ctrl->step,
+		ctrl->default_value);
 
 error:
 	return rc;
@@ -1777,7 +1777,7 @@ static void handle_event_change(enum hal_command_response cmd, void *data)
 	} else if (rc == -ENOTSUPP) {
 		msm_vidc_queue_v4l2_event(inst,
 				V4L2_EVENT_MSM_VIDC_HW_UNSUPPORTED);
-	} else if (rc == -EBUSY) {
+	} else if (rc == -ENOMEM) {
 		msm_vidc_queue_v4l2_event(inst,
 				V4L2_EVENT_MSM_VIDC_HW_OVERLOAD);
 	}
@@ -5782,7 +5782,7 @@ static int msm_vidc_check_mbpf_supported(struct msm_vidc_inst *inst)
 
 	if (mbpf > core->resources.max_mbpf) {
 		msm_vidc_print_running_insts(inst->core);
-		return -EBUSY;
+		return -ENOMEM;
 	}
 
 	return 0;
@@ -5885,7 +5885,7 @@ int msm_comm_check_memory_supported(struct msm_vidc_inst *vidc_inst)
 		s_vpr_e(vidc_inst->sid,
 			"%s: video mem overshoot - reached %llu MB, max_limit %llu MB\n",
 			__func__, total_mem_size >> 20, memory_limit_mbytes);
-		msm_comm_print_insts_info(core);
+		msm_comm_print_mem_usage(core);
 		return -EBUSY;
 	}
 
@@ -5900,7 +5900,7 @@ int msm_comm_check_memory_supported(struct msm_vidc_inst *vidc_inst)
 			s_vpr_e(vidc_inst->sid,
 				"%s: insufficient device addr space, required %llu, available %llu\n",
 				__func__, non_sec_mem_size, non_sec_cb_size);
-			msm_comm_print_insts_info(core);
+			msm_comm_print_mem_usage(core);
 			return -EINVAL;
 		}
 	}
@@ -5933,7 +5933,7 @@ static int msm_vidc_check_mbps_supported(struct msm_vidc_inst *inst)
 				"H/W is overloaded. needed: %d max: %d\n",
 				video_load, max_video_load);
 			msm_vidc_print_running_insts(inst->core);
-			return -EBUSY;
+			return -ENOMEM;
 		}
 
 		if (video_load + image_load > max_video_load + max_image_load) {
@@ -5942,7 +5942,7 @@ static int msm_vidc_check_mbps_supported(struct msm_vidc_inst *inst)
 				video_load, image_load,
 				max_video_load, max_image_load);
 			msm_vidc_print_running_insts(inst->core);
-			return -EBUSY;
+			return -ENOMEM;
 		}
 	}
 	return 0;
@@ -7768,6 +7768,8 @@ u32 msm_comm_calc_framerate(struct msm_vidc_inst *inst,
 {
 	u32 framerate = inst->clk_data.frame_rate;
 	u32 interval;
+	struct msm_vidc_capability *capability;
+	capability = &inst->capability;
 
 	if (timestamp_us <= prev_ts) {
 		s_vpr_e(inst->sid, "%s: invalid ts %lld, prev ts %lld\n",
@@ -7775,8 +7777,12 @@ u32 msm_comm_calc_framerate(struct msm_vidc_inst *inst,
 		return framerate;
 	}
 	interval = (u32)(timestamp_us - prev_ts);
-	framerate = ((1000000 + interval / 2) / interval) << 16;
-	return framerate;
+	framerate = (1000000 + interval / 2) / interval;
+	if (framerate > capability->cap[CAP_FRAMERATE].max)
+		framerate = capability->cap[CAP_FRAMERATE].max;
+	if (framerate < 1)
+		framerate = 1;
+	return framerate << 16;
 }
 
 u32 msm_comm_get_max_framerate(struct msm_vidc_inst *inst)
