@@ -20,6 +20,7 @@ struct modem_data {
 	bool crash_shutdown;
 	u32 pas_id;
 	bool ignore_errors;
+	struct completion err_ready;
 	struct completion stop_ack;
 	void __iomem *rmb_base;
 	struct clk *xo;
@@ -27,7 +28,6 @@ struct modem_data {
 	struct device mba_mem_dev;
 	struct device *mba_mem_dev_fixed;
 	unsigned long attrs_dma;
-	struct completion err_ready;
 	int is_not_loadable;
 	unsigned int err_fatal_irq;
 	unsigned int err_ready_irq;
@@ -35,13 +35,9 @@ struct modem_data {
 	unsigned int wdog_bite_irq;
 	unsigned int generic_irq;
 	int ramdump_disable_irq;
-	int ramdump_disable;
 	int shutdown_ack_irq;
 	int force_stop_bit;
-	int err_fatal_gpio;
-	int force_stop_gpio;
-	int ramdump_disable_gpio;
-	int shutdown_ack_gpio;
+	struct qcom_smem_state *state;
 };
 
 extern struct pil_reset_ops pil_msa_mss_ops;

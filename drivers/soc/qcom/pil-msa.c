@@ -17,6 +17,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/dma-mapping.h>
 #include <linux/highmem.h>
+#include <linux/qcom_scm.h>
 #include <soc/qcom/secure_buffer.h>
 #include <trace/events/trace_msm_pil_event.h>
 
@@ -222,12 +223,18 @@ static void pil_mss_alt_reset(struct q6v5_data *drv, u32 val)
 static int pil_mss_restart_reg(struct q6v5_data *drv, u32 mss_restart)
 {
 	int ret = 0;
+
 	if (drv->restart_reg && !drv->restart_reg_sec) {
 		writel_relaxed(mss_restart, drv->restart_reg);
 		/* Ensure physical address access is done before returning.*/
 		mb();
 		udelay(2);
+	} else if (drv->restart_reg_sec) {
+		ret = qcom_scm_pas_mss_reset(mss_restart);
+		if (ret)
+			pr_err("Secure MSS restart failed\n");
 	}
+
 	return ret;
 }
 
@@ -497,7 +504,11 @@ void pil_mss_remove_proxy_votes(struct pil_desc *pil)
 static int pil_mss_mem_setup(struct pil_desc *pil,
 					phys_addr_t addr, size_t size)
 {
-	return 0;
+	struct modem_data *md = dev_get_drvdata(pil->dev);
+
+	if (!md->subsys_desc.pil_mss_memsetup)
+		return 0;
+	return qcom_scm_pas_mem_setup(md->pas_id, addr, size);
 }
 
 static int pil_mss_reset(struct pil_desc *pil)

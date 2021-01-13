@@ -15,10 +15,10 @@
 #include <linux/clk.h>
 #include <linux/err.h>
 #include <linux/of.h>
+#include <linux/of_irq.h>
 #include <linux/regulator/consumer.h>
 #include <linux/interrupt.h>
 #include <linux/dma-mapping.h>
-#include <linux/of_gpio.h>
 #include <soc/qcom/subsystem_restart.h>
 #include <soc/qcom/ramdump.h>
 #include <linux/soc/qcom/smem.h>
@@ -139,7 +139,7 @@ static irqreturn_t modem_ramdump_disable_intr_handler(int irq, void *drv_data)
 	struct modem_data *drv = drv_data;
 
 	pr_info("Received ramdump disable interrupt from modem\n");
-	drv->ramdump_disable = 1;
+	drv->subsys_desc.ramdump_disable = 1;
 	return IRQ_HANDLED;
 }
 
@@ -152,19 +152,19 @@ static int modem_shutdown(const struct subsys_desc *subsys, bool force_stop)
 		return 0;
 
 	if (!subsys_get_crash_status(drv->subsys) && force_stop &&
-	    drv->force_stop_gpio) {
-		gpio_set_value(drv->force_stop_gpio, 1);
+	    drv->force_stop_bit) {
+		qcom_smem_state_update_bits(drv->state,
+				BIT(drv->force_stop_bit), 1);
 		ret = wait_for_completion_timeout(&drv->stop_ack,
 				msecs_to_jiffies(STOP_ACK_TIMEOUT_MS));
 		if (!ret)
 			pr_warn("Timed out on stop ack from modem.\n");
-		gpio_set_value(drv->force_stop_gpio, 0);
+		qcom_smem_state_update_bits(drv->state,
+				BIT(subsys->force_stop_bit), 0);
 	}
 
-	if (drv->ramdump_disable_gpio) {
-		drv->ramdump_disable = gpio_get_value(
-					drv->ramdump_disable_gpio);
-		 pr_warn("Ramdump disable gpio value is %d\n",
+	if (drv->ramdump_disable_irq) {
+		pr_warn("Ramdump disable value is %d\n",
 			drv->subsys_desc.ramdump_disable);
 	}
 
@@ -316,40 +316,39 @@ static void pil_disable_all_irqs(struct modem_data *drv)
 	}
 }
 
-static int __get_gpio(struct subsys_desc *desc, const char *prop,
-					int *gpio)
-{
-	struct device_node *dnode = desc->dev->of_node;
-	int ret = -ENOENT;
-
-	if (of_find_property(dnode, prop, NULL)) {
-		*gpio = of_get_named_gpio(dnode, prop, 0);
-		ret = *gpio < 0 ? *gpio : 0;
-	}
-
-	return ret;
-}
-
 static int __get_irq(struct platform_device *pdev, const char *prop,
-		unsigned int *irq, int *gpio)
+		unsigned int *irq)
 {
-	int ret, gpiol, irql;
-	struct modem_data *drv = platform_get_drvdata(pdev);
+	int irql = 0;
+	struct device_node *dnode = pdev->dev.of_node;
 
-	ret = __get_gpio(&drv->subsys_desc, prop, &gpiol);
-	if (ret)
-		return ret;
+	if (of_property_match_string(dnode, "interrupt-names", prop) < 0)
+		return -ENOENT;
 
-	irql = gpio_to_irq(gpiol);
-		irql = -ENXIO;
-
+	irql = of_irq_get_byname(dnode, prop);
 	if (irql < 0) {
 		pr_err("[%s]: Error getting IRQ \"%s\"\n", pdev->name,
-		prop);
+			prop);
 		return irql;
 	}
 	*irq = irql;
 	return 0;
+}
+
+static int __get_smem_state(struct modem_data *drv, const char *prop,
+				int *smem_bit)
+{
+	struct device_node *dnode = drv->dev->of_node;
+
+	if (of_find_property(dnode, "qcom,smem-states", NULL)) {
+		drv->state = qcom_smem_state_get(drv->dev, prop, smem_bit);
+		if (IS_ERR_OR_NULL(drv->state)) {
+			pr_err("Could not get smem-states %s\n", prop);
+			return PTR_ERR(drv->state);
+		}
+		return 0;
+	}
+	return -ENOENT;
 }
 
 static int pil_parse_irqs(struct platform_device *pdev)
@@ -357,47 +356,40 @@ static int pil_parse_irqs(struct platform_device *pdev)
 	int ret;
 	struct modem_data *drv = platform_get_drvdata(pdev);
 
-	ret = __get_irq(pdev, "qcom,gpio-err-fatal", &drv->err_fatal_irq,
-					&drv->err_fatal_gpio);
+	ret = __get_irq(pdev, "qcom,err-fatal", &drv->err_fatal_irq);
 	if (ret && ret != -ENOENT)
 		return ret;
 
-	ret = __get_irq(pdev, "qcom,gpio-err-ready", &drv->err_ready_irq, NULL);
+	ret = __get_irq(pdev, "qcom,err-ready", &drv->err_ready_irq);
 	if (ret && ret != -ENOENT)
 		return ret;
 
-	ret = __get_irq(pdev, "qcom,gpio-stop-ack", &drv->stop_ack_irq, NULL);
+	ret = __get_irq(pdev, "qcom,stop-ack", &drv->stop_ack_irq);
 	if (ret && ret != -ENOENT)
 		return ret;
 
-	ret = __get_gpio(&drv->subsys_desc, "qcom,gpio-force-stop",
-					&drv->force_stop_gpio);
+	ret = __get_irq(pdev, "qcom,ramdump-disabled",
+			&drv->ramdump_disable_irq);
 	if (ret && ret != -ENOENT)
 		return ret;
 
-	ret = __get_gpio(&drv->subsys_desc, "qcom,gpio-ramdump-disable",
-					 &drv->ramdump_disable_gpio);
+	ret = __get_irq(pdev, "qcom,shutdown-ack", &drv->shutdown_ack_irq);
 	if (ret && ret != -ENOENT)
 		return ret;
 
-	ret = __get_gpio(&drv->subsys_desc, "qcom,gpio-shutdown-ack",
-					 &drv->shutdown_ack_gpio);
+	ret = __get_irq(pdev, "qcom,wdog", &drv->wdog_bite_irq);
 	if (ret && ret != -ENOENT)
 		return ret;
 
-	ret = __get_irq(pdev, "qcom,wdog", &drv->wdog_bite_irq, NULL);
+	ret = __get_smem_state(drv, "qcom,force-stop", &drv->force_stop_bit);
 	if (ret && ret != -ENOENT)
 		return ret;
-
-	ret = platform_get_irq(pdev, 0);
-	if (ret > 0)
-		drv->wdog_bite_irq = ret;
 
 	if (of_property_read_bool(pdev->dev.of_node,
-					"qcom,pil-generic-irq-handler")) {
+			"qcom,pil-generic-irq-handler")) {
 		ret = platform_get_irq(pdev, 0);
-		if (ret > 0)
-			drv->generic_irq = ret;
+			if (ret > 0)
+				drv->generic_irq = ret;
 	}
 
 	return 0;
@@ -497,6 +489,7 @@ static int pil_subsys_init(struct modem_data *drv,
 {
 	int ret = -EINVAL;
 
+	drv->dev = &pdev->dev;
 	drv->subsys_desc.name = "modem";
 	drv->subsys_desc.dev = &pdev->dev;
 	drv->subsys_desc.owner = THIS_MODULE;
@@ -535,11 +528,11 @@ static int pil_subsys_init(struct modem_data *drv,
 		goto err_subsys;
 	}
 
-	//ret = pil_parse_irqs(pdev);
-	//if (ret) {
-	//	subsys_unregister(drv->subsys);
-	//	goto err_subsys;
-	//}
+	ret = pil_parse_irqs(pdev);
+	if (ret) {
+		subsys_unregister(drv->subsys);
+		goto err_subsys;
+	}
 
 	drv->ramdump_dev = create_ramdump_device("modem", &pdev->dev);
 	if (!drv->ramdump_dev) {
@@ -587,8 +580,6 @@ static int pil_mss_loadable_init(struct modem_data *drv,
 
 	q6_desc->ops = &pil_msa_mss_ops;
 
-	q6_desc->sequential_loading = of_property_read_bool(pdev->dev.of_node,
-						"qcom,sequential-fw-load");
 	q6->reset_clk = of_property_read_bool(pdev->dev.of_node,
 							"qcom,reset-clk");
 	q6->self_auth = of_property_read_bool(pdev->dev.of_node,
