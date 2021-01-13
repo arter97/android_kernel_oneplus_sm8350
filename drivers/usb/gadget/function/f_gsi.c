@@ -38,7 +38,8 @@ static inline bool usb_gsi_remote_wakeup_allowed(struct usb_function *f)
 	struct f_gsi *gsi = func_to_gsi(f);
 
 	if (f->config->cdev->gadget->speed >= USB_SPEED_SUPER)
-		remote_wakeup_allowed = gsi->func_wakeup_allowed;
+		remote_wakeup_allowed =
+			 gsi->func_is_suspended ? gsi->func_wakeup_allowed : false;
 	else
 		remote_wakeup_allowed =
 			usb_get_remote_wakeup_status(f->config->cdev->gadget);
@@ -2580,7 +2581,11 @@ static void gsi_suspend(struct usb_function *f)
 		return;
 	}
 
-	if (!gsi->data_interface_up) {
+	/*
+	 * GPS doesn't use any data interface, hence bail out as there is no
+	 * GSI specific handling needed.
+	 */
+	if (gsi->prot_id == IPA_USB_GPS) {
 		log_event_dbg("%s: suspend done\n", __func__);
 		return;
 	}
@@ -2614,7 +2619,7 @@ static void gsi_resume(struct usb_function *f)
 	/* Check any pending cpkt, and queue immediately on resume */
 	gsi_ctrl_send_notification(gsi);
 
-	if (!gsi->data_interface_up) {
+	if (gsi->prot_id == IPA_USB_GPS) {
 		log_event_dbg("%s: resume done\n", __func__);
 		return;
 	}
@@ -2643,6 +2648,10 @@ static int gsi_get_status(struct usb_function *f)
 {
 #ifdef CONFIG_USB_FUNC_WAKEUP_SUPPORTED
 	struct f_gsi *gsi = func_to_gsi(f);
+
+	/* Disable function remote wake-up for DPL interface */
+	if (gsi->prot_id == IPA_USB_DIAG)
+		return 0;
 
 	return (gsi->func_wakeup_allowed ? USB_INTRF_STAT_FUNC_RW : 0) |
 		USB_INTRF_STAT_FUNC_RW_CAP;
