@@ -1906,10 +1906,6 @@ int ep_pcie_core_enable_endpoint(enum ep_pcie_options opt)
 	}
 
 checkbme:
-	/* Clear AOSS_CC_RESET_STATUS::PERST_RAW_RESET_STATUS when linking up */
-	if (dev->aoss_rst_clear)
-		writel_relaxed(PERST_RAW_RESET_STATUS, dev->aoss_rst_perst);
-
 	/*
 	 * De-assert WAKE# GPIO following link until L2/3 and WAKE#
 	 * is triggered to send data from device to host at which point
