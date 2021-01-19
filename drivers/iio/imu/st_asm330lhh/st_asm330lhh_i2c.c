@@ -39,7 +39,12 @@ static int st_asm330lhh_i2c_write(struct device *dev, u8 addr, int len,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct i2c_msg msg;
-	u8 send[len + 1];
+	uint8_t *send;
+	int ret = 0;
+
+	send = kmalloc(len + 1, GFP_KERNEL);
+	if (!send)
+		return -ENOMEM;
 
 	send[0] = addr;
 	memcpy(&send[1], data, len * sizeof(u8));
@@ -49,7 +54,10 @@ static int st_asm330lhh_i2c_write(struct device *dev, u8 addr, int len,
 	msg.len = len + 1;
 	msg.buf = send;
 
-	return i2c_transfer(client->adapter, &msg, 1);
+	ret = i2c_transfer(client->adapter, &msg, 1);
+	kfree(send);
+
+	return ret;
 }
 
 static const struct st_asm330lhh_transfer_function st_asm330lhh_transfer_fn = {

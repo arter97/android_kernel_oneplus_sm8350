@@ -14,6 +14,9 @@
 #include <linux/device.h>
 #include <linux/iio/iio.h>
 #include <linux/delay.h>
+#include <linux/input.h>
+#include <linux/ktime.h>
+#include <linux/slab.h>
 
 #define ST_ASM330LHH_REVISION			"2.0.1"
 #define ST_ASM330LHH_PATCH			"4"
@@ -352,8 +355,12 @@ struct st_asm330lhh_hw {
 
 	const struct st_asm330lhh_transfer_function *tf;
 	struct st_asm330lhh_transfer_buffer tb;
-
+	struct regulator *vdd;
+	struct regulator *vio;
 	struct iio_mount_matrix orientation;
+	int enable_gpio;
+	bool asm330_hrtimer;
+	struct hrtimer st_asm330lhh_hrtimer;
 };
 
 extern const struct dev_pm_ops st_asm330lhh_pm_ops;
@@ -402,11 +409,6 @@ static inline bool st_asm330lhh_is_fifo_enabled(struct st_asm330lhh_hw *hw)
 				  BIT(ST_ASM330LHH_ID_ACC));
 }
 
-static inline s64 st_asm330lhh_get_time_ns(struct iio_dev *iio_dev)
-{
-	return iio_get_time_ns(iio_dev);
-}
-
 int st_asm330lhh_probe(struct device *dev, int irq,
 		       const struct st_asm330lhh_transfer_function *tf_ops);
 int st_asm330lhh_sensor_set_enable(struct st_asm330lhh_sensor *sensor,
@@ -433,4 +435,9 @@ int __st_asm330lhh_set_sensor_batching_odr(struct st_asm330lhh_sensor *sensor,
 					   bool enable);
 int st_asm330lhh_update_batching(struct iio_dev *iio_dev, bool enable);
 int st_asm330lhh_reset_hwts(struct st_asm330lhh_hw *hw);
+int st_asm330lhh_update_fifo(struct iio_dev *iio_dev, bool enable);
+int asm330_check_acc_gyro_early_buff_enable_flag(
+		struct st_asm330lhh_sensor *sensor);
+void st_asm330lhh_set_cpu_idle_state(bool value);
+void st_asm330lhh_hrtimer_reset(struct st_asm330lhh_hw *hw, s64 irq_delta_ts);
 #endif /* ST_ASM330LHH_H */
