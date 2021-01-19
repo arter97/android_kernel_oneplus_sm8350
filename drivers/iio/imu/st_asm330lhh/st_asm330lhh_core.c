@@ -7,17 +7,25 @@
  *
  * Licensed under the GPL-2.
  */
-
 #include <linux/kernel.h>
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
 #include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/pm.h>
+#include <linux/regulator/consumer.h>
+#include <linux/of_gpio.h>
+#include <linux/cpu.h>
 
 #include <linux/platform_data/st_sensors_pdata.h>
 
 #include "st_asm330lhh.h"
+
+/**Turn on of sensor in ms*/
+#define ST_ASM330LHH_TURN_ON_TIME		35
+
+static int asm330_check_regulator;
+
 
 static const struct st_asm330lhh_odr_table_entry st_asm330lhh_odr_table[] = {
 	[ST_ASM330LHH_ID_ACC] = {
@@ -208,6 +216,33 @@ static const struct iio_chan_spec st_asm330lhh_temp_channels[] = {
 #endif /* CONFIG_IIO_ST_ASM330LHH_EN_TEMPERATURE_FIFO */
 };
 
+void st_asm330lhh_set_cpu_idle_state(bool value)
+{
+	cpu_idle_poll_ctrl(value);
+}
+static enum hrtimer_restart st_asm330lhh_timer_function(
+		struct hrtimer *timer)
+{
+	st_asm330lhh_set_cpu_idle_state(true);
+
+	return HRTIMER_NORESTART;
+}
+void st_asm330lhh_hrtimer_reset(struct st_asm330lhh_hw *hw,
+		s64 irq_delta_ts)
+{
+	hrtimer_cancel(&hw->st_asm330lhh_hrtimer);
+	/*forward HRTIMER just before 1ms of irq arrival*/
+	hrtimer_forward(&hw->st_asm330lhh_hrtimer, ktime_get(),
+			ns_to_ktime(irq_delta_ts - 1000000));
+	hrtimer_restart(&hw->st_asm330lhh_hrtimer);
+}
+static void st_asm330lhh_hrtimer_init(struct st_asm330lhh_hw *hw)
+{
+	hrtimer_init(&hw->st_asm330lhh_hrtimer, CLOCK_MONOTONIC,
+			HRTIMER_MODE_REL);
+	hw->st_asm330lhh_hrtimer.function = st_asm330lhh_timer_function;
+}
+
 int __st_asm330lhh_write_with_mask(struct st_asm330lhh_hw *hw, u8 addr, u8 mask,
 				 u8 val)
 {
@@ -231,6 +266,7 @@ int __st_asm330lhh_write_with_mask(struct st_asm330lhh_hw *hw, u8 addr, u8 mask,
 	err = hw->tf->write(hw->dev, addr, sizeof(data), &data);
 	if (err < 0)
 		dev_err(hw->dev, "failed to write %02x register\n", addr);
+
 
 out:
 	mutex_unlock(&hw->lock);
@@ -294,7 +330,8 @@ static int st_asm330lhh_get_odr_calibration(struct st_asm330lhh_hw *hw)
 	odr_calib = (data * 37500) / 1000;
 	hw->ts_delta_ns = ST_ASM330LHH_TS_DELTA_NS - odr_calib;
 
-	dev_info(hw->dev, "Freq Fine %lld (ts %lld)\n", odr_calib, hw->ts_delta_ns);
+	dev_info(hw->dev, "Freq Fine %lld (ts %lld)\n",
+			odr_calib, hw->ts_delta_ns);
 
 	return 0;
 }
@@ -485,7 +522,7 @@ static int st_asm330lhh_read_oneshot(struct st_asm330lhh_sensor *sensor,
 				   u8 addr, int *val)
 {
 	int err, delay;
-	__le16 data;
+	__le16 data = 0;
 
 #ifdef CONFIG_IIO_ST_ASM330LHH_EN_TEMPERATURE_FIFO
 	if (sensor->id == ST_ASM330LHH_ID_TEMP) {
@@ -609,7 +646,7 @@ static int st_asm330lhh_write_raw(struct iio_dev *iio_dev,
 				  struct iio_chan_spec const *chan,
 				  int val, int val2, long mask)
 {
-	struct st_asm330lhh_sensor *s = iio_priv(iio_dev);
+	struct st_asm330lhh_sensor *sensor = iio_priv(iio_dev);
 	int err;
 
 	switch (mask) {
@@ -618,28 +655,28 @@ static int st_asm330lhh_write_raw(struct iio_dev *iio_dev,
 		if (err)
 			return err;
 
-		err = st_asm330lhh_set_full_scale(s, val2);
+		err = st_asm330lhh_set_full_scale(sensor, val2);
 		iio_device_release_direct_mode(iio_dev);
 		break;
 	case IIO_CHAN_INFO_SAMP_FREQ: {
 		int todr, tuodr;
 		u8 data;
 
-		err = st_asm330lhh_get_odr_val(s, val, val2, &todr, &tuodr, &data);
+		err = st_asm330lhh_get_odr_val(sensor, val, val2, &todr, &tuodr, &data);
 		if (!err) {
-			s->odr = val;
-			s->uodr = tuodr;
+			sensor->odr = val;
+			sensor->uodr = tuodr;
 
 			/*
 			 * VTS test testSamplingRateHotSwitchOperation not
 			 * toggle the enable status of sensor after changing
 			 * the ODR -> force it
 			 */
-			if (s->hw->enable_mask & BIT(s->id)) {
-				switch (s->id) {
+			if (sensor->hw->enable_mask & BIT(sensor->id)) {
+				switch (sensor->id) {
 				case ST_ASM330LHH_ID_GYRO:
 				case ST_ASM330LHH_ID_ACC:
-					err = st_asm330lhh_set_odr(s, s->odr, s->uodr);
+			err = st_asm330lhh_set_odr(sensor, sensor->odr, sensor->uodr);
 					if (err < 0)
 						break;
 
@@ -773,7 +810,7 @@ static int st_asm330lhh_of_get_pin(struct st_asm330lhh_hw *hw, int *pin)
 	if (!dev_fwnode(hw->dev))
 		return -EINVAL;
 
-	return device_property_read_u32(hw->dev, "st,int-pin", pin);
+	return device_property_read_u32(hw->dev, "st,drdy-int-pin", pin);
 }
 
 static int st_asm330lhh_get_int_reg(struct st_asm330lhh_hw *hw, u8 *drdy_reg)
@@ -948,11 +985,116 @@ static struct iio_dev *st_asm330lhh_alloc_iiodev(struct st_asm330lhh_hw *hw,
 	return iio_dev;
 }
 
+static void st_asm330lhh_regulator_power_down(struct st_asm330lhh_hw *hw)
+{
+	regulator_disable(hw->vdd);
+	regulator_set_voltage(hw->vdd, 0, INT_MAX);
+	regulator_set_load(hw->vdd, 0);
+	regulator_disable(hw->vio);
+	regulator_set_voltage(hw->vio, 0, INT_MAX);
+	regulator_set_load(hw->vio, 0);
+}
+
+static int st_asm330lhh_regulator_init(struct st_asm330lhh_hw *hw)
+{
+	int err = 0;
+
+	hw->vdd  = devm_regulator_get(hw->dev, "vdd");
+	if (IS_ERR(hw->vdd)) {
+		err = PTR_ERR(hw->vdd);
+		if (err != -EPROBE_DEFER)
+			dev_err(hw->dev, "Error %d to get vdd\n", err);
+		return err;
+	}
+
+	hw->vio = devm_regulator_get(hw->dev, "vio");
+	if (IS_ERR(hw->vio)) {
+		err = PTR_ERR(hw->vio);
+		if (err != -EPROBE_DEFER)
+			dev_err(hw->dev, "Error %d to get vio\n", err);
+		return err;
+	}
+	return err;
+}
+
+static int st_asm330lhh_regulator_power_up(struct st_asm330lhh_hw *hw)
+{
+	u32 vdd_voltage[2] = {3000000, 3600000};
+	u32 vio_voltage[2] = {1620000, 3600000};
+	u32 vdd_current = 30000;
+	u32 vio_current = 30000;
+	int err = 0;
+
+	/* Enable VDD for ASM330 */
+	if (vdd_voltage[0] > 0 && vdd_voltage[0] <= vdd_voltage[1]) {
+		err = regulator_set_voltage(hw->vdd, vdd_voltage[0],
+						vdd_voltage[1]);
+		if (err) {
+			pr_err("Error %d during vdd set_voltage\n", err);
+			return err;
+		}
+	}
+
+	if (vdd_current > 0) {
+		err = regulator_set_load(hw->vdd, vdd_current);
+		if (err < 0) {
+			pr_err("vdd regulator_set_load failed,err=%d\n", err);
+			goto remove_vdd_voltage;
+		}
+	}
+
+	err = regulator_enable(hw->vdd);
+	if (err) {
+		dev_err(hw->dev, "vdd enable failed with error %d\n", err);
+		goto remove_vdd_current;
+	}
+
+	/* Enable VIO for ASM330 */
+	if (vio_voltage[0] > 0 && vio_voltage[0] <= vio_voltage[1]) {
+		err = regulator_set_voltage(hw->vio, vio_voltage[0],
+						vio_voltage[1]);
+		if (err) {
+			pr_err("Error %d during vio set_voltage\n", err);
+			goto disable_vdd;
+		}
+	}
+
+	if (vio_current > 0) {
+		err = regulator_set_load(hw->vio, vio_current);
+		if (err < 0) {
+			pr_err("vio regulator_set_load failed,err=%d\n", err);
+			goto remove_vio_voltage;
+		}
+	}
+
+	err = regulator_enable(hw->vio);
+	if (err) {
+		dev_err(hw->dev, "vio enable failed with error %d\n", err);
+		goto remove_vio_current;
+	}
+
+	return 0;
+
+remove_vio_current:
+	regulator_set_load(hw->vio, 0);
+remove_vio_voltage:
+	regulator_set_voltage(hw->vio, 0, INT_MAX);
+disable_vdd:
+	regulator_disable(hw->vdd);
+remove_vdd_current:
+	regulator_set_load(hw->vdd, 0);
+remove_vdd_voltage:
+	regulator_set_voltage(hw->vdd, 0, INT_MAX);
+
+	return err;
+}
+
 int st_asm330lhh_probe(struct device *dev, int irq,
 		     const struct st_asm330lhh_transfer_function *tf_ops)
 {
 	struct st_asm330lhh_hw *hw;
-	int i, err;
+	struct device_node *np;
+	int i = 0, err = 0;
 
 	hw = devm_kzalloc(dev, sizeof(*hw), GFP_KERNEL);
 	if (!hw)
@@ -968,11 +1110,40 @@ int st_asm330lhh_probe(struct device *dev, int irq,
 	hw->irq = irq;
 	hw->tf = tf_ops;
 	hw->odr_table_entry = st_asm330lhh_odr_table;
+	np = hw->dev->of_node;
+
+	dev_info(hw->dev, "Ver: %s\n", ST_ASM330LHH_VERSION);
+
+	/* use qtimer if property is enabled */
+	if (of_property_read_u32(np, "qcom,regulator_check",
+				&asm330_check_regulator))
+		asm330_check_regulator = 1; //force to 1 if not in dt
+
+	/* if enabled, check regulator enabled or not */
+	if (asm330_check_regulator) {
+		err = st_asm330lhh_regulator_init(hw);
+		if (err < 0) {
+			dev_err(hw->dev, "regulator init failed\n");
+			return err;
+		}
+
+		err = st_asm330lhh_regulator_power_up(hw);
+		if (err < 0) {
+			dev_err(hw->dev, "regulator power up failed\n");
+			return err;
+		}
+
+		/* allow time for enabling regulators */
+		usleep_range(1000, 2000);
+	}
+
+	/* use hrtimer if property is enabled */
+	hw->asm330_hrtimer = of_property_read_bool(np, "qcom,asm330_hrtimer");
 
 	dev_info(hw->dev, "Ver: %s\n", ST_ASM330LHH_VERSION);
 	err = st_asm330lhh_check_whoami(hw);
 	if (err < 0)
-		return err;
+		goto regulator_shutdown;
 
 	err = st_asm330lhh_get_odr_calibration(hw);
 	if (err < 0)
@@ -984,18 +1155,20 @@ int st_asm330lhh_probe(struct device *dev, int irq,
 
 	err = st_asm330lhh_init_device(hw);
 	if (err < 0)
-		return err;
+		goto regulator_shutdown;
 
 	for (i = 0; i < ST_ASM330LHH_ID_MAX; i++) {
 		hw->iio_devs[i] = st_asm330lhh_alloc_iiodev(hw, i);
-		if (!hw->iio_devs[i])
-			return -ENOMEM;
+		if (!hw->iio_devs[i]) {
+			err = -ENOMEM;
+			goto regulator_shutdown;
+		}
 	}
 
 	if (hw->irq > 0) {
 		err = st_asm330lhh_buffers_setup(hw);
 		if (err < 0)
-			return err;
+			goto regulator_shutdown;
 	}
 
 	for (i = 0; i < ST_ASM330LHH_ID_MAX; i++) {
@@ -1004,8 +1177,12 @@ int st_asm330lhh_probe(struct device *dev, int irq,
 
 		err = devm_iio_device_register(hw->dev, hw->iio_devs[i]);
 		if (err)
-			return err;
+			goto regulator_shutdown;
 	}
+
+	if (hw->asm330_hrtimer)
+		st_asm330lhh_hrtimer_init(hw);
+
 
 #if defined(CONFIG_PM) && defined(CONFIG_IIO_ST_ASM330LHH_MAY_WAKEUP)
 	err = device_init_wakeup(dev, 1);
@@ -1016,6 +1193,12 @@ int st_asm330lhh_probe(struct device *dev, int irq,
 	dev_info(hw->dev, "probe ok\n");
 
 	return 0;
+
+regulator_shutdown:
+	if (asm330_check_regulator)
+		st_asm330lhh_regulator_power_down(hw);
+
+	return err;
 }
 EXPORT_SYMBOL(st_asm330lhh_probe);
 

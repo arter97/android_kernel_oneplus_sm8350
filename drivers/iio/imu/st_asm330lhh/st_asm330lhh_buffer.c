@@ -7,6 +7,8 @@
  *
  * Licensed under the GPL-2.
  */
+
+#include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
@@ -16,6 +18,9 @@
 #include <linux/iio/buffer.h>
 #include <asm/unaligned.h>
 #include <linux/iio/buffer.h>
+#include <linux/of.h>
+#include <asm/arch_timer.h>
+
 #include "st_asm330lhh.h"
 
 #define ST_ASM330LHH_REG_FIFO_STATUS1_ADDR	0x3a
@@ -23,7 +28,25 @@
 #define ST_ASM330LHH_REG_TIMESTAMP2_ADDR	0x42
 #define ST_ASM330LHH_REG_FIFO_DATA_OUT_TAG_ADDR	0x78
 
-#define ST_ASM330LHH_SAMPLE_DISCHARD		0x7ffd
+#define ST_ASM330LHH_SAMPLE_DISCHARD           0x7ffd
+
+#define QTIMER_DIV				192
+#define QTIMER_MUL				10000
+
+static int asm330_use_qtimer;
+
+static inline void get_monotonic_boottime(struct timespec *ts)
+{
+	*ts = ktime_to_timespec(ktime_get_boottime());
+}
+
+static inline s64 st_asm330lhh_get_time_ns(void)
+{
+	struct timespec ts;
+
+	get_monotonic_boottime(&ts);
+	return timespec_to_ns(&ts);
+}
 
 /* Timestamp convergence filter parameter */
 #define ST_ASM330LHH_EWMA_LEVEL			120
@@ -59,11 +82,14 @@ inline int st_asm330lhh_reset_hwts(struct st_asm330lhh_hw *hw)
 {
 	u8 data = 0xaa;
 
-	hw->ts = st_asm330lhh_get_time_ns(hw->iio_devs[0]);
+	hw->ts = st_asm330lhh_get_time_ns();
 	hw->ts_offset = hw->ts;
 	hw->val_ts_old = 0;
 	hw->hw_ts_high = 0;
 	hw->tsample = 0ull;
+
+	if (hw->asm330_hrtimer)
+		st_asm330lhh_set_cpu_idle_state(true);
 
 	return st_asm330lhh_write_atomic(hw, ST_ASM330LHH_REG_TIMESTAMP2_ADDR,
 					 sizeof(data), &data);
@@ -303,7 +329,7 @@ ssize_t st_asm330lhh_get_max_watermark(struct device *dev,
 {
 	struct st_asm330lhh_sensor *sensor = iio_priv(dev_get_drvdata(dev));
 
-	return sprintf(buf, "%d\n", sensor->max_watermark);
+	return scnprintf(buf, PAGE_SIZE, "%d\n", sensor->max_watermark);
 }
 
 ssize_t st_asm330lhh_get_watermark(struct device *dev,
@@ -356,7 +382,7 @@ ssize_t st_asm330lhh_flush_fifo(struct device *dev,
 	s64 ts;
 
 	mutex_lock(&hw->fifo_lock);
-	ts = st_asm330lhh_get_time_ns(iio_dev);
+	ts = st_asm330lhh_get_time_ns();
 	hw->delta_ts = ts - hw->ts;
 	hw->ts = ts;
 	set_bit(ST_ASM330LHH_HW_FLUSH, &hw->state);
@@ -400,7 +426,7 @@ int st_asm330lhh_update_batching(struct iio_dev *iio_dev, bool enable)
 	return err;
 }
 
-static int st_asm330lhh_update_fifo(struct iio_dev *iio_dev, bool enable)
+int st_asm330lhh_update_fifo(struct iio_dev *iio_dev, bool enable)
 {
 	struct st_asm330lhh_sensor *sensor = iio_priv(iio_dev);
 	struct st_asm330lhh_hw *hw = sensor->hw;
@@ -475,10 +501,13 @@ out:
 static irqreturn_t st_asm330lhh_handler_irq(int irq, void *private)
 {
 	struct st_asm330lhh_hw *hw = (struct st_asm330lhh_hw *)private;
-	s64 ts = st_asm330lhh_get_time_ns(hw->iio_devs[0]);
+	s64 ts = st_asm330lhh_get_time_ns();
 
 	hw->delta_ts = ts - hw->ts;
 	hw->ts = ts;
+
+	if (hw->asm330_hrtimer)
+		st_asm330lhh_hrtimer_reset(hw, hw->delta_ts);
 
 	return IRQ_WAKE_THREAD;
 }
@@ -492,12 +521,15 @@ static irqreturn_t st_asm330lhh_handler_thread(int irq, void *private)
 	clear_bit(ST_ASM330LHH_HW_FLUSH, &hw->state);
 	mutex_unlock(&hw->fifo_lock);
 
+	if (hw->asm330_hrtimer)
+		st_asm330lhh_set_cpu_idle_state(false);
+
 	return IRQ_HANDLED;
 }
 
 static int st_asm330lhh_fifo_preenable(struct iio_dev *iio_dev)
 {
-	return st_asm330lhh_update_fifo(iio_dev, true);
+		return st_asm330lhh_update_fifo(iio_dev, true);
 }
 
 static int st_asm330lhh_fifo_postdisable(struct iio_dev *iio_dev)
@@ -526,6 +558,7 @@ static int st_asm330lhh_fifo_init(struct st_asm330lhh_hw *hw)
 
 int st_asm330lhh_buffers_setup(struct st_asm330lhh_hw *hw)
 {
+	struct device_node *np = hw->dev->of_node;
 	struct iio_buffer *buffer;
 	unsigned long irq_type;
 	bool irq_active_low;
@@ -566,6 +599,10 @@ int st_asm330lhh_buffers_setup(struct st_asm330lhh_hw *hw)
 		irq_type |= IRQF_SHARED;
 	}
 
+	/* use qtimer if property is enabled */
+	if (of_property_read_u32(np, "qcom,use_qtimer", &asm330_use_qtimer))
+		asm330_use_qtimer = 0; //force to 0 if not in dt
+
 	err = devm_request_threaded_irq(hw->dev, hw->irq,
 					st_asm330lhh_handler_irq,
 					st_asm330lhh_handler_thread,
@@ -591,4 +628,14 @@ int st_asm330lhh_buffers_setup(struct st_asm330lhh_hw *hw)
 	}
 
 	return st_asm330lhh_fifo_init(hw);
+}
+
+int st_asm330lhh_deallocate_fifo(struct st_asm330lhh_hw *hw)
+{
+	int i;
+
+	for (i = 0; i < ST_ASM330LHH_ID_MAX; i++)
+		devm_iio_kfifo_free(hw->dev, hw->iio_devs[i]->buffer);
+
+	return 0;
 }
