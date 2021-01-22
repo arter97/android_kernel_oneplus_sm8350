@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2021, The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -103,6 +103,14 @@ static void dp_fisa_fse_cache_flush_timer(void *arg)
 	struct fse_cache_flush_history *fse_cache_flush_rec;
 	QDF_STATUS status;
 
+	if (!fisa_hdl)
+		return;
+
+	if (fisa_hdl->pm_suspended) {
+		qdf_atomic_set(&fisa_hdl->fse_cache_flush_posted, 0);
+		return;
+	}
+
 	fse_cache_flush_rec = &fisa_hdl->cache_fl_rec[fse_cache_flush_rec_idx %
 							MAX_FSE_CACHE_FL_HST];
 	fse_cache_flush_rec->timestamp = qdf_get_log_timestamp();
@@ -112,7 +120,6 @@ static void dp_fisa_fse_cache_flush_timer(void *arg)
 	dp_info("FSE cache flush for %d flows",
 		fse_cache_flush_rec->flows_added);
 
-	qdf_atomic_set(&fisa_hdl->fse_cache_flush_posted, 0);
 	status =
 	 dp_rx_flow_send_htt_operation_cmd(soc->pdev_list[0],
 					   DP_HTT_FST_CACHE_INVALIDATE_FULL,
@@ -123,6 +130,8 @@ static void dp_fisa_fse_cache_flush_timer(void *arg)
 		 * Not big impact cache entry gets updated later
 		 */
 	}
+
+	qdf_atomic_set(&fisa_hdl->fse_cache_flush_posted, 0);
 }
 
 /**
@@ -266,6 +275,7 @@ QDF_STATUS dp_rx_fst_attach(struct dp_soc *soc, struct dp_pdev *pdev)
 
 	qdf_atomic_init(&fst->fse_cache_flush_posted);
 
+	fst->fse_cache_flush_allow = true;
 	fst->soc_hdl = soc;
 	soc->rx_fst = fst;
 	soc->fisa_enable = true;
@@ -406,6 +416,15 @@ void dp_rx_fst_update_cmem_params(struct dp_soc *soc, uint16_t num_entries,
 	qdf_event_set(&fst->cmem_resp_event);
 }
 
+void dp_rx_fst_update_pm_suspend_status(struct dp_soc *soc, bool suspended)
+{
+	struct dp_rx_fst *fst = soc->rx_fst;
+
+	if (!fst)
+		return;
+
+	fst->pm_suspended = suspended;
+}
 #else /* WLAN_SUPPORT_RX_FISA */
 
 #endif /* !WLAN_SUPPORT_RX_FISA */
