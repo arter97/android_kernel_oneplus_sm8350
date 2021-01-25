@@ -33,6 +33,9 @@ else
 	source ${SCRIPTS_ROOT}/envsetup.sh $PLATFORM_NAME
 fi
 
+# Pass LEX, YACC, and KBUILD_HOSTLDFLAGS via KERN_MAKE_ARGS to prevent build
+# errors due to android build system's restriction against using path tools.
+
 KERN_MAKE_ARGS="ARCH=$ARCH \
 		CROSS_COMPILE=$CROSS_COMPILE \
 		REAL_CC=$REAL_CC \
@@ -41,6 +44,9 @@ KERN_MAKE_ARGS="ARCH=$ARCH \
 		HOSTLD=$HOSTLD \
 		HOSTAR=$HOSTAR \
 		LD=$LD \
+                LEX=$LEX \
+                YACC=$YACC \
+                KBUILD_HOSTLDFLAGS=-fuse-ld=lld \
 		"
 
 # Allyes fragment temporarily created on GKI config fragment
