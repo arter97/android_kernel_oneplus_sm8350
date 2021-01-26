@@ -19,7 +19,7 @@ static struct gsi_inst_status {
 	struct gsi_opts *opts;
 } inst_status[IPA_USB_MAX_TETH_PROT_SIZE];
 
-#define MAX_CDEV_INSTANCES		3
+#define MAX_CDEV_INSTANCES		4
 
 static int major;
 static struct class *gsi_class;
@@ -38,7 +38,11 @@ static inline bool usb_gsi_remote_wakeup_allowed(struct usb_function *f)
 	struct f_gsi *gsi = func_to_gsi(f);
 
 	if (f->config->cdev->gadget->speed >= USB_SPEED_SUPER)
-		remote_wakeup_allowed = gsi->func_wakeup_allowed;
+		remote_wakeup_allowed =
+			 gsi->func_is_suspended ? gsi->func_wakeup_allowed : false;
+	else
+		remote_wakeup_allowed =
+			usb_get_remote_wakeup_status(f->config->cdev->gadget);
 
 	log_event_dbg("%s: remote_wakeup_allowed:%s", __func__,
 			(remote_wakeup_allowed ? "true" : "false"));
@@ -697,10 +701,10 @@ static void ipa_data_path_enable(struct gsi_data_port *d_port)
 		usb_gsi_ep_op(gsi->d_port.out_ep,
 				&gsi->d_port.out_request,
 				GSI_EP_OP_STORE_DBL_INFO);
-
-		usb_gsi_ep_op(gsi->d_port.out_ep, &gsi->d_port.out_request,
-				GSI_EP_OP_ENABLE_GSI);
 	}
+
+	usb_gsi_ep_op(gsi->d_port.in_ep, &gsi->d_port.in_request,
+				GSI_EP_OP_ENABLE_GSI);
 
 	/* Unblock doorbell to GSI */
 	usb_gsi_ep_op(d_port->in_ep, (void *)&block_db,
@@ -780,6 +784,13 @@ static int ipa_suspend_work_handler(struct gsi_data_port *d_port)
 			GSI_EP_OP_SET_CLR_BLOCK_DBL);
 		goto done;
 	}
+
+	/*
+	 * Ensure that the DBL is blocked before suspend.
+	 */
+	block_db = true;
+	usb_gsi_ep_op(gsi->d_port.in_ep, (void *)&block_db,
+					GSI_EP_OP_SET_CLR_BLOCK_DBL);
 
 	log_event_dbg("%s: Calling xdci_suspend", __func__);
 	ret = ipa_usb_xdci_suspend(gsi->d_port.out_channel_handle,
@@ -1533,6 +1544,7 @@ static long gsi_ctrl_dev_ioctl(struct file *fp, unsigned int cmd,
 		atomic_set(&c_port->ctrl_online, 1);
 		break;
 	case QTI_CTRL_GET_LINE_STATE:
+	case GSI_MBIM_GPS_USB_STATUS:
 		val = atomic_read(&gsi->connected);
 		if (gsi->prot_id == IPA_USB_RMNET)
 			val = gsi->rmnet_dtr_status;
@@ -1561,26 +1573,35 @@ static long gsi_ctrl_dev_ioctl(struct file *fp, unsigned int cmd,
 			break;
 		}
 
-		if (gsi->d_port.in_channel_handle == -EINVAL &&
-			gsi->d_port.out_channel_handle == -EINVAL) {
-			ret = -EAGAIN;
-			break;
+		if (gsi->prot_id != IPA_USB_GPS) {
+			if (gsi->d_port.in_channel_handle == -EINVAL &&
+				gsi->d_port.out_channel_handle == -EINVAL) {
+				ret = -EAGAIN;
+				break;
+			}
+			info.ph_ep_info.ep_type = GSI_MBIM_DATA_EP_TYPE_HSUSB;
+			info.ph_ep_info.peripheral_iface_id = gsi->data_id;
+		} else {
+			info.ph_ep_info.ep_type = GSI_MBIM_DATA_EP_TYPE_HSUSB;
+			info.ph_ep_info.peripheral_iface_id = gsi->ctrl_id;
 		}
-
-		info.ph_ep_info.ep_type = GSI_MBIM_DATA_EP_TYPE_HSUSB;
-		info.ph_ep_info.peripheral_iface_id = gsi->data_id;
-		info.ipa_ep_pair.cons_pipe_num =
-		(gsi->prot_id == IPA_USB_DIAG) ? -1 :
-				gsi->d_port.out_channel_handle;
-		info.ipa_ep_pair.prod_pipe_num = gsi->d_port.in_channel_handle;
 
 		log_event_dbg("%s: prot id :%d ep_type:%d intf:%d",
 				__func__, gsi->prot_id, info.ph_ep_info.ep_type,
 				info.ph_ep_info.peripheral_iface_id);
+		if (gsi->prot_id != IPA_USB_GPS) {
+			info.ipa_ep_pair.cons_pipe_num =
+			(gsi->prot_id == IPA_USB_DIAG) ? -1 :
+					gsi->d_port.out_channel_handle;
+			info.ipa_ep_pair.prod_pipe_num =
+					gsi->d_port.in_channel_handle;
 
-		log_event_dbg("%s: ipa_cons_idx:%d ipa_prod_idx:%d",
-				__func__, info.ipa_ep_pair.cons_pipe_num,
-				info.ipa_ep_pair.prod_pipe_num);
+
+			log_event_dbg("%s: ipa_cons_idx:%d ipa_prod_idx:%d",
+					__func__,
+					info.ipa_ep_pair.cons_pipe_num,
+					info.ipa_ep_pair.prod_pipe_num);
+		}
 
 		ret = copy_to_user((void __user *)arg, &info,
 			sizeof(info));
@@ -1742,6 +1763,8 @@ static int gsi_function_ctrl_port_init(struct f_gsi *gsi)
 		strlcat(gsi->c_port.name, GSI_MBIM_CTRL_NAME, sz);
 	else if (gsi->prot_id == IPA_USB_DIAG)
 		strlcat(gsi->c_port.name, GSI_DPL_CTRL_NAME, sz);
+	else if (gsi->prot_id == IPA_USB_GPS)
+		strlcat(gsi->c_port.name, GSI_GPS_CTRL_NAME, sz);
 	else
 		ctrl_dev_create = false;
 
@@ -2497,7 +2520,9 @@ static int gsi_set_alt(struct usb_function *f, unsigned int intf,
 	atomic_set(&gsi->connected, 1);
 
 	/* send 0 len pkt to qti to notify state change */
-	if (gsi->prot_id == IPA_USB_DIAG)
+	if (gsi->prot_id == IPA_USB_DIAG ||
+			gsi->prot_id == IPA_USB_GPS ||
+			gsi->prot_id == IPA_USB_MBIM)
 		gsi_ctrl_send_cpkt_tomodem(gsi, NULL, 0);
 
 	return ret;
@@ -2529,7 +2554,7 @@ static void gsi_disable(struct usb_function *f)
 	}
 
 	gsi_ctrl_clear_cpkt_queues(gsi, false);
-	/* send 0 len pkt to qti/qbi to notify state change */
+	/* send 0 len pkt to qti/qbi/gps to notify state change */
 	gsi_ctrl_send_cpkt_tomodem(gsi, NULL, 0);
 	gsi->c_port.notify_req_queued = false;
 	/* Disable Data Path  - only if it was initialized already (alt=1) */
@@ -2553,9 +2578,22 @@ static void gsi_suspend(struct usb_function *f)
 	bool block_db;
 	struct f_gsi *gsi = func_to_gsi(f);
 
-	/* Check if function is already suspended in gsi_func_suspend() */
-	if (gsi->func_is_suspended) {
+	/* Check if function is already suspended in gsi_func_suspend()
+	 * Or func_suspend would have bailed out earlier if func_remote_wakeup
+	 * wasn't enabled.
+	 */
+	if (gsi->func_is_suspended && (gsi->d_port.sm_state == STATE_SUSPENDED ||
+			gsi->d_port.sm_state == STATE_SUSPEND_IN_PROGRESS)) {
 		log_event_dbg("%s: func already suspended, return\n", __func__);
+		return;
+	}
+
+	/*
+	 * GPS doesn't use any data interface, hence bail out as there is no
+	 * GSI specific handling needed.
+	 */
+	if (gsi->prot_id == IPA_USB_GPS) {
+		log_event_dbg("%s: suspend done\n", __func__);
 		return;
 	}
 
@@ -2588,6 +2626,11 @@ static void gsi_resume(struct usb_function *f)
 	/* Check any pending cpkt, and queue immediately on resume */
 	gsi_ctrl_send_notification(gsi);
 
+	if (gsi->prot_id == IPA_USB_GPS) {
+		log_event_dbg("%s: resume done\n", __func__);
+		return;
+	}
+
 	/*
 	 * Linux host does not send RNDIS_MSG_INIT or non-zero
 	 * RNDIS_MESSAGE_PACKET_FILTER after performing bus resume.
@@ -2612,6 +2655,10 @@ static int gsi_get_status(struct usb_function *f)
 {
 #ifdef CONFIG_USB_FUNC_WAKEUP_SUPPORTED
 	struct f_gsi *gsi = func_to_gsi(f);
+
+	/* Disable function remote wake-up for DPL interface */
+	if (gsi->prot_id == IPA_USB_DIAG)
+		return 0;
 
 	return (gsi->func_wakeup_allowed ? USB_INTRF_STAT_FUNC_RW : 0) |
 		USB_INTRF_STAT_FUNC_RW_CAP;
@@ -2849,9 +2896,11 @@ static int gsi_bind(struct usb_configuration *c, struct usb_function *f)
 			goto fail;
 	}
 
-	status = gsi->data_id = usb_interface_id(c, f);
-	if (status < 0)
-		goto fail;
+	if (gsi->prot_id != IPA_USB_GPS) {
+		status = gsi->data_id = usb_interface_id(c, f);
+		if (status < 0)
+			goto fail;
+	}
 
 	switch (gsi->prot_id) {
 	case IPA_USB_RNDIS:
@@ -3137,6 +3186,18 @@ static int gsi_bind(struct usb_configuration *c, struct usb_function *f)
 		info.in_req_num_buf = GSI_NUM_IN_BUFFERS;
 		info.notify_buf_len = sizeof(struct usb_cdc_notification);
 		break;
+	case IPA_USB_GPS:
+		info.string_defs = gps_string_defs;
+		info.ctrl_str_idx = 0;
+		info.ctrl_desc = &gps_interface_desc;
+		info.fs_notify_desc = &gps_fs_notify_desc;
+		info.hs_notify_desc = &gps_hs_notify_desc;
+		info.ss_notify_desc = &gps_ss_notify_desc;
+		info.fs_desc_hdr = gps_fs_function;
+		info.hs_desc_hdr = gps_hs_function;
+		info.ss_desc_hdr = gps_ss_function;
+		info.notify_buf_len = sizeof(struct usb_cdc_notification);
+		break;
 	default:
 		log_event_err("%s: Invalid prot id %d", __func__,
 							gsi->prot_id);
@@ -3146,6 +3207,9 @@ static int gsi_bind(struct usb_configuration *c, struct usb_function *f)
 	status = gsi_update_function_bind_params(gsi, cdev, &info);
 	if (status)
 		goto dereg_rndis;
+
+	if (gsi->prot_id == IPA_USB_GPS)
+		goto skip_ipa_init;
 
 	status = ipa_register_ipa_ready_cb(ipa_ready_callback, gsi);
 	if (!status) {
@@ -3172,6 +3236,7 @@ static int gsi_bind(struct usb_configuration *c, struct usb_function *f)
 
 	gsi->d_port.sm_state = STATE_INITIALIZED;
 
+skip_ipa_init:
 	DBG(cdev, "%s: %s speed IN/%s OUT/%s NOTIFY/%s\n",
 			f->name,
 			gadget_is_superspeed(c->cdev->gadget) ? "super" :
@@ -3264,6 +3329,10 @@ static int gsi_bind_config(struct f_gsi *gsi)
 	case IPA_USB_DIAG:
 		gsi->function.name = "dpl";
 		gsi->function.strings = qdss_gsi_strings;
+		break;
+	case IPA_USB_GPS:
+		gsi->function.name = "gps";
+		gsi->function.strings = gps_strings;
 		break;
 	default:
 		log_event_err("%s: invalid prot id %d", __func__, prot_id);

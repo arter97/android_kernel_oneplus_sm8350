@@ -2828,6 +2828,7 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
 	p->wts.boost_expires		= 0;
 	p->wts.boost_period		= 0;
 	p->wts.low_latency		= 0;
+	p->wts.iowaited			= false;
 #endif
 	INIT_LIST_HEAD(&p->se.group_node);
 
@@ -5254,6 +5255,7 @@ int sched_setattr_nocheck(struct task_struct *p, const struct sched_attr *attr)
 {
 	return __sched_setscheduler(p, attr, false, true);
 }
+EXPORT_SYMBOL_GPL(sched_setattr_nocheck);
 
 /**
  * sched_setscheduler_nocheck - change the scheduling policy and/or RT priority of a thread from kernelspace.

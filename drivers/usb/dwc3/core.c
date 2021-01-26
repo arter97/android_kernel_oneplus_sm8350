@@ -1622,6 +1622,7 @@ static int dwc3_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, dwc);
 
+	init_waitqueue_head(&dwc->wait_linkstate);
 	spin_lock_init(&dwc->lock);
 
 	pm_runtime_no_callbacks(dev);
@@ -2004,7 +2005,8 @@ static int dwc3_resume(struct device *dev)
 		 * state as active to reflect actual state of device which
 		 * is now out of LPM. This allows runtime_suspend later.
 		 */
-		if (dwc->current_dr_role == DWC3_GCTL_PRTCAP_HOST)
+		if (dwc->current_dr_role == DWC3_GCTL_PRTCAP_HOST &&
+					pm_runtime_status_suspended(dev))
 			pm_runtime_resume(dev);
 
 		return 0;

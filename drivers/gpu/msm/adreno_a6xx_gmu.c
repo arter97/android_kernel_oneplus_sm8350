@@ -1164,6 +1164,13 @@ int a6xx_gmu_wait_for_lowest_idle(struct adreno_device *adreno_dev)
 		reg3, reg4);
 	dev_err(&gmu->pdev->dev, "A6XX_GMU_AO_SPARE_CNTL=%x\n", reg5);
 
+	if (adreno_is_a660(adreno_dev)) {
+		u32 val;
+
+		gmu_core_regread(device, A6XX_GMU_PWR_COL_PREEMPT_KEEPALIVE, &val);
+		dev_err(&gmu->pdev->dev, "PWR_COL_PREEMPT_KEEPALIVE=%x\n", val);
+	}
+
 	/* Access GX registers only when GX is ON */
 	if (is_on(reg1)) {
 		kgsl_regread(device, A6XX_CP_STATUS_1, &reg6);
@@ -3095,6 +3102,8 @@ no_gx_power:
 	del_timer_sync(&device->idle_timer);
 
 	kgsl_pwrscale_sleep(device);
+
+	kgsl_pwrctrl_clear_l3_vote(device);
 
 	trace_kgsl_pwr_set_state(device, KGSL_STATE_SLUMBER);
 

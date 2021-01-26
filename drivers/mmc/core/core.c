@@ -612,6 +612,12 @@ static int mmc_devfreq_create_freq_table(struct mmc_host *host)
 		break;
 	}
 
+	if (mmc_card_sd(host->card) && (clk_scaling->freq_table_sz < 2)) {
+		clk_scaling->freq_table[clk_scaling->freq_table_sz] =
+				host->card->clk_scaling_highest;
+		clk_scaling->freq_table_sz++;
+	}
+
 out:
 	/**
 	 * devfreq requires unsigned long type freq_table while the
@@ -1637,6 +1643,47 @@ int __mmc_claim_host(struct mmc_host *host, struct mmc_ctx *ctx,
 	return stop;
 }
 EXPORT_SYMBOL(__mmc_claim_host);
+
+#if defined(CONFIG_SDC_QTI)
+/**
+ *   mmc_try_claim_host - try exclusively to claim a host
+ *   and keep trying for given time, with a gap of 10ms
+ *   @host: mmc host to claim
+ *   @dealy_ms: delay in ms
+ *
+ *   Returns %1 if the host is claimed, %0 otherwise.
+ */
+int mmc_try_claim_host(struct mmc_host *host, struct mmc_ctx *ctx,
+		     unsigned int delay_ms)
+{
+	int claimed_host = 0;
+	struct task_struct *task = ctx ? NULL : current;
+	unsigned long flags;
+	int retry_cnt = delay_ms/10;
+	bool pm = false;
+
+	do {
+		spin_lock_irqsave(&host->lock, flags);
+		if (!host->claimed || mmc_ctx_matches(host, ctx, task)) {
+			host->claimed = 1;
+			mmc_ctx_set_claimer(host, ctx, task);
+			host->claim_cnt += 1;
+			claimed_host = 1;
+			if (host->claim_cnt == 1)
+				pm = true;
+		}
+		spin_unlock_irqrestore(&host->lock, flags);
+		if (!claimed_host)
+			mmc_delay(10);
+	} while (!claimed_host && retry_cnt--);
+
+	if (pm)
+		pm_runtime_get_sync(mmc_dev(host));
+
+	return claimed_host;
+}
+EXPORT_SYMBOL(mmc_try_claim_host);
+#endif
 
 /**
  *	mmc_release_host - release a host

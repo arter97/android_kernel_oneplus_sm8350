@@ -91,7 +91,7 @@ static u32 a6xx_ifpc_pwrup_reglist[] = {
 	A6XX_CP_AHB_CNTL,
 };
 
-/* Applicable to a620, a650 and a660 */
+/* Applicable to a620, a635, a650 and a660 */
 static u32 a650_pwrup_reglist[] = {
 	A6XX_CP_PROTECT_REG + 47,          /* Programmed for infinite span */
 	A6XX_TPL1_BICUBIC_WEIGHTS_TABLE_0,
@@ -129,6 +129,36 @@ static void a6xx_gmu_wrapper_init(struct adreno_device *adreno_dev)
 		dev_warn(device->dev, "gmu_wrapper ioremap failed\n");
 }
 
+static int match_name(struct device *dev, void *data)
+{
+	struct device *parent = data;
+
+	return (!strcmp(dev_name(dev), dev_name(parent)));
+}
+
+static void find_ddr_qos_device(struct adreno_device *adreno_dev)
+{
+	struct device *devfreq_dev, *ddr_qos_dev;
+	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
+
+	if (device->pwrctrl.ddr_qos_devfreq)
+		return;
+
+	ddr_qos_dev = bus_find_device_by_name(&platform_bus_type, NULL,
+			"soc:qcom,kgsl-ddr-qos");
+
+	if (!ddr_qos_dev)
+		return;
+
+	/* Devfreq device has the same name as its parent device */
+	devfreq_dev = device_find_child(ddr_qos_dev, ddr_qos_dev, match_name);
+	if (!devfreq_dev)
+		return;
+
+	device->pwrctrl.ddr_qos_devfreq = container_of(devfreq_dev,
+					struct devfreq, dev);
+}
+
 int a6xx_init(struct adreno_device *adreno_dev)
 {
 	const struct adreno_a6xx_core *a6xx_core = to_a6xx_core(adreno_dev);
@@ -138,7 +168,8 @@ int a6xx_init(struct adreno_device *adreno_dev)
 
 	/* If the memory type is DDR 4, override the existing configuration */
 	if (of_fdt_get_ddrtype() == 0x7) {
-		if (adreno_is_a660_shima(adreno_dev))
+		if (adreno_is_a660_shima(adreno_dev) ||
+			adreno_is_a635(adreno_dev))
 			adreno_dev->highest_bank_bit = 14;
 		else if ((adreno_is_a650(adreno_dev) ||
 				adreno_is_a660(adreno_dev)))
@@ -155,6 +186,8 @@ int a6xx_init(struct adreno_device *adreno_dev)
 		if (IS_ERR(adreno_dev->pwrup_reglist))
 			return PTR_ERR(adreno_dev->pwrup_reglist);
 	}
+
+	find_ddr_qos_device(adreno_dev);
 
 	return a6xx_get_cp_init_cmds(adreno_dev);
 }
@@ -209,7 +242,7 @@ __get_gmu_ao_cgc_mode_cntl(struct adreno_device *adreno_dev)
 	else if (adreno_is_a615_family(adreno_dev))
 		return 0x00000222;
 	else if (adreno_is_a660(adreno_dev))
-		return 0x00020200;
+		return 0x00020000;
 	else
 		return 0x00020202;
 }
@@ -281,6 +314,18 @@ bool a6xx_cx_regulator_disable_wait(struct regulator *reg,
 	}
 }
 
+static void set_holi_sptprac_clock(struct adreno_device *adreno_dev, bool enable)
+{
+	u32 val = 0;
+
+	adreno_read_gmu_wrapper(adreno_dev,
+			A6XX_GPU_GMU_GX_SPTPRAC_CLOCK_CONTROL, &val);
+	val &= ~1;
+	adreno_write_gmu_wrapper(adreno_dev,
+			A6XX_GPU_GMU_GX_SPTPRAC_CLOCK_CONTROL,
+			val | (enable ? 1 : 0));
+}
+
 static void a6xx_hwcg_set(struct adreno_device *adreno_dev, bool on)
 {
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
@@ -320,6 +365,8 @@ static void a6xx_hwcg_set(struct adreno_device *adreno_dev, bool on)
 		!adreno_is_a610(adreno_dev))
 		gmu_core_regrmw(device,
 			A6XX_GPU_GMU_GX_SPTPRAC_CLOCK_CONTROL, 1, 0);
+	else if (adreno_is_a619_holi(adreno_dev))
+		set_holi_sptprac_clock(adreno_dev, false);
 
 	for (i = 0; i < a6xx_core->hwcg_count; i++)
 		kgsl_regwrite(device, a6xx_core->hwcg[i].offset,
@@ -334,6 +381,8 @@ static void a6xx_hwcg_set(struct adreno_device *adreno_dev, bool on)
 		!adreno_is_a610(adreno_dev))
 		gmu_core_regrmw(device,
 			A6XX_GPU_GMU_GX_SPTPRAC_CLOCK_CONTROL, 0, 1);
+	else if (adreno_is_a619_holi(adreno_dev))
+		set_holi_sptprac_clock(adreno_dev, true);
 
 	/* enable top level HWCG */
 	kgsl_regwrite(device, A6XX_RBBM_CLOCK_CNTL,
@@ -696,7 +745,10 @@ void a6xx_start(struct adreno_device *adreno_dev)
 	if (adreno_is_a660(adreno_dev)) {
 		kgsl_regwrite(device, A6XX_CP_CHICKEN_DBG, 0x1);
 		kgsl_regwrite(device, A6XX_RBBM_GBIF_CLIENT_QOS_CNTL, 0x0);
-		kgsl_regwrite(device, A6XX_UCHE_CMDQ_CONFIG, 0x66906);
+
+		/* Set dualQ + disable afull for A660 GPU but not for A635 */
+		if (!adreno_is_a635(adreno_dev))
+			kgsl_regwrite(device, A6XX_UCHE_CMDQ_CONFIG, 0x66906);
 	}
 
 	if (ADRENO_FEATURE(adreno_dev, ADRENO_APRIV))

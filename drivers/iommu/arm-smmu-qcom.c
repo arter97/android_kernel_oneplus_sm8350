@@ -19,9 +19,7 @@
 #include <linux/debugfs.h>
 #include <linux/uaccess.h>
 
-#define ARM_SMMU_IMPL_DEF1	6
-
-#define IMPL_DEF1_MICRO_MMU_CTRL	0
+#define IMPL_DEF4_MICRO_MMU_CTRL	0
 #define MICRO_MMU_CTRL_LOCAL_HALT_REQ	BIT(2)
 #define MICRO_MMU_CTRL_IDLE		BIT(3)
 
@@ -47,11 +45,11 @@ struct qsmmuv2_archdata {
 
 static int qsmmuv2_wait_for_halt(struct arm_smmu_device *smmu)
 {
-	void __iomem *reg = arm_smmu_page(smmu, ARM_SMMU_IMPL_DEF1);
+	void __iomem *reg = arm_smmu_page(smmu, ARM_SMMU_IMPL_DEF4);
 	struct device *dev = smmu->dev;
 	u32 tmp;
 
-	if (readl_poll_timeout_atomic(reg + IMPL_DEF1_MICRO_MMU_CTRL, tmp,
+	if (readl_poll_timeout_atomic(reg + IMPL_DEF4_MICRO_MMU_CTRL, tmp,
 				      (tmp & MICRO_MMU_CTRL_IDLE), 0, 30000)) {
 		dev_err(dev, "Couldn't halt SMMU!\n");
 		return -EBUSY;
@@ -64,11 +62,11 @@ static int __qsmmuv2_halt(struct arm_smmu_device *smmu, bool wait)
 {
 	u32 val;
 
-	val = arm_smmu_readl(smmu, ARM_SMMU_IMPL_DEF1,
-			     IMPL_DEF1_MICRO_MMU_CTRL);
+	val = arm_smmu_readl(smmu, ARM_SMMU_IMPL_DEF4,
+			     IMPL_DEF4_MICRO_MMU_CTRL);
 	val |= MICRO_MMU_CTRL_LOCAL_HALT_REQ;
 
-	arm_smmu_writel(smmu, ARM_SMMU_IMPL_DEF1, IMPL_DEF1_MICRO_MMU_CTRL,
+	arm_smmu_writel(smmu, ARM_SMMU_IMPL_DEF4, IMPL_DEF4_MICRO_MMU_CTRL,
 			val);
 
 	return wait ? qsmmuv2_wait_for_halt(smmu) : 0;
@@ -88,11 +86,11 @@ static void qsmmuv2_resume(struct arm_smmu_device *smmu)
 {
 	u32 val;
 
-	val = arm_smmu_readl(smmu, ARM_SMMU_IMPL_DEF1,
-			     IMPL_DEF1_MICRO_MMU_CTRL);
+	val = arm_smmu_readl(smmu, ARM_SMMU_IMPL_DEF4,
+			     IMPL_DEF4_MICRO_MMU_CTRL);
 	val &= ~MICRO_MMU_CTRL_LOCAL_HALT_REQ;
 
-	arm_smmu_writel(smmu, ARM_SMMU_IMPL_DEF1, IMPL_DEF1_MICRO_MMU_CTRL,
+	arm_smmu_writel(smmu, ARM_SMMU_IMPL_DEF4, IMPL_DEF4_MICRO_MMU_CTRL,
 			val);
 }
 
@@ -1170,7 +1168,7 @@ static void qsmmuv500_tlb_sync_timeout(struct arm_smmu_device *smmu)
 			    "TLB sync timed out -- SMMU may be deadlocked\n");
 
 	sync_inv_ack = arm_smmu_readl(smmu,
-				      ARM_SMMU_IMPL_DEF0,
+				      ARM_SMMU_IMPL_DEF5,
 				      ARM_SMMU_STATS_SYNC_INV_TBU_ACK);
 	ret = qcom_scm_io_readl((unsigned long)(smmu->phys_addr +
 				ARM_SMMU_TBU_PWR_STATUS), &tbu_pwr_status);
@@ -1390,7 +1388,6 @@ static struct qsmmuv500_tbu_device *qsmmuv500_find_tbu(
 static int qsmmuv500_ecats_lock(struct arm_smmu_domain *smmu_domain,
 				struct qsmmuv500_tbu_device *tbu,
 				unsigned long *flags)
-	__acquires(&smmu->atos_lock)
 {
 	struct arm_smmu_device *smmu = tbu->smmu;
 	struct qsmmuv500_archdata *data = to_qsmmuv500_archdata(smmu);
@@ -1415,7 +1412,6 @@ static int qsmmuv500_ecats_lock(struct arm_smmu_domain *smmu_domain,
 static void qsmmuv500_ecats_unlock(struct arm_smmu_domain *smmu_domain,
 					struct qsmmuv500_tbu_device *tbu,
 					unsigned long *flags)
-	__releases(&smmu->atos_lock)
 {
 	struct arm_smmu_device *smmu = tbu->smmu;
 	struct qsmmuv500_archdata *data = to_qsmmuv500_archdata(smmu);
@@ -1450,12 +1446,6 @@ static phys_addr_t qsmmuv500_iova_to_phys(
 
 	if (iova_ext_bits && split_tables)
 		iova_ext_bits = ~iova_ext_bits;
-
-	if (iova_ext_bits) {
-		dev_err_ratelimited(smmu->dev, "ECATS: address out of bounds: %pad\n",
-					&iova);
-		return 0;
-	}
 
 	tbu = qsmmuv500_find_tbu(smmu, sid);
 	if (!tbu)
@@ -1495,6 +1485,15 @@ static phys_addr_t qsmmuv500_iova_to_phys(
 			arm_smmu_cb_write(smmu, idx, ARM_SMMU_CB_RESUME,
 					  RESUME_TERMINATE);
 	}
+
+	/* checking out of bound fault after resuming stalled transactions */
+	if (iova_ext_bits) {
+		dev_err_ratelimited(smmu->dev,
+				    "ECATS: address out of bounds: %pad\n",
+				    &iova);
+		goto out_resume;
+	}
+
 
 	/* Only one concurrent atos operation */
 	ret = qsmmuv500_ecats_lock(smmu_domain, tbu, &flags);
@@ -1589,10 +1588,10 @@ redo:
 	if (!phys && needs_redo++ < 2)
 		goto redo;
 
-	arm_smmu_cb_write(smmu, idx, ARM_SMMU_CB_SCTLR, sctlr_orig);
 	qsmmuv500_ecats_unlock(smmu_domain, tbu, &flags);
 
 out_resume:
+	arm_smmu_cb_write(smmu, idx, ARM_SMMU_CB_SCTLR, sctlr_orig);
 	qsmmuv500_tbu_resume(tbu);
 
 out_power_off:
