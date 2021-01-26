@@ -544,7 +544,7 @@ void sde_encoder_phys_setup_cdm(struct sde_encoder_phys *phys_enc,
  * @info:       structure used to populate the pp line count information
  */
 void sde_encoder_helper_get_pp_line_count(struct drm_encoder *drm_enc,
-		struct sde_hw_pp_vsync_info *info);
+		struct sde_hw_pp_vsync_info *info, int rw);
 
 /**
  * sde_encoder_helper_get_transfer_time - get the mdp transfer time in usecs

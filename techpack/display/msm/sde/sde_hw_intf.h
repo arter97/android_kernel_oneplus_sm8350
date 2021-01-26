@@ -147,7 +147,7 @@ struct sde_hw_intf_ops {
 	 * line_count
 	 */
 	int (*get_vsync_info)(struct sde_hw_intf *intf,
-			struct sde_hw_pp_vsync_info  *info);
+			struct sde_hw_pp_vsync_info  *info, int rw);
 
 	/**
 	 * configure and enable the autorefresh config
