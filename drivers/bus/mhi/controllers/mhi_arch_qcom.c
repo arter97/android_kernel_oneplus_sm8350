@@ -16,6 +16,7 @@
 #include <linux/slab.h>
 #include <linux/suspend.h>
 #include <linux/mhi.h>
+#include <linux/mhi_ssr.h>
 #include "mhi_qcom.h"
 
 /**
@@ -31,6 +32,7 @@ struct mhi_bus_bw_cfg {
 struct arch_info {
 	struct mhi_dev *mhi_dev;
 	struct esoc_desc *esoc_client;
+	struct ssr_client_hook ssr_ops;
 	struct esoc_client_hook esoc_ops;
 	struct icc_path *icc_path;
 	const char *icc_name;
@@ -454,6 +456,7 @@ int mhi_arch_pcie_init(struct mhi_controller *mhi_cntrl)
 	struct mhi_dev *mhi_dev = mhi_controller_get_devdata(mhi_cntrl);
 	struct arch_info *arch_info = mhi_dev->arch_info;
 	struct mhi_link_info *cur_link_info;
+	struct ssr_client_hook *ssr_ops;
 	char node[32];
 	int ret;
 	u16 linkstat;
@@ -569,6 +572,23 @@ int mhi_arch_pcie_init(struct mhi_controller *mhi_cntrl)
 						&mhi_dev->pci_dev->dev, "mdm");
 		if (IS_ERR_OR_NULL(arch_info->esoc_client)) {
 			MHI_CNTRL_ERR("Failed to register esoc client\n");
+
+			/*
+			 * In cases where esoc support is not present
+			 * sysfs is used for MHI SSR functionality
+			 */
+			ssr_ops = &arch_info->ssr_ops;
+			ssr_ops->name = "MHI_SSR";
+			ssr_ops->priv = mhi_cntrl;
+			ssr_ops->ssr_link_power_on =
+				mhi_arch_esoc_ops_power_on;
+			ssr_ops->ssr_link_power_off =
+				mhi_arch_esoc_ops_power_off;
+			ret = mhi_ssr_init(ssr_ops);
+
+			if (ret)
+				MHI_CNTRL_ERR("Failed to initialize SSR ops\n");
+
 		} else {
 			/* register for power on/off hooks */
 			struct esoc_client_hook *esoc_ops =

@@ -15,3 +15,4 @@ obj-$(CONFIG_EP_PCIE) += ep_pcie/
 obj-$(CONFIG_MSM_MHI_DEV) += mhi_dev/
 obj-$(CONFIG_IPA_ETH) += ethernet/
 obj-$(CONFIG_VETH_IPA) += veth_ipa/
+obj-$(CONFIG_QTI_MHI_SSR) += mhi_ssr/
