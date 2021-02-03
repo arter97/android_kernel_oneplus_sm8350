@@ -803,6 +803,22 @@ USER(\label, ic	ivau, \tmp2)			// invalidate I line PoU
 .Lyield_out_\@ :
 	.endm
 
+	/*
+	 * Check whether preempt-disabled code should yield as soon as it
+	 * is able. This is the case if re-enabling preemption a single
+	 * time results in a preempt count of zero, and the TIF_NEED_RESCHED
+	 * flag is set. (Note that the latter is stored negated in the
+	 * top word of the thread_info::preempt_count field)
+	 */
+	.macro		cond_yield, lbl:req, tmp:req
+#ifdef CONFIG_PREEMPTION
+	get_current_task \tmp
+	ldr		\tmp, [\tmp, #TSK_TI_PREEMPT]
+	sub		\tmp, \tmp, #PREEMPT_DISABLE_OFFSET
+	cbz		\tmp, \lbl
+#endif
+	.endm
+
 	.macro __mitigate_spectre_bhb_loop      tmp
 #ifdef CONFIG_MITIGATE_SPECTRE_BRANCH_HISTORY
 alternative_cb  spectre_bhb_patch_loop_iter
