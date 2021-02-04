@@ -1319,4 +1319,6 @@ config DUMP_XBL_LOG
 		cat /sys/module/xbl_log/xbl_log
 
 source "drivers/soc/qcom/icnss2/Kconfig"
+
+source "drivers/soc/qcom/gnsssirf/Kconfig"
 endmenu
