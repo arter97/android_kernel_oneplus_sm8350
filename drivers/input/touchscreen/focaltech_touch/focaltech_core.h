@@ -184,8 +184,8 @@ enum trusted_touch_tvm_states {
 	TVM_INTERRUPT_ENABLED,
 	TVM_INTERRUPT_DISABLED,
 	TVM_IRQ_RELEASED,
-	TVM_IOMEM_RELEASED,
 	TVM_I2C_SESSION_RELEASED,
+	TVM_IOMEM_RELEASED,
 	TRUSTED_TOUCH_TVM_STATE_MAX
 };
 
@@ -295,6 +295,7 @@ struct fts_ts_data {
 	struct clk *iface_clk;
 	atomic_t trusted_touch_initialized;
 	atomic_t trusted_touch_enabled;
+	atomic_t trusted_touch_underway;
 	atomic_t trusted_touch_event;
 	atomic_t trusted_touch_abort_status;
 	atomic_t delayed_vm_probe_pending;

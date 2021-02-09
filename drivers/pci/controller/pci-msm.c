@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2014-2020, The Linux Foundation. All rights reserved.*/
+/* Copyright (c) 2014-2021, The Linux Foundation. All rights reserved.*/
 
 #include <dt-bindings/regulator/qcom,rpmh-regulator-levels.h>
 #include <linux/bitops.h>
@@ -96,15 +96,6 @@
 #define PCIE20_AUX_CLK_FREQ_REG (0xb40)
 #define PCIE20_ACK_F_ASPM_CTRL_REG (0x70c)
 #define PCIE20_ACK_N_FTS (0xff00)
-
-#define PCIE20_PLR_IATU_VIEWPORT (0x900)
-#define PCIE20_PLR_IATU_CTRL1 (0x904)
-#define PCIE20_PLR_IATU_CTRL2 (0x908)
-#define PCIE20_PLR_IATU_LBAR (0x90c)
-#define PCIE20_PLR_IATU_UBAR (0x910)
-#define PCIE20_PLR_IATU_LAR (0x914)
-#define PCIE20_PLR_IATU_LTAR (0x918)
-#define PCIE20_PLR_IATU_UTAR (0x91c)
 
 #define PCIE_IATU_BASE(n) (n * 0x200)
 #define PCIE_IATU_CTRL1(n) (PCIE_IATU_BASE(n) + 0x00)
@@ -540,6 +531,12 @@ struct msm_pcie_phy_info_t {
 	u32 delay;
 };
 
+/* tcsr info structure */
+struct msm_pcie_tcsr_info_t {
+	u32 offset;
+	u32 val;
+};
+
 /* sid info structure */
 struct msm_pcie_sid_info_t {
 	u16 bdf;
@@ -694,6 +691,7 @@ struct msm_pcie_dev_t {
 	uint32_t smmu_sid_base;
 	uint32_t link_check_max_count;
 	uint32_t target_link_speed;
+	uint32_t dt_target_link_speed;
 	uint32_t current_link_speed;
 	uint32_t n_fts;
 	uint32_t ep_latency;
@@ -742,6 +740,8 @@ struct msm_pcie_dev_t {
 	u32 num_parf_testbus_sel;
 	u32 phy_len;
 	struct msm_pcie_phy_info_t *phy_sequence;
+	u32 tcsr_len;
+	struct msm_pcie_tcsr_info_t *tcsr_config;
 	u32 sid_info_len;
 	struct msm_pcie_sid_info_t *sid_info;
 	u32 ep_shadow[MAX_DEVICE_NUM][PCIE_CONF_SPACE_DW];
@@ -1096,6 +1096,21 @@ static void pcie_phy_dump(struct msm_pcie_dev_t *dev)
 			readl_relaxed(dev->phy + (i + 20)),
 			readl_relaxed(dev->phy + (i + 24)),
 			readl_relaxed(dev->phy + (i + 28)));
+	}
+}
+
+static void pcie_tcsr_init(struct msm_pcie_dev_t *dev)
+{
+	int i;
+	struct msm_pcie_tcsr_info_t *tcsr_cfg;
+
+	i = dev->tcsr_len;
+	tcsr_cfg = dev->tcsr_config;
+	while (i--) {
+		msm_pcie_write_reg(dev->tcsr,
+			tcsr_cfg->offset,
+			tcsr_cfg->val);
+		tcsr_cfg++;
 	}
 }
 
@@ -2485,105 +2500,32 @@ static bool msm_pcie_check_ltssm_state(struct msm_pcie_dev_t *dev, u32 state)
  * @host_addr: - region start address on host
  * @host_end: - region end address (low 32 bit) on host,
  *	upper 32 bits are same as for @host_addr
- * @target_addr: - region start address on target
+ * @bdf: - bus:device:function
  */
 static void msm_pcie_iatu_config(struct msm_pcie_dev_t *dev, int nr, u8 type,
-				unsigned long host_addr, u32 host_end,
-				unsigned long target_addr)
+				unsigned long host_addr, u32 host_end, u32 bdf)
 {
-	void __iomem *iatu_base = dev->iatu ? dev->iatu : dev->dm_core;
-
-	u32 iatu_viewport_offset;
-	u32 iatu_ctrl1_offset;
-	u32 iatu_ctrl2_offset;
-	u32 iatu_lbar_offset;
-	u32 iatu_ubar_offset;
-	u32 iatu_lar_offset;
-	u32 iatu_ltar_offset;
-	u32 iatu_utar_offset;
-
-	if (dev->iatu) {
-		iatu_viewport_offset = 0;
-		iatu_ctrl1_offset = PCIE_IATU_CTRL1(nr);
-		iatu_ctrl2_offset = PCIE_IATU_CTRL2(nr);
-		iatu_lbar_offset = PCIE_IATU_LBAR(nr);
-		iatu_ubar_offset = PCIE_IATU_UBAR(nr);
-		iatu_lar_offset = PCIE_IATU_LAR(nr);
-		iatu_ltar_offset = PCIE_IATU_LTAR(nr);
-		iatu_utar_offset = PCIE_IATU_UTAR(nr);
-	} else {
-		iatu_viewport_offset = PCIE20_PLR_IATU_VIEWPORT;
-		iatu_ctrl1_offset = PCIE20_PLR_IATU_CTRL1;
-		iatu_ctrl2_offset = PCIE20_PLR_IATU_CTRL2;
-		iatu_lbar_offset = PCIE20_PLR_IATU_LBAR;
-		iatu_ubar_offset = PCIE20_PLR_IATU_UBAR;
-		iatu_lar_offset = PCIE20_PLR_IATU_LAR;
-		iatu_ltar_offset = PCIE20_PLR_IATU_LTAR;
-		iatu_utar_offset = PCIE20_PLR_IATU_UTAR;
+	if (!dev->iatu) {
+		PCIE_ERR(dev, "PCIe: RC%d no iatu resource\n", dev->rc_idx);
+		return;
 	}
 
-	if (dev->shadow_en && iatu_viewport_offset) {
-		dev->rc_shadow[PCIE20_PLR_IATU_VIEWPORT / 4] =
-			nr;
-		dev->rc_shadow[PCIE20_PLR_IATU_CTRL1 / 4] =
-			type;
-		dev->rc_shadow[PCIE20_PLR_IATU_LBAR / 4] =
-			lower_32_bits(host_addr);
-		dev->rc_shadow[PCIE20_PLR_IATU_UBAR / 4] =
-			upper_32_bits(host_addr);
-		dev->rc_shadow[PCIE20_PLR_IATU_LAR / 4] =
-			host_end;
-		dev->rc_shadow[PCIE20_PLR_IATU_LTAR / 4] =
-			lower_32_bits(target_addr);
-		dev->rc_shadow[PCIE20_PLR_IATU_UTAR / 4] =
-			upper_32_bits(target_addr);
-		dev->rc_shadow[PCIE20_PLR_IATU_CTRL2 / 4] =
-			BIT(31);
-	}
-
-	/* select region */
-	if (iatu_viewport_offset)
-		msm_pcie_write_reg(iatu_base, iatu_viewport_offset, nr);
+	/* configure iATU only for endpoints */
+	if (!bdf)
+		return;
 
 	/* switch off region before changing it */
-	msm_pcie_write_reg(iatu_base, iatu_ctrl2_offset, 0);
+	msm_pcie_write_reg(dev->iatu, PCIE_IATU_CTRL2(nr), 0);
 
-	msm_pcie_write_reg(iatu_base, iatu_ctrl1_offset, type);
-	msm_pcie_write_reg(iatu_base, iatu_lbar_offset,
-				lower_32_bits(host_addr));
-	msm_pcie_write_reg(iatu_base, iatu_ubar_offset,
-				upper_32_bits(host_addr));
-	msm_pcie_write_reg(iatu_base, iatu_lar_offset, host_end);
-	msm_pcie_write_reg(iatu_base, iatu_ltar_offset,
-				lower_32_bits(target_addr));
-	msm_pcie_write_reg(iatu_base, iatu_utar_offset,
-				upper_32_bits(target_addr));
-	msm_pcie_write_reg(iatu_base, iatu_ctrl2_offset, BIT(31));
-
-	if (dev->enumerated) {
-		PCIE_DBG2(dev, "IATU for Endpoint %02x:%02x.%01x\n",
-			dev->pcidev_table[nr].bdf >> 24,
-			dev->pcidev_table[nr].bdf >> 19 & 0x1f,
-			dev->pcidev_table[nr].bdf >> 16 & 0x07);
-		if (iatu_viewport_offset)
-			PCIE_DBG2(dev, "IATU_VIEWPORT:0x%x\n",
-				readl_relaxed(dev->dm_core +
-					PCIE20_PLR_IATU_VIEWPORT));
-		PCIE_DBG2(dev, "IATU_CTRL1:0x%x\n",
-			readl_relaxed(iatu_base + iatu_ctrl1_offset));
-		PCIE_DBG2(dev, "IATU_LBAR:0x%x\n",
-			readl_relaxed(iatu_base + iatu_lbar_offset));
-		PCIE_DBG2(dev, "IATU_UBAR:0x%x\n",
-			readl_relaxed(iatu_base + iatu_ubar_offset));
-		PCIE_DBG2(dev, "IATU_LAR:0x%x\n",
-			readl_relaxed(iatu_base + iatu_lar_offset));
-		PCIE_DBG2(dev, "IATU_LTAR:0x%x\n",
-			readl_relaxed(iatu_base + iatu_ltar_offset));
-		PCIE_DBG2(dev, "IATU_UTAR:0x%x\n",
-			readl_relaxed(iatu_base + iatu_utar_offset));
-		PCIE_DBG2(dev, "IATU_CTRL2:0x%x\n\n",
-			readl_relaxed(iatu_base + iatu_ctrl2_offset));
-	}
+	msm_pcie_write_reg(dev->iatu, PCIE_IATU_CTRL1(nr), type);
+	msm_pcie_write_reg(dev->iatu, PCIE_IATU_LBAR(nr),
+			   lower_32_bits(host_addr));
+	msm_pcie_write_reg(dev->iatu, PCIE_IATU_UBAR(nr),
+			   upper_32_bits(host_addr));
+	msm_pcie_write_reg(dev->iatu, PCIE_IATU_LAR(nr), host_end);
+	msm_pcie_write_reg(dev->iatu, PCIE_IATU_LTAR(nr), lower_32_bits(bdf));
+	msm_pcie_write_reg(dev->iatu, PCIE_IATU_UTAR(nr), 0);
+	msm_pcie_write_reg(dev->iatu, PCIE_IATU_CTRL2(nr), BIT(31));
 }
 
 /**
@@ -3795,6 +3737,34 @@ static int msm_pcie_get_reg(struct msm_pcie_dev_t *pcie_dev)
 	return 0;
 }
 
+static int msm_pcie_get_tcsr_values(struct msm_pcie_dev_t *dev,
+					struct platform_device *pdev)
+{
+	int size = 0, ret = 0;
+
+	of_get_property(pdev->dev.of_node, "qcom,tcsr", &size);
+
+	if (!size) {
+		PCIE_DBG(dev, "PCIe: RC%d: tcsr is not present in DT\n",
+			dev->rc_idx);
+		return 0;
+	}
+
+	dev->tcsr_config = devm_kzalloc(&pdev->dev, size, GFP_KERNEL);
+
+	if (!dev->tcsr_config)
+		return -ENOMEM;
+
+	dev->tcsr_len = size / sizeof(*dev->tcsr_config);
+
+	of_property_read_u32_array(pdev->dev.of_node,
+		"qcom,tcsr",
+		(unsigned int *)dev->tcsr_config,
+		size / sizeof(dev->tcsr_config->offset));
+
+	return ret;
+}
+
 static int msm_pcie_get_resources(struct msm_pcie_dev_t *dev,
 					struct platform_device *pdev)
 {
@@ -3805,7 +3775,7 @@ static int msm_pcie_get_resources(struct msm_pcie_dev_t *dev,
 	PCIE_DBG(dev, "PCIe: RC%d: entry\n", dev->rc_idx);
 
 	dev->icc_path = of_icc_get(&pdev->dev, "icc_path");
-	if (IS_ERR_OR_NULL(dev->icc_path)) {
+	if (IS_ERR(dev->icc_path)) {
 		ret = dev->icc_path ? PTR_ERR(dev->icc_path) : -EINVAL;
 
 		PCIE_ERR(dev, "PCIe: RC%d: failed to get ICC path: %d\n",
@@ -3828,6 +3798,10 @@ static int msm_pcie_get_resources(struct msm_pcie_dev_t *dev,
 					irq_info->num);
 		}
 	}
+
+	ret = msm_pcie_get_tcsr_values(dev, pdev);
+	if (ret)
+		return ret;
 
 	ret = msm_pcie_get_clk(dev);
 	if (ret)
@@ -4083,6 +4057,10 @@ static int msm_pcie_enable(struct msm_pcie_dev_t *dev)
 		readl_relaxed(dev->parf + PCIE20_PARF_AXI_MSTR_WR_ADDR_HALT);
 	msm_pcie_write_reg(dev->parf, PCIE20_PARF_AXI_MSTR_WR_ADDR_HALT,
 				BIT(31) | val);
+
+	/* init tcsr */
+	if (dev->tcsr_config)
+		pcie_tcsr_init(dev);
 
 	/* init PCIe PHY */
 	ret = pcie_phy_init(dev);
@@ -5681,9 +5659,11 @@ static int msm_pcie_probe(struct platform_device *pdev)
 		pcie_dev->rc_idx, pcie_dev->link_check_max_count);
 
 	of_property_read_u32(of_node, "qcom,target-link-speed",
-				&pcie_dev->target_link_speed);
+				&pcie_dev->dt_target_link_speed);
 	PCIE_DBG(pcie_dev, "PCIe: RC%d: target-link-speed: 0x%x.\n",
-		pcie_dev->rc_idx, pcie_dev->target_link_speed);
+		pcie_dev->rc_idx, pcie_dev->dt_target_link_speed);
+
+	pcie_dev->target_link_speed = pcie_dev->dt_target_link_speed;
 
 	of_property_read_u32(of_node, "qcom,n-fts", &pcie_dev->n_fts);
 	PCIE_DBG(pcie_dev, "n-fts: 0x%x.\n", pcie_dev->n_fts);
@@ -6132,6 +6112,55 @@ static void msm_pcie_poll_for_l0_from_l0s(struct msm_pcie_dev_t *dev)
 	while (!msm_pcie_check_ltssm_state(dev, MSM_PCIE_LTSSM_L0))
 		pci_walk_bus(dev->dev->bus, msm_pcie_read_devid_all, dev);
 }
+
+int msm_pcie_set_target_link_speed(u32 rc_idx, u32 target_link_speed)
+{
+	struct msm_pcie_dev_t *pcie_dev;
+
+	if (rc_idx >=  MAX_RC_NUM) {
+		pr_err("PCIe: invalid rc index %u\n", rc_idx);
+		return -EINVAL;
+	}
+
+	pcie_dev = &msm_pcie_dev[rc_idx];
+
+	if (!pcie_dev->drv_ready) {
+		PCIE_DBG(pcie_dev,
+			"PCIe: RC%d: has not been successfully probed yet\n",
+			pcie_dev->rc_idx);
+		return -EPROBE_DEFER;
+	}
+
+	/*
+	 * Reject the request if it exceeds what PCIe RC is capable or if
+	 * it's greater than what was specified in DT (if present)
+	 */
+	if (target_link_speed > pcie_dev->bw_gen_max ||
+		(pcie_dev->dt_target_link_speed &&
+		target_link_speed > pcie_dev->dt_target_link_speed)) {
+		PCIE_DBG(pcie_dev,
+			"PCIe: RC%d: invalid target link speed: %d\n",
+			pcie_dev->rc_idx, target_link_speed);
+		return -EINVAL;
+	}
+
+	pcie_dev->target_link_speed = target_link_speed;
+
+	/*
+	 * The request 0 will reset maximum GEN speed to default. Default will
+	 * be devicetree specified GEN speed if present else it will be whatever
+	 * the PCIe root complex is capable of.
+	 */
+	if (!target_link_speed)
+		pcie_dev->target_link_speed = pcie_dev->dt_target_link_speed ?
+			pcie_dev->dt_target_link_speed : pcie_dev->bw_gen_max;
+
+	PCIE_DBG(pcie_dev, "PCIe: RC%d: target_link_speed is now: 0x%x.\n",
+		pcie_dev->rc_idx, pcie_dev->target_link_speed);
+
+	return 0;
+}
+EXPORT_SYMBOL(msm_pcie_set_target_link_speed);
 
 int msm_pcie_set_link_bandwidth(struct pci_dev *pci_dev, u16 target_link_speed,
 				u16 target_link_width)

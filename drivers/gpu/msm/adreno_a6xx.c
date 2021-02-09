@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/clk/qcom.h>
@@ -49,6 +49,7 @@ static u32 a6xx_pwrup_reglist[] = {
 	A6XX_SP_NC_MODE_CNTL,
 	A6XX_PC_DBG_ECO_CNTL,
 	A6XX_RB_CONTEXT_SWITCH_GMEM_SAVE_RESTORE,
+	A6XX_UCHE_GBIF_GX_CONFIG,
 };
 
 /* IFPC only static powerup restore list */
@@ -129,6 +130,36 @@ static void a6xx_gmu_wrapper_init(struct adreno_device *adreno_dev)
 		dev_warn(device->dev, "gmu_wrapper ioremap failed\n");
 }
 
+static int match_name(struct device *dev, void *data)
+{
+	struct device *parent = data;
+
+	return (!strcmp(dev_name(dev), dev_name(parent)));
+}
+
+static void find_ddr_qos_device(struct adreno_device *adreno_dev)
+{
+	struct device *devfreq_dev, *ddr_qos_dev;
+	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
+
+	if (device->pwrctrl.ddr_qos_devfreq)
+		return;
+
+	ddr_qos_dev = bus_find_device_by_name(&platform_bus_type, NULL,
+			"soc:qcom,kgsl-ddr-qos");
+
+	if (!ddr_qos_dev)
+		return;
+
+	/* Devfreq device has the same name as its parent device */
+	devfreq_dev = device_find_child(ddr_qos_dev, ddr_qos_dev, match_name);
+	if (!devfreq_dev)
+		return;
+
+	device->pwrctrl.ddr_qos_devfreq = container_of(devfreq_dev,
+					struct devfreq, dev);
+}
+
 int a6xx_init(struct adreno_device *adreno_dev)
 {
 	const struct adreno_a6xx_core *a6xx_core = to_a6xx_core(adreno_dev);
@@ -156,6 +187,8 @@ int a6xx_init(struct adreno_device *adreno_dev)
 		if (IS_ERR(adreno_dev->pwrup_reglist))
 			return PTR_ERR(adreno_dev->pwrup_reglist);
 	}
+
+	find_ddr_qos_device(adreno_dev);
 
 	return a6xx_get_cp_init_cmds(adreno_dev);
 }
@@ -339,6 +372,9 @@ static void a6xx_hwcg_set(struct adreno_device *adreno_dev, bool on)
 	for (i = 0; i < a6xx_core->hwcg_count; i++)
 		kgsl_regwrite(device, a6xx_core->hwcg[i].offset,
 			on ? a6xx_core->hwcg[i].value : 0);
+
+	/* GBIF L2 CGC control is not part of the UCHE */
+	kgsl_regrmw(device, A6XX_UCHE_GBIF_GX_CONFIG, 0x70000, on ? 2 : 0);
 
 	/*
 	 * Enable SP clock after programming HWCG registers.
@@ -544,7 +580,7 @@ void a6xx_start(struct adreno_device *adreno_dev)
 	kgsl_regwrite(device, A6XX_UCHE_CACHE_WAYS, 0x4);
 
 	/* ROQ sizes are twice as big on a640/a680 than on a630 */
-	if (ADRENO_GPUREV(adreno_dev) >= ADRENO_REV_A640) {
+	if (ADRENO_GPUREV(adreno_dev) >= ADRENO_REV_A635) {
 		kgsl_regwrite(device, A6XX_CP_ROQ_THRESHOLDS_2, 0x02000140);
 		kgsl_regwrite(device, A6XX_CP_ROQ_THRESHOLDS_1, 0x8040362C);
 	} else if (adreno_is_a612(adreno_dev) || adreno_is_a610(adreno_dev)) {

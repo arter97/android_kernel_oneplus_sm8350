@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
 #ifndef _F_GSI_H
@@ -31,10 +31,12 @@
 
 #define GSI_NUM_IN_RNDIS_BUFFERS 50
 #define GSI_NUM_IN_RMNET_BUFFERS 50
+#define GSI_NUM_IN_DPL_BUFFERS 30
 #define GSI_NUM_IN_BUFFERS 15
 #define GSI_IN_BUFF_SIZE 2048
 #define GSI_IN_RMNET_BUFF_SIZE 31744
 #define GSI_IN_RNDIS_BUFF_SIZE 16384
+#define GSI_IN_DPL_BUFF_SIZE 16384
 #define GSI_NUM_OUT_BUFFERS 14
 #define GSI_OUT_AGGR_SIZE 24576
 
@@ -280,6 +282,8 @@ struct f_gsi {
 	struct gsi_ctrl_port c_port;
 	void *ipc_log_ctxt;
 	bool rmnet_dtr_status;
+
+	bool rwake_inprogress;
 
 	/* To test remote wakeup using debugfs */
 	struct timer_list gsi_rw_timer;
