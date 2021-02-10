@@ -24,6 +24,8 @@
 #define SCM_HAS_CORE_CLK	BIT(0)
 #define SCM_HAS_IFACE_CLK	BIT(1)
 #define SCM_HAS_BUS_CLK		BIT(2)
+#define SCM_LOAD_QUP_FW_ARG	0x7E7E7E7E
+#define SCM_AUTH_GSI_QUP_PROC	0x13
 
 struct qcom_scm {
 	struct device *dev;
@@ -510,6 +512,15 @@ int qcom_scm_restore_sec_cfg(u32 device_id, u32 spare)
 	return __qcom_scm_restore_sec_cfg(__scm->dev, device_id, spare);
 }
 EXPORT_SYMBOL(qcom_scm_restore_sec_cfg);
+
+int qcom_scm_load_qup_fw(void)
+{
+	struct device *dev = __scm ? __scm->dev : NULL;
+
+	return __qcom_scm_restore_sec_cfg(dev, SCM_AUTH_GSI_QUP_PROC,
+						SCM_LOAD_QUP_FW_ARG);
+}
+EXPORT_SYMBOL(qcom_scm_load_qup_fw);
 
 int qcom_scm_iommu_secure_ptbl_size(u32 spare, size_t *size)
 {
