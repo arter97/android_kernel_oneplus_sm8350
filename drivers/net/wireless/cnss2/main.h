@@ -41,7 +41,8 @@
 #define TIME_CLOCK_FREQ_HZ		19200000
 #define CNSS_RAMDUMP_MAGIC		0x574C414E
 #define CNSS_RAMDUMP_VERSION		0
-#define MAX_FIRMWARE_NAME_LEN		20
+#define MAX_FIRMWARE_NAME_LEN		40
+#define FW_V2_NUMBER                    2
 
 #define CNSS_EVENT_SYNC   BIT(0)
 #define CNSS_EVENT_UNINTERRUPTIBLE BIT(1)
@@ -426,6 +427,7 @@ struct cnss_plat_data {
 	struct cnss_platform_cap cap;
 	struct pm_qos_request qos_request;
 	struct cnss_device_version device_version;
+	u32 rc_num;
 	unsigned long device_id;
 	enum cnss_driver_status driver_status;
 	u32 recovery_count;
@@ -490,6 +492,7 @@ struct cnss_plat_data {
 	u8 pcie_gen_speed;
 	struct cnss_dms_data dms;
 	int power_up_error;
+	u32 hw_trc_override;
 };
 
 #ifdef CONFIG_ARCH_QCOM
