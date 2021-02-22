@@ -14,7 +14,6 @@
 #include <linux/types.h>
 #include <linux/ipa_qmi_service_v01.h>
 #include <linux/msm_gsi.h>
-#include <linux/msm-sps.h>
 
 #define IPA_APPS_MAX_BW_IN_MBPS 700
 #define IPA_BW_THRESHOLD_MAX 3
@@ -1413,7 +1412,6 @@ int ipa_put_rt_tbl(u32 rt_tbl_hdl);
 int ipa_register_intf(const char *name,
 	const struct ipa_tx_intf *tx,
 	const struct ipa_rx_intf *rx);
-int ipa_deregister_intf(const char *name);
 
 /*
  * Aggregation
@@ -1588,13 +1586,7 @@ int ipa_enable_wdi_pipe(u32 clnt_hdl);
 int ipa_disable_wdi_pipe(u32 clnt_hdl);
 int ipa_resume_wdi_pipe(u32 clnt_hdl);
 int ipa_suspend_wdi_pipe(u32 clnt_hdl);
-int ipa_uc_reg_rdyCB(struct ipa_wdi_uc_ready_params *param);
-int ipa_uc_dereg_rdyCB(void);
-int ipa_add_hdr(struct ipa_ioc_add_hdr *hdrs);
-int ipa_del_hdr(struct ipa_ioc_del_hdr *hdls);
-int ipa_get_hdr(struct ipa_ioc_get_hdr *lookup);
-int ipa_tx_dp_mul(enum ipa_client_type src,
-		struct ipa_tx_data_desc *data_desc);
+
 /**
  * ipa_get_wdi_stats() - Query WDI statistics from uc
  * @stats:	[inout] stats blob from client populated by driver
@@ -1825,6 +1817,16 @@ int ipa_del_socksv5_conn(uint32_t handle);
 int ipa_mhi_handle_ipa_config_req(struct ipa_config_req_msg_v01 *config_req);
 int ipa_wigig_save_regs(void);
 
+/*
+ * this function needs to be removed, but wlan driver is checking return value
+ * to see if IPA is present, so we can't return -EPERM
+ */
+static inline int ipa_uc_reg_rdyCB(
+	struct ipa_wdi_uc_ready_params *inout)
+{
+	return -EFAULT;
+}
+
 #else /* IS_ENABLED(CONFIG_IPA3) */
 
 /*
@@ -1934,6 +1936,37 @@ static inline int ipa_setup_sys_pipe(struct ipa_sys_connect_params *sys_in,
 }
 
 static inline int ipa_teardown_sys_pipe(u32 clnt_hdl)
+{
+	return -EPERM;
+}
+
+static inline int ipa_connect_wdi_pipe(struct ipa_wdi_in_params *in,
+		struct ipa_wdi_out_params *out)
+{
+	return -EPERM;
+}
+
+static inline int ipa_disconnect_wdi_pipe(u32 clnt_hdl)
+{
+	return -EPERM;
+}
+
+static inline int ipa_enable_wdi_pipe(u32 clnt_hdl)
+{
+	return -EPERM;
+}
+
+static inline int ipa_disable_wdi_pipe(u32 clnt_hdl)
+{
+	return -EPERM;
+}
+
+static inline int ipa_resume_wdi_pipe(u32 clnt_hdl)
+{
+	return -EPERM;
+}
+
+static inline int ipa_suspend_wdi_pipe(u32 clnt_hdl)
 {
 	return -EPERM;
 }
@@ -2132,6 +2165,11 @@ static inline int ipa_register_intf_ext(const char *name,
 	return -EPERM;
 }
 
+static inline int ipa_tx_dp_mul(enum ipa_client_type src,
+	struct ipa_tx_data_desc *data_desc)
+{
+	return -EPERM;
+}
 
 static inline u16 ipa_get_smem_restr_bytes(void)
 {
@@ -2296,6 +2334,31 @@ static inline struct iommu_domain *ipa_get_smmu_domain(void)
 
 static inline int ipa_disable_apps_wan_cons_deaggr(
 	uint32_t agg_size, uint32_t agg_count)
+{
+	return -EPERM;
+}
+
+static inline int ipa_add_hdr(struct ipa_ioc_add_hdr *hdrs)
+{
+	return -EPERM;
+}
+
+static inline int ipa_del_hdr(struct ipa_ioc_del_hdr *hdls)
+{
+	return -EPERM;
+}
+
+static inline int ipa_get_hdr(struct ipa_ioc_get_hdr *lookup)
+{
+	return -EPERM;
+}
+
+static inline int ipa_deregister_intf(const char *name)
+{
+	return -EPERM;
+}
+
+static inline int ipa_uc_dereg_rdyCB(void)
 {
 	return -EPERM;
 }
