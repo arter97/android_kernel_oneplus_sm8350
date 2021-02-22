@@ -655,6 +655,11 @@ struct ipa_ext_intf {
  * @keep_ipa_awake: when true, IPA will not be clock gated
  * @napi_enabled: when true, IPA call client callback to start polling
  * @bypass_agg: when true, IPA bypasses the aggregation
+ * @int_modt: GSI event ring interrupt moderation time
+ *		cycles base interrupt moderation (32KHz clock)
+ * @int_modc: GSI event ring interrupt moderation packet counter
+ * @buff_size: Actual buff size of rx_pkt
+ * @ext_ioctl_v2: Flag to determine whether ioctl_v2 received
  */
 struct ipa_sys_connect_params {
 	struct ipa_ep_cfg ipa_ep_cfg;
@@ -667,6 +672,10 @@ struct ipa_sys_connect_params {
 	struct napi_struct *napi_obj;
 	bool recycle_enabled;
 	bool bypass_agg;
+	u32 int_modt;
+	u32 int_modc;
+	u32 buff_size;
+	bool ext_ioctl_v2;
 };
 
 /**
@@ -1714,6 +1723,9 @@ typedef void (*ipa_rmnet_ctl_stop_cb)(void *user_data);
 
 typedef void (*ipa_rmnet_ctl_rx_notify_cb)(void *user_data, void *rx_data);
 
+int ipa_get_default_aggr_time_limit(enum ipa_client_type client,
+	u32 *default_aggr_time_limit);
+
 /**
  * ipa_register_ipa_ready_cb() - register a callback to be invoked
  * when IPA core driver initialization is complete.
@@ -2096,6 +2108,12 @@ static inline int ipa_unregister_rmnet_ctl_cb(void)
 
 static inline int ipa_uc_reg_rdyCB(
 	struct ipa_wdi_uc_ready_params *inout)
+{
+	return -EPERM;
+}
+
+static inline int ipa_get_default_aggr_time_limit(enum ipa_client_type client,
+	u32 *default_aggr_time_limit)
 {
 	return -EPERM;
 }

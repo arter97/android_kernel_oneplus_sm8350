@@ -1,18 +1,21 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2016-2020, The Linux Foundation. All rights reserved. */
+/* Copyright (c) 2016-2021, The Linux Foundation. All rights reserved. */
 
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/of.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/regulator/consumer.h>
+#if IS_ENABLED(CONFIG_QCOM_COMMAND_DB)
 #include <soc/qcom/cmd-db.h>
+#endif
 #include <linux/of_gpio.h>
 
 #include "main.h"
 #include "debug.h"
 #include "bus.h"
 
+#if IS_ENABLED(CONFIG_ARCH_QCOM)
 static struct cnss_vreg_cfg cnss_vreg_list[] = {
 	{"vdd-wlan-core", 1300000, 1300000, 0, 0, 0},
 	{"vdd-wlan-io", 1800000, 1800000, 0, 0, 0},
@@ -34,6 +37,13 @@ static struct cnss_vreg_cfg cnss_vreg_list[] = {
 static struct cnss_clk_cfg cnss_clk_list[] = {
 	{"rf_clk", 0, 0},
 };
+#else
+static struct cnss_vreg_cfg cnss_vreg_list[] = {
+};
+
+static struct cnss_clk_cfg cnss_clk_list[] = {
+};
+#endif
 
 #define CNSS_VREG_INFO_SIZE		ARRAY_SIZE(cnss_vreg_list)
 #define CNSS_CLK_INFO_SIZE		ARRAY_SIZE(cnss_clk_list)
@@ -43,6 +53,7 @@ static struct cnss_clk_cfg cnss_clk_list[] = {
 #define BOOTSTRAP_ACTIVE		"bootstrap_active"
 #define WLAN_EN_GPIO			"wlan-en-gpio"
 #define BT_EN_GPIO			"qcom,bt-en-gpio"
+#define XO_CLK_GPIO			"qcom,xo-clk-gpio"
 #define WLAN_EN_ACTIVE			"wlan_en_active"
 #define WLAN_EN_SLEEP			"wlan_en_sleep"
 
@@ -711,9 +722,55 @@ int cnss_get_pinctrl(struct cnss_plat_data *plat_priv)
 		pinctrl_info->bt_en_gpio = -EINVAL;
 	}
 
+	/* Added for QCA6490 to minimize XO CLK selection leakage prevention */
+	if (of_find_property(dev->of_node, XO_CLK_GPIO, NULL)) {
+		pinctrl_info->xo_clk_gpio = of_get_named_gpio(dev->of_node,
+							      XO_CLK_GPIO, 0);
+		cnss_pr_dbg("QCA6490 XO_CLK GPIO: %d\n",
+			    pinctrl_info->xo_clk_gpio);
+	} else {
+		pinctrl_info->xo_clk_gpio = -EINVAL;
+	}
 	return 0;
 out:
 	return ret;
+}
+
+#define CNSS_XO_CLK_RETRY_COUNT_MAX 5
+static void cnss_set_xo_clk_gpio_state(struct cnss_plat_data *plat_priv,
+				       bool enable)
+{
+	int xo_clk_gpio = plat_priv->pinctrl_info.xo_clk_gpio, retry = 0, ret;
+
+	if (xo_clk_gpio < 0 || plat_priv->device_id != QCA6490_DEVICE_ID)
+		return;
+
+retry_gpio_req:
+	ret = gpio_request(xo_clk_gpio, "XO_CLK_GPIO");
+	if (ret) {
+		if (retry++ < CNSS_XO_CLK_RETRY_COUNT_MAX) {
+			/* wait for ~(10 - 20) ms */
+			usleep_range(10000, 20000);
+			goto retry_gpio_req;
+		}
+	}
+
+	if (ret) {
+		cnss_pr_err("QCA6490 XO CLK Gpio request failed\n");
+		return;
+	}
+
+	if (enable) {
+		gpio_direction_output(xo_clk_gpio, 1);
+		/*XO CLK must be asserted for some time before WLAN_EN */
+		usleep_range(100, 200);
+	} else {
+		/* Assert XO CLK ~(2-5)ms before off for valid latch in HW */
+		usleep_range(2000, 5000);
+		gpio_direction_output(xo_clk_gpio, 0);
+	}
+
+	gpio_free(xo_clk_gpio);
 }
 
 static int cnss_select_pinctrl_state(struct cnss_plat_data *plat_priv,
@@ -742,7 +799,7 @@ static int cnss_select_pinctrl_state(struct cnss_plat_data *plat_priv,
 			}
 			udelay(BOOTSTRAP_DELAY);
 		}
-
+		cnss_set_xo_clk_gpio_state(plat_priv, true);
 		if (!IS_ERR_OR_NULL(pinctrl_info->wlan_en_active)) {
 			ret = pinctrl_select_state
 				(pinctrl_info->pinctrl,
@@ -754,6 +811,7 @@ static int cnss_select_pinctrl_state(struct cnss_plat_data *plat_priv,
 			}
 			udelay(WLAN_ENABLE_DELAY);
 		}
+		cnss_set_xo_clk_gpio_state(plat_priv, false);
 	} else {
 		if (!IS_ERR_OR_NULL(pinctrl_info->wlan_en_sleep)) {
 			ret = pinctrl_select_state(pinctrl_info->pinctrl,
@@ -888,6 +946,30 @@ void cnss_set_pin_connect_status(struct cnss_plat_data *plat_priv)
 	plat_priv->pin_result.host_pin_result = pin_status;
 }
 
+#if IS_ENABLED(CONFIG_QCOM_COMMAND_DB)
+static int cnss_cmd_db_ready(struct cnss_plat_data *plat_priv)
+{
+	return cmd_db_ready();
+}
+
+static u32 cnss_cmd_db_read_addr(struct cnss_plat_data *plat_priv,
+				 const char *res_id)
+{
+	return cmd_db_read_addr(res_id);
+}
+#else
+static int cnss_cmd_db_ready(struct cnss_plat_data *plat_priv)
+{
+	return -EOPNOTSUPP;
+}
+
+static u32 cnss_cmd_db_read_addr(struct cnss_plat_data *plat_priv,
+				 const char *res_id)
+{
+	return 0;
+}
+#endif
+
 int cnss_get_tcs_info(struct cnss_plat_data *plat_priv)
 {
 	struct platform_device *plat_dev = plat_priv->plat_dev;
@@ -940,13 +1022,13 @@ int cnss_get_cpr_info(struct cnss_plat_data *plat_priv)
 		goto out;
 	}
 
-	ret = cmd_db_ready();
+	ret = cnss_cmd_db_ready(plat_priv);
 	if (ret) {
-		cnss_pr_err("CommandDB is not ready\n");
+		cnss_pr_err("CommandDB is not ready, err = %d\n", ret);
 		goto out;
 	}
 
-	cpr_pmic_addr = cmd_db_read_addr(cmd_db_name);
+	cpr_pmic_addr = cnss_cmd_db_read_addr(plat_priv, cmd_db_name);
 	if (cpr_pmic_addr > 0) {
 		cpr_info->cpr_pmic_addr = cpr_pmic_addr;
 		cnss_pr_dbg("Get CPR PMIC address 0x%x from %s\n",

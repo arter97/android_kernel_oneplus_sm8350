@@ -138,7 +138,7 @@ static struct bt_power bt_vreg_info_qca6490 = {
 };
 
 static struct bt_power bt_vreg_info_wcn6750 = {
-	.compatible = "qcom,wcn6750",
+	.compatible = "qcom,wcn6750-bt",
 	.vregs = bt_vregs_info_qca6xx0,
 	.num_vregs = ARRAY_SIZE(bt_vregs_info_qca6xx0),
 };
@@ -148,7 +148,7 @@ static const struct of_device_id bt_power_match_table[] = {
 	{	.compatible = "qcom,wcn3990", .data = &bt_vreg_info_wcn399x},
 	{	.compatible = "qcom,qca6390", .data = &bt_vreg_info_qca6390},
 	{	.compatible = "qcom,qca6490", .data = &bt_vreg_info_qca6490},
-	{	.compatible = "qcom,wcn6750", .data = &bt_vreg_info_wcn6750},
+	{	.compatible = "qcom,wcn6750-bt", .data = &bt_vreg_info_wcn6750},
 	{},
 };
 
@@ -398,25 +398,30 @@ static int bt_configure_gpios(int on)
 			bt_power_src_status[BT_RESET_GPIO] =
 				gpio_get_value(bt_reset_gpio);
 		}
-		rc = gpio_request(xo_reset_gpio, "xo_reset_gpio_n");
-		if (rc) {
-			pr_err("%s: unable to request gpio %d (%d)\n",
+
+		pr_info("xo_reset_gpio(%d)\n", xo_reset_gpio);
+
+		if (xo_reset_gpio > 0) {
+			rc = gpio_request(xo_reset_gpio, "xo_reset_gpio_n");
+			if (rc) {
+				pr_err("%s: unable to request gpio %d (%d)\n",
 					__func__, xo_reset_gpio, rc);
-		} else {
-			pr_info("%s: gpio_request for xo_reset_gpio succeed\n",
+			} else {
+				pr_info("%s: gpio_request for xo_reset_gpio succeed\n",
 					__func__);
-			//pull GPIO high
-			rc = gpio_direction_output(xo_reset_gpio, 1);
-			if (rc) {
-				pr_err("%s: Unable to set direction of xo_reset_gpio\n",
-					 __func__);
-			}
-			udelay(2000);
-			//pull GPIO low after 2 ms delay
-			rc = gpio_direction_output(xo_reset_gpio, 0);
-			if (rc) {
-				pr_err("%s: Unable to set direction of xo_reset_gpio\n",
-					 __func__);
+				//pull GPIO high
+				rc = gpio_direction_output(xo_reset_gpio, 1);
+				if (rc) {
+					pr_err("%s: Unable to set direction of xo_reset_gpio\n",
+						__func__);
+				}
+				udelay(2000);
+				//pull GPIO low after 2 ms delay
+				rc = gpio_direction_output(xo_reset_gpio, 0);
+				if (rc) {
+					pr_err("%s: Unable to set direction of xo_reset_gpio\n",
+						__func__);
+				}
 			}
 		}
 		msleep(50);
