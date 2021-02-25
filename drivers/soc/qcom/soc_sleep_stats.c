@@ -159,6 +159,11 @@ static int soc_sleep_stats_create_sysfs(struct platform_device *pdev,
 	return sysfs_create_file(drv->kobj, &drv->ka.attr);
 }
 
+static const struct stats_config legacy_rpm_data = {
+	.num_records = 2,
+	.appended_stats_avail = true,
+};
+
 static const struct stats_config rpm_data = {
 	.offset_addr = 0x14,
 	.num_records = 2,
@@ -174,6 +179,7 @@ static const struct stats_config rpmh_data = {
 static const struct of_device_id soc_sleep_stats_table[] = {
 	{ .compatible = "qcom,rpm-sleep-stats", .data = &rpm_data},
 	{ .compatible = "qcom,rpmh-sleep-stats", .data = &rpmh_data},
+	{ .compatible = "qcom,legacy-rpm-sleep-stats", .data = &legacy_rpm_data},
 	{ },
 };
 
@@ -181,7 +187,8 @@ static int soc_sleep_stats_probe(struct platform_device *pdev)
 {
 	struct soc_sleep_stats_data *drv;
 	struct resource *res;
-	void __iomem *offset_addr;
+	void __iomem *offset_addr = NULL;
+	uint32_t offset = 0;
 	int ret;
 
 	drv = devm_kzalloc(&pdev->dev, sizeof(*drv), GFP_KERNEL);
@@ -196,14 +203,18 @@ static int soc_sleep_stats_probe(struct platform_device *pdev)
 	if (!res)
 		return PTR_ERR(res);
 
-	offset_addr = ioremap_nocache(res->start + drv->config->offset_addr,
-				      sizeof(u32));
-	if (IS_ERR(offset_addr))
-		return PTR_ERR(offset_addr);
+	if (drv->config->offset_addr) {
+		offset_addr = ioremap_nocache(res->start + drv->config->offset_addr,
+					      sizeof(u32));
+		if (IS_ERR(offset_addr))
+			return PTR_ERR(offset_addr);
 
-	drv->stats_base = res->start | readl_relaxed(offset_addr);
+		offset = readl_relaxed(offset_addr);
+		iounmap(offset_addr);
+	}
+
+	drv->stats_base = res->start | offset;
 	drv->stats_size = resource_size(res);
-	iounmap(offset_addr);
 
 	ret = soc_sleep_stats_create_sysfs(pdev, drv);
 	if (ret) {
