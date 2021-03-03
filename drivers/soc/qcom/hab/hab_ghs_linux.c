@@ -153,3 +153,9 @@ int hab_hypervisor_register_os(void)
 
 void dump_hab_wq(struct physical_channel *pchan) {};
 void hab_pipe_read_dump(struct physical_channel *pchan) {};
+int hab_stat_log(struct physical_channel **pchans, int pchan_cnt, char *dest,
+			int dest_size)
+{
+	return 0;
+};
+

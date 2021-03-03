@@ -45,8 +45,6 @@ int physical_channel_read(struct physical_channel *pchan,
 		return 0;
 }
 
-#define HAB_HEAD_SIGNATURE 0xBEE1BEE1
-
 int physical_channel_send(struct physical_channel *pchan,
 		struct hab_header *header,
 		void *payload)

@@ -131,6 +131,12 @@ void dump_hab_wq(struct physical_channel *pchan)
 	queue_work(dev->wq, &dev->wdata.work);
 }
 
+int hab_stat_log(struct physical_channel **pchans, int pchan_cnt, char *dest,
+			int dest_size)
+{
+	return 0;
+};
+
 /* The input is already va now */
 inline unsigned long hab_shmem_factory_va(unsigned long factory_addr)
 {
