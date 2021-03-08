@@ -223,11 +223,8 @@ dp_pdev_nbuf_alloc_and_map_replenish(struct dp_soc *dp_soc,
 		return QDF_STATUS_E_NOMEM;
 	}
 
-	ret = qdf_nbuf_map_nbytes_single(dp_soc->osdev,
-					 (nbuf_frag_info_t->virt_addr).nbuf,
-					 QDF_DMA_FROM_DEVICE,
-					 rx_desc_pool->buf_size);
-
+	ret = dp_rx_buffer_pool_nbuf_map(dp_soc, rx_desc_pool,
+					 nbuf_frag_info_t);
 	if (qdf_unlikely(QDF_IS_STATUS_ERROR(ret))) {
 		dp_rx_buffer_pool_nbuf_free(dp_soc,
 			(nbuf_frag_info_t->virt_addr).nbuf, mac_id);
@@ -238,11 +235,6 @@ dp_pdev_nbuf_alloc_and_map_replenish(struct dp_soc *dp_soc,
 
 	nbuf_frag_info_t->paddr =
 		qdf_nbuf_get_frag_paddr((nbuf_frag_info_t->virt_addr).nbuf, 0);
-
-	dp_ipa_handle_rx_buf_smmu_mapping(dp_soc,
-			(qdf_nbuf_t)((nbuf_frag_info_t->virt_addr).nbuf),
-					  rx_desc_pool->buf_size,
-					  true);
 
 	ret = check_x86_paddr(dp_soc, &((nbuf_frag_info_t->virt_addr).nbuf),
 			      &nbuf_frag_info_t->paddr,
@@ -415,6 +407,8 @@ QDF_STATUS __dp_rx_buffers_replenish(struct dp_soc *dp_soc, uint32_t mac_id,
 	}
 
 	hal_srng_access_end(dp_soc->hal_soc, rxdma_srng);
+
+	dp_rx_schedule_refill_thread(dp_soc);
 
 	dp_verbose_debug("replenished buffers %d, rx desc added back to free list %u",
 			 count, num_desc_to_free);
@@ -2167,6 +2161,55 @@ static inline void dp_rx_update_stats(struct dp_soc *soc,
 {
 }
 #endif
+
+#ifdef WLAN_FEATURE_PKT_CAPTURE_LITHIUM
+/**
+ * dp_rx_deliver_to_pkt_capture() - deliver rx packet to packet capture
+ * @soc : dp_soc handle
+ * @pdev: dp_pdev handle
+ * @peer_id: peer_id of the peer for which completion came
+ * @ppdu_id: ppdu_id
+ * @netbuf: Buffer pointer
+ *
+ * This function is used to deliver rx packet to packet capture
+ */
+void dp_rx_deliver_to_pkt_capture(struct dp_soc *soc,  struct dp_pdev *pdev,
+				  uint16_t peer_id, uint32_t is_offload,
+				  qdf_nbuf_t netbuf)
+{
+	dp_wdi_event_handler(WDI_EVENT_PKT_CAPTURE_RX_DATA, soc, netbuf,
+			     peer_id, is_offload, pdev->pdev_id);
+}
+
+void dp_rx_deliver_to_pkt_capture_no_peer(struct dp_soc *soc, qdf_nbuf_t nbuf,
+					  uint32_t is_offload)
+{
+	uint16_t msdu_len = 0;
+	uint16_t peer_id, vdev_id;
+	uint32_t pkt_len = 0;
+	uint8_t *rx_tlv_hdr;
+	uint32_t l2_hdr_offset = 0;
+	struct hal_rx_msdu_metadata msdu_metadata;
+
+	peer_id = QDF_NBUF_CB_RX_PEER_ID(nbuf);
+	vdev_id = QDF_NBUF_CB_RX_VDEV_ID(nbuf);
+	rx_tlv_hdr = qdf_nbuf_data(nbuf);
+	hal_rx_msdu_metadata_get(soc->hal_soc, rx_tlv_hdr, &msdu_metadata);
+	msdu_len = QDF_NBUF_CB_RX_PKT_LEN(nbuf);
+	pkt_len = msdu_len + msdu_metadata.l3_hdr_pad +
+		  RX_PKT_TLVS_LEN;
+	l2_hdr_offset =
+		hal_rx_msdu_end_l3_hdr_padding_get(soc->hal_soc, rx_tlv_hdr);
+
+	qdf_nbuf_set_pktlen(nbuf, pkt_len);
+	dp_rx_skip_tlvs(nbuf, msdu_metadata.l3_hdr_pad);
+
+	dp_wdi_event_handler(WDI_EVENT_PKT_CAPTURE_RX_DATA, soc, nbuf,
+			     HTT_INVALID_VDEV, is_offload, 0);
+}
+
+#endif
+
 /**
  * dp_rx_process() - Brain of the Rx processing functionality
  *		     Called from the bottom half (tasklet/NET_RX_SOFTIRQ)
@@ -2228,6 +2271,7 @@ uint32_t dp_rx_process(struct dp_intr *int_ctx, hal_ring_handle_t hal_ring_hdl,
 	QDF_STATUS status;
 	qdf_nbuf_t ebuf_head;
 	qdf_nbuf_t ebuf_tail;
+	uint8_t pkt_capture_offload = 0;
 
 	DP_HIST_INIT();
 
@@ -2423,6 +2467,10 @@ more_data:
 		QDF_NBUF_CB_RX_VDEV_ID(rx_desc->nbuf) =
 			DP_PEER_METADATA_VDEV_ID_GET(peer_mdata);
 
+		/* to indicate whether this msdu is rx offload */
+		pkt_capture_offload =
+			DP_PEER_METADATA_OFFLOAD_GET(peer_mdata);
+
 		/*
 		 * save msdu flags first, last and continuation msdu in
 		 * nbuf->cb, also save mcbc, is_da_valid, is_sa_valid and
@@ -2575,7 +2623,10 @@ done:
 			vdev = peer->vdev;
 		} else {
 			nbuf->next = NULL;
-			dp_rx_deliver_to_stack_no_peer(soc, nbuf);
+			dp_rx_deliver_to_pkt_capture_no_peer(
+					soc, nbuf, pkt_capture_offload);
+			if (!pkt_capture_offload)
+				dp_rx_deliver_to_stack_no_peer(soc, nbuf);
 			nbuf = next;
 			continue;
 		}
@@ -2820,10 +2871,15 @@ done:
 	}
 
 	if (qdf_likely(deliver_list_head)) {
-		if (qdf_likely(peer))
-			dp_rx_deliver_to_stack(soc, vdev, peer,
-					       deliver_list_head,
-					       deliver_list_tail);
+		if (qdf_likely(peer)) {
+			dp_rx_deliver_to_pkt_capture(soc, vdev->pdev, peer_id,
+						     pkt_capture_offload,
+						     deliver_list_head);
+			if (!pkt_capture_offload)
+				dp_rx_deliver_to_stack(soc, vdev, peer,
+						       deliver_list_head,
+						       deliver_list_tail);
+		}
 		else {
 			nbuf = deliver_list_head;
 			while (nbuf) {
