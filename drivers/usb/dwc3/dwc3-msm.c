@@ -97,6 +97,9 @@
 /* USB DBM Hardware registers */
 #define DBM_REG_OFFSET		0xF8000
 
+/* DBM_GEN_CFG */
+#define DBM_EN_USB3		0x00000001
+
 /* DBM_EP_CFG */
 #define DBM_EN_EP		0x00000001
 #define USB3_EPNUM		0x0000003E
@@ -972,7 +975,7 @@ static int __dwc3_msm_ep_queue(struct dwc3_ep *dep, struct dwc3_request *req)
 	memset(trb, 0, sizeof(*trb));
 
 	req->trb = trb;
-	req->num_trbs++;
+	req->num_trbs = 1;
 	trb->bph = DBM_TRB_BIT | DBM_TRB_DMA | DBM_TRB_EP_NUM(dep->number);
 	trb->size = DWC3_TRB_SIZE_LENGTH(req->request.length);
 	trb->ctrl = DWC3_TRBCTL_NORMAL | DWC3_TRB_CTRL_HWO |
@@ -1136,7 +1139,7 @@ static int dwc3_msm_ep_queue(struct usb_ep *ep,
 
 	spin_unlock_irqrestore(&dwc->lock, flags);
 
-	msm_dbm_write_reg(mdwc, DBM_GEN_CFG,
+	msm_dbm_write_reg_field(mdwc, DBM_GEN_CFG, DBM_EN_USB3,
 			dwc3_msm_is_dev_superspeed(mdwc) ? 1 : 0);
 
 	return 0;
@@ -2339,40 +2342,6 @@ static void dwc3_msm_notify_event(struct dwc3 *dwc,
 		if (dwc->retries_on_error < MAX_ERROR_RECOVERY_TRIES)
 			schedule_work(&mdwc->restart_usb_work);
 		break;
-	case DWC3_CONTROLLER_POST_RESET_EVENT:
-		dev_dbg(mdwc->dev,
-				"DWC3_CONTROLLER_POST_RESET_EVENT received\n");
-
-		/*
-		 * Below sequence is used when controller is working without
-		 * having ssphy and only USB high/full speed is supported.
-		 */
-		if (dwc->maximum_speed == USB_SPEED_HIGH ||
-					dwc->maximum_speed == USB_SPEED_FULL) {
-			dwc3_msm_write_reg(mdwc->base, QSCRATCH_GENERAL_CFG,
-				dwc3_msm_read_reg(mdwc->base,
-				QSCRATCH_GENERAL_CFG)
-				| PIPE_UTMI_CLK_DIS);
-
-			usleep_range(2, 5);
-
-
-			dwc3_msm_write_reg(mdwc->base, QSCRATCH_GENERAL_CFG,
-				dwc3_msm_read_reg(mdwc->base,
-				QSCRATCH_GENERAL_CFG)
-				| PIPE_UTMI_CLK_SEL
-				| PIPE3_PHYSTATUS_SW);
-
-			usleep_range(2, 5);
-
-			dwc3_msm_write_reg(mdwc->base, QSCRATCH_GENERAL_CFG,
-				dwc3_msm_read_reg(mdwc->base,
-				QSCRATCH_GENERAL_CFG)
-				& ~PIPE_UTMI_CLK_DIS);
-		}
-
-		dwc->tx_fifo_size = mdwc->tx_fifo_size;
-		break;
 	case DWC3_CONTROLLER_CONNDONE_EVENT:
 		dev_dbg(mdwc->dev, "DWC3_CONTROLLER_CONNDONE_EVENT received\n");
 		/*
@@ -2588,6 +2557,35 @@ static void dwc3_msm_power_collapse_por(struct dwc3_msm *mdwc)
 		clk_disable_unprepare(mdwc->cfg_ahb_clk);
 	}
 
+	/*
+	 * Below sequence is used when controller is working without
+	 * having ssphy and only USB high/full speed is supported.
+	 */
+	if (dwc->maximum_speed == USB_SPEED_HIGH ||
+				dwc->maximum_speed == USB_SPEED_FULL) {
+		dwc3_msm_write_reg(mdwc->base, QSCRATCH_GENERAL_CFG,
+			dwc3_msm_read_reg(mdwc->base,
+			QSCRATCH_GENERAL_CFG)
+			| PIPE_UTMI_CLK_DIS);
+
+		usleep_range(2, 5);
+
+
+		dwc3_msm_write_reg(mdwc->base, QSCRATCH_GENERAL_CFG,
+			dwc3_msm_read_reg(mdwc->base,
+			QSCRATCH_GENERAL_CFG)
+			| PIPE_UTMI_CLK_SEL
+			| PIPE3_PHYSTATUS_SW);
+
+		usleep_range(2, 5);
+
+		dwc3_msm_write_reg(mdwc->base, QSCRATCH_GENERAL_CFG,
+			dwc3_msm_read_reg(mdwc->base,
+			QSCRATCH_GENERAL_CFG)
+			& ~PIPE_UTMI_CLK_DIS);
+	}
+
+	dwc->tx_fifo_size = mdwc->tx_fifo_size;
 	ret = dwc3_core_init(dwc);
 	if (ret)
 		dev_err(mdwc->dev, "%s: dwc3_core init failed (%d)\n",
@@ -2666,7 +2664,7 @@ static void dwc3_set_phy_speed_flags(struct dwc3_msm *mdwc)
 		for (i = 0; i < num_ports; i++) {
 			reg = dwc3_msm_read_reg(mdwc->base,
 					USB3_PORTSC + i*0x10);
-			if (reg & PORT_PE) {
+			if (reg & PORT_CONNECT) {
 				if (DEV_HIGHSPEED(reg) || DEV_FULLSPEED(reg))
 					mdwc->hs_phy->flags |= PHY_HSFS_MODE;
 				else if (DEV_LOWSPEED(reg))
@@ -3871,8 +3869,14 @@ static ssize_t mode_store(struct device *dev, struct device_attribute *attr,
 		const char *buf, size_t count)
 {
 	struct dwc3_msm *mdwc = dev_get_drvdata(dev);
+	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
 
 	if (sysfs_streq(buf, "peripheral")) {
+		if (dwc->dr_mode == USB_DR_MODE_HOST) {
+			dev_err(dev, "Core supports host mode only.\n");
+			return -EINVAL;
+		}
+
 		mdwc->vbus_active = true;
 		mdwc->id_state = DWC3_ID_FLOAT;
 	} else if (sysfs_streq(buf, "host")) {
@@ -4829,7 +4833,9 @@ static int dwc3_otg_start_host(struct dwc3_msm *mdwc, int on)
 
 
 		mdwc->host_nb.notifier_call = dwc3_msm_host_notifier;
+#ifdef USB_CONFIG
 		usb_register_notify(&mdwc->host_nb);
+#endif
 
 		dwc3_set_prtcap(dwc, DWC3_GCTL_PRTCAP_HOST);
 		if (!dwc->dis_enblslpm_quirk)
@@ -4908,7 +4914,9 @@ static int dwc3_otg_start_host(struct dwc3_msm *mdwc, int on)
 
 		mdwc->hs_phy->flags &= ~PHY_HOST_MODE;
 		dwc3_host_exit(dwc);
+#ifdef USB_CONFIG
 		usb_unregister_notify(&mdwc->host_nb);
+#endif
 
 		dwc3_set_prtcap(dwc, DWC3_GCTL_PRTCAP_DEVICE);
 		dwc3_msm_write_reg_field(mdwc->base, DWC3_GUSB3PIPECTL(0),

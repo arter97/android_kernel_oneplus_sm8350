@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2018-2020 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2021 The Linux Foundation. All rights reserved.
  */
 
 #include <linux/device.h>
@@ -1358,7 +1358,7 @@ static void smblib_uusb_removal(struct smb_charger *chg)
 	smblib_update_usb_type(chg);
 }
 
-void smblib_suspend_on_debug_battery(struct smb_charger *chg)
+void smblib_config_charger_on_debug_battery(struct smb_charger *chg)
 {
 	int rc = 0, val;
 
@@ -1367,6 +1367,8 @@ void smblib_suspend_on_debug_battery(struct smb_charger *chg)
 		smblib_err(chg, "Couldn't get debug battery prop rc=%d\n", rc);
 		return;
 	}
+
+	vote(chg->bat_temp_irq_disable_votable, DEBUG_BOARD_VOTER, val, 0);
 
 	if (chg->suspend_input_on_debug_batt) {
 		vote(chg->usb_icl_votable, DEBUG_BOARD_VOTER, val, 0);
@@ -1850,6 +1852,27 @@ static int smblib_temp_change_irq_disable_vote_callback(struct votable *votable,
 	}
 
 	chg->irq_info[TEMP_CHANGE_IRQ].enabled = !disable;
+
+	return 0;
+}
+
+static int smblib_bat_temp_irq_disable_vote_callback(struct votable *votable,
+				void *data, int disable, const char *client)
+{
+	struct smb_charger *chg = data;
+
+	if (!chg->irq_info[BAT_TEMP_IRQ].irq)
+		return 0;
+
+	if (chg->irq_info[BAT_TEMP_IRQ].enabled && disable) {
+		disable_irq_wake(chg->irq_info[BAT_TEMP_IRQ].irq);
+		disable_irq_nosync(chg->irq_info[BAT_TEMP_IRQ].irq);
+	} else if (!chg->irq_info[BAT_TEMP_IRQ].enabled && !disable) {
+		enable_irq(chg->irq_info[BAT_TEMP_IRQ].irq);
+		enable_irq_wake(chg->irq_info[BAT_TEMP_IRQ].irq);
+	}
+
+	chg->irq_info[BAT_TEMP_IRQ].enabled = !disable;
 
 	return 0;
 }
@@ -7379,7 +7402,7 @@ static void bms_update_work(struct work_struct *work)
 		chg->iio_chan_list_qg = qg_list;
 	}
 
-	smblib_suspend_on_debug_battery(chg);
+	smblib_config_charger_on_debug_battery(chg);
 
 	if (chg->batt_psy)
 		power_supply_changed(chg->batt_psy);
@@ -7591,8 +7614,10 @@ static void smblib_chg_termination_work(struct work_struct *work)
 	int val;
 	struct smb_charger *chg = container_of(work, struct smb_charger,
 						chg_termination_work);
+	union power_supply_propval pval = {0, };
 	int rc, input_present, delay = CHG_TERM_WA_ENTRY_DELAY_MS;
 	int vbat_now_uv, max_fv_uv;
+	u8 stat = 0;
 
 	/*
 	 * Hold awake votable to prevent pm_relax being called prior to
@@ -7610,6 +7635,21 @@ static void smblib_chg_termination_work(struct work_struct *work)
 		vote(chg->dc_suspend_votable, CHG_TERMINATION_VOTER, false, 0);
 		smblib_err(chg, "Couldn't read SOC value, rc=%d\n", rc);
 		goto out;
+	}
+
+	if ((rc < 0) || (pval.intval < 100)) {
+		rc = smblib_read(chg, BATTERY_CHARGER_STATUS_1_REG, &stat);
+		if (rc < 0)
+			goto out;
+
+		/* check we are not in termination to exit the WA */
+		if ((stat & BATTERY_CHARGER_STATUS_MASK) != TERMINATE_CHARGE) {
+			vote(chg->usb_icl_votable, CHG_TERMINATION_VOTER,
+				false, 0);
+			vote(chg->dc_suspend_votable, CHG_TERMINATION_VOTER,
+				false, 0);
+			goto out;
+		}
 	}
 
 	/* Get the battery float voltage */
@@ -8156,6 +8196,15 @@ static int smblib_create_votables(struct smb_charger *chg)
 		return rc;
 	}
 
+	chg->bat_temp_irq_disable_votable = create_votable(
+			"BAT_TEMP_IRQ_DISABLE", VOTE_SET_ANY,
+			smblib_bat_temp_irq_disable_vote_callback, chg);
+	if (IS_ERR(chg->bat_temp_irq_disable_votable)) {
+		rc = PTR_ERR(chg->bat_temp_irq_disable_votable);
+		chg->bat_temp_irq_disable_votable = NULL;
+		return rc;
+	}
+
 	return rc;
 }
 
@@ -8169,6 +8218,8 @@ static void smblib_destroy_votables(struct smb_charger *chg)
 		destroy_votable(chg->awake_votable);
 	if (chg->chg_disable_votable)
 		destroy_votable(chg->chg_disable_votable);
+	if (chg->bat_temp_irq_disable_votable)
+		destroy_votable(chg->bat_temp_irq_disable_votable);
 }
 
 static void smblib_iio_deinit(struct smb_charger *chg)
@@ -8283,7 +8334,8 @@ int smblib_init(struct smb_charger *chg)
 		}
 
 		rc = qcom_step_chg_init(chg->dev, chg->step_chg_enabled,
-				chg->sw_jeita_enabled, false, chg->iio_chans);
+				chg->sw_jeita_enabled, chg->jeita_arb_enable,
+				chg->iio_chans);
 		if (rc < 0) {
 			smblib_err(chg, "Couldn't init qcom_step_chg_init rc=%d\n",
 				rc);

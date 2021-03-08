@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2011, 2013-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011, 2013-2021, The Linux Foundation. All rights reserved.
  * Linux Foundation chooses to take subject only to the GPLv2 license terms,
  * and distributes only under these terms.
  *
@@ -110,6 +110,7 @@ struct f_cdev {
 	/* function suspend status */
 	bool			func_is_suspended;
 	bool			func_wakeup_allowed;
+	bool			func_wakeup_pending;
 
 	struct cserial		port_usb;
 
@@ -530,8 +531,24 @@ static int usb_cser_set_alt(struct usb_function *f, unsigned int intf,
 		}
 	}
 
+	port->func_wakeup_pending = false;
 	usb_cser_connect(port);
 	return rc;
+}
+
+static void usb_cser_resume(struct usb_function *f)
+{
+	struct f_cdev *port = func_to_port(f);
+	struct usb_composite_dev *cdev = f->config->cdev;
+
+	if (cdev->gadget->speed >= USB_SPEED_SUPER && port->func_is_suspended) {
+		if (port->func_wakeup_pending) {
+			dev_dbg(&cdev->gadget->dev,
+				"func_wakeup for port:%s\n", port->name);
+			usb_func_wakeup(&port->port_usb.func);
+			port->func_wakeup_pending = false;
+		}
+	}
 }
 
 static int usb_cser_func_suspend(struct usb_function *f, u8 options)
@@ -566,6 +583,9 @@ static void usb_cser_disable(struct usb_function *f)
 		"port(%s) deactivated\n", port->name);
 
 	usb_cser_disconnect(port);
+	port->func_is_suspended = false;
+	port->func_wakeup_allowed = false;
+	port->func_wakeup_pending = false;
 	usb_ep_disable(port->port_usb.notify);
 	port->port_usb.notify->driver_data = NULL;
 }
@@ -966,6 +986,7 @@ static void usb_cser_read_complete(struct usb_ep *ep, struct usb_request *req)
 {
 	struct f_cdev *port = ep->driver_data;
 	unsigned long flags;
+	int ret;
 
 	pr_debug("ep:(%pK)(%s) port:%p req_status:%d req->actual:%u\n",
 			ep, ep->name, port, req->status, req->actual);
@@ -975,7 +996,25 @@ static void usb_cser_read_complete(struct usb_ep *ep, struct usb_request *req)
 	}
 
 	spin_lock_irqsave(&port->port_lock, flags);
-	if (!port->port_open || req->status || !req->actual) {
+	if (!port->port_open) {
+		list_add_tail(&req->list, &port->read_pool);
+		spin_unlock_irqrestore(&port->port_lock, flags);
+		return;
+	}
+
+	if (req->status || !req->actual) {
+		/*
+		 * ECONNRESET can be returned when host issues clear EP halt,
+		 * restart OUT requests if so.
+		 */
+		if (req->status == -ECONNRESET) {
+			spin_unlock_irqrestore(&port->port_lock, flags);
+			ret = usb_ep_queue(ep, req, GFP_KERNEL);
+			if (!ret)
+				return;
+			spin_lock_irqsave(&port->port_lock, flags);
+		}
+
 		list_add_tail(&req->list, &port->read_pool);
 		spin_unlock_irqrestore(&port->port_lock, flags);
 		return;
@@ -1653,6 +1692,8 @@ static ssize_t cser_rw_write(struct file *file, const char __user *ubuf,
 			port->func_is_suspended) {
 			pr_debug("Calling usb_func_wakeup\n");
 			ret = usb_func_wakeup(func);
+			if (ret == -EAGAIN)
+				port->func_wakeup_pending = true;
 		} else {
 			pr_debug("Calling usb_gadget_wakeup\n");
 			ret = usb_gadget_wakeup(gadget);
@@ -2047,6 +2088,7 @@ static struct usb_function *cser_alloc(struct usb_function_instance *fi)
 	port->port_usb.func.disable = usb_cser_disable;
 	port->port_usb.func.setup = usb_cser_setup;
 	port->port_usb.func.func_suspend = usb_cser_func_suspend;
+	port->port_usb.func.resume = usb_cser_resume;
 	port->port_usb.func.get_status = usb_cser_get_status;
 	port->port_usb.func.free_func = usb_cser_free_func;
 

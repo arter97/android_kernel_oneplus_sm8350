@@ -365,7 +365,8 @@ static void arm_smmu_arch_write_sync(struct arm_smmu_device *smmu)
 		return;
 
 	/* Read to complete prior write transcations */
-	id = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_ID0);
+	id = arm_smmu_readl(smmu, ARM_SMMU_IMPL_DEF0, 0);
+
 
 	/* Wait for read to complete before off */
 	rmb();
@@ -656,8 +657,6 @@ static void arm_smmu_power_off_atomic(struct arm_smmu_device *smmu,
 {
 	unsigned long flags;
 
-	arm_smmu_arch_write_sync(smmu);
-
 	spin_lock_irqsave(&pwr->clock_refs_lock, flags);
 	if (pwr->clock_refs_count == 0) {
 		WARN(1, "%s: bad clock_ref_count\n", dev_name(pwr->dev));
@@ -670,6 +669,7 @@ static void arm_smmu_power_off_atomic(struct arm_smmu_device *smmu,
 		return;
 	}
 
+	arm_smmu_arch_write_sync(smmu);
 	arm_smmu_disable_clocks(pwr);
 
 	pwr->clock_refs_count = 0;
@@ -3023,7 +3023,6 @@ static int __bus_lookup_iommu_group(struct device *dev, void *priv)
 	}
 
 	data->group = group;
-	iommu_group_put(group);
 	return 1;
 }
 
@@ -3703,6 +3702,9 @@ static struct iommu_group *arm_smmu_device_group(struct device *dev)
 	int i, idx;
 
 	group = of_get_device_group(dev);
+	if (group)
+		goto finish;
+
 	for_each_cfg_sme(fwspec, i, idx) {
 		if (group && smmu->s2crs[idx].group &&
 		    group != smmu->s2crs[idx].group) {
@@ -3729,6 +3731,7 @@ static struct iommu_group *arm_smmu_device_group(struct device *dev)
 			return NULL;
 	}
 
+finish:
 	if (smmu->impl && smmu->impl->device_group &&
 	    smmu->impl->device_group(dev, group)) {
 		iommu_group_put(group);

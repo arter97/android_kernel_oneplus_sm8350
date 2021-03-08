@@ -321,6 +321,7 @@
 
 /* Global USB3 PIPE Control Register */
 #define DWC3_GUSB3PIPECTL_PHYSOFTRST	BIT(31)
+#define DWC3_GUSB3PIPECTL_HSTPRTCMPL	BIT(30)
 #define DWC3_GUSB3PIPECTL_U2SSINP3OK	BIT(29)
 #define DWC3_GUSB3PIPECTL_DISRXDETINP3	BIT(28)
 #define DWC3_GUSB3PIPECTL_UX_EXIT_PX	BIT(27)
@@ -848,6 +849,13 @@ enum dwc3_link_state {
 	DWC3_LINK_STATE_RESET		= 0x0e,
 	DWC3_LINK_STATE_RESUME		= 0x0f,
 	DWC3_LINK_STATE_MASK		= 0x0f,
+};
+
+enum gadget_state {
+	DWC3_GADGET_INACTIVE,
+	DWC3_GADGET_SOFT_CONN,
+	DWC3_GADGET_CABLE_CONN,
+	DWC3_GADGET_ACTIVE,
 };
 
 /* TRB Length, PCM and Status */
@@ -1382,6 +1390,7 @@ struct dwc3 {
 	unsigned int		irq_event_count[MAX_INTR_STATS];
 	unsigned int		irq_dbg_index;
 
+	enum gadget_state	gadget_state;
 	/* Indicate if the gadget was powered by the otg driver */
 	unsigned int		vbus_active:1;
 	/* Indicate if software connect was issued by the usb_gadget_driver */
@@ -1695,7 +1704,6 @@ static inline void dwc3_ulpi_exit(struct dwc3 *dwc)
 enum dwc3_notify_event {
 	DWC3_CONTROLLER_ERROR_EVENT,
 	DWC3_CONTROLLER_RESET_EVENT,
-	DWC3_CONTROLLER_POST_RESET_EVENT,
 	DWC3_CORE_PM_SUSPEND_EVENT,
 	DWC3_CORE_PM_RESUME_EVENT,
 	DWC3_CONTROLLER_CONNDONE_EVENT,

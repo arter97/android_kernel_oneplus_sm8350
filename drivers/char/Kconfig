@@ -544,6 +544,15 @@ config TILE_SROM
 
 source "drivers/char/xillybus/Kconfig"
 
+config MSM_FASTCVPD
+	bool "QTI FASTCVP driver"
+	depends on QCOM_GLINK
+	help
+		This driver exposes APIs to video driver to share
+		HFI command queue address to CDSP and handle errors
+		to exit gracefully in case video and cdsp subsystems crash.
+		Say M if you want to enable this module.
+
 config MSM_ADSPRPC
 	tristate "QTI FastRPC driver"
 	depends on RPMSG && QCOM_SECURE_BUFFER && MSM_SERVICE_LOCATOR && MSM_SERVICE_NOTIFIER && PM_SLEEP && HAS_DMA && CMA && MMU
@@ -562,6 +571,15 @@ config ADSPRPC_QGKI
 		config is used in the driver to detect whether it is being compiled
 		in a GKI kernel or not.
 		Say Y if the driver is being compiled in a QGKI kernel.
+
+config VIRTIO_EAVB
+	tristate "Virtio eavb driver"
+	depends on VIRTIO
+	help
+	  This the virtual eavb frontend driver based on virtio. Eavb
+	  means ethernet Audio Video Bridging. It provides unified ioctl
+	  interface for userspace. Say Y if you want to support virtual
+	  eavb.
 
 config MSM_RDBG
 	tristate "QTI Remote debug driver"
