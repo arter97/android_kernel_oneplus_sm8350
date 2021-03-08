@@ -60,6 +60,9 @@ static uint8_t re_init_fail_cnt, probe_fail_cnt;
 /* An atomic flag to check if SSR cleanup has been done or not */
 static qdf_atomic_t is_recovery_cleanup_done;
 
+/* firmware/host hang event data */
+static uint8_t g_fw_host_hang_event[QDF_HANG_EVENT_DATA_SIZE];
+
 /*
  * In BMI Phase we are only sending small chunk (256 bytes) of the FW image at
  * a time, and wait for the completion interrupt to start the next transfer.
@@ -525,6 +528,26 @@ static void hdd_soc_load_unlock(struct device *dev)
 	hdd_allow_suspend(WIFI_POWER_EVENT_WAKELOCK_DRIVER_INIT);
 }
 
+#ifdef DP_MEM_PRE_ALLOC
+/**
+ * hdd_init_dma_mask() - Set the DMA mask for dma memory pre-allocation
+ * @dev: device handle
+ * @bus_type: Bus type for which init is being done
+ *
+ * Return: 0 - success, non-zero on failure
+ */
+static int hdd_init_dma_mask(struct device *dev, enum qdf_bus_type bus_type)
+{
+	return hif_init_dma_mask(dev, bus_type);
+}
+#else
+static inline int
+hdd_init_dma_mask(struct device *dev, enum qdf_bus_type bus_type)
+{
+	return QDF_STATUS_SUCCESS;
+}
+#endif
+
 static int __hdd_soc_probe(struct device *dev,
 			   void *bdev,
 			   const struct hif_bus_id *bid,
@@ -542,6 +565,10 @@ static int __hdd_soc_probe(struct device *dev,
 	cds_set_recovery_in_progress(false);
 
 	errno = hdd_init_qdf_ctx(dev, bdev, bus_type, bid);
+	if (errno)
+		goto unlock;
+
+	errno = hdd_init_dma_mask(dev, bus_type);
 	if (errno)
 		goto unlock;
 
@@ -1977,10 +2004,8 @@ wlan_hdd_pld_uevent(struct device *dev, struct pld_uevent_data *event_data)
 	case PLD_FW_HANG_EVENT:
 		hdd_info("Received firmware hang event");
 		cds_get_recovery_reason(&reason);
-		hang_evt_data.hang_data =
-				qdf_mem_malloc(QDF_HANG_EVENT_DATA_SIZE);
-		if (!hang_evt_data.hang_data)
-			return;
+		qdf_mem_zero(&g_fw_host_hang_event, QDF_HANG_EVENT_DATA_SIZE);
+		hang_evt_data.hang_data = g_fw_host_hang_event;
 		hang_evt_data.offset = 0;
 		qdf_hang_event_notifier_call(reason, &hang_evt_data);
 		hang_evt_data.offset = QDF_WLAN_HANG_FW_OFFSET;
@@ -1997,8 +2022,6 @@ wlan_hdd_pld_uevent(struct device *dev, struct pld_uevent_data *event_data)
 
 		hdd_send_hang_data(hang_evt_data.hang_data,
 				   QDF_HANG_EVENT_DATA_SIZE);
-		qdf_mem_free(hang_evt_data.hang_data);
-
 		break;
 	default:
 		/* other events intentionally not handled */

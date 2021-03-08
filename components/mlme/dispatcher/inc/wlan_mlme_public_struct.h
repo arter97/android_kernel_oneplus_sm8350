@@ -86,6 +86,13 @@
 #define CFG_VALID_CHANNEL_LIST_STRING_LEN (CFG_VALID_CHANNEL_LIST_LEN * 4)
 
 #define DEFAULT_ROAM_TRIGGER_BITMAP 0xFFFFFFFF
+
+/**
+ * detect AP off based FW reported last RSSI > roaming Low rssi
+ * and not less than 20db of host cached RSSI
+ */
+#define AP_OFF_RSSI_OFFSET 20
+
 /**
  * struct mlme_cfg_str - generic structure for all mlme CFG string items
  *
@@ -924,6 +931,7 @@ struct wlan_mlme_vht_caps {
  * @sap_max_inactivity_override: Override updating ap_sta_inactivity from
  * hostapd.conf
  * @sap_uapsd_enabled: Flag to enable/disable UAPSD for SAP
+ * @reject_addba_req: Flag to decline ADDBA Req from SAP
  */
 struct wlan_mlme_qos {
 	uint32_t tx_aggregation_size;
@@ -944,6 +952,7 @@ struct wlan_mlme_qos {
 	uint32_t tx_non_aggr_sw_retry_threshold;
 	bool sap_max_inactivity_override;
 	bool sap_uapsd_enabled;
+	bool reject_addba_req;
 };
 
 #ifdef WLAN_FEATURE_11AX
@@ -1333,21 +1342,19 @@ struct wlan_mlme_acs {
 
 /*
  * struct wlan_mlme_cfg_twt - All twt related cfg items
- * @is_twt_bcast_enabled: twt capability for the session
  * @is_twt_enabled: global twt configuration
- * @is_twt_responder_enabled: twt responder
- * @is_twt_requestor_enabled: twt requestor
+ * @bcast_requestor_tgt_cap: Broadcast requestor target capability
+ * @bcast_responder_tgt_cap: Broadcast responder target capability
  * @is_bcast_responder_enabled: bcast responder enable/disable
  * @is_bcast_requestor_enabled: bcast requestor enable/disable
  * @twt_congestion_timeout: congestion timeout value
  */
 struct wlan_mlme_cfg_twt {
-	bool is_twt_bcast_enabled;
 	bool is_twt_enabled;
-	bool is_twt_responder_enabled;
-	bool is_twt_requestor_enabled;
 	bool is_bcast_responder_enabled;
 	bool is_bcast_requestor_enabled;
+	bool bcast_requestor_tgt_cap;
+	bool bcast_responder_tgt_cap;
 	uint32_t twt_congestion_timeout;
 };
 
@@ -2394,7 +2401,7 @@ struct wlan_mlme_cfg {
 	struct wlan_mlme_dot11_mode dot11_mode;
 	struct wlan_mlme_reg reg;
 	struct roam_trigger_score_delta trig_score_delta[NUM_OF_ROAM_TRIGGERS];
-	struct roam_trigger_min_rssi trig_min_rssi[NUM_OF_ROAM_TRIGGERS];
+	struct roam_trigger_min_rssi trig_min_rssi[NUM_OF_ROAM_MIN_RSSI];
 	struct wlan_mlme_ratemask ratemask_cfg;
 };
 
@@ -2432,6 +2439,7 @@ struct wlan_mlme_sae_single_pmk {
  * @data_11kv:          Neighbor report/BTM parameters.
  * @btm_rsp:            BTM response information
  * @roam_init_info:     Roam initial info
+ * @roam_msg_info:      roam related message information
  */
 struct mlme_roam_debug_info {
 	struct wmi_roam_trigger_info trigger;
@@ -2440,6 +2448,7 @@ struct mlme_roam_debug_info {
 	struct wmi_neighbor_report_data data_11kv;
 	struct roam_btm_response_data btm_rsp;
 	struct roam_initial_data roam_init_info;
+	struct roam_msg_info roam_msg_info;
 };
 
 /**

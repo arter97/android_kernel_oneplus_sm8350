@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2020 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2021 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -1479,6 +1479,10 @@ static const uint8_t *wma_wow_wake_reason_str(A_INT32 wake_reason)
 		return "VDEV_DISCONNECT";
 	case WOW_REASON_LOCAL_DATA_UC_DROP:
 		return "LOCAL_DATA_UC_DROP";
+	case WOW_REASON_GENERIC_WAKE:
+		return "GENERIC_WAKE";
+	case WOW_REASON_TWT:
+		return "TWT Event";
 	default:
 		return "unknown";
 	}
@@ -1749,6 +1753,7 @@ static bool is_piggybacked_event(int32_t reason)
 	case WOW_REASON_ROAM_HO:
 	case WOW_REASON_ROAM_PMKID_REQUEST:
 	case WOW_REASON_VDEV_DISCONNECT:
+	case WOW_REASON_TWT:
 		return true;
 	default:
 		return false;
@@ -2290,6 +2295,11 @@ static void wma_acquire_wow_wakelock(t_wma_handle *wma, int wake_reason)
 	case WOW_REASON_ROAM_PREAUTH_START:
 		wl = &wma->roam_preauth_wl;
 		ms = WMA_ROAM_PREAUTH_WAKE_LOCK_DURATION;
+		break;
+	case WOW_REASON_PROBE_REQ_WPS_IE_RECV:
+		wl = &wma->probe_req_wps_wl;
+		ms = WMA_REASON_PROBE_REQ_WPS_IE_RECV_DURATION;
+		break;
 	default:
 		return;
 	}
@@ -2444,6 +2454,11 @@ static int wma_wake_event_no_payload(
 
 	case WOW_REASON_NLOD:
 		return wma_wake_reason_nlod(wma, wake_info->vdev_id);
+
+	case WOW_REASON_GENERIC_WAKE:
+		wma_info("Wake reason %s",
+			 wma_wow_wake_reason_str(wake_info->wake_reason));
+		return 0;
 
 	default:
 		return 0;
@@ -3984,6 +3999,8 @@ QDF_STATUS wma_set_tx_rx_aggr_size(uint8_t vdev_id,
 	if (aggr_type == WMI_VDEV_CUSTOM_AGGR_TYPE_AMSDU)
 		cmd->enable_bitmap |= 0x04;
 
+	cmd->enable_bitmap |= (0x1 << 6);
+
 	wma_debug("tx aggr: %d rx aggr: %d vdev: %d enable_bitmap %d",
 		 cmd->tx_aggr_size, cmd->rx_aggr_size, cmd->vdev_id,
 		 cmd->enable_bitmap);
@@ -4048,6 +4065,8 @@ QDF_STATUS wma_set_tx_rx_aggr_size_per_ac(WMA_HANDLE handle,
 		/* bit 2 (aggr_type): TX Aggregation Type (0=A-MPDU, 1=A-MSDU) */
 		if (aggr_type == WMI_VDEV_CUSTOM_AGGR_TYPE_AMSDU)
 			cmd->enable_bitmap |= 0x04;
+
+		cmd->enable_bitmap |= (0x1 << 6);
 
 		wma_debug("queue_num: %d, tx aggr: %d rx aggr: %d vdev: %d, bitmap: %d",
 			 queue_num, cmd->tx_aggr_size,
@@ -4555,6 +4574,10 @@ int wma_unified_power_debug_stats_event_handler(void *handle,
 
 	mac->sme.power_stats_resp_callback(power_stats_results,
 			mac->sme.power_debug_stats_context);
+
+	mac->sme.power_stats_resp_callback = NULL;
+	mac->sme.power_debug_stats_context = NULL;
+
 	qdf_mem_free(power_stats_results);
 	return 0;
 }

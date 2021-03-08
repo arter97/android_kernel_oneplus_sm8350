@@ -700,9 +700,11 @@ populate_dot_11_f_ext_chann_switch_ann(struct mac_context *mac_ptr,
 				struct pe_session *session_entry);
 
 void
-populate_dot11f_vht_tx_power_env(struct mac_context *mac,
-				 tDot11fIEvht_transmit_power_env *pDot11f,
-				 enum phy_ch_width ch_width, uint32_t chan_freq);
+populate_dot11f_tx_power_env(struct mac_context *mac,
+			     tDot11fIEtransmit_power_env *pDot11f,
+			     enum phy_ch_width ch_width, uint32_t chan_freq,
+			     uint16_t *num_tpe, bool is_ch_switch);
+
 /* / Populate a tDot11fIEChannelSwitchWrapper */
 void
 populate_dot11f_chan_switch_wrapper(struct mac_context *mac,
@@ -1210,7 +1212,7 @@ static inline QDF_STATUS populate_dot11f_he_bss_color_change(
 }
 #endif
 
-#ifdef WLAN_SUPPORT_TWT
+#if defined(WLAN_FEATURE_11AX) && defined(WLAN_SUPPORT_TWT)
 /**
  * populate_dot11f_twt_extended_caps() - populate TWT extended capabilities
  * @mac_ctx: Global MAC context.

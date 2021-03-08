@@ -208,6 +208,8 @@
 #define WMA_ROAM_HO_WAKE_LOCK_DURATION          (500)          /* in msec */
 #define WMA_ROAM_PREAUTH_WAKE_LOCK_DURATION     (2 * 1000)
 
+#define WMA_REASON_PROBE_REQ_WPS_IE_RECV_DURATION     (3 * 1000)
+
 #ifdef FEATURE_WLAN_AUTO_SHUTDOWN
 #define WMA_AUTO_SHUTDOWN_WAKE_LOCK_DURATION    WAKELOCK_DURATION_RECOMMENDED
 #endif
@@ -968,6 +970,7 @@ typedef struct {
 	qdf_wake_lock_t wow_auto_shutdown_wl;
 	qdf_wake_lock_t roam_ho_wl;
 	qdf_wake_lock_t roam_preauth_wl;
+	qdf_wake_lock_t probe_req_wps_wl;
 	int wow_nack;
 	qdf_atomic_t is_wow_bus_suspended;
 #ifdef WLAN_FEATURE_LPSS
@@ -1039,6 +1042,16 @@ typedef struct {
 	bool fw_therm_throt_support;
 	bool enable_tx_compl_tsf64;
 } t_wma_handle, *tp_wma_handle;
+
+/**
+ * wma_validate_handle() - Validate WMA handle
+ * @wma_handle: wma handle
+ *
+ * Return: errno if WMA handle is NULL; 0 otherwise
+ */
+#define wma_validate_handle(wma_handle) \
+        __wma_validate_handle(wma_handle, __func__)
+int __wma_validate_handle(tp_wma_handle wma_handle, const char *func);
 
 /**
  * wma_vdev_nss_chain_params_send() - send vdev nss chain params to fw.

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2020 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2021 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -973,22 +973,11 @@ void wma_update_rate_flags_after_vdev_restart(tp_wma_handle wma,
 	bss_phymode = des_chan->ch_phymode;
 
 	if (IS_WLAN_PHYMODE_HE(bss_phymode)) {
-		if (des_chan->ch_width == CH_WIDTH_160MHZ ||
-		    des_chan->ch_width == CH_WIDTH_80P80MHZ)
-			rate_flags |= TX_RATE_HE160;
-		else if (des_chan->ch_width == CH_WIDTH_80MHZ)
-			rate_flags |= TX_RATE_HE80;
-		else if (des_chan->ch_width)
-			rate_flags |= TX_RATE_HE40;
-		else
-			rate_flags |= TX_RATE_HE20;
+		rate_flags = wma_get_he_rate_flags(des_chan->ch_width);
 	} else if (IS_WLAN_PHYMODE_VHT(bss_phymode)) {
-		rate_flags |= wma_get_vht_rate_flags(des_chan->ch_width);
+		rate_flags = wma_get_vht_rate_flags(des_chan->ch_width);
 	} else if (IS_WLAN_PHYMODE_HT(bss_phymode)) {
-		if (des_chan->ch_width)
-			rate_flags |= TX_RATE_HT40;
-		else
-			rate_flags |= TX_RATE_HT20;
+		rate_flags = wma_get_ht_rate_flags(des_chan->ch_width);
 	} else {
 		rate_flags = TX_RATE_LEGACY;
 	}
@@ -4682,6 +4671,40 @@ static void wma_sap_allow_runtime_pm(tp_wma_handle wma)
 	qdf_runtime_pm_allow_suspend(&wma->sap_prevent_runtime_pm_lock);
 }
 
+static bool wma_is_vdev_in_sap_mode(tp_wma_handle wma, uint8_t vdev_id)
+{
+	struct wma_txrx_node *intf = wma->interfaces;
+
+	if (vdev_id >= wma->max_bssid) {
+		wma_err("Invalid vdev_id %hu", vdev_id);
+		QDF_ASSERT(0);
+		return false;
+	}
+
+	if ((intf[vdev_id].type == WMI_VDEV_TYPE_AP) &&
+	    (intf[vdev_id].sub_type == 0))
+		return true;
+
+	return false;
+}
+
+static bool wma_is_vdev_in_go_mode(tp_wma_handle wma, uint8_t vdev_id)
+{
+	struct wma_txrx_node *intf = wma->interfaces;
+
+	if (vdev_id >= wma->max_bssid) {
+		wma_err("Invalid vdev_id %hu", vdev_id);
+		QDF_ASSERT(0);
+		return false;
+	}
+
+	if ((intf[vdev_id].type == WMI_VDEV_TYPE_AP) &&
+	    (intf[vdev_id].sub_type == WMI_UNIFIED_VDEV_SUBTYPE_P2P_GO))
+		return true;
+
+	return false;
+}
+
 void wma_add_sta(tp_wma_handle wma, tpAddStaParams add_sta)
 {
 	uint8_t oper_mode = BSS_OPERATIONAL_MODE_STA;
@@ -4714,9 +4737,42 @@ void wma_add_sta(tp_wma_handle wma, tpAddStaParams add_sta)
 		break;
 	}
 
-	/* handle wow for sap and nan with 1 or more peer in same way */
-	if (BSS_OPERATIONAL_MODE_AP == oper_mode ||
-	    BSS_OPERATIONAL_MODE_NDI == oper_mode) {
+	/* handle wow for sap with 1 or more peer in same way */
+	if (wma_is_vdev_in_sap_mode(wma, add_sta->smesessionId)) {
+		bool is_bus_suspend_allowed_in_sap_mode =
+			(wlan_pmo_get_sap_mode_bus_suspend(wma->psoc) &&
+				wmi_service_enabled(wma->wmi_handle,
+					wmi_service_sap_connected_d3_wow));
+		if (!is_bus_suspend_allowed_in_sap_mode) {
+			htc_vote_link_up(htc_handle);
+			wmi_info("sap d0 wow");
+		} else {
+			wmi_info("sap d3 wow");
+		}
+		wma_sap_prevent_runtime_pm(wma);
+
+		return;
+	}
+
+	/* handle wow for p2pgo with 1 or more peer in same way */
+	if (wma_is_vdev_in_go_mode(wma, add_sta->smesessionId)) {
+		bool is_bus_suspend_allowed_in_go_mode =
+			(wlan_pmo_get_go_mode_bus_suspend(wma->psoc) &&
+				wmi_service_enabled(wma->wmi_handle,
+					wmi_service_go_connected_d3_wow));
+		if (!is_bus_suspend_allowed_in_go_mode) {
+			htc_vote_link_up(htc_handle);
+			wmi_info("p2p go d0 wow");
+		} else {
+			wmi_info("p2p go d3 wow");
+		}
+		wma_sap_prevent_runtime_pm(wma);
+
+		return;
+	}
+
+	/* handle wow for nan with 1 or more peer in same way */
+	if (BSS_OPERATIONAL_MODE_NDI == oper_mode) {
 		wma_debug("disable runtime pm and vote for link up");
 		htc_vote_link_up(htc_handle);
 		wma_sap_prevent_runtime_pm(wma);
@@ -4776,8 +4832,39 @@ void wma_delete_sta(tp_wma_handle wma, tpDeleteStaParams del_sta)
 		qdf_mem_free(del_sta);
 	}
 
-	if (BSS_OPERATIONAL_MODE_AP == oper_mode ||
-	    BSS_OPERATIONAL_MODE_NDI == oper_mode) {
+	if (wma_is_vdev_in_sap_mode(wma, del_sta->smesessionId)) {
+		bool is_bus_suspend_allowed_in_sap_mode =
+			(wlan_pmo_get_sap_mode_bus_suspend(wma->psoc) &&
+				wmi_service_enabled(wma->wmi_handle,
+					wmi_service_sap_connected_d3_wow));
+		if (!is_bus_suspend_allowed_in_sap_mode) {
+			htc_vote_link_down(htc_handle);
+			wmi_info("sap d0 wow");
+		} else {
+			wmi_info("sap d3 wow");
+		}
+		wma_sap_allow_runtime_pm(wma);
+
+		return;
+	}
+
+	if (wma_is_vdev_in_go_mode(wma, del_sta->smesessionId)) {
+		bool is_bus_suspend_allowed_in_go_mode =
+			(wlan_pmo_get_go_mode_bus_suspend(wma->psoc) &&
+				wmi_service_enabled(wma->wmi_handle,
+					wmi_service_go_connected_d3_wow));
+		if (!is_bus_suspend_allowed_in_go_mode) {
+			htc_vote_link_down(htc_handle);
+			wmi_info("p2p go d0 wow");
+		} else {
+			wmi_info("p2p go d3 wow");
+		}
+		wma_sap_allow_runtime_pm(wma);
+
+		return;
+	}
+
+	if (BSS_OPERATIONAL_MODE_NDI == oper_mode) {
 		wma_debug("allow runtime pm and vote for link down");
 		htc_vote_link_down(htc_handle);
 		wma_sap_allow_runtime_pm(wma);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2020 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2021 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -187,6 +187,16 @@ struct wma_ini_config *wma_get_ini_handle(tp_wma_handle wma)
 	return &wma->ini_config;
 }
 
+int __wma_validate_handle(tp_wma_handle wma_handle, const char *func)
+{
+	if (!wma_handle) {
+		wma_err("Invalid WMA handle (via %s)", func);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 #define MAX_SUPPORTED_PEERS_REV1_1 14
 #define MAX_SUPPORTED_PEERS_REV1_3 32
 #ifdef WLAN_MAX_CLIENTS_ALLOWED
@@ -347,9 +357,14 @@ static void wma_set_default_tgt_config(tp_wma_handle wma_handle,
 	tgt_cfg->num_ocb_channels = CFG_TGT_NUM_OCB_CHANNELS;
 	tgt_cfg->num_ocb_schedules = CFG_TGT_NUM_OCB_SCHEDULES;
 	tgt_cfg->twt_ap_sta_count = CFG_TGT_DEFAULT_TWT_AP_STA_COUNT;
+	tgt_cfg->enable_pci_gen = cfg_get(wma_handle->psoc, CFG_ENABLE_PCI_GEN);
 
 	tgt_cfg->mgmt_comp_evt_bundle_support = true;
 	tgt_cfg->tx_msdu_new_partition_id_support = true;
+	tgt_cfg->is_sap_connected_d3wow_enabled =
+		ucfg_pmo_get_sap_mode_bus_suspend(wma_handle->psoc);
+	tgt_cfg->is_go_connected_d3wow_enabled =
+		ucfg_pmo_get_go_mode_bus_suspend(wma_handle->psoc);
 
 	cfg_nan_get_max_ndi(wma_handle->psoc,
 			    &tgt_cfg->max_ndi);
@@ -2952,6 +2967,8 @@ QDF_STATUS wma_open(struct wlan_objmgr_psoc *psoc,
 			"wlan_roam_ho_wl");
 		qdf_wake_lock_create(&wma_handle->roam_preauth_wl,
 				     "wlan_roam_preauth_wl");
+		qdf_wake_lock_create(&wma_handle->probe_req_wps_wl,
+				     "wlan_probe_req_wps_wl");
 	}
 
 	qdf_status = wlan_objmgr_psoc_try_get_ref(psoc, WLAN_LEGACY_WMA_ID);
@@ -3460,6 +3477,7 @@ err_get_psoc_ref:
 		qdf_wake_lock_destroy(&wma_handle->wow_auto_shutdown_wl);
 		qdf_wake_lock_destroy(&wma_handle->roam_ho_wl);
 		qdf_wake_lock_destroy(&wma_handle->roam_preauth_wl);
+		qdf_wake_lock_destroy(&wma_handle->probe_req_wps_wl);
 	}
 err_free_wma_handle:
 	cds_free_context(QDF_MODULE_ID_WMA, wma_handle);
@@ -4461,6 +4479,7 @@ QDF_STATUS wma_close(void)
 		qdf_wake_lock_destroy(&wma_handle->wow_auto_shutdown_wl);
 		qdf_wake_lock_destroy(&wma_handle->roam_ho_wl);
 		qdf_wake_lock_destroy(&wma_handle->roam_preauth_wl);
+		qdf_wake_lock_destroy(&wma_handle->probe_req_wps_wl);
 	}
 
 	/* unregister Firmware debug log */
@@ -9055,6 +9074,10 @@ static QDF_STATUS wma_mc_process_msg(struct scheduler_msg *msg)
 		break;
 	case WMA_TWT_RESUME_DIALOG_REQUEST:
 		wma_twt_process_resume_dialog(wma_handle, msg->bodyptr);
+		qdf_mem_free(msg->bodyptr);
+		break;
+	case WMA_TWT_NUDGE_DIALOG_REQUEST:
+		wma_twt_process_nudge_dialog(wma_handle, msg->bodyptr);
 		qdf_mem_free(msg->bodyptr);
 		break;
 	default:

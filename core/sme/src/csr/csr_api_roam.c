@@ -79,6 +79,7 @@
 #include "wlan_if_mgr_public_struct.h"
 #include "wlan_if_mgr_ucfg_api.h"
 #endif
+#include "wlan_roam_debug.h"
 
 #define RSN_AUTH_KEY_MGMT_SAE           WLAN_RSN_SEL(WLAN_AKM_SAE)
 #define MAX_PWR_FCC_CHAN_12 8
@@ -2415,95 +2416,38 @@ uint32_t csr_convert_phy_cb_state_to_ini_value(ePhyChanBondState phyCbState)
 }
 
 #ifdef WLAN_FEATURE_11AX
-#define CSR_REVISE_REQ_HE_CAP_PER_BAND(_req, _pmac, _ch_freq) \
-	csr_revise_req_he_cap_per_band(&(_req)->he_config, _pmac, _ch_freq)
-
-static void
-csr_revise_req_he_cap_per_band(tDot11fIEhe_cap *he_config,
-			       struct mac_context *mac,
-			       uint32_t ch_freq)
-{
-	if (wlan_reg_is_24ghz_ch_freq(ch_freq)) {
-		he_config->bfee_sts_lt_80 =
-			mac->he_cap_2g.bfee_sts_lt_80;
-	} else {
-		he_config->bfee_sts_lt_80 =
-			mac->he_cap_5g.bfee_sts_lt_80;
-
-		he_config->num_sounding_lt_80 =
-			mac->he_cap_5g.num_sounding_lt_80;
-		if (he_config->chan_width_2 ||
-		    he_config->chan_width_3) {
-			he_config->bfee_sts_gt_80 =
-				mac->he_cap_5g.bfee_sts_gt_80;
-			he_config->num_sounding_gt_80 =
-				mac->he_cap_5g.num_sounding_gt_80;
-			he_config->he_ppdu_20_in_160_80p80Mhz =
-				mac->he_cap_5g.he_ppdu_20_in_160_80p80Mhz;
-			he_config->he_ppdu_80_in_160_80p80Mhz =
-				mac->he_cap_5g.he_ppdu_80_in_160_80p80Mhz;
-		}
-	}
-}
-
-/**
- * csr_join_req_copy_he_cap() - Copy HE cap into CSR Join Req
- * @csr_join_req: pointer to CSR Join Req
- * @session: pointer to CSR session
- *
- * Return: None
- */
-static void csr_join_req_copy_he_cap(struct join_req *csr_join_req,
-				     struct csr_roam_session *session)
-{
-	qdf_mem_copy(&csr_join_req->he_config, &session->he_config,
-		     sizeof(session->he_config));
-}
-
-/**
- * csr_start_bss_copy_he_cap() - Copy HE cap into CSR Join Req
- * @req: pointer to START BSS Req
- * @session: pointer to CSR session
- *
- * Return: None
- */
-static void csr_start_bss_copy_he_cap(struct start_bss_req *req,
-				      struct csr_roam_session *session)
-{
-	qdf_mem_copy(&req->he_config, &session->he_config,
-		     sizeof(session->he_config));
-}
-
-void csr_init_session_twt_cap(struct csr_roam_session *session,
-			      uint32_t type_of_persona)
-{
-	if (WMI_VDEV_TYPE_AP == type_of_persona) {
-		session->he_config.twt_request = 0;
-	} else if (WMI_VDEV_TYPE_STA == type_of_persona) {
-		session->he_config.twt_responder = 0;
-	}
-}
-
 void csr_update_session_he_cap(struct mac_context *mac_ctx,
 			       struct csr_roam_session *session)
 {
 	enum QDF_OPMODE persona;
-	tDot11fIEhe_cap *he_cap = &session->he_config;
-	he_cap->present = true;
+	tDot11fIEhe_cap *he_cap;
+	struct wlan_objmgr_vdev *vdev;
+	struct mlme_legacy_priv *mlme_priv;
 
-	qdf_mem_copy(&session->he_config,
+	vdev = wlan_objmgr_get_vdev_by_id_from_psoc(mac_ctx->psoc,
+						    session->vdev_id,
+						    WLAN_LEGACY_SME_ID);
+	if (!vdev)
+		return;
+	mlme_priv = wlan_vdev_mlme_get_ext_hdl(vdev);
+	if (!mlme_priv) {
+		wlan_objmgr_vdev_release_ref(vdev, WLAN_LEGACY_SME_ID);
+		return;
+	}
+	qdf_mem_copy(&mlme_priv->he_config,
 		     &mac_ctx->mlme_cfg->he_caps.dot11_he_cap,
-		     sizeof(session->he_config));
-
+		     sizeof(mlme_priv->he_config));
+	he_cap = &mlme_priv->he_config;
+	he_cap->present = true;
 	/*
 	 * Do not advertise requester role for SAP & responder role
 	 * for STA
 	 */
-	persona = csr_get_session_persona(mac_ctx, session->sessionId);
-	if (QDF_SAP_MODE == persona) {
-		session->he_config.twt_request = 0;
-	} else if (QDF_STA_MODE == persona) {
-		session->he_config.twt_responder = 0;
+	persona = wlan_vdev_mlme_get_opmode(vdev);
+	if (persona == QDF_SAP_MODE || persona == QDF_P2P_GO_MODE) {
+		he_cap->twt_request = 0;
+	} else if (persona == QDF_STA_MODE || persona == QDF_P2P_CLIENT_MODE) {
+		he_cap->twt_responder = 0;
 	}
 
 	if (he_cap->ppet_present) {
@@ -2517,24 +2461,9 @@ void csr_update_session_he_cap(struct mac_context *mac_ctx,
 	} else {
 		he_cap->ppet.ppe_threshold.num_ppe_th = 0;
 	}
-	session->he_sta_obsspd = mac_ctx->mlme_cfg->he_caps.he_sta_obsspd;
+	mlme_priv->he_sta_obsspd = mac_ctx->mlme_cfg->he_caps.he_sta_obsspd;
+	wlan_objmgr_vdev_release_ref(vdev, WLAN_LEGACY_SME_ID);
 }
-
-#else
-#define CSR_REVISE_REQ_HE_CAP_PER_BAND(_req, _pmac, _ch_freq)   /* no op */
-
-static inline
-void csr_join_req_copy_he_cap(struct join_req *csr_join_req,
-			      struct csr_roam_session *session)
-{
-}
-
-static inline
-void csr_start_bss_copy_he_cap(struct start_bss_req *req,
-			       struct csr_roam_session *session)
-{
-}
-
 #endif
 
 /**
@@ -14578,6 +14507,7 @@ csr_check_vendor_ap_3_present(struct mac_context *mac_ctx, uint8_t *ie,
 	return ret;
 }
 
+#if defined(WLAN_FEATURE_11AX) && defined(WLAN_SUPPORT_TWT)
 /**
  * csr_enable_twt() - Check if its allowed to enable twt for this session
  * @ie: pointer to beacon/probe resp ie's
@@ -14590,26 +14520,44 @@ csr_check_vendor_ap_3_present(struct mac_context *mac_ctx, uint8_t *ie,
 static bool csr_enable_twt(struct mac_context *mac_ctx, tDot11fBeaconIEs *ie)
 {
 
-	if (mac_ctx->mlme_cfg->twt_cfg.is_twt_requestor_enabled && ie &&
+	if (mac_ctx->mlme_cfg->he_caps.dot11_he_cap.twt_request && ie &&
 	    (ie->qcn_ie.present || ie->he_cap.twt_responder)) {
 		sme_debug("TWT is supported, hence disable UAPSD; twt req supp: %d,twt respon supp: %d, QCN_IE: %d",
-			  mac_ctx->mlme_cfg->twt_cfg.is_twt_requestor_enabled,
-			  ie->he_cap.twt_responder,
-			  ie->qcn_ie.present);
+			  mac_ctx->mlme_cfg->he_caps.dot11_he_cap.twt_request,
+			  ie->he_cap.twt_responder, ie->qcn_ie.present);
 		return true;
 	}
 	return false;
 }
+#else
+static bool csr_enable_twt(struct mac_context *mac_ctx, tDot11fBeaconIEs *ie)
+{
+	return false;
+}
+#endif
 
 #ifdef WLAN_FEATURE_11AX
 static void
-csr_update_he_caps_mcs(struct wlan_mlme_cfg *mlme_cfg,
+csr_update_he_caps_mcs(struct mac_context *mac
+,		       struct wlan_mlme_cfg *mlme_cfg,
 		       struct csr_roam_session *csr_session)
 {
 	uint32_t tx_mcs_map = 0;
 	uint32_t rx_mcs_map = 0;
 	uint32_t mcs_map = 0;
+	struct wlan_objmgr_vdev *vdev;
+	struct mlme_legacy_priv *mlme_priv;
 
+	vdev = wlan_objmgr_get_vdev_by_id_from_psoc(mac->psoc,
+						    csr_session->vdev_id,
+						    WLAN_LEGACY_SME_ID);
+	if (!vdev)
+		return;
+	mlme_priv = wlan_vdev_mlme_get_ext_hdl(vdev);
+	if (!mlme_priv) {
+		wlan_objmgr_vdev_release_ref(vdev, WLAN_LEGACY_SME_ID);
+		return;
+	}
 	rx_mcs_map = mlme_cfg->he_caps.dot11_he_cap.rx_he_mcs_map_lt_80;
 	tx_mcs_map = mlme_cfg->he_caps.dot11_he_cap.tx_he_mcs_map_lt_80;
 	mcs_map = rx_mcs_map & 0x3;
@@ -14623,12 +14571,14 @@ csr_update_he_caps_mcs(struct wlan_mlme_cfg *mlme_cfg,
 	}
 	sme_debug("new HE Nss MCS MAP: Rx 0x%0X, Tx: 0x%0X",
 		  rx_mcs_map, tx_mcs_map);
-	csr_session->he_config.tx_he_mcs_map_lt_80 = tx_mcs_map;
-	csr_session->he_config.rx_he_mcs_map_lt_80 = rx_mcs_map;
+	mlme_priv->he_config.tx_he_mcs_map_lt_80 = tx_mcs_map;
+	mlme_priv->he_config.rx_he_mcs_map_lt_80 = rx_mcs_map;
+	wlan_objmgr_vdev_release_ref(vdev, WLAN_LEGACY_SME_ID);
 }
 #else
 static void
-csr_update_he_caps_mcs(struct wlan_mlme_cfg *mlme_cfg,
+csr_update_he_caps_mcs(struct mac_context *mac,
+		       struct wlan_mlme_cfg *mlme_cfg,
 		       struct csr_roam_session *csr_session)
 {
 }
@@ -14681,15 +14631,27 @@ static void csr_handle_iot_ap_no_common_he_rates(struct mac_context *mac,
 					uint32_t *dot11mode)
 {
 	uint16_t int_mcs;
+	struct wlan_objmgr_vdev *vdev;
+	struct mlme_legacy_priv *mlme_priv;
 
 	/* if the connection is not 11AX mode then return */
 	if (*dot11mode != MLME_DOT11_MODE_11AX)
 		return;
 
-	int_mcs = HE_INTERSECT_MCS(session->he_config.tx_he_mcs_map_lt_80,
+	vdev = wlan_objmgr_get_vdev_by_id_from_psoc(mac->psoc,
+						    session->vdev_id,
+						    WLAN_LEGACY_SME_ID);
+	if (!vdev)
+		return;
+	mlme_priv = wlan_vdev_mlme_get_ext_hdl(vdev);
+	if (!mlme_priv) {
+		wlan_objmgr_vdev_release_ref(vdev, WLAN_LEGACY_SME_ID);
+		return;
+	}
+	int_mcs = HE_INTERSECT_MCS(mlme_priv->he_config.tx_he_mcs_map_lt_80,
 				   ies->he_cap.rx_he_mcs_map_lt_80);
 	sme_debug("HE self rates %x AP rates %x int_mcs %x vendorIE %d",
-		  session->he_config.rx_he_mcs_map_lt_80,
+		  mlme_priv->he_config.rx_he_mcs_map_lt_80,
 		  ies->he_cap.rx_he_mcs_map_lt_80, int_mcs,
 		  ies->vendor_vht_ie.present);
 	if (ies->he_cap.present)
@@ -14699,6 +14661,7 @@ static void csr_handle_iot_ap_no_common_he_rates(struct mac_context *mac,
 			*dot11mode = MLME_DOT11_MODE_11AC;
 			sme_debug("No common 11AX rate. Force 11AC connection");
 	}
+	wlan_objmgr_vdev_release_ref(vdev, WLAN_LEGACY_SME_ID);
 }
 #else
 static void csr_handle_iot_ap_no_common_he_rates(struct mac_context *mac,
@@ -14894,6 +14857,10 @@ QDF_STATUS csr_send_join_req_msg(struct mac_context *mac, uint32_t sessionId,
 			      pProfile->negotiatedMCEncryptionType,
 			      mac->scan.countryCodeCurrent[0],
 			      mac->scan.countryCodeCurrent[1]);
+		wlan_rec_conn_info(sessionId, DEBUG_CONN_CONNECTING,
+				   pBssDescription->bssId,
+				   pProfile->negotiatedAuthType,
+				   pBssDescription->chan_freq);
 		/* bsstype */
 		dw_tmp = csr_translate_bsstype_to_mac_type
 						(pProfile->BSSType);
@@ -15038,7 +15005,7 @@ QDF_STATUS csr_send_join_req_msg(struct mac_context *mac, uint32_t sessionId,
 				  mac->roam.configParam.is_force_1x1);
 		}
 
-		csr_update_he_caps_mcs(mac->mlme_cfg, pSession);
+		csr_update_he_caps_mcs(mac, mac->mlme_cfg, pSession);
 		/*
 		 * If CCK WAR is set for current AP, update to firmware via
 		 * WMI_VDEV_PARAM_ABG_MODE_TX_CHAIN_NUM
@@ -15449,17 +15416,6 @@ QDF_STATUS csr_send_join_req_msg(struct mac_context *mac, uint32_t sessionId,
 		csr_join_req->txLdpcIniFeatureEnabled =
 			(uint8_t)mac->mlme_cfg->ht_caps.tx_ldpc_enable;
 
-		if ((csr_is11h_supported(mac)) &&
-			(WLAN_REG_IS_5GHZ_CH_FREQ(bss_freq)) &&
-			(pIes->Country.present) &&
-			(!mac->mlme_cfg->sap_cfg.country_code_priority)) {
-			csr_save_to_channel_power2_g_5_g(mac,
-				pIes->Country.num_triplets *
-				sizeof(tSirMacChanInfo),
-				(tSirMacChanInfo *)
-				(&pIes->Country.triplets[0]));
-			csr_apply_power2_current(mac);
-		}
 		/*
 		 * If RX LDPC has been disabled for 2.4GHz channels and enabled
 		 * for 5Ghz for STA like persona then here is how to handle
@@ -15477,15 +15433,6 @@ QDF_STATUS csr_send_join_req_msg(struct mac_context *mac, uint32_t sessionId,
 			(unsigned int)(*(uint32_t *) &csr_join_req->ht_config),
 			(unsigned int)(*(uint32_t *) &csr_join_req->
 			vht_config));
-
-		if (IS_DOT11_MODE_HE(csr_join_req->dot11mode)) {
-			csr_join_req_copy_he_cap(csr_join_req, pSession);
-			/* change the HE caps like sts per band */
-			if (!mac->usr_cfg_tx_bfee_nsts)
-				CSR_REVISE_REQ_HE_CAP_PER_BAND(csr_join_req,
-							       mac,
-							       bss_freq);
-		}
 
 		value = mac->mlme_cfg->vht_caps.vht_cap_info.su_bformee;
 		value1 = mac->mlme_cfg->vht_caps.vht_cap_info.tx_bfee_ant_supp;
@@ -16145,13 +16092,6 @@ QDF_STATUS csr_send_mb_start_bss_req_msg(struct mac_context *mac, uint32_t
 		     &pParam->extendedRateSet,
 		     sizeof(tSirMacRateSet));
 
-	if (IS_DOT11_MODE_HE(pMsg->dot11mode)) {
-		csr_start_bss_copy_he_cap(pMsg, pSession);
-		/* change the HE caps like sts per band */
-		CSR_REVISE_REQ_HE_CAP_PER_BAND(pMsg, mac,
-					       pParam->operation_chan_freq);
-	}
-
 	pMsg->add_ie_params = pParam->add_ie_params;
 	pMsg->obssEnabled = mac->roam.configParam.obssEnabled;
 	pMsg->sap_dot11mc = pParam->sap_dot11mc;
@@ -16441,12 +16381,6 @@ QDF_STATUS csr_setup_vdev_session(struct vdev_mlme_obj *vdev_mlme)
 			vht_cap_info->ampdu_len_exponent;
 
 	csr_update_session_he_cap(mac_ctx, session);
-
-	/*
-	 * Do not advertise requester role for SAP & responder role
-	 * for STA
-	 */
-	csr_init_session_twt_cap(session, vdev_mlme->mgmt.generic.type);
 
 	csr_send_set_ie(vdev_mlme->mgmt.generic.type,
 			vdev_mlme->mgmt.generic.subtype,
@@ -17591,6 +17525,9 @@ csr_create_roam_scan_offload_request(struct mac_context *mac_ctx,
 			mac_ctx->mlme_cfg->trig_min_rssi[DEAUTH_MIN_RSSI];
 	req_buf->min_rssi_params[BMISS_MIN_RSSI] =
 			mac_ctx->mlme_cfg->trig_min_rssi[BMISS_MIN_RSSI];
+	req_buf->min_rssi_params[MIN_RSSI_2G_TO_5G_ROAM] =
+			mac_ctx->mlme_cfg->trig_min_rssi[MIN_RSSI_2G_TO_5G_ROAM];
+
 	req_buf->score_delta_param[IDLE_ROAM_TRIGGER] =
 			mac_ctx->mlme_cfg->trig_score_delta[IDLE_ROAM_TRIGGER];
 	req_buf->score_delta_param[BTM_ROAM_TRIGGER] =
@@ -19861,6 +19798,9 @@ csr_cm_roam_scan_offload_ap_profile(struct mac_context *mac_ctx,
 			mac_ctx->mlme_cfg->trig_min_rssi[DEAUTH_MIN_RSSI];
 	params->min_rssi_params[BMISS_MIN_RSSI] =
 			mac_ctx->mlme_cfg->trig_min_rssi[BMISS_MIN_RSSI];
+	params->min_rssi_params[MIN_RSSI_2G_TO_5G_ROAM] =
+			mac_ctx->mlme_cfg->trig_min_rssi[MIN_RSSI_2G_TO_5G_ROAM];
+
 	params->score_delta_param[IDLE_ROAM_TRIGGER] =
 			mac_ctx->mlme_cfg->trig_score_delta[IDLE_ROAM_TRIGGER];
 	params->score_delta_param[BTM_ROAM_TRIGGER] =
@@ -22851,6 +22791,8 @@ csr_check_and_set_sae_single_pmk_cap(struct mac_context *mac_ctx,
 
 #define IS_ROAM_REASON_STA_KICKOUT(reason) ((reason & 0xF) == \
 	WMI_ROAM_TRIGGER_REASON_STA_KICKOUT)
+#define IS_ROAM_REASON_DISCONNECTION(reason) ((reason & 0xF) == \
+	WMI_ROAM_TRIGGER_REASON_DEAUTH)
 
 static QDF_STATUS
 csr_process_roam_sync_callback(struct mac_context *mac_ctx,
@@ -22907,7 +22849,10 @@ csr_process_roam_sync_callback(struct mac_context *mac_ctx,
 	sme_debug("LFR3: reason: %d roam invoke in progress %d, source %d",
 		  reason, vdev_roam_params->roam_invoke_in_progress,
 		  vdev_roam_params->source);
-
+	if (reason == SIR_ROAM_SYNCH_PROPAGATION)
+		wlan_rec_conn_info(session_id, DEBUG_CONN_ROAMING,
+				   bss_desc ? bss_desc->bssId : NULL,
+				   reason, session->connectState);
 	switch (reason) {
 	case SIR_ROAMING_DEREGISTER_STA:
 		/*
@@ -23319,9 +23264,8 @@ csr_process_roam_sync_callback(struct mac_context *mac_ctx,
 		roam_synch_data->join_rsp->tspecIeLen);
 #endif
 
-	QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
-		FL("LFR3: RIC length - %d"),
-		roam_synch_data->join_rsp->parsedRicRspLen);
+	sme_debug("LFR3: RIC length - %d",
+		  roam_synch_data->join_rsp->parsedRicRspLen);
 	if (len) {
 		session->connectedInfo.pbFrames =
 			qdf_mem_malloc(len);
@@ -23437,6 +23381,12 @@ csr_process_roam_sync_callback(struct mac_context *mac_ctx,
 	csr_roam_call_callback(mac_ctx, session_id, roam_info, 0,
 		eCSR_ROAM_ASSOCIATION_COMPLETION, eCSR_ROAM_RESULT_ASSOCIATED);
 	csr_reset_pmkid_candidate_list(mac_ctx, session_id);
+
+	if (IS_ROAM_REASON_DISCONNECTION(roam_synch_data->roamReason))
+		sme_qos_csr_event_ind(mac_ctx, session_id,
+				      SME_QOS_CSR_DISCONNECT_ROAM_COMPLETE,
+				      NULL);
+
 	if (!CSR_IS_WAIT_FOR_KEY(mac_ctx, session_id)) {
 		QDF_TRACE(QDF_MODULE_ID_SME,
 				QDF_TRACE_LEVEL_DEBUG,

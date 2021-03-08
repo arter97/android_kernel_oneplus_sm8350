@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2020 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2021 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -335,8 +335,9 @@ QDF_STATUS policy_mgr_update_connection_info(struct wlan_objmgr_psoc *psoc,
 		}
 		conn_index++;
 	}
-	qdf_mutex_release(&pm_ctx->qdf_conc_list_lock);
+
 	if (!found) {
+		qdf_mutex_release(&pm_ctx->qdf_conc_list_lock);
 		/* err msg */
 		policy_mgr_err("can't find vdev_id %d in pm_conc_connection_list",
 			vdev_id);
@@ -346,11 +347,13 @@ QDF_STATUS policy_mgr_update_connection_info(struct wlan_objmgr_psoc *psoc,
 		status = pm_ctx->wma_cbacks.wma_get_connection_info(
 				vdev_id, &conn_table_entry);
 		if (QDF_STATUS_SUCCESS != status) {
+			qdf_mutex_release(&pm_ctx->qdf_conc_list_lock);
 			policy_mgr_err("can't find vdev_id %d in connection table",
 			vdev_id);
 			return status;
 		}
 	} else {
+		qdf_mutex_release(&pm_ctx->qdf_conc_list_lock);
 		policy_mgr_err("wma_get_connection_info is NULL");
 		return QDF_STATUS_E_FAILURE;
 	}
@@ -378,7 +381,7 @@ QDF_STATUS policy_mgr_update_connection_info(struct wlan_objmgr_psoc *psoc,
 			policy_mgr_get_bw(conn_table_entry.chan_width),
 			conn_table_entry.mac_id, chain_mask,
 			nss, vdev_id, true, true, conn_table_entry.ch_flagext);
-
+	qdf_mutex_release(&pm_ctx->qdf_conc_list_lock);
 	/* do we need to change the HW mode */
 	policy_mgr_check_n_start_opportunistic_timer(psoc);
 
@@ -2503,77 +2506,6 @@ QDF_STATUS policy_mgr_set_connection_update(struct wlan_objmgr_psoc *psoc)
 
 	return QDF_STATUS_SUCCESS;
 }
-
-QDF_STATUS
-policy_mgr_wait_for_dual_mac_configuration(struct wlan_objmgr_psoc *psoc)
-{
-	QDF_STATUS status;
-	struct policy_mgr_psoc_priv_obj *policy_mgr_context;
-
-	policy_mgr_context = policy_mgr_get_context(psoc);
-	if (!policy_mgr_context) {
-		policy_mgr_err("Invalid context");
-		return QDF_STATUS_E_FAILURE;
-	}
-
-	status = qdf_wait_single_event(
-		   &policy_mgr_context->dual_mac_configuration_complete_evt,
-		   DUAL_MAC_CONFIG_TIMEOUT);
-
-	if (!QDF_IS_STATUS_SUCCESS(status)) {
-		policy_mgr_err("wait for event failed");
-		return QDF_STATUS_E_FAILURE;
-	}
-
-	return QDF_STATUS_SUCCESS;
-}
-
-QDF_STATUS
-policy_mgr_dual_mac_configuration_complete(struct wlan_objmgr_psoc *psoc)
-{
-	QDF_STATUS status;
-	struct policy_mgr_psoc_priv_obj *policy_mgr_context;
-
-	policy_mgr_context = policy_mgr_get_context(psoc);
-	if (!policy_mgr_context) {
-		policy_mgr_err("Invalid context");
-		return QDF_STATUS_E_FAILURE;
-	}
-
-	status = qdf_event_set(
-		   &policy_mgr_context->dual_mac_configuration_complete_evt);
-
-	if (!QDF_IS_STATUS_SUCCESS(status)) {
-		policy_mgr_err("set event failed");
-		return QDF_STATUS_E_FAILURE;
-	}
-
-	return QDF_STATUS_SUCCESS;
-}
-
-QDF_STATUS
-policy_mgr_reset_dual_mac_configuration(struct wlan_objmgr_psoc *psoc)
-{
-	QDF_STATUS status;
-	struct policy_mgr_psoc_priv_obj *policy_mgr_context;
-
-	policy_mgr_context = policy_mgr_get_context(psoc);
-	if (!policy_mgr_context) {
-		policy_mgr_err("Invalid context");
-		return QDF_STATUS_E_FAILURE;
-	}
-
-	status = qdf_event_reset(
-		&policy_mgr_context->dual_mac_configuration_complete_evt);
-
-	if (!QDF_IS_STATUS_SUCCESS(status)) {
-		policy_mgr_err("clear event failed");
-		return QDF_STATUS_E_FAILURE;
-	}
-
-	return QDF_STATUS_SUCCESS;
-}
-
 
 QDF_STATUS policy_mgr_set_chan_switch_complete_evt(
 		struct wlan_objmgr_psoc *psoc)
