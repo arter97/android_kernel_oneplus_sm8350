@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2020 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2021 The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
  *
@@ -257,9 +257,11 @@ struct sde_crtc_misr_info {
  * @ad_active     : list containing ad properties that are active
  * @crtc_lock     : crtc lock around create, destroy and access.
  * @frame_pending : Whether or not an update is pending
+ * @kickoff_in_progress : boolean entry to check if kickoff is in progress
  * @frame_events  : static allocation of in-flight frame events
  * @frame_event_list : available frame event list
- * @spin_lock     : spin lock for frame event, transaction status, etc...
+ * @spin_lock     : spin lock for transaction status, etc...
+ * @fevent_spin_lock     : spin lock for frame event
  * @event_thread  : Pointer to event handler thread
  * @event_worker  : Event worker queue
  * @event_cache   : Local cache of event worker structures
@@ -286,6 +288,7 @@ struct sde_crtc_misr_info {
  * @ltm_buffer_lock : muttx to protect ltm_buffers allcation and free
  * @ltm_lock        : Spinlock to protect ltm buffer_cnt, hist_en and ltm lists
  * @needs_hw_reset  : Initiate a hw ctl reset
+ * @hist_irq_idx    : hist interrupt irq idx
  * @src_bpp         : source bpp used to calculate compression ratio
  * @target_bpp      : target bpp used to calculate compression ratio
  * @static_cache_read_work: delayed worker to transition cache state to read
@@ -341,6 +344,8 @@ struct sde_crtc {
 	struct sde_crtc_frame_event frame_events[SDE_CRTC_FRAME_EVENT_SIZE];
 	struct list_head frame_event_list;
 	spinlock_t spin_lock;
+	spinlock_t fevent_spin_lock;
+	bool kickoff_in_progress;
 
 	/* for handling internal event thread */
 	struct sde_crtc_event event_cache[SDE_CRTC_MAX_EVENT_COUNT];
@@ -374,6 +379,7 @@ struct sde_crtc {
 	struct mutex ltm_buffer_lock;
 	spinlock_t ltm_lock;
 	bool needs_hw_reset;
+	int hist_irq_idx;
 
 	int src_bpp;
 	int target_bpp;
