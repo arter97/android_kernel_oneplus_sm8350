@@ -175,6 +175,7 @@ int brightness_to_alpha_debug(int fb, int fa, int ab, int aa, int cb)
 		return interpolate(cb, fb, ab, fa, aa);
 }
 
+bool oneplus_dimlayer_hbm_enable;
 int oneplus_get_panel_brightness_to_alpha(void)
 {
 	struct dsi_display *display = get_main_display();
@@ -188,7 +189,7 @@ int oneplus_get_panel_brightness_to_alpha(void)
 		return brightness_to_alpha_debug(front_brightness, front_alpha, after_brightness, after_alpha, cur_brightness);
 	}
 
-	if (display->panel->dim_status)
+	if (oneplus_dimlayer_hbm_enable)
 		return brightness_to_alpha(display->panel->hbm_backlight);
 	else
 		return bl_to_alpha_dc(display->panel->hbm_backlight);
