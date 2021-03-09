@@ -1720,6 +1720,7 @@ static int mhi_dev_process_stop_cmd(struct mhi_dev_ring *ring, uint32_t ch_id,
 				sizeof(struct mhi_dev_ch_ctx) * ch_id;
 		data_transfer.device_pa = mhi->ch_ctx_shadow.device_pa +
 				sizeof(struct mhi_dev_ch_ctx) * ch_id;
+	}
 	data_transfer.size = sizeof(enum mhi_dev_ch_ctx_state);
 	data_transfer.virt_addr = &mhi->ch_ctx_cache[ch_id].ch_state;
 
@@ -1798,7 +1799,7 @@ static void mhi_dev_process_reset_cmd(struct mhi_dev *mhi, int ch_id)
 	ch->reset_pending = false;
 }
 
-static void mhi_dev_process_cmd_ring(struct mhi_dev *mhi,
+static int mhi_dev_process_cmd_ring(struct mhi_dev *mhi,
 			union mhi_dev_ring_element_type *el, void *ctx)
 {
 	int rc = 0;
@@ -1827,7 +1828,7 @@ static void mhi_dev_process_cmd_ring(struct mhi_dev *mhi,
 				if (rc)
 					mhi_log(MHI_MSG_ERROR,
 						"Error with compl event\n");
-				return;
+				return rc;
 			}
 			goto send_start_completion_event;
 		} else {
@@ -1860,7 +1861,7 @@ static void mhi_dev_process_cmd_ring(struct mhi_dev *mhi,
 			if (rc)
 				mhi_log(MHI_MSG_ERROR,
 					"Error with compl event\n");
-			return;
+			return rc;
 		}
 
 		mhi->ring[mhi->ch_ring_start + ch_id].state =
@@ -1886,7 +1887,7 @@ static void mhi_dev_process_cmd_ring(struct mhi_dev *mhi,
 					mhi_log(MHI_MSG_ERROR,
 					"error starting event ring %d\n",
 					mhi->ch_ctx_cache[ch_id].err_indx);
-					return;
+					return rc;
 				}
 			}
 			mutex_lock(&mhi->ch[ch_id].ch_lock);
@@ -1941,7 +1942,7 @@ send_start_completion_event:
 			rc = mhi_dev_send_event(mhi, 0, &event);
 			if (rc) {
 				pr_err("stop event send failed\n");
-				return;
+				return rc;
 			}
 		} else {
 			/*
@@ -1954,7 +1955,7 @@ send_start_completion_event:
 			ring = &mhi->ring[ch_id + mhi->ch_ring_start];
 			if (ring->state == RING_STATE_UINT) {
 				pr_err("Channel not opened for %d\n", ch_id);
-				return;
+				return -EINVAL;
 			}
 
 			ch = &mhi->ch[ch_id];
@@ -2001,7 +2002,7 @@ send_start_completion_event:
 			rc = mhi_dev_send_event(mhi, 0, &event);
 			if (rc) {
 				pr_err("stop event send failed\n");
-				return;
+				return rc;
 			}
 		} else {
 
@@ -2012,7 +2013,7 @@ send_start_completion_event:
 			ring = &mhi->ring[ch_id + mhi->ch_ring_start];
 			if (ring->state == RING_STATE_UINT) {
 				pr_err("Channel not opened for %d\n", ch_id);
-				return;
+				return -EINVAL;
 			}
 			ch = &mhi->ch[ch_id];
 			mutex_lock(&ch->ch_lock);
@@ -2024,7 +2025,8 @@ send_start_completion_event:
 				ch->reset_pending = true;
 				mutex_unlock(&ch->ring->event_lock);
 				mutex_unlock(&ch->ch_lock);
-				return;
+				rc = -EBUSY;
+				return rc;
 			}
 			mhi_dev_process_reset_cmd(mhi, ch_id);
 			mutex_unlock(&ch->ring->event_lock);
@@ -2039,9 +2041,10 @@ send_start_completion_event:
 		pr_err("%s: Invalid command:%d\n", __func__, el->generic.type);
 		break;
 	}
+	return rc;
 }
 
-static void mhi_dev_process_tre_ring(struct mhi_dev *mhi,
+static int mhi_dev_process_tre_ring(struct mhi_dev *mhi,
 			union mhi_dev_ring_element_type *el, void *ctx)
 {
 	struct mhi_dev_ring *ring = (struct mhi_dev_ring *)ctx;
@@ -2052,7 +2055,7 @@ static void mhi_dev_process_tre_ring(struct mhi_dev *mhi,
 		mhi_log(MHI_MSG_VERBOSE,
 			"invalid channel ring id (%d), should be < %lu\n",
 			ring->id, mhi->ch_ring_start);
-		return;
+		return -EINVAL;
 	}
 
 	ch = &mhi->ch[ring->id - mhi->ch_ring_start];
@@ -2066,6 +2069,7 @@ static void mhi_dev_process_tre_ring(struct mhi_dev *mhi,
 	 */
 	if (ch->active_client && ch->active_client->event_trigger != NULL)
 		ch->active_client->event_trigger(&reason);
+	return 0;
 }
 
 static void mhi_dev_process_ring_pending(struct work_struct *work)
@@ -2080,7 +2084,7 @@ static void mhi_dev_process_ring_pending(struct work_struct *work)
 	mutex_lock(&mhi_ctx->mhi_lock);
 
 	rc = mhi_dev_process_ring(&mhi->ring[mhi->cmd_ring_idx]);
-	if (rc) {
+	if (rc && rc != -EBUSY) {
 		mhi_log(MHI_MSG_ERROR, "error processing command ring\n");
 		goto exit;
 	}
@@ -2107,6 +2111,7 @@ static void mhi_dev_process_ring_pending(struct work_struct *work)
 			goto exit;
 		}
 		ch->db_pending = false;
+		mutex_unlock(&ch->ch_lock);
 
 		if (ch->reset_pending) {
 			/*
@@ -2117,9 +2122,13 @@ static void mhi_dev_process_ring_pending(struct work_struct *work)
 			ch_id = ch->ch_id;
 			mhi_log(MHI_MSG_VERBOSE,
 				"processing pending ch:%d reset\n", ch_id);
-			mutex_lock(&ch->ring->event_lock);
-			mhi_dev_process_reset_cmd(mhi, ch_id);
-			mutex_unlock(&ch->ring->event_lock);
+			rc = mhi_dev_process_ring(
+				&mhi->ring[mhi->cmd_ring_idx]);
+			if (rc) {
+				mhi_log(MHI_MSG_ERROR,
+					"error processing command ring\n");
+				goto exit;
+			}
 		}
 
 		rc = mhi_dev_mmio_enable_chdb_a7(mhi, ch->ch_id);
@@ -2129,7 +2138,6 @@ static void mhi_dev_process_ring_pending(struct work_struct *work)
 			mutex_unlock(&ch->ch_lock);
 			goto exit;
 		}
-		mutex_unlock(&ch->ch_lock);
 	}
 
 exit:
