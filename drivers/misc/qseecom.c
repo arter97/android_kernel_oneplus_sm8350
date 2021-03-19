@@ -36,7 +36,7 @@
 #include <soc/qcom/qseecomi.h>
 #include <asm/cacheflush.h>
 #include "qseecom_kernel.h"
-#include <crypto/ice.h>
+#include <linux/crypto-qti-common.h>
 #include <linux/delay.h>
 #include <linux/signal.h>
 #include <linux/compat.h>
@@ -90,7 +90,9 @@
 #define TWO 2
 #define QSEECOM_UFS_ICE_CE_NUM 10
 #define QSEECOM_SDCC_ICE_CE_NUM 20
-#define QSEECOM_ICE_FDE_KEY_INDEX 0
+
+/* Assume the ice device contains 32 slots (0-31) and reserve the last one for the FDE  */
+#define QSEECOM_ICE_FDE_KEY_INDEX 31
 
 #define PHY_ADDR_4G	(1ULL<<32)
 
@@ -2655,6 +2657,11 @@ err_resp:
 			pr_warn("get cback req app_id = %d, resp->data = %d\n",
 				data->client.app_id, resp->data);
 			resp->resp_type = SMCINVOKE_RESULT_INBOUND_REQ_NEEDED;
+			/* We are here because scm call sent to TZ has requested
+			 * for another callback request. This call has been a
+			 * success and hence setting result = 0
+			 */
+			resp->result = 0;
 			break;
 		default:
 			pr_err("fail:resp res= %d,app_id = %d,lstr = %d\n",
@@ -6407,9 +6414,9 @@ static int qseecom_enable_ice_setup(int usage)
 	int ret = 0;
 
 	if (usage == QSEOS_KM_USAGE_UFS_ICE_DISK_ENCRYPTION)
-		ret = qcom_ice_setup_ice_hw("ufs", true);
+		ret = crypto_qti_ice_setup_ice_hw("ufs", true);
 	else if (usage == QSEOS_KM_USAGE_SDCC_ICE_DISK_ENCRYPTION)
-		ret = qcom_ice_setup_ice_hw("sdcc", true);
+		ret = crypto_qti_ice_setup_ice_hw("sdcc", true);
 
 	return ret;
 }
@@ -6419,9 +6426,9 @@ static int qseecom_disable_ice_setup(int usage)
 	int ret = 0;
 
 	if (usage == QSEOS_KM_USAGE_UFS_ICE_DISK_ENCRYPTION)
-		ret = qcom_ice_setup_ice_hw("ufs", false);
+		ret = crypto_qti_ice_setup_ice_hw("ufs", false);
 	else if (usage == QSEOS_KM_USAGE_SDCC_ICE_DISK_ENCRYPTION)
-		ret = qcom_ice_setup_ice_hw("sdcc", false);
+		ret = crypto_qti_ice_setup_ice_hw("sdcc", false);
 
 	return ret;
 }
@@ -8284,7 +8291,7 @@ long qseecom_ioctl(struct file *file,
 			pr_err("copy_from_user failed\n");
 			return -EFAULT;
 		}
-		qcom_ice_set_fde_flag(ice_data.flag);
+		crypto_qti_ice_set_fde_flag(ice_data.flag);
 		break;
 	}
 	case QSEECOM_IOCTL_FBE_CLEAR_KEY: {

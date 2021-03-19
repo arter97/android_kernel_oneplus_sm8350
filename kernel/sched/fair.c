@@ -6903,6 +6903,7 @@ compute_energy(struct task_struct *p, int dst_cpu, struct perf_domain *pd)
 	unsigned long cpu_cap = arch_scale_cpu_capacity(cpumask_first(pd_mask));
 #endif
 	unsigned long max_util = 0, sum_util = 0;
+	unsigned long energy = 0;
 	int cpu;
 	unsigned long cpu_util;
 
@@ -6945,7 +6946,11 @@ compute_energy(struct task_struct *p, int dst_cpu, struct perf_domain *pd)
 		max_util = max(max_util, cpu_util);
 	}
 
-	return em_pd_energy(pd->em_pd, max_util, sum_util);
+	trace_android_vh_em_pd_energy(pd->em_pd, max_util, sum_util, &energy);
+	if (!energy)
+		energy = em_pd_energy(pd->em_pd, max_util, sum_util);
+
+	return energy;
 }
 
 #ifdef CONFIG_SCHED_WALT
@@ -9142,9 +9147,10 @@ static inline void update_sg_lb_stats(struct lb_env *env,
 
 		sgs->group_load += cpu_runnable_load(rq);
 		sgs->group_util += cpu_util(i);
-		sgs->sum_nr_running += rq->cfs.h_nr_running;
 
 		nr_running = rq->nr_running;
+		sgs->sum_nr_running += nr_running;
+
 		if (nr_running > 1)
 			*sg_status |= SG_OVERLOAD;
 

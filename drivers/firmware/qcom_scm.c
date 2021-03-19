@@ -509,6 +509,13 @@ int qcom_scm_iommu_secure_unmap(u64 sec_id, int cbndx, unsigned long iova,
 }
 EXPORT_SYMBOL(qcom_scm_iommu_secure_unmap);
 
+int qcom_scm_mem_protect_audio(phys_addr_t paddr, size_t size)
+{
+	return __qcom_scm_mem_protect_audio(__scm ? __scm->dev : NULL,
+								paddr, size);
+}
+EXPORT_SYMBOL(qcom_scm_mem_protect_audio);
+
 /**
  * qcom_scm_assign_mem_regions() - Make a secure call to reassign memory
  *				   ownership of several memory regions
@@ -980,6 +987,15 @@ int qcom_scm_request_encrypted_log(phys_addr_t buf, size_t len,
 }
 EXPORT_SYMBOL(qcom_scm_request_encrypted_log);
 
+int qcom_scm_invoke_smc_legacy(phys_addr_t in_buf, size_t in_buf_size,
+		phys_addr_t out_buf, size_t out_buf_size, int32_t *result,
+		u64 *response_type, unsigned int *data)
+{
+	return __qcom_scm_invoke_smc_legacy(__scm->dev, in_buf, in_buf_size, out_buf,
+		out_buf_size, result, response_type, data);
+}
+EXPORT_SYMBOL(qcom_scm_invoke_smc_legacy);
+
 int qcom_scm_invoke_smc(phys_addr_t in_buf, size_t in_buf_size,
 		phys_addr_t out_buf, size_t out_buf_size, int32_t *result,
 		u64 *response_type, unsigned int *data)
@@ -1204,6 +1220,9 @@ early_initcall(scm_mem_protection_init);
 #if IS_MODULE(CONFIG_QCOM_SCM)
 static void __exit qcom_scm_exit(void)
 {
+#if IS_ENABLED(CONFIG_QCOM_SCM_QCPE)
+	__qcom_scm_qcpe_exit();
+#endif
 	platform_driver_unregister(&qcom_scm_driver);
 	qtee_shmbridge_driver_exit();
 }
