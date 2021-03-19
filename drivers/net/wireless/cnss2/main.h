@@ -343,7 +343,6 @@ enum cnss_bdf_type {
 	CNSS_BDF_BIN,
 	CNSS_BDF_ELF,
 	CNSS_BDF_REGDB = 4,
-	CNSS_BDF_DUMMY = 255,
 };
 
 enum cnss_cal_status {
@@ -565,4 +564,6 @@ int cnss_dev_specific_power_on(struct cnss_plat_data *plat_priv);
 int cnss_request_firmware_direct(struct cnss_plat_data *plat_priv,
 				 const struct firmware **fw_entry,
 				 const char *filename);
+void cnss_disable_redundant_vreg(struct cnss_plat_data *plat_priv);
+
 #endif /* _CNSS_MAIN_H */
