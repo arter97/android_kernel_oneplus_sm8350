@@ -22,6 +22,7 @@
 #include <linux/regmap.h>
 #include <linux/slab.h>
 #include <linux/spmi.h>
+#include <linux/suspend.h>
 #include <linux/input/qpnp-power-on.h>
 #include <linux/regulator/driver.h>
 #include <linux/regulator/machine.h>
@@ -2551,9 +2552,31 @@ static int qpnp_pon_freeze(struct device *dev)
 	return rc;
 }
 
+static int qpnp_pon_suspend(struct device *dev)
+{
+#ifdef CONFIG_DEEPSLEEP
+	if (mem_sleep_current == PM_SUSPEND_MEM)
+		return qpnp_pon_freeze(dev);
+#endif
+
+	return 0;
+}
+
+static int qpnp_pon_resume(struct device *dev)
+{
+#ifdef CONFIG_DEEPSLEEP
+	if (mem_sleep_current == PM_SUSPEND_MEM)
+		return qpnp_pon_restore(dev);
+#endif
+
+	return 0;
+}
+
 static const struct dev_pm_ops qpnp_pon_pm_ops = {
 	.freeze = qpnp_pon_freeze,
 	.restore = qpnp_pon_restore,
+	.suspend = qpnp_pon_suspend,
+	.resume = qpnp_pon_resume,
 };
 #endif
 
