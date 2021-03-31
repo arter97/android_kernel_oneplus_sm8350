@@ -1266,7 +1266,7 @@ static int ata_scsi_dev_config(struct scsi_device *sdev,
 		blk_queue_update_dma_pad(q, ATA_DMA_PAD_SZ - 1);
 
 		/* configure draining */
-		buf = kmalloc(ATAPI_MAX_DRAIN, q->bounce_gfp | GFP_KERNEL);
+		buf = kmalloc(ATAPI_MAX_DRAIN, GFP_NOIO);
 		if (!buf) {
 			ata_dev_err(dev, "drain buffer allocation failed\n");
 			return -ENOMEM;
