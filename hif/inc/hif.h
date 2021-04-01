@@ -1305,6 +1305,28 @@ int hif_apps_enable_irq_wake(struct hif_opaque_softc *hif_ctx);
  */
 int hif_apps_disable_irq_wake(struct hif_opaque_softc *hif_ctx);
 
+/**
+ * hif_apps_enable_irqs_except_wake_irq() - Enables all irqs except wake_irq
+ * @hif_ctx: an opaque HIF handle to use
+ *
+ * As opposed to the standard hif_irq_enable, this function always applies to
+ * the APPS side kernel interrupt handling.
+ *
+ * Return: errno
+ */
+int hif_apps_enable_irqs_except_wake_irq(struct hif_opaque_softc *hif_ctx);
+
+/**
+ * hif_apps_disable_irqs_except_wake_irq() - Disables all irqs except wake_irq
+ * @hif_ctx: an opaque HIF handle to use
+ *
+ * As opposed to the standard hif_irq_disable, this function always applies to
+ * the APPS side kernel interrupt handling.
+ *
+ * Return: errno
+ */
+int hif_apps_disable_irqs_except_wake_irq(struct hif_opaque_softc *hif_ctx);
+
 #ifdef FEATURE_RUNTIME_PM
 int hif_pre_runtime_suspend(struct hif_opaque_softc *hif_ctx);
 void hif_pre_runtime_resume(struct hif_opaque_softc *hif_ctx);
@@ -1676,4 +1698,36 @@ static inline void hif_config_irq_set_perf_affinity_hint(
 {
 }
 #endif
+
+/**
+ * hif_apps_grp_irqs_enable() - enable ext grp irqs
+ * @hif - HIF opaque context
+ *
+ * Return: 0 on success. Error code on failure.
+ */
+int hif_apps_grp_irqs_enable(struct hif_opaque_softc *hif_ctx);
+
+/**
+ * hif_apps_grp_irqs_disable() - disable ext grp irqs
+ * @hif - HIF opaque context
+ *
+ * Return: 0 on success. Error code on failure.
+ */
+int hif_apps_grp_irqs_disable(struct hif_opaque_softc *hif_ctx);
+
+/**
+ * hif_disable_grp_irqs() - disable ext grp irqs
+ * @hif - HIF opaque context
+ *
+ * Return: 0 on success. Error code on failure.
+ */
+int hif_disable_grp_irqs(struct hif_opaque_softc *scn);
+
+/**
+ * hif_enable_grp_irqs() - enable ext grp irqs
+ * @hif - HIF opaque context
+ *
+ * Return: 0 on success. Error code on failure.
+ */
+int hif_enable_grp_irqs(struct hif_opaque_softc *scn);
 #endif /* _HIF_H_ */
