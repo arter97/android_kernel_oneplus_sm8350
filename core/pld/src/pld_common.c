@@ -2014,9 +2014,12 @@ int pld_smmu_unmap(struct device *dev,
 	case PLD_BUS_TYPE_PCIE:
 		ret = pld_pcie_smmu_unmap(dev, iova_addr, size);
 		break;
-	case PLD_BUS_TYPE_PCIE_FW_SIM:
-	case PLD_BUS_TYPE_SNOC_FW_SIM:
 	case PLD_BUS_TYPE_IPCI:
+		ret = pld_ipci_smmu_unmap(dev, iova_addr, size);
+		break;
+	case PLD_BUS_TYPE_PCIE_FW_SIM:
+	case PLD_BUS_TYPE_IPCI_FW_SIM:
+	case PLD_BUS_TYPE_SNOC_FW_SIM:
 		pr_err("Not supported on type %d\n", type);
 		break;
 	default:
