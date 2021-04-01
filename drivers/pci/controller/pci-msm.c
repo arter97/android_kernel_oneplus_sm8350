@@ -851,6 +851,9 @@ struct msm_pcie_dev_t {
 	bool drv_supported;
 
 	void (*rumi_init)(struct msm_pcie_dev_t *pcie_dev);
+
+	u32 *filtered_bdfs;
+	u32 bdf_count;
 };
 
 struct msm_root_dev_t {
@@ -3004,7 +3007,7 @@ static int msm_pcie_oper_conf(struct pci_bus *bus, u32 devfn, int oper,
 	struct msm_pcie_dev_t *dev;
 	void __iomem *config_base;
 	bool rc = false;
-	u32 rc_idx;
+	u32 rc_idx, *filtered_bdf;
 	int rv = 0;
 	u32 bdf = BDF_OFFSET(bus->number, devfn);
 	int i;
@@ -3058,6 +3061,19 @@ static int msm_pcie_oper_conf(struct pci_bus *bus, u32 devfn, int oper,
 			*val = ~0;
 			rv = PCIBIOS_DEVICE_NOT_FOUND;
 			goto unlock;
+	}
+
+	/* 32-bit BDF filtering */
+	if (dev->bdf_count) {
+		i = dev->bdf_count;
+		filtered_bdf = dev->filtered_bdfs;
+		while (i--) {
+			if (*filtered_bdf == bdf) {
+				*val = ~0;
+				goto unlock;
+			}
+			filtered_bdf++;
+		}
 	}
 
 	if (!rc && !dev->enumerated)
@@ -5230,12 +5246,14 @@ static void msm_pcie_handle_linkdown(struct msm_pcie_dev_t *dev)
 	dev->link_status = MSM_PCIE_LINK_DOWN;
 	dev->shadow_en = false;
 
-	/* PCIe registers dump on link down */
-	PCIE_DUMP(dev, "PCIe:Linkdown IRQ for RC%d Dumping PCIe registers\n",
-		dev->rc_idx);
-	pcie_phy_dump(dev);
-	pcie_parf_dump(dev);
-	pcie_dm_core_dump(dev);
+	if (!dev->suspending) {
+		/* PCIe registers dump on link down */
+		PCIE_DUMP(dev, "PCIe:Linkdown IRQ for RC%d Dumping PCIe registers\n",
+			dev->rc_idx);
+		pcie_phy_dump(dev);
+		pcie_parf_dump(dev);
+		pcie_dm_core_dump(dev);
+	}
 
 	/* assert PERST */
 	if (!(msm_pcie_keep_resources_on & BIT(dev->rc_idx)))
@@ -5932,7 +5950,7 @@ static int msm_pcie_probe(struct platform_device *pdev)
 {
 	int ret = 0;
 	int rc_idx = -1;
-	int i, j;
+	int i, j, size;
 	struct msm_pcie_dev_t *pcie_dev;
 	struct device_node *of_node;
 
@@ -6243,6 +6261,23 @@ static int msm_pcie_probe(struct platform_device *pdev)
 	msm_pcie_sysfs_init(pcie_dev);
 
 	pcie_dev->drv_ready = true;
+
+	of_get_property(pdev->dev.of_node, "qcom,filtered-bdfs", &size);
+	if (size) {
+		pcie_dev->filtered_bdfs = devm_kzalloc(&pdev->dev, size,
+						       GFP_KERNEL);
+		if (!pcie_dev->filtered_bdfs)
+			return -ENOMEM;
+
+		pcie_dev->bdf_count = size / sizeof(*pcie_dev->filtered_bdfs);
+
+		ret = of_property_read_u32_array(pdev->dev.of_node,
+						 "qcom,filtered-bdfs",
+						 pcie_dev->filtered_bdfs,
+						 pcie_dev->bdf_count);
+		if (ret)
+			pcie_dev->bdf_count = 0;
+	}
 
 	if (pcie_dev->boot_option & MSM_PCIE_NO_PROBE_ENUMERATION) {
 		PCIE_DBG(pcie_dev,
