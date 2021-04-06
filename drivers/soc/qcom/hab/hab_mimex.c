@@ -83,7 +83,7 @@ struct export_desc_super *habmem_add_export(
 	if (!vchan || !sizebytes)
 		return NULL;
 
-	exp_super = kzalloc(sizebytes, GFP_KERNEL);
+	exp_super = vzalloc(sizebytes);
 	if (!exp_super)
 		return NULL;
 
@@ -169,7 +169,7 @@ static void habmem_export_destroy(struct kref *refcount)
 	spin_unlock(&pchan->expid_lock);
 
 	habmem_exp_release(exp_super);
-	kfree(exp_super);
+	vfree(exp_super);
 }
 
 /*

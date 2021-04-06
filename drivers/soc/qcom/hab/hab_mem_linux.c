@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 #include "hab.h"
 #include <linux/fdtable.h>
@@ -54,13 +54,13 @@ static struct pages_list *pages_list_create(
 	}
 
 	size = exp->payload_count * sizeof(struct page *);
-	pages = kmalloc(size, GFP_KERNEL);
+	pages = vmalloc(size);
 	if (!pages)
 		return ERR_PTR(-ENOMEM);
 
 	pglist = kzalloc(sizeof(*pglist), GFP_KERNEL);
 	if (!pglist) {
-		kfree(pages);
+		vfree(pages);
 		return ERR_PTR(-ENOMEM);
 	}
 
@@ -114,7 +114,7 @@ static void pages_list_destroy(struct kref *refcount)
 	if (pglist->type == HAB_PAGE_LIST_IMPORT)
 		pages_list_remove(pglist);
 
-	kfree(pglist->pages);
+	vfree(pglist->pages);
 
 	kfree(pglist);
 }
@@ -209,7 +209,7 @@ static struct dma_buf *habmem_get_dma_buf_from_uva(unsigned long address,
 	struct pages_list *pglist = NULL;
 	DEFINE_DMA_BUF_EXPORT_INFO(exp_info);
 
-	pages = kmalloc_array(page_count, sizeof(struct page *), GFP_KERNEL);
+	pages = vmalloc((page_count * sizeof(struct page *)));
 	if (!pages) {
 		ret = -ENOMEM;
 		goto err;
@@ -256,7 +256,7 @@ static struct dma_buf *habmem_get_dma_buf_from_uva(unsigned long address,
 	return dmabuf;
 
 err:
-	kfree(pages);
+	vfree(pages);
 	kfree(pglist);
 	return ERR_PTR(ret);
 }
@@ -415,7 +415,7 @@ static int habmem_add_export_compress(struct virtual_channel *vchan,
 	ret = habmem_compress_pfns(exp_super, pfns, payload_size);
 	if (ret) {
 		pr_err("hab compressed pfns failed %d\n", ret);
-		kfree(exp_super);
+		vfree(exp_super);
 		dma_buf_put((struct dma_buf *)buf);
 		*payload_size = 0;
 		goto err;
@@ -497,9 +497,8 @@ int habmem_hyp_grant(struct virtual_channel *vchan,
 	} else if (HABMM_EXPIMP_FLAGS_FD & flags)
 		dmabuf = dma_buf_get(address);
 	else { /*Input is kva;*/
-		pages = kmalloc_array(page_count,
-				sizeof(struct page *),
-				GFP_KERNEL);
+		pages = vmalloc((page_count *
+				sizeof(struct page *)));
 		if (!pages) {
 			ret = -ENOMEM;
 			goto err;
@@ -550,7 +549,7 @@ int habmem_hyp_grant(struct virtual_channel *vchan,
 
 	return ret;
 err:
-	kfree(pages);
+	vfree(pages);
 	kfree(pglist);
 	return ret;
 }
