@@ -956,6 +956,9 @@ static int crypto_qti_ice_enable_setup(struct ice_device *ice_dev)
 					__func__, ice_dev);
 			goto out;
 		}
+	} else {
+		pr_info("%s: No need to get regulator\n", __func__);
+		ret = 0;
 	}
 
 	/* Setup Clocks */
