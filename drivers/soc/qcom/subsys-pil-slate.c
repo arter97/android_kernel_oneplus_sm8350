@@ -19,6 +19,7 @@
 #include <soc/qcom/ramdump.h>
 #include <soc/qcom/subsystem_notif.h>
 #include <linux/highmem.h>
+#include <linux/qtee_shmbridge.h>
 
 #include "peripheral-loader.h"
 #include "../../misc/qseecom_kernel.h"
@@ -340,30 +341,20 @@ static int slate_auth_metadata(struct pil_desc *pil,
 {
 	struct pil_slate_data *slate_data = desc_to_data(pil);
 	struct tzapp_slate_req slate_tz_req;
-	void *mdata_buf;
-	dma_addr_t mdata_phys;
-	unsigned long attrs = 0;
-	struct device dev;
+	struct qtee_shm shm;
 	int ret;
 
-	arch_setup_dma_ops(&dev, 0, 0, NULL, 0);
-
-	dev.coherent_dma_mask = DMA_BIT_MASK(sizeof(dma_addr_t) * 8);
-	mdata_buf = dma_alloc_attrs(&dev, size,
-			&mdata_phys, GFP_KERNEL, attrs);
-
-	if (!mdata_buf) {
-		pr_err("SLATE_PIL: Allocation for metadata failed.\n");
-		return -ENOMEM;
-	}
+	ret = qtee_shmbridge_allocate_shm(size, &shm);
+	if (ret)
+		pr_err("Shmbridge memory allocation failed\n");
 
 	/* Make sure there are no mappings in PKMAP and fixmap */
 	kmap_flush_unused();
 
-	memcpy(mdata_buf, metadata, size);
+	memcpy(shm.vaddr, metadata, size);
 
 	slate_tz_req.tzapp_slate_cmd = SLATEPIL_AUTH_MDT;
-	slate_tz_req.address_fw = (phys_addr_t)mdata_phys;
+	slate_tz_req.address_fw = shm.paddr;
 	slate_tz_req.size_fw = size;
 
 	ret = slatepil_tzapp_comm(slate_data, &slate_tz_req);
@@ -373,7 +364,8 @@ static int slate_auth_metadata(struct pil_desc *pil,
 				__func__);
 		return slate_data->cmd_status;
 	}
-	dma_free_attrs(&dev, size, mdata_buf, mdata_phys, attrs);
+
+	qtee_shmbridge_free_shm(&shm);
 	pr_debug("SLATE MDT Authenticated\n");
 	return 0;
 }
@@ -432,7 +424,21 @@ static int slate_auth_and_xfer(struct pil_desc *pil)
 {
 	struct pil_slate_data *slate_data = desc_to_data(pil);
 	struct tzapp_slate_req slate_tz_req;
+	uint32_t ns_vmids[] = {VMID_HLOS};
+	uint32_t ns_vm_perms[] = {PERM_READ | PERM_WRITE};
+	u64 shm_bridge_handle;
 	int ret;
+
+	ret = qtee_shmbridge_register(slate_data->address_fw, slate_data->size_fw,
+		ns_vmids, ns_vm_perms, 1, PERM_READ|PERM_WRITE,
+		&shm_bridge_handle);
+
+	if (ret) {
+		pr_err("Failed to create shm bridge with physical address %p size  %ld ret=%d\n",
+			slate_data->address_fw, (long)slate_data->size_fw, ret);
+		pil_free_memory(&slate_data->desc);
+		return ret;
+	}
 
 	slate_tz_req.tzapp_slate_cmd = SLATEPIL_IMAGE_LOAD;
 	slate_tz_req.address_fw = slate_data->address_fw;
@@ -450,12 +456,14 @@ static int slate_auth_and_xfer(struct pil_desc *pil)
 		dev_err(pil->dev,
 			"%s: SLATEPIL_IMAGE_LOAD qseecom call failed\n",
 			__func__);
+		qtee_shmbridge_deregister(shm_bridge_handle);
 		pil_free_memory(&slate_data->desc);
 		return slate_data->cmd_status;
 	}
 	ret = slate_get_version(&slate_data->subsys_desc);
 	/* SLATE Transfer of image is complete, free up the memory */
 	pr_debug("SLATE Firmware authentication and transfer done\n");
+	qtee_shmbridge_deregister(shm_bridge_handle);
 	pil_free_memory(&slate_data->desc);
 	return 0;
 }
@@ -474,6 +482,9 @@ static int slate_ramdump(int enable, const struct subsys_desc *subsys)
 	struct pil_desc desc = slate_data->desc;
 	struct ramdump_segment *ramdump_segments;
 	struct tzapp_slate_req slate_tz_req;
+	uint32_t ns_vmids[] = {VMID_HLOS};
+	uint32_t ns_vm_perms[] = {PERM_READ | PERM_WRITE};
+	u64 shm_bridge_handle;
 	phys_addr_t start_addr;
 	void *region;
 	int ret;
@@ -492,6 +503,18 @@ static int slate_ramdump(int enable, const struct subsys_desc *subsys)
 			"SLATE PIL failure to allocate ramdump region of size %zx\n",
 			SLATE_RAMDUMP_SZ);
 		return -ENOMEM;
+	}
+
+	ret = qtee_shmbridge_register(start_addr, SLATE_RAMDUMP_SZ,
+		ns_vmids, ns_vm_perms, 1, PERM_READ|PERM_WRITE,
+		&shm_bridge_handle);
+
+	if (ret) {
+		pr_err("Failed to create shm bridge with physical address %p size  %ld ret=%d\n",
+		start_addr, (long)SLATE_RAMDUMP_SZ, ret);
+		dma_free_attrs(desc.dev, SLATE_RAMDUMP_SZ, region,
+			start_addr, desc.attrs);
+		return ret;
 	}
 
 	ramdump_segments = kcalloc(1, sizeof(*ramdump_segments), GFP_KERNEL);
