@@ -215,6 +215,7 @@ int qcom_scm_set_cold_boot_addr(void *entry, const cpumask_t *cpus)
 static inline
 int qcom_scm_set_warm_boot_addr(void *entry, const cpumask_t *cpus)
 		{ return -ENODEV; }
+static inline
 int qcom_scm_set_warm_boot_addr_mc(void *entry, u32 aff0, u32 aff1, u32 aff2,
 				   u32 flags)
 {

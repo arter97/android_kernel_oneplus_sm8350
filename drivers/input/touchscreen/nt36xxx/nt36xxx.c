@@ -976,6 +976,11 @@ static int nvt_ts_trusted_touch_pvm_vm_mode_enable(struct nvt_ts_data *ts)
 	struct trusted_touch_vm_info *vm_info = ts->vm_info;
 
 	atomic_set(&ts->trusted_touch_underway, 1);
+
+#if BOOT_UPDATE_FIRMWARE
+	if (nvt_fwu_wq)
+		cancel_delayed_work_sync(&ts->nvt_fwu_work);
+#endif
 	/* i2c session start and resource acquire */
 	if (nvt_ts_bus_get(ts) < 0) {
 		pr_err("nvt_ts_bus_get failed\n");
@@ -2035,6 +2040,14 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 #endif
 
 	mutex_lock(&ts->lock);
+
+#ifdef CONFIG_NOVATEK_TRUSTED_TOUCH
+#ifndef CONFIG_ARCH_QTI_VM
+	if (nvt_ts_trusted_touch_get_pvm_driver_state(ts) !=
+					TRUSTED_TOUCH_PVM_INIT)
+		return IRQ_HANDLED;
+#endif
+#endif
 
 	ret = CTP_I2C_READ(ts->client, I2C_FW_Address, point_data, POINT_DATA_LEN + 1);
 	if (ret < 0) {
@@ -3118,7 +3131,7 @@ static int32_t nvt_ts_resume(struct device *dev)
 		return 0;
 	}
 
-#ifdef CONFIG_ST_TRUSTED_TOUCH
+#ifdef CONFIG_NOVATEK_TRUSTED_TOUCH
 	if (atomic_read(&ts->trusted_touch_enabled))
 		wait_for_completion_interruptible(
 			&ts->trusted_touch_powerdown);

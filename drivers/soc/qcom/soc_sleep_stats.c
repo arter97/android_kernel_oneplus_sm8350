@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
 /*
- * Copyright (c) 2011-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2021, The Linux Foundation. All rights reserved.
  */
 
 #define pr_fmt(fmt) "%s: " fmt, __func__
@@ -187,7 +187,7 @@ static int soc_sleep_stats_probe(struct platform_device *pdev)
 {
 	struct soc_sleep_stats_data *drv;
 	struct resource *res;
-	void __iomem *offset_addr = NULL;
+	void __iomem *offset_addr;
 	uint32_t offset = 0;
 	int ret;
 
@@ -204,13 +204,13 @@ static int soc_sleep_stats_probe(struct platform_device *pdev)
 		return PTR_ERR(res);
 
 	if (drv->config->offset_addr) {
-		offset_addr = ioremap_nocache(res->start + drv->config->offset_addr,
-					      sizeof(u32));
-		if (IS_ERR(offset_addr))
-			return PTR_ERR(offset_addr);
+		offset_addr = devm_ioremap_nocache(&pdev->dev, res->start +
+						   drv->config->offset_addr,
+						   sizeof(u32));
+		if (!offset_addr)
+			return -ENOMEM;
 
 		offset = readl_relaxed(offset_addr);
-		iounmap(offset_addr);
 	}
 
 	drv->stats_base = res->start | offset;

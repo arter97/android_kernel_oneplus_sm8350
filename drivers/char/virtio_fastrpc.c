@@ -22,6 +22,7 @@
 #include <linux/virtio.h>
 #include <linux/virtio_config.h>
 #include <linux/uaccess.h>
+#include <linux/suspend.h>
 #include <soc/qcom/subsystem_notif.h>
 #include <soc/qcom/subsystem_restart.h>
 #include "adsprpc_compat.h"
@@ -546,7 +547,7 @@ static int virt_fastrpc_invoke(struct fastrpc_file *fl, uint32_t kernel,
 	remote_arg_t *lpra = NULL;
 	struct virt_fastrpc_buf *rpra;
 	struct virt_fastrpc_dmahandle *handle;
-	uint64_t *fdlist;
+	uint64_t *fdlist = NULL;
 	int *fds, outbufs_offset = 0;
 	unsigned int *attrs;
 	struct fastrpc_mmap **maps, *mmap = NULL;
@@ -753,7 +754,7 @@ static int virt_fastrpc_invoke(struct fastrpc_file *fl, uint32_t kernel,
 		struct scatterlist *sgl = NULL;
 		int index = 0, hlist;
 
-		if (maps[i]) {
+		if (fds && maps[i]) {
 			/* fill in dma handle list */
 			hlist = i - bufs;
 			handle[hlist].fd = fds[i];
@@ -787,6 +788,9 @@ static int virt_fastrpc_invoke(struct fastrpc_file *fl, uint32_t kernel,
 	wait_for_completion(&msg->work);
 
 	rsp = msg->rxbuf;
+	if (!rsp)
+		goto bail;
+
 	err = rsp->hdr.result;
 	if (err)
 		goto bail;
@@ -833,7 +837,7 @@ bail:
 	for (i = 0; i < bufs; i++)
 		fastrpc_mmap_free(maps[i], 0);
 
-	if (total) {
+	if (total && fdlist) {
 		for (i = 0; i < M_FDLIST; i++) {
 			if (!fdlist[i])
 				break;
@@ -943,7 +947,7 @@ static const struct file_operations debugfs_fops = {
 	.read = fastrpc_debugfs_read,
 };
 
-static inline void fastprc_free_pages(struct page **pages, int count)
+static inline void fastrpc_free_pages(struct page **pages, int count)
 {
 	while (count--)
 		__free_page(pages[count]);
@@ -996,7 +1000,7 @@ static struct page **fastrpc_alloc_pages(unsigned int count, gfp_t gfp)
 			__free_pages(page, order);
 		}
 		if (!page) {
-			fastprc_free_pages(pages, i);
+			fastrpc_free_pages(pages, i);
 			return NULL;
 		}
 		count -= order_size;
@@ -1030,7 +1034,7 @@ static struct page **fastrpc_alloc_buffer(struct fastrpc_buf *buf, gfp_t gfp)
 out_free_sg:
 	sg_free_table(&buf->sgt);
 out_free_pages:
-	fastprc_free_pages(pages, count);
+	fastrpc_free_pages(pages, count);
 	return NULL;
 }
 
@@ -1040,7 +1044,7 @@ static inline void fastrpc_free_buffer(struct fastrpc_buf *buf)
 
 	vunmap(buf->va);
 	sg_free_table(&buf->sgt);
-	fastprc_free_pages(buf->pages, count);
+	fastrpc_free_pages(buf->pages, count);
 }
 
 static void fastrpc_buf_free(struct fastrpc_buf *buf, int cache)
@@ -1343,6 +1347,9 @@ static int virt_fastrpc_munmap(struct fastrpc_file *fl, uintptr_t raddr,
 	wait_for_completion(&msg->work);
 
 	rsp = msg->rxbuf;
+	if (!rsp)
+		goto bail;
+
 	err = rsp->hdr.result;
 bail:
 	if (rsp) {
@@ -1429,9 +1436,6 @@ static int fastrpc_internal_munmap_fd(struct fastrpc_file *fl,
 	struct fastrpc_apps *me = fl->apps;
 	struct fastrpc_mmap *map = NULL;
 
-	VERIFY(err, (fl && ud));
-	if (err)
-		goto bail;
 	VERIFY(err, fl->dsp_proc_init == 1);
 	if (err) {
 		dev_err(me->dev, "%s: user application %s trying to unmap without initialization\n",
@@ -1516,6 +1520,9 @@ static int virt_fastrpc_mmap(struct fastrpc_file *fl, uint32_t flags,
 	wait_for_completion(&msg->work);
 
 	rsp = msg->rxbuf;
+	if (!rsp)
+		goto bail;
+
 	err = rsp->hdr.result;
 	if (err)
 		goto bail;
@@ -1646,6 +1653,9 @@ static int virt_fastrpc_control(struct fastrpc_file *fl,
 	wait_for_completion(&msg->work);
 
 	rsp = msg->rxbuf;
+	if (!rsp)
+		goto bail;
+
 	err = rsp->hdr.result;
 bail:
 	if (rsp) {
@@ -1760,6 +1770,9 @@ static int virt_fastrpc_open(struct fastrpc_file *fl)
 	wait_for_completion(&msg->work);
 
 	rsp = msg->rxbuf;
+	if (!rsp)
+		goto bail;
+
 	err = rsp->hdr.result;
 	if (err)
 		goto bail;
@@ -1831,6 +1844,9 @@ static int virt_fastrpc_close(struct fastrpc_file *fl)
 	wait_for_completion(&msg->work);
 
 	rsp = msg->rxbuf;
+	if (!rsp)
+		goto bail;
+
 	err = rsp->result;
 bail:
 	if (rsp) {
@@ -2221,6 +2237,40 @@ vqs_del:
 	return err;
 }
 
+/**
+ ** virtio_fastrpc_pm_notifier() - PM notifier callback function.
+ ** @nb:                Pointer to the notifier block.
+ ** @event:        Suspend state event from PM module.
+ ** @unused:        Null pointer from PM module.
+ **
+ ** This function is register as callback function to get notifications
+ ** from the PM module on the system suspend state.
+ **/
+static int virtio_fastrpc_pm_notifier(struct notifier_block *nb,
+					unsigned long event, void *unused)
+{
+	struct fastrpc_apps *me = &gfa;
+	unsigned long flags;
+	int i = 0;
+	struct virt_fastrpc_msg *msg;
+
+	if (event == PM_SUSPEND_PREPARE) {
+		spin_lock_irqsave(&me->msglock, flags);
+		for (i = 0; i < FASTRPC_MSG_MAX; i++) {
+			if (me->msgtable[i]) {
+				msg = me->msgtable[i];
+				complete(&msg->work);
+			}
+		}
+		spin_unlock_irqrestore(&me->msglock, flags);
+	}
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block virtio_fastrpc_pm_nb = {
+		.notifier_call = virtio_fastrpc_pm_notifier,
+};
+
 static int virt_fastrpc_probe(struct virtio_device *vdev)
 {
 	struct fastrpc_apps *me = &gfa;
@@ -2368,11 +2418,18 @@ static struct virtio_driver virtio_fastrpc_driver = {
 
 static int __init virtio_fastrpc_init(void)
 {
+	int ret;
+
+	ret = register_pm_notifier(&virtio_fastrpc_pm_nb);
+	if (ret)
+		pr_err("virtio_fastrpc: power state notif error\n");
+
 	return register_virtio_driver(&virtio_fastrpc_driver);
 }
 
 static void __exit virtio_fastrpc_exit(void)
 {
+	unregister_pm_notifier(&virtio_fastrpc_pm_nb);
 	unregister_virtio_driver(&virtio_fastrpc_driver);
 }
 module_init(virtio_fastrpc_init);

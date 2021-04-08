@@ -666,7 +666,7 @@ config QCOM_SECURE_BUFFER
 
 config QCOM_GLINK_PKT
 	tristate "Enable device interface for GLINK packet channels"
-	depends on QCOM_GLINK
+	depends on QCOM_GLINK || RPMSG_QCOM_GLINK_SLATECOM
 	help
 	  G-link packet driver provides the interface for the userspace
 	  clients to communicate over G-Link via device nodes.
@@ -1213,6 +1213,25 @@ config QTI_CRYPTO_TZ
 	 programmed and managed through SCM calls to TZ where ICE driver
 	 will configure keys.
 
+config QTI_CRYPTO_FDE
+	tristate "Enable common crypto functionality used for FDE"
+	depends on QTI_CRYPTO_COMMON
+	help
+	 Say 'Y' to enable hardware Full Disk Encryption implementation to be used by
+	 different storage layers such as UFS. Enabling the FDE will reserve one slot
+	 of KSM(Key Slot Manager) for the FDE. Making one less slot available for FBE
+	 (File based encryption) in case both encryption mechanism are enabled on device.
+
+config QTI_CRYPTO_VIRTUALIZATION
+	tristate "Enable hypervysor to be used for FBE"
+	depends on FS_ENCRYPTION_INLINE_CRYPT
+	depends on MSM_HAB
+	help
+	 Say 'Y' to enable routing of crypto requests to different operating
+	 system in virtualized environment. Driver uses a hardware abstraction(hab)
+	 layer where the APIs exposed by that operationg systems are used to send
+	 requests to perform the hardware crypto operation.
+
 config QTI_HW_KEY_MANAGER
 	tristate "Enable QTI Hardware Key Manager for storage encryption"
 	default n
@@ -1255,6 +1274,32 @@ config MSM_SLATECOM
 		communication between G-Link/slate_com_dev and Slate processor over SPI.
 		This handle the interrupts raised by BG and notify the G-link with
 		interrupt event and event data.
+
+config MSM_SLATECOM_INTERFACE
+	tristate "Driver support for Slate Communication"
+	depends on MSM_SLATECOM
+	help
+		Create a slate_com_dev device node for user space communication.
+		Single user space client can open device node for communication
+		from hardware. Hardware will provide access to read
+		registers and read/write AHB memory in the device.
+
+config QCOM_AOP_SET_DDR
+	tristate "Sysfs to communicate with AOP using QMP protocol"
+	help
+	  This options enables a driver which allows clients to send messages
+	  to Alway On processor using QMP transport. Users can echo a frequency
+	  into an exposed sysfs node to send to AOP. The driver expects the Cap
+	  frequency of DDR based on SKU.
+
+config DUMP_XBL_LOG
+	bool "print xbl log on console from fs"
+	help
+	  This driver is used to capture xbl log from reserved memory  region
+	  defined separately in each device tree and print on console when user
+	  requests. User can perform below command to print xbl log stored in
+	  reserved memory region:
+		cat /sys/module/xbl_log/xbl_log
 
 source "drivers/soc/qcom/icnss2/Kconfig"
 endmenu
