@@ -66,6 +66,7 @@ qca_wlan_vendor_twt_add_dialog_policy[QCA_WLAN_VENDOR_ATTR_TWT_SETUP_MAX + 1] = 
 	[QCA_WLAN_VENDOR_ATTR_TWT_SETUP_MAX_WAKE_DURATION] = {.type = NLA_U32 },
 	[QCA_WLAN_VENDOR_ATTR_TWT_SETUP_MIN_WAKE_INTVL] = {.type = NLA_U32 },
 	[QCA_WLAN_VENDOR_ATTR_TWT_SETUP_MAX_WAKE_INTVL] = {.type = NLA_U32 },
+	[QCA_WLAN_VENDOR_ATTR_TWT_SETUP_WAKE_INTVL2_MANTISSA] = {.type = NLA_U32 },
 };
 
 static const struct nla_policy
@@ -231,6 +232,16 @@ int hdd_twt_get_add_dialog_values(struct nlattr **tb,
 		return -EINVAL;
 	}
 	params->wake_intvl_mantis = nla_get_u32(tb[cmd_id]);
+
+	/*
+	 * If mantissa in microsecond is present then take precedence over
+	 * mantissa in TU. And send mantissa in microsecond to firmware.
+	 */
+	cmd_id = QCA_WLAN_VENDOR_ATTR_TWT_SETUP_WAKE_INTVL2_MANTISSA;
+	if (tb[cmd_id]) {
+		params->wake_intvl_mantis = nla_get_u32(tb[cmd_id]);
+	}
+
 	if (params->wake_intvl_mantis >
 	    TWT_SETUP_WAKE_INTVL_MANTISSA_MAX) {
 		hdd_err_rl("Invalid wake_intvl_mantis %u",
@@ -497,7 +508,7 @@ hdd_twt_pack_get_params_resp_nlmsg(struct wlan_objmgr_psoc *psoc,
 	enum qca_wlan_twt_setup_state converted_state;
 	uint64_t tsf_val;
 	uint32_t wake_duration;
-	uint32_t wake_intvl_mantis_tu;
+	uint32_t wake_intvl_mantis_us, wake_intvl_mantis_tu;
 	int i, attr;
 
 	config_attr = nla_nest_start(reply_skb,
@@ -565,7 +576,7 @@ hdd_twt_pack_get_params_resp_nlmsg(struct wlan_objmgr_psoc *psoc,
 			}
 		}
 
-		if (params[i].info_frame_disabled) {
+		if (!params[i].info_frame_disabled) {
 			attr = QCA_WLAN_VENDOR_ATTR_TWT_SETUP_TWT_INFO_ENABLED;
 			if (nla_put_flag(reply_skb, attr)) {
 				hdd_err("TWT: get_params put Info Enable fail");
@@ -581,6 +592,12 @@ hdd_twt_pack_get_params_resp_nlmsg(struct wlan_objmgr_psoc *psoc,
 			return QDF_STATUS_E_INVAL;
 		}
 
+		wake_intvl_mantis_us = params[i].wake_intvl_us;
+		attr = QCA_WLAN_VENDOR_ATTR_TWT_SETUP_WAKE_INTVL2_MANTISSA;
+		if (nla_put_u32(reply_skb, attr, wake_intvl_mantis_us)) {
+			hdd_err("TWT: get_params failed to put Wake Interval in us");
+			return QDF_STATUS_E_INVAL;
+		}
 		wake_intvl_mantis_tu = params[i].wake_intvl_us /
 				       TWT_WAKE_INTVL_MULTIPLICATION_FACTOR;
 		attr = QCA_WLAN_VENDOR_ATTR_TWT_SETUP_WAKE_INTVL_MANTISSA;
@@ -588,6 +605,9 @@ hdd_twt_pack_get_params_resp_nlmsg(struct wlan_objmgr_psoc *psoc,
 			hdd_err("TWT: get_params failed to put Wake Interval");
 			return QDF_STATUS_E_INVAL;
 		}
+
+		hdd_debug("TWT: Send mantissa_us:%d, mantissa_tu:%d to userspace",
+			   wake_intvl_mantis_us, wake_intvl_mantis_tu);
 
 		attr = QCA_WLAN_VENDOR_ATTR_TWT_SETUP_WAKE_INTVL_EXP;
 		if (nla_put_u8(reply_skb, attr, 0)) {
@@ -1063,7 +1083,7 @@ hdd_twt_setup_pack_resp_nlmsg(struct sk_buff *reply_skb,
 	enum qca_wlan_vendor_twt_status vendor_status;
 	int response_type;
 	uint32_t wake_duration;
-	uint32_t wake_intvl_mantissa_tu;
+	uint32_t wake_intvl_mantis_us, wake_intvl_mantis_tu;
 
 	hdd_enter();
 
@@ -1128,15 +1148,24 @@ hdd_twt_setup_pack_resp_nlmsg(struct sk_buff *reply_skb,
 		return QDF_STATUS_E_FAILURE;
 	}
 
-	wake_intvl_mantissa_tu = (event->additional_params.wake_intvl_us /
+	wake_intvl_mantis_us = event->additional_params.wake_intvl_us;
+	if (nla_put_u32(reply_skb,
+			QCA_WLAN_VENDOR_ATTR_TWT_SETUP_WAKE_INTVL2_MANTISSA,
+			wake_intvl_mantis_us)) {
+		hdd_err("TWT: Failed to put wake interval mantissa in us");
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	wake_intvl_mantis_tu = (event->additional_params.wake_intvl_us /
 				 TWT_WAKE_INTVL_MULTIPLICATION_FACTOR);
 	if (nla_put_u32(reply_skb,
 			QCA_WLAN_VENDOR_ATTR_TWT_SETUP_WAKE_INTVL_MANTISSA,
-			wake_intvl_mantissa_tu)) {
-		hdd_err("TWT: Failed to put wake interval us");
+			wake_intvl_mantis_tu)) {
+		hdd_err("TWT: Failed to put wake interval mantissa in tu");
 		return QDF_STATUS_E_FAILURE;
 	}
-	hdd_debug("wake_intvl_mantissa in TU %d", wake_intvl_mantissa_tu);
+	hdd_debug("TWT: Send mantissa_us:%d, mantissa_tu:%d to userspace",
+		  wake_intvl_mantis_us, wake_intvl_mantis_tu);
 
 	if (nla_put_u8(reply_skb, QCA_WLAN_VENDOR_ATTR_TWT_SETUP_WAKE_INTVL_EXP,
 		       0)) {
@@ -1308,6 +1337,15 @@ int hdd_send_twt_add_dialog_cmd(struct hdd_context *hdd_ctx,
  * Handles QCA_WLAN_TWT_SET
  *
  * Return: 0 for Success and negative value for failure
+ *
+ *    If the setup request is received:
+ *        before the host driver receiving the setup response event from
+ *        firmware for the previous setup request, then return -EINPROGRESS
+ *
+ *        after the host driver received the setup response event from
+ *        firmware for the previous setup request, then setup_done is
+ *        set to true and this new setup request is sent to firmware
+ *        for parameter re-negotiation.
  */
 static int hdd_twt_setup_session(struct hdd_adapter *adapter,
 				 struct nlattr *twt_param_attr)
@@ -1367,13 +1405,10 @@ static int hdd_twt_setup_session(struct hdd_adapter *adapter,
 
 	if (ucfg_mlme_is_twt_setup_in_progress(adapter->hdd_ctx->psoc,
 					       &hdd_sta_ctx->conn_info.bssid,
-					       params.dialog_id) ||
-	    ucfg_mlme_is_twt_setup_done(adapter->hdd_ctx->psoc,
-					&hdd_sta_ctx->conn_info.bssid,
 					params.dialog_id)) {
-		hdd_err_rl("TWT session exists for dialog:%d",
+		hdd_err_rl("TWT setup is in progress for dialog_id:%d",
 			   params.dialog_id);
-		return -EALREADY;
+		return -EINPROGRESS;
 	}
 
 	ret = hdd_send_twt_add_dialog_cmd(adapter->hdd_ctx, &params);
