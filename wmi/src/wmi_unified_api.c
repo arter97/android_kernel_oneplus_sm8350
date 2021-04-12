@@ -773,13 +773,11 @@ QDF_STATUS wmi_unified_process_ll_stats_get_cmd(wmi_unified_t wmi_handle,
 #ifdef FEATURE_CLUB_LL_STATS_AND_GET_STATION
 QDF_STATUS wmi_process_unified_ll_stats_get_sta_cmd(
 				wmi_unified_t wmi_handle,
-				const struct ll_stats_get_params *get_req,
-				bool is_always_over_qmi)
+				const struct ll_stats_get_params *get_req)
 {
 	if (wmi_handle->ops->send_unified_ll_stats_get_sta_cmd)
 		return wmi_handle->ops->send_unified_ll_stats_get_sta_cmd(
-						wmi_handle, get_req,
-						is_always_over_qmi);
+						wmi_handle, get_req);
 
 	return QDF_STATUS_E_FAILURE;
 }
@@ -3325,22 +3323,6 @@ QDF_STATUS wmi_unified_send_cp_stats_cmd(wmi_unified_t wmi_handle,
 
 	return QDF_STATUS_E_FAILURE;
 }
-
-#ifdef WLAN_SUPPORT_INFRA_CTRL_PATH_STATS
-QDF_STATUS
-wmi_unified_extract_infra_cp_stats(wmi_unified_t wmi_handle,
-				   void *evt_buf, uint32_t evt_buf_len,
-				   struct infra_cp_stats_event *params)
-{
-	if (wmi_handle->ops->extract_infra_cp_stats)
-		return wmi_handle->ops->extract_infra_cp_stats(wmi_handle,
-								   evt_buf,
-								   evt_buf_len,
-								   params);
-
-	return QDF_STATUS_E_FAILURE;
-}
-#endif /* WLAN_SUPPORT_INFRA_CTRL_PATH_STATS */
 
 QDF_STATUS
 wmi_unified_extract_cp_stats_more_pending(wmi_unified_t wmi_handle,

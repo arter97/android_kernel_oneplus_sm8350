@@ -38,6 +38,30 @@ QDF_STATUS
 wmi_unified_infra_cp_stats_request_send(
 				wmi_unified_t wmi_handle,
 				struct infra_cp_stats_cmd_info *param);
+
+/**
+ * wmi_unified_extract_infra_cp_stats() - extract various infra cp statistics
+ * @wmi_handle: wmi handle
+ * @evt_buf: event buffer
+ * @evt_buf_len: length of event buffer
+ * @params: pointer to store the extracted event info
+ *
+ * This function extracts the infra cp statistics from the event
+ *
+ * Return: QDF_STATUS_SUCCESS on success and QDF_STATUS_E_FAILURE for failure
+ */
+QDF_STATUS
+wmi_unified_extract_infra_cp_stats(wmi_unified_t wmi_handle,
+				   void *evt_buf, uint32_t evt_buf_len,
+				   struct infra_cp_stats_event *params);
+
+QDF_STATUS wmi_stats_handler(void *buff, int32_t len,
+			     struct infra_cp_stats_event *params);
+
+QDF_STATUS
+extract_infra_cp_stats_tlv(wmi_unified_t wmi_handle, void *evt_buf,
+			   uint32_t evt_buf_len,
+			   struct infra_cp_stats_event *params);
 #endif /* WLAN_SUPPORT_INFRA_CTRL_PATH_STATS */
 
 /**
@@ -51,6 +75,20 @@ wmi_unified_infra_cp_stats_request_send(
 QDF_STATUS wmi_unified_stats_request_send(wmi_unified_t wmi_handle,
 					  uint8_t macaddr[QDF_MAC_ADDR_SIZE],
 					  struct stats_request_params *param);
+
+#ifdef WLAN_FEATURE_BIG_DATA_STATS
+/**
+ * wmi_unified_big_data_stats_request_send() - WMI request big data stats
+ * function
+ * @wmi_handle: handle to WMI
+ * @param: pointer to hold stats request parameter
+ *
+ * Return: QDF_STATUS_SUCCESS on success and QDF_STATUS_E_FAILURE for failure
+ */
+QDF_STATUS
+wmi_unified_big_data_stats_request_send(wmi_unified_t wmi_handle,
+					struct stats_request_params *param);
+#endif
 
 /**
  * wmi_extract_stats_param() - extract all stats count from event

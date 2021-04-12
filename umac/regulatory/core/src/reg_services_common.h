@@ -569,6 +569,15 @@ bool reg_is_range_overlap_2g(qdf_freq_t low_freq, qdf_freq_t high_freq);
  */
 bool reg_is_range_overlap_5g(qdf_freq_t low_freq, qdf_freq_t high_freq);
 
+/**
+ * reg_is_freq_indoor() - Check if the input frequency is an indoor frequency.
+ * @pdev: Pointer to pdev.
+ * @freq: Channel frequency.
+ *
+ * Return: Return true if the input frequency is indoor, else false.
+ */
+bool reg_is_freq_indoor(struct wlan_objmgr_pdev *pdev, qdf_freq_t freq);
+
 #ifdef CONFIG_BAND_6GHZ
 /**
  * reg_is_6ghz_chan_freq() - Check if the given channel frequency is 6GHz
@@ -1426,6 +1435,15 @@ QDF_STATUS reg_get_client_power_for_6ghz_ap(struct wlan_objmgr_pdev *pdev,
 					    qdf_freq_t chan_freq,
 					    bool *is_psd, uint16_t *tx_power,
 					    uint16_t *eirp_psd_power);
+
+/**
+ * reg_decide_6g_ap_pwr_type() - Decide which power mode AP should operate in
+ *
+ * @pdev: pdev ptr
+ *
+ * Return: AP power type
+ */
+enum reg_6g_ap_type reg_decide_6g_ap_pwr_type(struct wlan_objmgr_pdev *pdev);
 #else
 static inline QDF_STATUS
 reg_set_cur_6g_ap_pwr_type(struct wlan_objmgr_pdev *pdev,
@@ -1511,5 +1529,71 @@ QDF_STATUS reg_get_client_power_for_6ghz_ap(struct wlan_objmgr_pdev *pdev,
 	*eirp_psd_power = 0;
 	return QDF_STATUS_E_NOSUPPORT;
 }
+
+static inline enum reg_6g_ap_type
+reg_decide_6g_ap_pwr_type(struct wlan_objmgr_pdev *pdev)
+{
+	return REG_INDOOR_AP;
+}
+#endif
+
+/**
+ * reg_set_ext_tpc_supported() - Set if FW supports new WMI command for TPC
+ * @psoc: Pointer to psoc
+ * @val: value
+ *
+ * Return: QDF_STATUS
+ */
+QDF_STATUS reg_set_ext_tpc_supported(struct wlan_objmgr_psoc *psoc,
+				     bool val);
+
+/**
+ * reg_is_ext_tpc_supported() - Whether FW supports new WMI command for TPC
+ *
+ * @psoc: pointer to psoc
+ *
+ * Return: true if FW supports the new TPC command, else false
+ */
+bool reg_is_ext_tpc_supported(struct wlan_objmgr_psoc *psoc);
+
+#if defined(CONFIG_BAND_6GHZ) && defined(CONFIG_REG_CLIENT)
+/**
+ * reg_set_lower_6g_edge_ch_supp() - Set if lower 6ghz edge channel is
+ * supported by FW
+ *
+ * @psoc: Pointer to psoc
+ * @val: value
+ */
+QDF_STATUS reg_set_lower_6g_edge_ch_supp(struct wlan_objmgr_psoc *psoc,
+					 bool val);
+
+/**
+ * reg_set_disable_upper_6g_edge_ch_supp() - Set if upper 6ghz edge channel is
+ * disabled by FW
+ *
+ * @psoc: Pointer to psoc
+ * @val: value
+ */
+QDF_STATUS
+reg_set_disable_upper_6g_edge_ch_supp(struct wlan_objmgr_psoc *psoc,
+				      bool val);
+
+/**
+ * reg_is_lower_6g_edge_ch_supp() - Check whether 6GHz lower edge channel
+ * (5935 MHz) is supported.
+ * @psoc: pointer to psoc
+ *
+ * Return: true if edge channels are supported, else false
+ */
+bool reg_is_lower_6g_edge_ch_supp(struct wlan_objmgr_psoc *psoc);
+
+/**
+ * reg_is_upper_6g_edge_ch_disabled() - Check whether 6GHz upper edge
+ * channel (7115 MHz) is disabled.
+ * @psoc: pointer to psoc
+ *
+ * Return: true if edge channels are supported, else false
+ */
+bool reg_is_upper_6g_edge_ch_disabled(struct wlan_objmgr_psoc *psoc);
 #endif
 #endif

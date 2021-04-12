@@ -33,6 +33,21 @@ wmi_unified_infra_cp_stats_request_send(wmi_unified_t wmi_handle,
 
 	return QDF_STATUS_E_FAILURE;
 }
+
+QDF_STATUS
+wmi_unified_extract_infra_cp_stats(wmi_unified_t wmi_handle,
+				   void *evt_buf, uint32_t evt_buf_len,
+				   struct infra_cp_stats_event *params)
+{
+	if (wmi_handle->ops->extract_infra_cp_stats)
+		return wmi_handle->ops->extract_infra_cp_stats(wmi_handle,
+								   evt_buf,
+								   evt_buf_len,
+								   params);
+
+	return QDF_STATUS_E_FAILURE;
+}
+
 #endif /* WLAN_SUPPORT_INFRA_CTRL_PATH_STATS */
 
 QDF_STATUS wmi_unified_stats_request_send(wmi_unified_t wmi_handle,
@@ -45,6 +60,20 @@ QDF_STATUS wmi_unified_stats_request_send(wmi_unified_t wmi_handle,
 
 	return QDF_STATUS_E_FAILURE;
 }
+
+#ifdef WLAN_FEATURE_BIG_DATA_STATS
+QDF_STATUS
+wmi_unified_big_data_stats_request_send(wmi_unified_t wmi_handle,
+					struct stats_request_params *param)
+{
+	if (wmi_handle->ops->send_big_data_stats_request_cmd)
+		return wmi_handle->ops->send_big_data_stats_request_cmd(
+								wmi_handle,
+								param);
+
+	return QDF_STATUS_E_FAILURE;
+}
+#endif
 
 QDF_STATUS
 wmi_extract_stats_param(wmi_unified_t wmi_handle, void *evt_buf,

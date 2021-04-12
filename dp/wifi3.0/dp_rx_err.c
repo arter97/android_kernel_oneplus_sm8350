@@ -494,7 +494,8 @@ dp_rx_oor_handle(struct dp_soc *soc,
 	 * to stack in this case since the connection might fail due to
 	 * duplicated EAP response.
 	 */
-	if (mpdu_desc_info->mpdu_flags & HAL_MPDU_F_RETRY_BIT &&
+	if (mpdu_desc_info &&
+	    mpdu_desc_info->mpdu_flags & HAL_MPDU_F_RETRY_BIT &&
 	    peer->rx_tid[tid].ba_status == DP_RX_BA_ACTIVE) {
 		frame_mask &= ~FRAME_MASK_IPV4_EAPOL;
 		DP_STATS_INC(soc, rx.err.reo_err_oor_eapol_drop, 1);
@@ -556,6 +557,7 @@ dp_rx_reo_err_entry_process(struct dp_soc *soc,
 	qdf_nbuf_t head_nbuf = NULL;
 	qdf_nbuf_t tail_nbuf = NULL;
 	uint16_t msdu_processed = 0;
+	bool ret;
 
 	peer_id = DP_PEER_METADATA_PEER_ID_GET(
 					mpdu_desc_info->peer_meta_data);
@@ -574,6 +576,14 @@ more_msdu_link_desc:
 		pdev = dp_get_pdev_for_lmac_id(soc, rx_desc->pool_id);
 
 		nbuf = rx_desc->nbuf;
+		ret = dp_rx_desc_paddr_sanity_check(rx_desc,
+						    msdu_list.paddr[i]);
+		if (!ret) {
+			DP_STATS_INC(soc, rx.err.nbuf_sanity_fail, 1);
+			rx_desc->in_err_state = 1;
+			continue;
+		}
+
 		rx_desc_pool = &soc->rx_desc_buf[rx_desc->pool_id];
 		dp_ipa_handle_rx_buf_smmu_mapping(soc, nbuf,
 						  rx_desc_pool->buf_size,
@@ -2245,6 +2255,24 @@ done:
 					dp_2k_jump_handle(soc, nbuf,
 							  rx_tlv_hdr,
 							  peer_id, tid);
+					break;
+				case HAL_REO_ERR_REGULAR_FRAME_OOR:
+					if (hal_rx_msdu_end_first_msdu_get(soc->hal_soc,
+									   rx_tlv_hdr)) {
+						peer_id =
+							hal_rx_mpdu_start_sw_peer_id_get(soc->hal_soc,
+											 rx_tlv_hdr);
+						tid =
+							hal_rx_mpdu_start_tid_get(hal_soc, rx_tlv_hdr);
+					}
+					QDF_NBUF_CB_RX_PKT_LEN(nbuf) =
+						hal_rx_msdu_start_msdu_len_get(
+									       rx_tlv_hdr);
+					nbuf->next = NULL;
+					dp_rx_oor_handle(soc, nbuf,
+							 rx_tlv_hdr,
+							 NULL,
+							 peer_id, tid);
 					break;
 				case HAL_REO_ERR_BAR_FRAME_2K_JUMP:
 				case HAL_REO_ERR_BAR_FRAME_OOR:

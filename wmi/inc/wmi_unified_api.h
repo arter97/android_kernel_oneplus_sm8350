@@ -1493,14 +1493,12 @@ QDF_STATUS wmi_unified_process_ll_stats_get_cmd(wmi_unified_t wmi_handle,
  *                                              get station request
  * @wmi_handle: wmi handle
  * @get_req: unified ll stats and get station request command params
- * @is_always_over_qmi: flag to send stats request always over qmi
  *
  * Return: QDF_STATUS_SUCCESS on success and QDF_STATUS_E_FAILURE for failure
  */
 QDF_STATUS wmi_process_unified_ll_stats_get_sta_cmd(
 				wmi_unified_t wmi_handle,
-				const struct ll_stats_get_params *get_req,
-				bool is_always_over_qmi);
+				const struct ll_stats_get_params *get_req);
 #endif /* FEATURE_CLUB_LL_STATS_AND_GET_STATION */
 #endif /* WLAN_FEATURE_LINK_LAYER_STATS */
 
@@ -4218,23 +4216,6 @@ wmi_unified_send_injector_frame_config_cmd(wmi_unified_t wmi_handle,
 QDF_STATUS wmi_unified_send_cp_stats_cmd(wmi_unified_t wmi_handle,
 					 void *buf_ptr, uint32_t buf_len);
 
-#ifdef WLAN_SUPPORT_INFRA_CTRL_PATH_STATS
-/**
- * wmi_unified_extract_infra_cp_stats() - extract various infra cp statistics
- * @wmi_handle: wmi handle
- * @evt_buf: event buffer
- * @evt_buf_len: length of event buffer
- * @params: pointer to store the extracted event info
- *
- * This function extracts the infra cp statistics from the event
- *
- * Return: QDF_STATUS_SUCCESS on success and QDF_STATUS_E_FAILURE for failure
- */
-QDF_STATUS
-wmi_unified_extract_infra_cp_stats(wmi_unified_t wmi_handle,
-				   void *evt_buf, uint32_t evt_buf_len,
-				   struct infra_cp_stats_event *params);
-#endif /* WLAN_SUPPORT_INFRA_CTRL_PATH_STATS */
 
 /**
  * wmi_unified_extract_cp_stats_more_pending() - extract more flag

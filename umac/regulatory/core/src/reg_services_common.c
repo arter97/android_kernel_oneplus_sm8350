@@ -2489,6 +2489,32 @@ bool reg_is_range_overlap_5g(qdf_freq_t low_freq, qdf_freq_t high_freq)
 				     FIVE_GIG_ENDING_EDGE_FREQ);
 }
 
+bool reg_is_freq_indoor(struct wlan_objmgr_pdev *pdev, qdf_freq_t freq)
+{
+	struct regulatory_channel *cur_chan_list;
+	struct wlan_regulatory_pdev_priv_obj *pdev_priv_obj;
+	enum channel_enum chan_enum;
+
+	pdev_priv_obj = reg_get_pdev_obj(pdev);
+
+	if (!IS_VALID_PDEV_REG_OBJ(pdev_priv_obj)) {
+		reg_err("reg pdev priv obj is NULL");
+		return false;
+	}
+
+	chan_enum = reg_get_chan_enum_for_freq(freq);
+
+	if (chan_enum == INVALID_CHANNEL) {
+		reg_err_rl("Invalid chan enum %d", chan_enum);
+		return false;
+	}
+
+	cur_chan_list = pdev_priv_obj->cur_chan_list;
+
+	return (cur_chan_list[chan_enum].chan_flags &
+		REGULATORY_CHAN_INDOOR_ONLY);
+}
+
 #ifdef CONFIG_BAND_6GHZ
 bool reg_is_6ghz_chan_freq(uint16_t freq)
 {
@@ -2547,39 +2573,6 @@ bool reg_is_6ghz_psc_chan_freq(uint16_t freq)
 	reg_debug_rl("Channel freq %d MHz is not a 6GHz PSC frequency", freq);
 
 	return false;
-}
-
-/**
- * reg_is_freq_indoor() - Check if the input frequency is an indoor frequency.
- * @pdev: Pointer to pdev.
- * @freq: Channel frequency.
- *
- * Return: Return true if the input frequency is indoor, else false.
- */
-static bool reg_is_freq_indoor(struct wlan_objmgr_pdev *pdev, qdf_freq_t freq)
-{
-	struct regulatory_channel *cur_chan_list;
-	struct wlan_regulatory_pdev_priv_obj *pdev_priv_obj;
-	enum channel_enum chan_enum;
-
-	pdev_priv_obj = reg_get_pdev_obj(pdev);
-
-	if (!IS_VALID_PDEV_REG_OBJ(pdev_priv_obj)) {
-		reg_err("reg pdev priv obj is NULL");
-		return false;
-	}
-
-	chan_enum = reg_get_chan_enum_for_freq(freq);
-
-	if (chan_enum == INVALID_CHANNEL) {
-		reg_err_rl("Invalid chan enum %d", chan_enum);
-		return false;
-	}
-
-	cur_chan_list = pdev_priv_obj->cur_chan_list;
-
-	return (cur_chan_list[chan_enum].chan_flags &
-		REGULATORY_CHAN_INDOOR_ONLY);
 }
 
 bool reg_is_6g_freq_indoor(struct wlan_objmgr_pdev *pdev, qdf_freq_t freq)
@@ -4483,6 +4476,9 @@ QDF_STATUS reg_get_client_power_for_6ghz_ap(struct wlan_objmgr_pdev *pdev,
 		return QDF_STATUS_E_FAILURE;
 	}
 
+	if (ap_pwr_type >= REG_CURRENT_MAX_AP_TYPE)
+		return QDF_STATUS_E_FAILURE;
+
 	master_chan_list = pdev_priv_obj->
 			mas_chan_list_6g_client[ap_pwr_type][client_type];
 
@@ -4498,4 +4494,134 @@ QDF_STATUS reg_get_client_power_for_6ghz_ap(struct wlan_objmgr_pdev *pdev,
 	return status;
 }
 
+/**
+ * reg_is_afc_available() - check if the automated frequency control system is
+ * available, function will need to be updated once AFC is implemented
+ * @pdev: Pointer to pdev structure
+ *
+ * Return: false since the AFC system is not yet available
+ */
+static bool reg_is_afc_available(struct wlan_objmgr_pdev *pdev)
+{
+	return false;
+}
+
+enum reg_6g_ap_type reg_decide_6g_ap_pwr_type(struct wlan_objmgr_pdev *pdev)
+{
+	struct wlan_regulatory_pdev_priv_obj *pdev_priv_obj;
+	enum reg_6g_ap_type ap_pwr_type = REG_INDOOR_AP;
+
+	pdev_priv_obj = reg_get_pdev_obj(pdev);
+	if (!IS_VALID_PDEV_REG_OBJ(pdev_priv_obj)) {
+		reg_err("pdev reg component is NULL");
+		return REG_VERY_LOW_POWER_AP;
+	}
+
+	if (reg_is_afc_available(pdev))
+		ap_pwr_type = REG_STANDARD_POWER_AP;
+	else if (pdev_priv_obj->indoor_chan_enabled)
+		ap_pwr_type = REG_INDOOR_AP;
+	else if (pdev_priv_obj->reg_6g_superid != FCC1_6G &&
+		 pdev_priv_obj->reg_6g_superid != FCC1_6G_CL)
+		ap_pwr_type = REG_VERY_LOW_POWER_AP;
+
+	reg_set_cur_6g_ap_pwr_type(pdev, ap_pwr_type);
+
+	return ap_pwr_type;
+}
+#endif
+
+QDF_STATUS
+reg_set_ext_tpc_supported(struct wlan_objmgr_psoc *psoc, bool val)
+{
+	struct wlan_regulatory_psoc_priv_obj *psoc_priv_obj;
+
+	psoc_priv_obj = reg_get_psoc_obj(psoc);
+
+	if (!IS_VALID_PSOC_REG_OBJ(psoc_priv_obj)) {
+		reg_err("psoc reg component is NULL");
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	psoc_priv_obj->is_ext_tpc_supported = val;
+
+	return QDF_STATUS_SUCCESS;
+}
+
+bool reg_is_ext_tpc_supported(struct wlan_objmgr_psoc *psoc)
+{
+	struct wlan_regulatory_psoc_priv_obj *psoc_priv_obj;
+
+	psoc_priv_obj = reg_get_psoc_obj(psoc);
+
+	if (!IS_VALID_PSOC_REG_OBJ(psoc_priv_obj)) {
+		reg_err("psoc reg component is NULL");
+		return  false;
+	}
+
+	return psoc_priv_obj->is_ext_tpc_supported;
+}
+
+#if defined(CONFIG_BAND_6GHZ) && defined(CONFIG_REG_CLIENT)
+QDF_STATUS
+reg_set_lower_6g_edge_ch_supp(struct wlan_objmgr_psoc *psoc, bool val)
+{
+	struct wlan_regulatory_psoc_priv_obj *psoc_priv_obj;
+
+	psoc_priv_obj = reg_get_psoc_obj(psoc);
+
+	if (!IS_VALID_PSOC_REG_OBJ(psoc_priv_obj)) {
+		reg_err("psoc reg component is NULL");
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	psoc_priv_obj->is_lower_6g_edge_ch_supported = val;
+
+	return QDF_STATUS_SUCCESS;
+}
+
+QDF_STATUS
+reg_set_disable_upper_6g_edge_ch_supp(struct wlan_objmgr_psoc *psoc, bool val)
+{
+	struct wlan_regulatory_psoc_priv_obj *psoc_priv_obj;
+
+	psoc_priv_obj = reg_get_psoc_obj(psoc);
+
+	if (!IS_VALID_PSOC_REG_OBJ(psoc_priv_obj)) {
+		reg_err("psoc reg component is NULL");
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	psoc_priv_obj->is_upper_6g_edge_ch_disabled = val;
+
+	return QDF_STATUS_SUCCESS;
+}
+
+bool reg_is_lower_6g_edge_ch_supp(struct wlan_objmgr_psoc *psoc)
+{
+	struct wlan_regulatory_psoc_priv_obj *psoc_priv_obj;
+
+	psoc_priv_obj = reg_get_psoc_obj(psoc);
+
+	if (!IS_VALID_PSOC_REG_OBJ(psoc_priv_obj)) {
+		reg_err("psoc reg component is NULL");
+		return  false;
+	}
+
+	return psoc_priv_obj->is_lower_6g_edge_ch_supported;
+}
+
+bool reg_is_upper_6g_edge_ch_disabled(struct wlan_objmgr_psoc *psoc)
+{
+	struct wlan_regulatory_psoc_priv_obj *psoc_priv_obj;
+
+	psoc_priv_obj = reg_get_psoc_obj(psoc);
+
+	if (!IS_VALID_PSOC_REG_OBJ(psoc_priv_obj)) {
+		reg_err("psoc reg component is NULL");
+		return  false;
+	}
+
+	return psoc_priv_obj->is_upper_6g_edge_ch_disabled;
+}
 #endif

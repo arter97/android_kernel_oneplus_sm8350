@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2020 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2021 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -1037,6 +1037,7 @@ enum qca_wlan_auth_type {
  * @QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_HE_OPERATION: Attribute type for
  * sending HE operation info.
  * @QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_AFTER_LAST: After last
+ *
  */
 enum qca_wlan_vendor_attr_get_station_info {
 	QCA_WLAN_VENDOR_ATTR_GET_STATION_INFO_INVALID = 0,
@@ -2833,6 +2834,139 @@ enum qca_vendor_roam_triggers {
 	QCA_ROAM_TRIGGER_REASON_IDLE		= 1 << 10,
 	QCA_ROAM_TRIGGER_REASON_TX_FAILURES	= 1 << 11,
 	QCA_ROAM_TRIGGER_REASON_EXTERNAL_SCAN	= 1 << 12,
+};
+
+/*
+ * enum qca_vendor_roam_fail_reasons: Defines the various roam
+ * fail reasons. This enum value is used in
+ * @QCA_WLAN_VENDOR_ATTR_GET_STA_INFO_ROAM_FAIL_REASON attribute.
+ *
+ * @QCA_ROAM_FAIL_REASON_SCAN_NOT_ALLOWED: Roam module in the firmware is not
+ * able to trigger the scan.
+ * @QCA_ROAM_FAIL_REASON_NO_AP_FOUND: No roamable APs found during roam scan.
+ * @QCA_ROAM_FAIL_REASON_NO_CAND_AP_FOUND: No candidate APs found during roam
+ * scan.
+ * @QCA_ROAM_FAIL_REASON_HOST: Roam fail due to disconnect issued from host.
+ * @QCA_ROAM_FAIL_REASON_AUTH_SEND: Unable to send Authentication frame.
+ * @QCA_ROAM_FAIL_REASON_AUTH_RECV: Received Authentication frame with error
+ * status code.
+ * @QCA_ROAM_FAIL_REASON_NO_AUTH_RESP: Authentication frame not received.
+ * @QCA_ROAM_FAIL_REASON_REASSOC_SEND: Unable to send Reassociation Request
+ * frame.
+ * @QCA_ROAM_FAIL_REASON_REASSOC_RECV: Received Reassociation Response frame
+ * with error status code.
+ * @QCA_ROAM_FAIL_REASON_NO_REASSOC_RESP: Reassociation Response frame not
+ * received.
+ * @QCA_ROAM_FAIL_REASON_SCAN_FAIL: Scan module not able to start scan.
+ * @QCA_ROAM_FAIL_REASON_AUTH_NO_ACK: No ACK is received for Authentication
+ * frame.
+ * @QCA_ROAM_FAIL_REASON_AUTH_INTERNAL_DROP: Authentication frame is dropped
+ * internally before transmission.
+ * @QCA_ROAM_FAIL_REASON_REASSOC_NO_ACK: No ACK is received for Reassociation
+ * Request frame.
+ * @QCA_ROAM_FAIL_REASON_REASSOC_INTERNAL_DROP: Reassociation Request frame is
+ * dropped internally.
+ * @QCA_ROAM_FAIL_REASON_EAPOL_M1_TIMEOUT: EAPOL-Key M1 is not received and
+ * times out.
+ * @QCA_ROAM_FAIL_REASON_EAPOL_M2_SEND: Unable to send EAPOL-Key M2 frame.
+ * @QCA_ROAM_FAIL_REASON_EAPOL_M2_INTERNAL_DROP: EAPOL-Key M2 frame dropped
+ * internally.
+ * @QCA_ROAM_FAIL_REASON_EAPOL_M2_NO_ACK: No ACK is received for EAPOL-Key
+ * M2 frame.
+ * @QCA_ROAM_FAIL_REASON_EAPOL_M3_TIMEOUT: EAPOL-Key M3 frame is not received.
+ * @QCA_ROAM_FAIL_REASON_EAPOL_M4_SEND: Unable to send EAPOL-Key M4 frame.
+ * @QCA_ROAM_FAIL_REASON_EAPOL_M4_INTERNAL_DROP: EAPOL-Key M4 frame dropped
+ * internally.
+ * @QCA_ROAM_FAIL_REASON_EAPOL_M4_NO_ACK: No ACK is received for EAPOL-Key M4
+ * frame.
+ * @QCA_ROAM_FAIL_REASON_NO_SCAN_FOR_FINAL_BEACON_MISS: Roam scan is not
+ * started for final beacon miss case.
+ * @QCA_ROAM_FAIL_REASON_DISCONNECT: Deauthentication or Disassociation frame
+ * received from the AP during roaming handoff.
+ * @QCA_ROAM_FAIL_REASON_RESUME_ABORT: Firmware roams to the AP when the Apps
+ * or host is suspended and gives the indication of the last roamed AP only
+ * when the Apps is resumed. If the Apps is resumed while the roaming is in
+ * progress, this ongoing roaming is aborted and the last roamed AP is
+ * indicated to host.
+ * @QCA_ROAM_FAIL_REASON_SAE_INVALID_PMKID: WPA3-SAE invalid PMKID.
+ * @QCA_ROAM_FAIL_REASON_SAE_PREAUTH_TIMEOUT: WPA3-SAE pre-authentication times
+ * out.
+ * @QCA_ROAM_FAIL_REASON_SAE_PREAUTH_FAIL: WPA3-SAE pre-authentication fails.
+ */
+enum qca_vendor_roam_fail_reasons {
+	QCA_ROAM_FAIL_REASON_NONE = 0,
+	QCA_ROAM_FAIL_REASON_SCAN_NOT_ALLOWED = 1,
+	QCA_ROAM_FAIL_REASON_NO_AP_FOUND = 2,
+	QCA_ROAM_FAIL_REASON_NO_CAND_AP_FOUND = 3,
+	QCA_ROAM_FAIL_REASON_HOST = 4,
+	QCA_ROAM_FAIL_REASON_AUTH_SEND = 5,
+	QCA_ROAM_FAIL_REASON_AUTH_RECV = 6,
+	QCA_ROAM_FAIL_REASON_NO_AUTH_RESP = 7,
+	QCA_ROAM_FAIL_REASON_REASSOC_SEND = 8,
+	QCA_ROAM_FAIL_REASON_REASSOC_RECV = 9,
+	QCA_ROAM_FAIL_REASON_NO_REASSOC_RESP = 10,
+	QCA_ROAM_FAIL_REASON_SCAN_FAIL = 11,
+	QCA_ROAM_FAIL_REASON_AUTH_NO_ACK = 12,
+	QCA_ROAM_FAIL_REASON_AUTH_INTERNAL_DROP = 13,
+	QCA_ROAM_FAIL_REASON_REASSOC_NO_ACK = 14,
+	QCA_ROAM_FAIL_REASON_REASSOC_INTERNAL_DROP = 15,
+	QCA_ROAM_FAIL_REASON_EAPOL_M1_TIMEOUT = 16,
+	QCA_ROAM_FAIL_REASON_EAPOL_M2_SEND = 17,
+	QCA_ROAM_FAIL_REASON_EAPOL_M2_INTERNAL_DROP = 18,
+	QCA_ROAM_FAIL_REASON_EAPOL_M2_NO_ACK = 19,
+	QCA_ROAM_FAIL_REASON_EAPOL_M3_TIMEOUT = 20,
+	QCA_ROAM_FAIL_REASON_EAPOL_M4_SEND = 21,
+	QCA_ROAM_FAIL_REASON_EAPOL_M4_INTERNAL_DROP = 22,
+	QCA_ROAM_FAIL_REASON_EAPOL_M4_NO_ACK = 23,
+	QCA_ROAM_FAIL_REASON_NO_SCAN_FOR_FINAL_BEACON_MISS = 24,
+	QCA_ROAM_FAIL_REASON_DISCONNECT = 25,
+	QCA_ROAM_FAIL_REASON_RESUME_ABORT = 26,
+	QCA_ROAM_FAIL_REASON_SAE_INVALID_PMKID = 27,
+	QCA_ROAM_FAIL_REASON_SAE_PREAUTH_TIMEOUT = 28,
+	QCA_ROAM_FAIL_REASON_SAE_PREAUTH_FAIL = 29,
+};
+
+/*
+ * enum qca_vendor_roam_invoke_fail_reasons: Defines the various roam
+ * invoke fail reasons. This enum value is used in
+ * @QCA_WLAN_VENDOR_ATTR_GET_STA_INFO_ROAM_INVOKE_FAIL_REASON attribute.
+ *
+ * @QCA_ROAM_INVOKE_STATUS_IFACE_INVALID: Invalid interface ID is passed
+ * in roam invoke command.
+ * @QCA_ROAM_INVOKE_STATUS_OFFLOAD_DISABLE: Roam offload in firmware is not
+ * enabled.
+ * @QCA_ROAM_INVOKE_STATUS_AP_SSID_LENGTH_INVALID: Connected AP profile SSID
+ * length is invalid.
+ * @QCA_ROAM_INVOKE_STATUS_ROAM_DISALLOW: Firmware internal roaming is already
+ * in progress.
+ * @QCA_ROAM_INVOKE_STATUS_NON_ROAMABLE_AP: Host sends the Beacon/Probe Response
+ * of the AP in the roam invoke command to firmware. This reason is sent by the
+ * firmware when the given AP is configured to be ignored or SSID/security
+ * does not match.
+ * @QCA_ROAM_INVOKE_STATUS_ROAM_INTERNAL_FAIL: Roam handoff failed because of
+ * firmware internal reasons.
+ * @QCA_ROAM_INVOKE_STATUS_DISALLOW: Roam invoke trigger is not enabled.
+ * @QCA_ROAM_INVOKE_STATUS_SCAN_FAIL: Scan start fail for roam invoke.
+ * @QCA_ROAM_INVOKE_STATUS_START_ROAM_FAIL: Roam handoff start fail.
+ * @QCA_ROAM_INVOKE_STATUS_INVALID_PARAMS: Roam invoke parameters are invalid.
+ * @QCA_ROAM_INVOKE_STATUS_NO_CAND_AP: No candidate AP found to roam to.
+ * @QCA_ROAM_INVOKE_STATUS_ROAM_FAIL: Roam handoff failed.
+ */
+enum qca_vendor_roam_invoke_fail_reasons {
+	QCA_ROAM_INVOKE_STATUS_NONE = 0,
+	QCA_ROAM_INVOKE_STATUS_IFACE_INVALID = 1,
+	QCA_ROAM_INVOKE_STATUS_OFFLOAD_DISABLE = 2,
+	QCA_ROAM_INVOKE_STATUS_AP_SSID_LENGTH_INVALID = 3,
+	QCA_ROAM_INVOKE_STATUS_ROAM_DISALLOW = 4,
+	QCA_ROAM_INVOKE_STATUS_NON_ROAMABLE_AP = 5,
+	QCA_ROAM_INVOKE_STATUS_ROAM_INTERNAL_FAIL = 6,
+	QCA_ROAM_INVOKE_STATUS_DISALLOW = 7,
+	QCA_ROAM_INVOKE_STATUS_SCAN_FAIL = 8,
+	QCA_ROAM_INVOKE_STATUS_START_ROAM_FAIL = 9,
+	QCA_ROAM_INVOKE_STATUS_INVALID_PARAMS = 10,
+	QCA_ROAM_INVOKE_STATUS_NO_CAND_AP = 11,
+	QCA_ROAM_INVOKE_STATUS_ROAM_FAIL = 12,
+
 };
 
 /**
@@ -8086,6 +8220,56 @@ enum qca_wlan_vendor_attr_wifi_test_config {
 	 */
 	QCA_WLAN_VENDOR_ATTR_WIFI_TEST_CONFIG_IGNORE_SA_QUERY_TIMEOUT = 43,
 
+	/* 8-bit unsigned value to configure the driver/firmware to start or
+	 * stop transmitting FILS discovery frames.
+	 * 0 - Stop transmitting FILS discovery frames
+	 * 1 - Start transmitting FILS discovery frames
+	 * This attribute is used to configure the testbed device.
+	 * This attribute can be configured only in AP mode and the
+	 * configuration is valid until AP restart.
+	 */
+	QCA_WLAN_VENDOR_ATTR_WIFI_TEST_CONFIG_FILS_DISCOVERY_FRAMES_TX = 44,
+
+	/* 8-bit unsigned value to configure the driver/firmware to enable or
+	 * disable full bandwidth UL MU-MIMO subfield in the HE PHY capabilities
+	 * information field.
+	 * 0 - Disable full bandwidth UL MU-MIMO subfield
+	 * 1 - Enable full bandwidth UL MU-MIMO subfield
+	 * This attribute is used to configure the testbed device.
+	 */
+	QCA_WLAN_VENDOR_ATTR_WIFI_TEST_CONFIG_FULL_BW_UL_MU_MIMO = 45,
+
+	/* 16-bit unsigned value to configure the driver with a specific BSS
+	 * max idle period to advertise in the BSS Max Idle Period element
+	 * (IEEE Std 802.11-2016, 9.4.2.79) in (Re)Association Request frames.
+	 * This attribute is used to configure the testbed device.
+	 */
+	QCA_WLAN_VENDOR_ATTR_WIFI_TEST_CONFIG_BSS_MAX_IDLE_PERIOD = 46,
+
+	/* 8-bit unsigned value to configure the driver to use only RU 242 tone
+	 * for data transmission.
+	 * 0 - Default behavior, 1 - Configure RU 242 tone for data Tx.
+	 * This attribute is used to configure the testbed device.
+	 */
+	QCA_WLAN_VENDOR_ATTR_WIFI_TEST_CONFIG_RU_242_TONE_TX = 47,
+
+	/* 8-bit unsigned value to configure the driver to disable data and
+	 * management response frame transmission to test the BSS max idle
+	 * feature.
+	 * 0 - Default behavior, 1 - Disable data and management response Tx.
+	 * This attribute is used to configure the testbed device.
+	 */
+	QCA_WLAN_VENDOR_ATTR_WIFI_TEST_CONFIG_DISABLE_DATA_MGMT_RSP_TX = 48,
+
+	/* 8-bit unsigned value to configure the driver/firmware to enable or
+	 * disable Punctured Preamble Rx subfield in the HE PHY capabilities
+	 * information field.
+	 * 0 - Disable Punctured Preamble Rx subfield
+	 * 1 - Enable Punctured Preamble Rx subfield
+	 * This attribute is used to configure the testbed device.
+	 */
+	QCA_WLAN_VENDOR_ATTR_WIFI_TEST_CONFIG_PUNCTURED_PREAMBLE_RX = 49,
+
 	/* keep last */
 	QCA_WLAN_VENDOR_ATTR_WIFI_TEST_CONFIG_AFTER_LAST,
 	QCA_WLAN_VENDOR_ATTR_WIFI_TEST_CONFIG_MAX =
@@ -8372,6 +8556,14 @@ enum qca_wlan_twt_setup_state {
  * TWT state for the given dialog id. The values for this are represented
  * by enum qca_wlan_twt_setup_state.
  * This is obtained through TWT GET operation.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_TWT_SETUP_WAKE_INTVL2_MANTISSA: Optional (u32)
+ * This attribute is used to configure wake interval mantissa.
+ * The unit is microseconds. This attribute, when specified, takes
+ * precedence over QCA_WLAN_VENDOR_ATTR_TWT_SETUP_WAKE_INTVL_MANTISSA.
+ * This parameter is used for
+ * 1. TWT SET Request and Response
+ * 2. TWT GET Response
  */
 enum qca_wlan_vendor_attr_twt_setup {
 	QCA_WLAN_VENDOR_ATTR_TWT_SETUP_INVALID = 0,
@@ -8399,6 +8591,7 @@ enum qca_wlan_vendor_attr_twt_setup {
 	QCA_WLAN_VENDOR_ATTR_TWT_SETUP_MIN_WAKE_DURATION = 18,
 	QCA_WLAN_VENDOR_ATTR_TWT_SETUP_MAX_WAKE_DURATION = 19,
 	QCA_WLAN_VENDOR_ATTR_TWT_SETUP_STATE = 20,
+	QCA_WLAN_VENDOR_ATTR_TWT_SETUP_WAKE_INTVL2_MANTISSA = 21,
 
 	/* keep last */
 	QCA_WLAN_VENDOR_ATTR_TWT_SETUP_AFTER_LAST,
@@ -9966,6 +10159,40 @@ enum qca_vendor_wlan_sta_guard_interval {
  * connection failure from driver. The driver shall not include this attribute
  * in response to QCA_NL80211_VENDOR_SUBCMD_GET_STA_INFO command if there is no
  * connection failure observed in the last attempted connection.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_GET_STA_INFO_LATEST_TX_RATE: u32, latest TX rate (Kbps)
+ * used by the station in its last TX frame while communicating to the AP in the
+ * connected state. When queried in the disconnected state, this represents the
+ * rate used by the STA in the last TX frame to the AP when it was connected.
+ * This attribute is used for STA mode only.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_GET_STA_INFO_LATEST_RIX: u32, used in STA mode only.
+ * This represents the rate index used by the STA for the last TX frame to the
+ * AP. When queried in the disconnected state, this gives the last RIX used by
+ * the STA in the last TX frame to the AP when it was connected.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_GET_STA_INFO_TSF_OUT_OF_SYNC_COUNT: u32, used in STA
+ * mode only. This represents the number of times the STA TSF goes out of sync
+ * from the AP after the connection. If queried in the disconnected state, this
+ * gives the count of TSF out of sync for the last connection.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_GET_STA_INFO_ROAM_TRIGGER_REASON: u32, used in STA
+ * mode only. This represents the roam trigger reason for the last roaming
+ * attempted by the firmware. This can be queried either in connected state or
+ * disconnected state. Each bit of this attribute represents the different
+ * roam trigger reason code which are defined in enum qca_vendor_roam_triggers.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_GET_STA_INFO_ROAM_FAIL_REASON: u32, used in STA mode
+ * only. This represents the roam fail reason for the last failed roaming
+ * attempt by the firmware. Different roam failure reason codes are specified
+ * in enum qca_vendor_roam_fail_reasons. This can be queried either in
+ * connected state or disconnected state.
+ *
+ * @QCA_WLAN_VENDOR_ATTR_GET_STA_INFO_ROAM_INVOKE_FAIL_REASON: u32, used in
+ * STA mode only. This represents the roam invoke fail reason for the last
+ * failed roam invoke. Different roam invoke failure reason codes
+ * are specified in enum qca_vendor_roam_invoke_fail_reasons. This can be
+ * queried either in connected state or disconnected state.
  */
 enum qca_wlan_vendor_attr_get_sta_info {
 	QCA_WLAN_VENDOR_ATTR_GET_STA_INFO_INVALID = 0,
@@ -10009,6 +10236,12 @@ enum qca_wlan_vendor_attr_get_sta_info {
 	QCA_WLAN_VENDOR_ATTR_GET_STA_INFO_BEACON_MIC_ERROR_COUNT = 41,
 	QCA_WLAN_VENDOR_ATTR_GET_STA_INFO_BEACON_REPLAY_COUNT = 42,
 	QCA_WLAN_VENDOR_ATTR_GET_STA_INFO_CONNECT_FAIL_REASON_CODE = 43,
+	QCA_WLAN_VENDOR_ATTR_GET_STA_INFO_LATEST_TX_RATE = 44,
+	QCA_WLAN_VENDOR_ATTR_GET_STA_INFO_LATEST_RIX = 45,
+	QCA_WLAN_VENDOR_ATTR_GET_STA_INFO_TSF_OUT_OF_SYNC_COUNT = 46,
+	QCA_WLAN_VENDOR_ATTR_GET_STA_INFO_ROAM_TRIGGER_REASON = 47,
+	QCA_WLAN_VENDOR_ATTR_GET_STA_INFO_ROAM_FAIL_REASON = 48,
+	QCA_WLAN_VENDOR_ATTR_GET_STA_INFO_ROAM_INVOKE_FAIL_REASON = 49,
 
 	/* keep last */
 	QCA_WLAN_VENDOR_ATTR_GET_STA_INFO_AFTER_LAST,
