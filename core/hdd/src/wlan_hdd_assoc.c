@@ -65,6 +65,7 @@
 #include "wlan_hdd_scan.h"
 #include "wlan_crypto_global_api.h"
 #include "wlan_hdd_bcn_recv.h"
+#include "wlan_mlme_twt_ucfg_api.h"
 
 #include "wlan_hdd_nud_tracking.h"
 #include <wlan_cfg80211_crypto.h>
@@ -3123,6 +3124,9 @@ hdd_association_completion_handler(struct hdd_adapter *adapter,
 					  WLAN_IPA_STA_CONNECT,
 					  roam_info->bssid.bytes);
 
+		if (adapter->device_mode == QDF_STA_MODE)
+			cdp_reset_rx_hw_ext_stats(soc);
+
 #ifdef FEATURE_WLAN_AUTO_SHUTDOWN
 		wlan_hdd_auto_shutdown_enable(hdd_ctx, false);
 #endif
@@ -3488,7 +3492,12 @@ hdd_association_completion_handler(struct hdd_adapter *adapter,
 			/* Inform FTM TIME SYNC about the connection with AP */
 			hdd_ftm_time_sync_sta_state_notify(
 					adapter, FTM_TIME_SYNC_STA_CONNECTED);
+
+			ucfg_mlme_init_twt_context(hdd_ctx->psoc,
+						   &roam_info->bssid,
+						   WLAN_ALL_SESSIONS_DIALOG_ID);
 		}
+
 		/*
 		 * Following code will be cleaned once the interface manager
 		 * module is enabled.

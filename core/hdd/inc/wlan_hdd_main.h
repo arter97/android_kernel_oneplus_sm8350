@@ -507,6 +507,7 @@ typedef enum {
 	NET_DEV_HOLD_CACHE_STATION_STATS_CB = 57,
 	NET_DEV_HOLD_DISPLAY_TXRX_STATS = 58,
 	NET_DEV_HOLD_GET_MODE_SPECIFIC_IF_COUNT = 59,
+	NET_DEV_HOLD_START_PRE_CAC_TRANS = 60,
 
 	/* Keep it at the end */
 	NET_DEV_HOLD_ID_MAX
@@ -1524,6 +1525,9 @@ struct hdd_adapter {
 	enum hdd_work_status netdev_features_update_work_status;
 	/* Flag to indicate whether it is a pre cac adapter or not */
 	bool is_pre_cac_adapter;
+#ifdef WLAN_FEATURE_BIG_DATA_STATS
+	struct big_data_stats_event big_data_stats;
+#endif
 	bool delete_in_progress;
 	qdf_atomic_t net_dev_hold_ref_count[NET_DEV_HOLD_ID_MAX];
 };
@@ -2189,6 +2193,9 @@ struct hdd_context {
 #endif
 	bool disconnect_for_sta_mon_conc;
 	bool is_dual_mac_cfg_updated;
+	bool is_regulatory_update_in_progress;
+	qdf_event_t regulatory_update_event;
+	qdf_mutex_t regulatory_status_lock;
 };
 
 /**

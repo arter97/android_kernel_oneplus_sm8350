@@ -83,6 +83,7 @@ struct sae_auth_retry {
  * @is_pmf_enabled: True if PMF is enabled
  * @last_assoc_received_time: last assoc received time
  * @last_disassoc_deauth_received_time: last disassoc/deauth received time
+ * @twt_ctx: TWT context
  */
 struct peer_mlme_priv_obj {
 	uint8_t last_pn_valid;
@@ -91,6 +92,9 @@ struct peer_mlme_priv_obj {
 	bool is_pmf_enabled;
 	qdf_time_t last_assoc_received_time;
 	qdf_time_t last_disassoc_deauth_received_time;
+#ifdef WLAN_SUPPORT_TWT
+	struct twt_context twt_ctx;
+#endif
 };
 
 /**
@@ -158,28 +162,8 @@ struct tclas_mask {
 	uint8_t classifier_mask;
 	union {
 		struct {
-			uint8_t version;
-			union {
-				struct {
-					uint8_t source[4];
-					uint8_t dest[4];
-					uint16_t src_port;
-					uint16_t dest_port;
-					uint8_t dscp;
-					uint8_t proto;
-					uint8_t reserved;
-				} ip_v4_params;
-				struct {
-					uint8_t source[16];
-					uint8_t dest[16];
-					uint16_t src_port;
-					uint16_t dest_port;
-					uint8_t DSCP;
-					uint8_t next_header;
-					uint8_t flow_label[3];
-				} ip_v6_params;
-			} params;
-		} ip_params; /* classifier_type = 4 */
+			uint8_t reserved[16];
+		} ip_param; /* classifier_type = 4 */
 	} info;
 };
 
@@ -365,6 +349,15 @@ uint8_t *mlme_get_dynamic_oce_flags(struct wlan_objmgr_vdev *vdev);
  */
 struct wlan_mlme_nss_chains *mlme_get_dynamic_vdev_config(
 					struct wlan_objmgr_vdev *vdev);
+
+/**
+ * mlme_get_vdev_he_ops()  - Get vdev HE operations IE info
+ * @psoc: Pointer to PSOC object
+ * @vdev_id: vdev id
+ *
+ * Return: HE ops IE
+ */
+uint32_t mlme_get_vdev_he_ops(struct wlan_objmgr_psoc *psoc, uint8_t vdev_id);
 
 /**
  * mlme_get_ini_vdev_config() - get the vdev ini config params

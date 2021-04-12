@@ -344,26 +344,8 @@ wma_roam_scan_chan_list_event_handler(WMA_HANDLE handle, uint8_t *event,
 }
 #endif
 
-#ifndef ROAM_OFFLOAD_V1
-/**
- * wma_update_per_roam_config() -per roam config parameter updation to FW
- * @handle: wma handle
- * @req_buf: per roam config parameters
- *
- * Return: none
- */
-void wma_update_per_roam_config(WMA_HANDLE handle,
-				 struct wlan_per_roam_config_req *req_buf);
-#endif
 QDF_STATUS wma_update_channel_list(WMA_HANDLE handle,
 				   tSirUpdateChanList *chan_list);
-
-#if defined(WLAN_FEATURE_ROAM_OFFLOAD) && !defined(ROAM_OFFLOAD_V1)
-QDF_STATUS wma_roam_scan_fill_self_caps(tp_wma_handle wma_handle,
-					roam_offload_param *
-					roam_offload_params,
-					struct roam_offload_scan_req *roam_req);
-#endif
 
 A_UINT32 e_csr_auth_type_to_rsn_authmode(enum csr_akm_type authtype,
 					 eCsrEncryptionType encr);
@@ -801,8 +783,6 @@ int wma_vdev_install_key_complete_event_handler(void *handle,
 void wma_objmgr_set_peer_mlme_phymode(tp_wma_handle wma, uint8_t *mac_addr,
 				      enum wlan_phymode phymode);
 
-uint32_t wma_convert_crypto_akm_to_wmi_akm(uint32_t keymgmt);
-
 QDF_STATUS wma_send_peer_assoc(tp_wma_handle wma,
 					   tSirNwType nw_type,
 					   tpAddStaParams params);
@@ -986,6 +966,15 @@ enum tx_rate_info wma_get_ht_rate_flags(enum phy_ch_width ch_width);
  * Return: Rate flags corresponding to ch_width
  */
 enum tx_rate_info wma_get_he_rate_flags(enum phy_ch_width ch_width);
+
+/**
+ * wma_set_vht_txbf_cfg() - set VHT Tx beamforming capability to FW
+ * @mac: Global MAC context
+ * @vdev_id: VDEV id
+ *
+ * Return: None
+ */
+void wma_set_vht_txbf_cfg(struct mac_context *mac, uint8_t vdev_id);
 
 int32_t wmi_unified_send_txbf(tp_wma_handle wma, tpAddStaParams params);
 
@@ -1739,16 +1728,6 @@ int wma_cold_boot_cal_event_handler(void *wma_ctx, uint8_t *event_buff,
  */
 int wma_oem_event_handler(void *wma_ctx, uint8_t *event_buff, uint32_t len);
 #endif
-
-/**
- * wma_set_roam_triggers() - Send roam trigger bitmap to WMI
- * @wma_handle: wma handle
- * @triggers: Carries vdev id and roam trigger bitmap.
- *
- * Return: Success or Failure status
- */
-QDF_STATUS wma_set_roam_triggers(tp_wma_handle wma_handle,
-				 struct wlan_roam_triggers *triggers);
 
 /**
  * wma_get_ani_level_evt_handler - event handler to fetch ani level

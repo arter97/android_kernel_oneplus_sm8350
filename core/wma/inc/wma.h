@@ -91,6 +91,14 @@
 #define wma_nofl_debug(params...) \
 	QDF_TRACE_DEBUG_NO_FL(QDF_MODULE_ID_WMA, params)
 
+#define wma_conditional_log(is_console_log_enabled, params...) \
+	do { \
+		if (is_console_log_enabled) \
+			wma_info(params); \
+		else \
+			wma_debug(params); \
+	} while (0)
+
 #define WMA_WILDCARD_PDEV_ID 0x0
 
 #define WMA_HW_DEF_SCAN_MAX_DURATION      30000 /* 30 secs */
@@ -2060,19 +2068,6 @@ void wma_vdev_clear_pause_bit(uint8_t vdev_id, wmi_tx_pause_type bit_pos)
 	iface->pause_bitmap &= ~(1 << bit_pos);
 }
 
-#ifndef ROAM_OFFLOAD_V1
-/**
- * wma_process_roaming_config() - process roam request
- * @wma_handle: wma handle
- * @roam_req: roam request parameters
- *
- * Main routine to handle ROAM commands coming from CSR module.
- *
- * Return: QDF status
- */
-QDF_STATUS wma_process_roaming_config(tp_wma_handle wma_handle,
-				     struct roam_offload_scan_req *roam_req);
-#endif
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD
 /**
  * wma_send_roam_preauth_status() - Send the preauth status to wmi

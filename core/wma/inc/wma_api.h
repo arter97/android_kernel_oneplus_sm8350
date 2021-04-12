@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2020 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2021 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -808,26 +808,6 @@ int wma_wlm_stats_req(int vdev_id, uint32_t bitmask, uint32_t max_size,
 int wma_wlm_stats_rsp(void *wma_ctx, uint8_t *event, uint32_t len);
 #endif /* FEATURE_WLM_STATS */
 
-#ifndef ROAM_OFFLOAD_V1
-/**
- * wma_update_roam_offload_flag() -  update roam offload flag to fw
- * @wma:     wma handle
- * @params: Roaming enable/disable params
- *
- * Return: none
- */
-void wma_update_roam_offload_flag(void *handle,
-				  struct roam_init_params *params);
-/**
- * wma_set_roam_disable_cfg() - Set roam module disable cfg to fw
- * @wma: wma handle
- * @params: Roaming module enable/disable params
- *
- * Return: none
- */
-void wma_set_roam_disable_cfg(void *handle, struct roam_disable_cfg *params);
-#endif
-
 /**
  * wma_self_peer_create() - create self peer in objmgr
  * @vdev_mlme: vdev mlme component private object
@@ -848,5 +828,15 @@ QDF_STATUS wma_vdev_self_peer_create(struct vdev_mlme_obj *vdev_mlme);
  * Return: None
  */
 void wma_cleanup_vdev(struct wlan_objmgr_vdev *vdev);
+
+/**
+ * wma_set_wakeup_logs_to_console() - Enable/disable wakeup logs to console
+ * @value: boolean value
+ *
+ * API to enable/disable wow host wakeup event logs to console.
+ *
+ * Return: None
+ */
+void wma_set_wakeup_logs_to_console(bool value);
 
 #endif /* WMA_API_H */

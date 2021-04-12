@@ -964,10 +964,6 @@ QDF_STATUS sme_update_is_fast_roam_ini_feature_enabled(mac_handle_t mac_handle,
 		const bool
 		isFastRoamIniFeatureEnabled);
 
-#ifndef ROAM_OFFLOAD_V1
-QDF_STATUS sme_config_fast_roaming(mac_handle_t mac_handle, uint8_t session_id,
-				   const bool is_fast_roam_enabled);
-#endif
 QDF_STATUS sme_stop_roaming(mac_handle_t mac_handle, uint8_t sessionId,
 			    uint8_t reason,
 			    enum wlan_cm_rso_control_requestor requestor);
@@ -1614,10 +1610,6 @@ QDF_STATUS sme_ext_scan_register_callback(mac_handle_t mac_handle,
 	return QDF_STATUS_SUCCESS;
 }
 #endif /* FEATURE_WLAN_EXTSCAN */
-
-#ifndef ROAM_OFFLOAD_V1
-QDF_STATUS sme_abort_roam_scan(mac_handle_t mac_handle, uint8_t sessionId);
-#endif
 
 /**
  * sme_get_vht_ch_width() - SME API to get the max supported FW chan width
@@ -3683,7 +3675,8 @@ QDF_STATUS sme_clear_twt_complete_cb(mac_handle_t mac_handle);
  * @mac_handle: MAC handle
  * @twt_cb: TWT callbacks
  *
- * Return: QDF Status
+ * Return: QDF_STATUS_SUCCESS on Success, other QDF_STATUS error codes
+ * on failure
  */
 QDF_STATUS sme_register_twt_callbacks(mac_handle_t mac_handle,
 				      struct twt_callbacks *twt_cb);
@@ -3731,18 +3724,14 @@ sme_pause_dialog_cmd(mac_handle_t mac_handle,
  * sme_nudge_dialog_cmd() - Register callback and send TWT nudge dialog
  * command to firmware
  * @mac_handle: MAC handle
- * @twt_nudge_dialog_cb: Function callback to handle nudge_dialog event
  * @twt_params: TWT nudge dialog parameters
- * @context: os_if_request cookie
  *
  * Return: QDF_STATUS_SUCCESS on Success, other QDF_STATUS error codes
  * on failure
  */
 QDF_STATUS
 sme_nudge_dialog_cmd(mac_handle_t mac_handle,
-		     twt_nudge_dialog_cb nudge_dialog_cb,
-		     struct wmi_twt_nudge_dialog_cmd_param *twt_params,
-		     void *context);
+		     struct wmi_twt_nudge_dialog_cmd_param *twt_params);
 
 /**
  * sme_resume_dialog_cmd() - Register callback and send TWT resume dialog
@@ -4143,23 +4132,6 @@ void sme_chan_to_freq_list(
 			uint32_t *freq_list,
 			const uint8_t *chan_list,
 			uint32_t chan_list_len);
-
-#ifndef ROAM_OFFLOAD_V1
-/**
- * sme_set_roam_triggers() - Send roam trigger bitmap to WMA
- * @mac_handle: Opaque handle to the MAC context
- * @triggers: Carries pointer of the object containing vdev id and
- *	      roam_trigger_bitmap.
- *
- * Send the roam trigger bitmap received to WMA/WMI. WMI converts
- * the bitmap to firmware compatible bitmap as per reasons
- * defined @WMI_ROAM_TRIGGER_REASON_ID
- *
- * Return: QDF_STATUS
- */
-QDF_STATUS sme_set_roam_triggers(mac_handle_t mac_handle,
-				 struct wlan_roam_triggers *triggers);
-#endif
 
 /**
  * sme_set_roam_config_enable() - Cache roam config status in SME

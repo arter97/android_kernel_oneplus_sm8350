@@ -43,6 +43,8 @@
 #include "../../core/src/vdev_mgr_ops.h"
 #include "wlan_pmo_ucfg_api.h"
 #include "wlan_objmgr_vdev_obj.h"
+#include "wlan_reg_services_api.h"
+#include "wlan_lmac_if_def.h"
 
 static void lim_process_mlm_auth_req(struct mac_context *, uint32_t *);
 static void lim_process_mlm_assoc_req(struct mac_context *, uint32_t *);
@@ -483,7 +485,7 @@ error:
 	qdf_mem_free(mlm_join_req);
 	if (session)
 		session->pLimMlmJoinReq = NULL;
-	mlmjoin_cnf.resultCode = eSIR_SME_RESOURCES_UNAVAILABLE;
+	mlmjoin_cnf.resultCode = eSIR_SME_PEER_CREATE_FAILED;
 	mlmjoin_cnf.sessionId = sessionid;
 	mlmjoin_cnf.protStatusCode = STATUS_UNSPECIFIED_FAILURE;
 	lim_post_sme_message(mac_ctx, LIM_MLM_JOIN_CNF,

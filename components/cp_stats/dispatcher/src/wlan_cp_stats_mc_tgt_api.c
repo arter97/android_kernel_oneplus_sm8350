@@ -26,10 +26,12 @@
 #include "wlan_cp_stats_mc_defs.h"
 #include "target_if_cp_stats.h"
 #include "wlan_cp_stats_tgt_api.h"
+#include "wlan_cp_stats_ucfg_api.h"
 #include "wlan_cp_stats_mc_tgt_api.h"
 #include <wlan_cp_stats_mc_ucfg_api.h>
 #include <wlan_cp_stats_utils_api.h>
 #include "../../core/src/wlan_cp_stats_defs.h"
+#include "../../core/src/wlan_cp_stats_obj_mgr_handler.h"
 
 static bool tgt_mc_cp_stats_is_last_event(struct stats_event *ev,
 					  enum stats_req_type stats_type)
@@ -51,15 +53,65 @@ static bool tgt_mc_cp_stats_is_last_event(struct stats_event *ev,
 	return is_last_event;
 }
 
+#ifdef WLAN_FEATURE_BIG_DATA_STATS
+static void
+tgt_cp_stats_register_big_data_rx_ops(struct wlan_lmac_if_rx_ops *rx_ops)
+{
+	rx_ops->cp_stats_rx_ops.process_big_data_stats_event =
+		tgt_mc_cp_stats_process_big_data_stats_event;
+}
+
+static QDF_STATUS
+send_big_data_stats_req(struct wlan_lmac_if_cp_stats_tx_ops *tx_ops,
+			struct wlan_objmgr_psoc *psoc,
+			struct request_info *req)
+{
+	if (!tx_ops->send_req_big_data_stats) {
+		cp_stats_err("could not get send_req_big_data_stats");
+		return QDF_STATUS_E_NULL_VALUE;
+	}
+
+	return tx_ops->send_req_big_data_stats(psoc, req);
+}
+#else
+static void
+tgt_cp_stats_register_big_data_rx_ops(struct wlan_lmac_if_rx_ops *rx_ops)
+{}
+
+static QDF_STATUS
+send_big_data_stats_req(struct wlan_lmac_if_cp_stats_tx_ops *tx_ops,
+			struct wlan_objmgr_psoc *psoc,
+			struct request_info *req)
+{
+	return QDF_STATUS_SUCCESS;
+}
+#endif
+
+#ifdef WLAN_SUPPORT_INFRA_CTRL_PATH_STATS
+static void
+tgt_cp_stats_register_infra_cp_stats_rx_ops(struct wlan_lmac_if_rx_ops *rx_ops)
+{
+	rx_ops->cp_stats_rx_ops.process_infra_stats_event =
+				tgt_mc_cp_stats_process_infra_stats_event;
+}
+#else
+static void
+tgt_cp_stats_register_infra_cp_stats_rx_ops(struct wlan_lmac_if_rx_ops *rx_ops)
+{
+}
+#endif
+
 void tgt_cp_stats_register_rx_ops(struct wlan_lmac_if_rx_ops *rx_ops)
 {
 	rx_ops->cp_stats_rx_ops.process_stats_event =
 					tgt_mc_cp_stats_process_stats_event;
+	tgt_cp_stats_register_infra_cp_stats_rx_ops(rx_ops);
+	tgt_cp_stats_register_big_data_rx_ops(rx_ops);
 }
 
 static void tgt_mc_cp_stats_extract_tx_power(struct wlan_objmgr_psoc *psoc,
-					struct stats_event *ev,
-					bool is_station_stats)
+					     struct stats_event *ev,
+					     bool is_station_stats)
 {
 	int32_t max_pwr;
 	uint8_t pdev_id;
@@ -614,6 +666,37 @@ tgt_mc_cp_stats_extract_peer_stats_info_ext(struct wlan_objmgr_psoc *psoc,
 	}
 }
 
+#ifdef WLAN_SUPPORT_INFRA_CTRL_PATH_STATS
+#ifdef WLAN_SUPPORT_TWT
+static void
+tgt_mc_infra_cp_stats_extract_twt_stats(struct wlan_objmgr_psoc *psoc,
+					struct infra_cp_stats_event *ev)
+{
+	QDF_STATUS status;
+	get_infra_cp_stats_cb resp_cb;
+	void *context;
+
+	status = wlan_cp_stats_infra_cp_get_context(psoc, &resp_cb, &context);
+	if (QDF_IS_STATUS_ERROR(status)) {
+		cp_stats_err("ucfg_get_infra_cp_stats_context failed");
+		return;
+	}
+
+	cp_stats_debug("num_twt_infra_cp_stats = %d action %d",
+		       ev->num_twt_infra_cp_stats, ev->action);
+
+	if (resp_cb)
+		resp_cb(ev, context);
+}
+#else
+static void
+tgt_mc_infra_cp_stats_extract_twt_stats(struct wlan_objmgr_psoc *psoc,
+					struct infra_cp_stats_event *ev)
+{
+}
+#endif
+#endif /* WLAN_SUPPORT_INFRA_CTRL_PATH_STATS */
+
 static void tgt_mc_cp_stats_extract_cca_stats(struct wlan_objmgr_psoc *psoc,
 						  struct stats_event *ev)
 {
@@ -977,6 +1060,20 @@ static void tgt_mc_cp_send_lost_link_stats(struct wlan_objmgr_psoc *psoc,
 		psoc_cp_stats_priv->legacy_stats_cb(ev);
 }
 
+#ifdef WLAN_SUPPORT_INFRA_CTRL_PATH_STATS
+QDF_STATUS tgt_mc_cp_stats_process_infra_stats_event(
+				struct wlan_objmgr_psoc *psoc,
+				struct infra_cp_stats_event *infra_event)
+{
+	if (!infra_event)
+		return QDF_STATUS_E_NULL_VALUE;
+
+	tgt_mc_infra_cp_stats_extract_twt_stats(psoc, infra_event);
+
+	return QDF_STATUS_SUCCESS;
+}
+#endif
+
 QDF_STATUS tgt_mc_cp_stats_process_stats_event(struct wlan_objmgr_psoc *psoc,
 					       struct stats_event *ev)
 {
@@ -1000,6 +1097,43 @@ QDF_STATUS tgt_mc_cp_stats_process_stats_event(struct wlan_objmgr_psoc *psoc,
 	tgt_mc_cp_send_lost_link_stats(psoc, ev);
 	return QDF_STATUS_SUCCESS;
 }
+
+#ifdef WLAN_FEATURE_BIG_DATA_STATS
+QDF_STATUS
+tgt_mc_cp_stats_process_big_data_stats_event(struct wlan_objmgr_psoc *psoc,
+					     struct big_data_stats_event *ev)
+{
+	QDF_STATUS status;
+	struct request_info last_req = {0};
+	bool pending = false;
+
+	if (!ev) {
+		cp_stats_err("invalid data");
+		return QDF_STATUS_E_INVAL;
+	}
+
+	status = ucfg_mc_cp_stats_get_pending_req(psoc,
+						  TYPE_BIG_DATA_STATS,
+						  &last_req);
+	if (QDF_IS_STATUS_ERROR(status)) {
+		cp_stats_err("ucfg_mc_cp_stats_get_pending_req failed");
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	ucfg_mc_cp_stats_reset_pending_req(psoc, TYPE_BIG_DATA_STATS,
+					   &last_req, &pending);
+
+	if (last_req.u.get_big_data_stats_cb && pending) {
+		last_req.u.get_big_data_stats_cb(ev, last_req.cookie);
+		last_req.u.get_big_data_stats_cb = NULL;
+	} else {
+		cp_stats_err("callback to send big data stats not found");
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	return QDF_STATUS_SUCCESS;
+}
+#endif
 
 QDF_STATUS tgt_mc_cp_stats_inc_wake_lock_stats(struct wlan_objmgr_psoc *psoc,
 					       uint32_t reason,
@@ -1037,6 +1171,9 @@ QDF_STATUS tgt_send_mc_cp_stats_req(struct wlan_objmgr_psoc *psoc,
 			return QDF_STATUS_E_NULL_VALUE;
 		}
 		status = tx_ops->send_req_peer_stats(psoc, req);
+		break;
+	case TYPE_BIG_DATA_STATS:
+		status = send_big_data_stats_req(tx_ops, psoc, req);
 		break;
 	default:
 		if (!tx_ops->send_req_stats) {
