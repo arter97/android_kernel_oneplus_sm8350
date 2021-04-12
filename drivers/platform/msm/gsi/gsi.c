@@ -598,8 +598,7 @@ static void gsi_process_evt_re(struct gsi_evt_ctx *ctx,
 	/* RMB before reading event ring shared b/w IPA h/w & driver
 	 * ordering between IPA h/w store and CPU load
 	 */
-	if (callback)
-		dma_rmb();
+	dma_rmb();
 	evt = (struct gsi_xfer_compl_evt *)(ctx->ring.base_va +
 			ctx->ring.rp_local - ctx->ring.base);
 	gsi_process_chan(evt, notify, callback);
@@ -3818,6 +3817,11 @@ int __gsi_populate_tre(struct gsi_chan_ctx *ctx,
 	tre.ieot = (xfer->flags & GSI_XFER_FLAG_EOT) ? 1 : 0;
 	tre.ieob = (xfer->flags & GSI_XFER_FLAG_EOB) ? 1 : 0;
 	tre.chain = (xfer->flags & GSI_XFER_FLAG_CHAIN) ? 1 : 0;
+
+	if (unlikely(ctx->state  == GSI_CHAN_STATE_NOT_ALLOCATED)) {
+		GSIERR("bad state %d\n", ctx->state);
+		return -GSI_STATUS_UNSUPPORTED_OP;
+	}
 
 	idx = gsi_find_idx_from_addr(&ctx->ring, ctx->ring.wp_local);
 	tre_ptr = (struct gsi_tre *)(ctx->ring.base_va +
