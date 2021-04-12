@@ -1341,6 +1341,7 @@ int sde_kms_vm_pre_release(struct sde_kms *sde_kms,
 	struct drm_encoder *encoder;
 	struct drm_connector *connector;
 	int rc = 0;
+	struct msm_drm_private *priv;
 
 	ddev = sde_kms->dev;
 
@@ -1348,6 +1349,7 @@ int sde_kms_vm_pre_release(struct sde_kms *sde_kms,
 	if (!crtc)
 		return 0;
 
+	priv = crtc->dev->dev_private;
 	/* if vm_req is enabled, once CRTC on the commit is guaranteed */
 	sde_kms_wait_for_frame_transfer_complete(&sde_kms->base, crtc);
 
@@ -1372,6 +1374,12 @@ int sde_kms_vm_pre_release(struct sde_kms *sde_kms,
 
 	/* disable vblank events */
 	drm_crtc_vblank_off(crtc);
+
+	/*
+	 * Flush event thread queue for any pending events as vblank work
+	 * might get scheduled from drm_crtc_vblank_off
+	 */
+	kthread_flush_worker(&priv->event_thread[crtc->index].worker);
 
 	/* reset sw state */
 	sde_crtc_reset_sw_state(crtc);
@@ -1512,31 +1520,6 @@ static void sde_kms_complete_commit(struct msm_kms *kms,
 	SDE_ATRACE_END("sde_kms_complete_commit");
 }
 
-void sde_kms_update_recovery_mask(struct sde_kms *sde_kms,
-		struct drm_crtc *crtc, bool flag)
-{
-	int i;
-	struct sde_hw_ctl *ctl;
-	struct sde_crtc *sde_crtc;
-
-	if (!crtc || !sde_kms) {
-		SDE_ERROR("invalid params\n");
-		return;
-	}
-
-	sde_crtc = to_sde_crtc(crtc);
-
-	for (i = 0; i < sde_crtc->num_ctls; ++i) {
-		ctl = sde_crtc->mixers[i].hw_ctl;
-		if (!ctl || !ctl->ops.reset)
-			continue;
-		if (flag)
-			sde_kms->recovery_mask |= BIT(ctl->idx - CTL_0);
-		else
-			sde_kms->recovery_mask &= ~BIT(ctl->idx - CTL_0);
-	}
-}
-
 static void sde_kms_wait_for_commit_done(struct msm_kms *kms,
 		struct drm_crtc *crtc)
 {
@@ -1586,9 +1569,7 @@ static void sde_kms_wait_for_commit_done(struct msm_kms *kms,
 		ret = sde_encoder_wait_for_event(encoder, MSM_ENC_COMMIT_DONE);
 		if (ret && ret != -EWOULDBLOCK) {
 			SDE_ERROR("wait for commit done returned %d\n", ret);
-			sde_kms_update_recovery_mask(to_sde_kms(kms),
-				crtc, true);
-			sde_crtc_request_frame_reset(crtc);
+			sde_crtc_request_frame_reset(crtc, encoder);
 			break;
 		}
 
