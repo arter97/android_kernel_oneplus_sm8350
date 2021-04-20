@@ -88,6 +88,9 @@
 /* ID for Microsoft OS String */
 #define GSI_MBIM_OS_STRING_ID 0xEE
 
+static char compatible_id[256] = "ALTRCFG";
+static char sub_compatible_id[8];
+
 #define EVT_NONE			0
 #define EVT_UNINITIALIZED		1
 #define EVT_INITIALIZED			2
@@ -240,6 +243,10 @@ struct gsi_ctrl_port {
 	unsigned int modem_to_host;
 	unsigned int cpkt_drop_cnt;
 	unsigned int get_encap_cnt;
+
+	struct device *dev;
+	struct work_struct uevent_work;
+	struct workqueue_struct *uevent_wq;
 };
 
 struct gsi_data_port {

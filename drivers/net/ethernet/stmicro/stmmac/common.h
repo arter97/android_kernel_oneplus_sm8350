@@ -91,6 +91,8 @@ struct stmmac_extra_stats {
 	unsigned long threshold;
 	unsigned long tx_pkt_n;
 	unsigned long rx_pkt_n;
+	unsigned long q_tx_pkt_n[MTL_MAX_TX_QUEUES];
+	unsigned long q_rx_pkt_n[MTL_MAX_RX_QUEUES];
 	unsigned long normal_irq_n;
 	unsigned long rx_normal_irq_n;
 	unsigned long napi_poll;
@@ -272,6 +274,7 @@ enum rx_frame_status {
 	llc_snap = 0x4,
 	dma_own = 0x8,
 	rx_not_ls = 0x10,
+	ctxt_desc = 0x20,
 };
 
 /* Tx status */
