@@ -133,3 +133,4 @@ obj-$(CONFIG_MSM_SEB_RPMSG) += slate_events_bridge_rpmsg.o
 obj-$(CONFIG_POWER_STATE) += power_state.o
 obj-$(CONFIG_AUTO_EARLY_LAUNCH) += auto_early_launcher.o
 obj-$(CONFIG_SILENT_MODE) += silent-mode-hw-monitoring.o
+obj-$(CONFIG_QTI_PMIC_LPM)	+= qti-pmic-lpm.o
