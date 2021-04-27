@@ -2270,9 +2270,13 @@ int wma_roam_stats_event_handler(WMA_HANDLE handle, uint8_t *event,
 			return -EINVAL;
 		}
 
-		if (roam_info->trigger.present)
+		if (roam_info->trigger.present) {
 			wma_rso_print_trigger_info(&roam_info->trigger,
 						   vdev_id);
+			wlan_cm_update_roam_states(wma->psoc, vdev_id,
+					roam_info->trigger.trigger_reason,
+					ROAM_TRIGGER_REASON);
+		}
 
 		/* Roam scan related details - Scan channel, scan type .. */
 		status = wmi_unified_extract_roam_scan_stats(
@@ -2303,9 +2307,12 @@ int wma_roam_stats_event_handler(WMA_HANDLE handle, uint8_t *event,
 			qdf_mem_free(roam_info);
 			return -EINVAL;
 		}
-		if (roam_info->result.present)
+		if (roam_info->result.present) {
 			wma_rso_print_roam_result(&roam_info->result, vdev_id);
-
+			wlan_cm_update_roam_states(wma->psoc, vdev_id,
+						roam_info->result.fail_reason,
+						ROAM_FAIL_REASON);
+		}
 		/* BTM resp info */
 		status = wlan_cm_roam_extract_btm_response(wma->wmi_handle,
 							   event,
@@ -2317,7 +2324,18 @@ int wma_roam_stats_event_handler(WMA_HANDLE handle, uint8_t *event,
 			qdf_mem_free(roam_info);
 			return -EINVAL;
 		}
-		if (roam_info->btm_rsp.present)
+
+		/*
+		 * Print BTM resp TLV info (wmi_roam_btm_response_info) only
+		 * when trigger reason is BTM or WTC_BTM. As for other roam
+		 * triggers this TLV contains zeros, so host should not print.
+		 */
+		if ((roam_info->btm_rsp.present) &&
+		    (roam_info->trigger.present &&
+		    (roam_info->trigger.trigger_reason ==
+		     WMI_ROAM_TRIGGER_REASON_WTC_BTM ||
+		     roam_info->trigger.trigger_reason ==
+		     WMI_ROAM_TRIGGER_REASON_BTM)))
 			wma_rso_print_btm_rsp_info(&roam_info->btm_rsp,
 						   vdev_id);
 
@@ -2564,19 +2582,14 @@ wma_roam_ho_fail_handler(tp_wma_handle wma, uint32_t vdev_id,
 	struct handoff_failure_ind *ho_failure_ind;
 	struct scheduler_msg sme_msg = { 0 };
 	QDF_STATUS qdf_status;
-	struct reject_ap_info ap_info;
-
-	ap_info.bssid = bssid;
-	ap_info.reject_ap_type = DRIVER_AVOID_TYPE;
-	ap_info.reject_reason = REASON_ROAM_HO_FAILURE;
-	ap_info.source = ADDED_BY_DRIVER;
-	wlan_blm_add_bssid_to_reject_list(wma->pdev, &ap_info);
 
 	ho_failure_ind = qdf_mem_malloc(sizeof(*ho_failure_ind));
 	if (!ho_failure_ind)
 		return;
 
 	ho_failure_ind->vdev_id = vdev_id;
+	ho_failure_ind->bssid = bssid;
+
 	sme_msg.type = eWNI_SME_HO_FAIL_IND;
 	sme_msg.bodyptr = ho_failure_ind;
 	sme_msg.bodyval = 0;
@@ -4536,6 +4549,10 @@ int wma_roam_event_callback(WMA_HANDLE handle, uint8_t *event_buf,
 		wma_handle->csr_roam_synch_cb(wma_handle->mac_context,
 					      roam_synch_data, NULL,
 					      SIR_ROAMING_INVOKE_FAIL);
+		wlan_cm_update_roam_states(wma_handle->psoc, wmi_event->vdev_id,
+					   wmi_event->notif_params,
+					   ROAM_INVOKE_FAIL_REASON);
+
 		qdf_mem_free(roam_synch_data);
 		break;
 	case WMI_ROAM_REASON_DEAUTH:

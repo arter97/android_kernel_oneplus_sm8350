@@ -51,17 +51,19 @@ OBJS :=
 OBJS_DIRS :=
 
 define add-wlan-objs
-$(eval
-  ifneq ($$(2),)
-    ifeq ($$(KERNEL_SUPPORTS_NESTED_COMPOSITES),y)
-      OBJS_DIRS += $$(dir $$(2))
-      OBJS += $$(1).o
-      $$(1)-y := $$(2)
+$(eval $(_add-wlan-objs))
+endef
+
+define _add-wlan-objs
+  ifneq ($(2),)
+    ifeq ($(KERNEL_SUPPORTS_NESTED_COMPOSITES),y)
+      OBJS_DIRS += $(dir $(2))
+      OBJS += $(1).o
+      $(1)-y := $(2)
     else
-      OBJS += $$(2)
+      OBJS += $(2)
     endif
   endif
-)
 endef
 
 ############ UAPI ############
@@ -2953,6 +2955,8 @@ cppflags-$(CONFIG_HL_DP_SUPPORT) += -DQCA_COMPUTE_TX_DELAY
 cppflags-$(CONFIG_HL_DP_SUPPORT) += -DQCA_COMPUTE_TX_DELAY_PER_TID
 cppflags-$(CONFIG_LL_DP_SUPPORT) += -DCONFIG_LL_DP_SUPPORT
 cppflags-$(CONFIG_LL_DP_SUPPORT) += -DWLAN_FULL_REORDER_OFFLOAD
+cppflags-$(CONFIG_WLAN_FEATURE_BIG_DATA_STATS) += -DWLAN_FEATURE_BIG_DATA_STATS
+cppflags-$(CONFIG_WLAN_FEATURE_IGMP_OFFLOAD) += -DWLAN_FEATURE_IGMP_OFFLOAD
 
 # For PCIe GEN switch
 cppflags-$(CONFIG_PCIE_GEN_SWITCH) += -DPCIE_GEN_SWITCH
@@ -3302,6 +3306,7 @@ cppflags-y += -DDP_RX_DESC_COOKIE_INVALIDATE
 cppflags-y += -DMON_ENABLE_DROP_FOR_MAC
 cppflags-y += -DPCI_LINK_STATUS_SANITY
 cppflags-y += -DDP_MON_RSSI_IN_DBM
+cppflags-y += -DSYSTEM_PM_CHECK
 endif
 
 # Enable Low latency optimisation mode
@@ -3686,6 +3691,7 @@ cppflags-$(CONFIG_BAND_6GHZ) += -DCONFIG_BAND_6GHZ
 cppflags-$(CONFIG_6G_SCAN_CHAN_SORT_ALGO) += -DFEATURE_6G_SCAN_CHAN_SORT_ALGO
 
 cppflags-$(CONFIG_RX_FISA) += -DWLAN_SUPPORT_RX_FISA
+cppflags-$(CONFIG_RX_FISA_HISTORY) += -DWLAN_SUPPORT_RX_FISA_HIST
 
 cppflags-$(CONFIG_DP_SWLM) += -DWLAN_DP_FEATURE_SW_LATENCY_MGR
 
@@ -3715,6 +3721,8 @@ cppflags-$(CONFIG_HIF_CPU_PERF_AFFINE_MASK) += -DHIF_CPU_PERF_AFFINE_MASK
 
 cppflags-$(CONFIG_GENERIC_SHADOW_REGISTER_ACCESS_ENABLE) += -DGENERIC_SHADOW_REGISTER_ACCESS_ENABLE
 
+cppflags-$(CONFIG_DUMP_REO_QUEUE_INFO_IN_DDR) += -DDUMP_REO_QUEUE_INFO_IN_DDR
+
 ifdef CONFIG_MAX_CLIENTS_ALLOWED
 ccflags-y += -DWLAN_MAX_CLIENTS_ALLOWED=$(CONFIG_MAX_CLIENTS_ALLOWED)
 endif
@@ -3732,6 +3740,14 @@ endif
 cppflags-$(CONFIG_DP_FT_LOCK_HISTORY) += -DDP_FT_LOCK_HISTORY
 
 ccflags-$(CONFIG_GET_DRIVER_MODE) += -DFEATURE_GET_DRIVER_MODE
+
+ifeq ($(CONFIG_SMP), y)
+ifeq ($(CONFIG_HIF_DETECTION_LATENCY_ENABLE), y)
+cppflags-y += -DHIF_DETECTION_LATENCY_ENABLE
+cppflags-y += -DDETECTION_TIMER_TIMEOUT=2000
+cppflags-y += -DDETECTION_LATENCY_THRESHOLD=1900
+endif
+endif
 
 KBUILD_CPPFLAGS += $(cppflags-y)
 
