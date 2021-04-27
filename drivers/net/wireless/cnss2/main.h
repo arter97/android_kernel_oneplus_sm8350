@@ -97,6 +97,7 @@ struct cnss_pinctrl_info {
 	struct pinctrl_state *wlan_en_sleep;
 	int bt_en_gpio;
 	int xo_clk_gpio; /*qca6490 only */
+	int sw_ctrl_gpio;
 };
 
 #if IS_ENABLED(CONFIG_MSM_SUBSYSTEM_RESTART)
@@ -343,6 +344,7 @@ enum cnss_bdf_type {
 	CNSS_BDF_BIN,
 	CNSS_BDF_ELF,
 	CNSS_BDF_REGDB = 4,
+	CNSS_BDF_HDS = 6,
 };
 
 enum cnss_cal_status {
@@ -394,6 +396,7 @@ enum cnss_ce_index {
 
 struct cnss_dms_data {
 	u32 mac_valid;
+	u8 nv_mac_not_prov;
 	u8 mac[QMI_WLFW_MAC_ADDR_SIZE_V01];
 };
 
@@ -434,6 +437,7 @@ struct cnss_plat_data {
 	enum cnss_driver_status driver_status;
 	u32 recovery_count;
 	u8 recovery_enabled;
+	u8 hds_enabled;
 	unsigned long driver_state;
 	struct list_head event_list;
 	spinlock_t event_lock; /* spinlock for driver work event handling */
@@ -568,5 +572,5 @@ int cnss_request_firmware_direct(struct cnss_plat_data *plat_priv,
 				 const struct firmware **fw_entry,
 				 const char *filename);
 void cnss_disable_redundant_vreg(struct cnss_plat_data *plat_priv);
-
+int cnss_gpio_get_value(struct cnss_plat_data *plat_priv, int gpio_num);
 #endif /* _CNSS_MAIN_H */

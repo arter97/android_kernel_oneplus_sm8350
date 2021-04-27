@@ -196,7 +196,13 @@
 
 #define PERF_CAPABILITY   (1 << 1)
 
-/* Fastrpc remote process attributes */
+/*Max number of region supported  */
+#define MAX_UNIQUE_ID 5
+
+/*Unique index flag used for mini dump*/
+
+static int md_unique_index_flag[MAX_UNIQUE_ID] = { 0, 0, 0, 0, 0 };
+
 enum fastrpc_proc_attr {
 	/* Macro for Debug attr */
 	FASTRPC_MODE_DEBUG				= 1 << 0,
@@ -257,6 +263,9 @@ enum fastrpc_msg_type {
 		&& (!strcmp(cb_pdname, local_pdname)))
 
 #define IS_ASYNC_FASTRPC_AVAILABLE (1)
+
+/* User PD Dump Name Max length */
+#define RAMDUMP_NAME_MAX_LENGTH 20
 
 static int fastrpc_pdr_notifier_cb(struct notifier_block *nb,
 					unsigned long code,
@@ -326,6 +335,7 @@ struct fastrpc_file;
 struct fastrpc_buf {
 	struct hlist_node hn;
 	struct hlist_node hn_rem;
+	struct hlist_node hn_init;
 	struct fastrpc_file *fl;
 	void *virt;
 	uint64_t phys;
@@ -505,6 +515,7 @@ struct fastrpc_channel_ctx {
 	struct smq_invoke_ctx *ctxtable[FASTRPC_CTX_MAX];
 	spinlock_t ctxlock;
 	struct fastrpc_rpmsg_log gmsg_log;
+	struct hlist_head initmems;
 };
 
 struct fastrpc_apps {
@@ -536,6 +547,7 @@ struct fastrpc_apps {
 	uint32_t max_size_limit;
 	void *ramdump_handle;
 	bool enable_ramdump;
+	struct mutex mut_uid;
 };
 
 struct fastrpc_mmap {
@@ -556,6 +568,8 @@ struct fastrpc_mmap {
 	uintptr_t raddr;
 	int uncached;
 	int secure;
+	/* Minidump unique index */
+	int frpc_md_index;
 	uintptr_t attr;
 	struct timespec64 map_start_time;
 	struct timespec64 map_end_time;
@@ -854,6 +868,117 @@ static inline void fastrpc_update_rxmsg_buf(struct fastrpc_channel_ctx *chan,
 	spin_unlock_irqrestore(&chan->gmsg_log.lock, flags);
 }
 
+
+static inline int get_unique_index(void)
+{
+	int index = -1;
+
+	mutex_lock(&gfa.mut_uid);
+	for (index = 0; index < MAX_UNIQUE_ID; index++) {
+		if (md_unique_index_flag[index] == 0) {
+			md_unique_index_flag[index] = 1;
+			mutex_unlock(&gfa.mut_uid);
+			return index;
+		}
+	}
+	mutex_unlock(&gfa.mut_uid);
+	return index;
+}
+
+static inline void reset_unique_index(int index)
+{
+	mutex_lock(&gfa.mut_uid);
+	if (index > -1 && index < MAX_UNIQUE_ID)
+		md_unique_index_flag[index] = 0;
+	mutex_unlock(&gfa.mut_uid);
+}
+
+/**
+ * fastrpc_elf_ramdump - Dump given ram dump entry
+ * @rh_dump_dev       : Device handle for given channel
+ * @ramdump_entry     : Dump region entry
+ *
+ * Returns int
+ */
+static int fastrpc_elf_ramdump(void *rh_dump_dev, struct ramdump_segment *ramdump_seg)
+{
+	int err = 0;
+
+	err = do_elf_ramdump(
+		rh_dump_dev,
+			ramdump_seg, 1);
+
+	return err;
+}
+
+/**
+ * fastrpc_minidump_add_region - Add mini dump region
+ * @fastrpc_mmap       : Input structure mmap
+ *
+ * Returns int
+ */
+static int fastrpc_minidump_add_region(struct fastrpc_mmap *map)
+{
+	int err = 0, ret_val = 0, md_index = 0;
+	struct md_region md_entry;
+
+	md_index = get_unique_index();
+	if (md_index > -1 && md_index < MAX_UNIQUE_ID) {
+		scnprintf(md_entry.name, MAX_NAME_LENGTH, "FRPC_%d", md_index);
+		md_entry.virt_addr = map->va;
+		md_entry.phys_addr = map->phys;
+		md_entry.size = map->size;
+		ret_val = msm_minidump_add_region(&md_entry);
+		if (ret_val < 0) {
+			ADSPRPC_ERR(
+			"Failed to add/update CMA to Minidump for phys: 0x%llx, size: %zu, md_index %d, md_entry.name %s\n",
+			map->phys,
+			map->size, md_index,
+			md_entry.name);
+			reset_unique_index(md_index);
+			err = ret_val;
+		} else {
+			map->frpc_md_index = md_index;
+		}
+	} else {
+		pr_warn("failed to generate valid unique id for mini dump : %d\n", md_index);
+	}
+	return err;
+}
+
+/**
+ * fastrpc_minidump_remove_region - Remove mini dump region if added
+ * @fastrpc_mmap       : Input structure mmap
+ *
+ * Returns int
+ */
+static int fastrpc_minidump_remove_region(struct fastrpc_mmap *map)
+{
+	int err = -1;
+	struct md_region md_entry;
+
+	if (map->frpc_md_index > -1 && map->frpc_md_index < MAX_UNIQUE_ID) {
+		scnprintf(md_entry.name, MAX_NAME_LENGTH, "FRPC_%d",
+					map->frpc_md_index);
+		md_entry.virt_addr = map->va;
+		md_entry.phys_addr = map->phys;
+		md_entry.size = map->size;
+		err = msm_minidump_remove_region(&md_entry);
+		if (err < 0) {
+			ADSPRPC_ERR(
+				"Failed to remove CMA from Minidump for phys: 0x%llx, size: %zu index = %d\n",
+				 map->phys, map->size, map->frpc_md_index);
+		} else {
+			reset_unique_index(map->frpc_md_index);
+			map->frpc_md_index = -1;
+		}
+	} else {
+		ADSPRPC_ERR("mini-dump enabled with invalid unique id: %d\n", map->frpc_md_index);
+	}
+	return err;
+}
+
+
 static void fastrpc_buf_free(struct fastrpc_buf *buf, int cache)
 {
 	struct fastrpc_file *fl = buf == NULL ? NULL : buf->fl;
@@ -1104,7 +1229,6 @@ static void fastrpc_mmap_free(struct fastrpc_mmap *map, uint32_t flags)
 	struct fastrpc_file *fl;
 	int vmid, cid = -1, err = 0;
 	struct fastrpc_session_ctx *sess;
-	struct md_region md_entry;
 
 	if (!map)
 		return;
@@ -1148,16 +1272,9 @@ static void fastrpc_mmap_free(struct fastrpc_mmap *map, uint32_t flags)
 				"failed to free remote heap allocation, device is not initialized\n");
 			return;
 		}
+
 		if (msm_minidump_enabled()) {
-			scnprintf(md_entry.name, sizeof(md_entry.name), "CMA_%d", current->tgid);
-			md_entry.virt_addr = map->va;
-			md_entry.phys_addr = map->phys;
-			md_entry.size = map->size;
-			if (msm_minidump_remove_region(&md_entry) < 0) {
-				ADSPRPC_ERR(
-					"Failed to remove CMA from Minidump for tgid: %d, phys: 0x%llx, size: %zu\n",
-					current->tgid, map->phys, map->size);
-			}
+			err = fastrpc_minidump_remove_region(map);
 		}
 		trace_fastrpc_dma_free(-1, map->phys, map->size);
 		if (map->phys) {
@@ -1226,7 +1343,6 @@ static int fastrpc_mmap_create(struct fastrpc_file *fl, int fd,
 	unsigned long flags;
 	int err = 0, vmid, sgl_index = 0;
 	struct scatterlist *sgl = NULL;
-	struct md_region md_entry;
 
 	VERIFY(err, cid >= ADSP_DOMAIN_ID && cid < NUM_CHANNELS);
 	if (err) {
@@ -1249,6 +1365,7 @@ static int fastrpc_mmap_create(struct fastrpc_file *fl, int fd,
 	map->fl = fl;
 	map->fd = fd;
 	map->attr = attr;
+	map->frpc_md_index = -1;
 	ktime_get_real_ts64(&map->map_start_time);
 	if (mflags == ADSP_MMAP_HEAP_ADDR ||
 				mflags == ADSP_MMAP_REMOTE_HEAP_ADDR) {
@@ -1264,16 +1381,11 @@ static int fastrpc_mmap_create(struct fastrpc_file *fl, int fd,
 		map->phys = (uintptr_t)region_phys;
 		map->size = len;
 		map->va = (uintptr_t)region_vaddr;
+
 		if (msm_minidump_enabled()) {
-			scnprintf(md_entry.name, sizeof(md_entry.name), "CMA_%d", fl->tgid);
-			md_entry.virt_addr = map->va;
-			md_entry.phys_addr = map->phys;
-			md_entry.size = map->size;
-			if (msm_minidump_add_region(&md_entry) >= 0) {
-				ADSPRPC_ERR(
-					"Failed to add CMA to Minidump for tgid: %d, phys: 0x%llx, size: %zu\n",
-					fl->tgid, map->phys, map->size);
-			}
+			err = fastrpc_minidump_add_region(map);
+			if (err)
+				goto bail;
 		}
 	} else if (mflags == FASTRPC_DMAHANDLE_NOMAP) {
 		VERIFY(err, !IS_ERR_OR_NULL(map->buf = dma_buf_get(fd)));
@@ -2129,6 +2241,42 @@ static void fastrpc_notify_users_staticpd_pdr(struct fastrpc_file *me)
 	spin_unlock(&me->hlock);
 }
 
+static void fastrpc_ramdump_collection(int cid)
+{
+	struct fastrpc_file *fl = NULL;
+	struct hlist_node *n = NULL;
+	struct fastrpc_apps *me = &gfa;
+	struct fastrpc_channel_ctx *chan = &me->channel[cid];
+	struct ramdump_segment ramdump_entry;
+	struct fastrpc_buf *buf = NULL;
+	int ret;
+	char ramdump_name[RAMDUMP_NAME_MAX_LENGTH];
+
+	spin_lock(&me->hlock);
+	hlist_for_each_entry_safe(fl, n, &me->drivers, hn) {
+		if (fl->cid == cid && fl->init_mem)
+			hlist_add_head(&fl->init_mem->hn_init, &chan->initmems);
+	}
+	spin_unlock(&me->hlock);
+
+	if (chan->rh_dump_dev) {
+		hlist_for_each_entry_safe(buf, n, &chan->initmems, hn_init) {
+			ramdump_entry.address = buf->phys;
+			ramdump_entry.v_address = (void __iomem *)buf->virt;
+			ramdump_entry.size = buf->size;
+			if (buf->fl) {
+				scnprintf(ramdump_name, ARRAY_SIZE(ramdump_name),
+					"%s_%x_", gcinfo[cid].subsys, buf->fl->tgid);
+				ramdump_entry.name = ramdump_name;
+			}
+			ret = fastrpc_elf_ramdump(chan->rh_dump_dev, &ramdump_entry);
+			if (ret < 0)
+				pr_err("adsprpc: %s: unable to dump PD memory (err %d)\n",
+					__func__, ret);
+			hlist_del_init(&buf->hn_init);
+		}
+	}
+}
 
 static void fastrpc_notify_drivers(struct fastrpc_apps *me, int cid)
 {
@@ -2789,6 +2937,7 @@ static void fastrpc_init(struct fastrpc_apps *me)
 	INIT_HLIST_HEAD(&me->maps);
 	spin_lock_init(&me->hlock);
 	me->channel = &gcinfo[0];
+	mutex_init(&me->mut_uid);
 	for (i = 0; i < NUM_CHANNELS; i++) {
 		init_completion(&me->channel[i].work);
 		init_completion(&me->channel[i].workport);
@@ -2800,6 +2949,7 @@ static void fastrpc_init(struct fastrpc_apps *me)
 		mutex_init(&me->channel[i].rpmsg_mutex);
 		spin_lock_init(&me->channel[i].ctxlock);
 		spin_lock_init(&me->channel[i].gmsg_log.lock);
+		INIT_HLIST_HEAD(&me->channel[i].initmems);
 	}
 	/* Set CDSP channel to non secure */
 	me->channel[CDSP_DOMAIN_ID].secure = NON_SECURE_CHANNEL;
@@ -3774,9 +3924,9 @@ bail:
 					"rh hyp unassign failed with %d for phys 0x%llx of size %zu\n",
 					hyp_err, phys, size);
 		}
-		mutex_lock(&fl->map_mutex);
-		fastrpc_mmap_free(mem, 0);
-		mutex_unlock(&fl->map_mutex);
+	mutex_lock(&fl->map_mutex);
+	fastrpc_mmap_free(mem, 0);
+	mutex_unlock(&fl->map_mutex);
 	}
 	return err;
 }
@@ -3811,12 +3961,13 @@ static int fastrpc_init_process(struct fastrpc_file *fl,
 			err = -ECONNREFUSED;
 			goto bail;
 		}
+	} else if (!(chan->unsigned_support) && (uproc->attrs & FASTRPC_MODE_UNSIGNED_MODULE)) {
+		err = -ECONNREFUSED;
+		goto bail;
 	}
-
 	err = fastrpc_channel_open(fl);
 	if (err)
 		goto bail;
-
 	switch (init->flags) {
 	case FASTRPC_INIT_ATTACH:
 	case FASTRPC_INIT_ATTACH_SENSORS:
@@ -4345,7 +4496,7 @@ static int fastrpc_mmap_remove_ssr(struct fastrpc_file *fl)
 	struct hlist_node *n = NULL;
 	int err = 0, ret = 0;
 	struct fastrpc_apps *me = &gfa;
-	struct ramdump_segment *ramdump_segments_rh = NULL;
+	struct ramdump_segment ramdump_segments_rh;
 
 	VERIFY(err, fl->cid == RH_CID);
 	if (err) {
@@ -4368,22 +4519,15 @@ static int fastrpc_mmap_remove_ssr(struct fastrpc_file *fl)
 			if (err)
 				goto bail;
 			if (me->ramdump_handle && me->enable_ramdump) {
-				ramdump_segments_rh = kcalloc(1,
-				sizeof(struct ramdump_segment), GFP_KERNEL);
-				if (ramdump_segments_rh) {
-					ramdump_segments_rh->address =
-					match->phys;
-					ramdump_segments_rh->v_address =
-					(void __iomem *)match->va;
-					ramdump_segments_rh->size = match->size;
-					ret = do_elf_ramdump(
-						 me->ramdump_handle,
-							 ramdump_segments_rh, 1);
-					if (ret < 0)
-						pr_err("adsprpc: %s: unable to dump heap (err %d)\n",
-							__func__, ret);
-					kfree(ramdump_segments_rh);
-				}
+				ramdump_segments_rh.address =
+				match->phys;
+				ramdump_segments_rh.v_address =
+				(void __iomem *)match->va;
+				ramdump_segments_rh.size = match->size;
+				ret = fastrpc_elf_ramdump(me->ramdump_handle, &ramdump_segments_rh);
+				if (ret < 0)
+					pr_err("adsprpc: %s: unable to dump heap (err %d)\n",
+						__func__, ret);
 			}
 			fastrpc_mmap_free(match, 0);
 		}
@@ -4595,7 +4739,7 @@ static int fastrpc_internal_mem_map(struct fastrpc_file *fl,
 
 	/* create DSP mapping */
 	VERIFY(err, !(err = fastrpc_mem_map_to_dsp(fl, ud->m.fd, ud->m.offset,
-		ud->m.flags, map->va, map->phys, ud->m.length, &map->raddr)));
+		ud->m.flags, map->va, map->phys, map->size, &map->raddr)));
 	if (err)
 		goto bail;
 	ud->m.vaddrout = map->raddr;
@@ -4834,7 +4978,6 @@ static void fastrpc_rpmsg_remove(struct rpmsg_device *rpdev)
 {
 	int err = 0;
 	int cid = -1;
-	struct fastrpc_apps *me = &gfa;
 
 	VERIFY(err, !IS_ERR_OR_NULL(rpdev));
 	if (err) {
@@ -4851,7 +4994,6 @@ static void fastrpc_rpmsg_remove(struct rpmsg_device *rpdev)
 	mutex_lock(&gcinfo[cid].rpmsg_mutex);
 	gcinfo[cid].rpdev = NULL;
 	mutex_unlock(&gcinfo[cid].rpmsg_mutex);
-	fastrpc_notify_drivers(me, cid);
 	ADSPRPC_INFO("closed rpmsg channel of %s\n",
 		gcinfo[cid].subsys);
 bail:
@@ -4981,6 +5123,7 @@ static int fastrpc_file_free(struct fastrpc_file *fl)
 	kfree(fl->gidlist.gids);
 
 	if (!fl->sctx) {
+		kfree(fl->dev_pm_qos_req);
 		kfree(fl);
 		return 0;
 	}
@@ -6021,6 +6164,8 @@ static int fastrpc_restart_notifier_cb(struct notifier_block *nb,
 			if (me->ramdump_handle)
 				me->channel[RH_CID].ramdumpenabled = 1;
 		}
+		if (cid == CDSP_DOMAIN_ID)
+			fastrpc_ramdump_collection(cid);
 		pr_info("adsprpc: %s: received RAMDUMP notification for %s\n",
 			__func__, gcinfo[cid].subsys);
 	} else if (code == SUBSYS_BEFORE_POWERUP) {
@@ -6031,6 +6176,7 @@ static int fastrpc_restart_notifier_cb(struct notifier_block *nb,
 			me->channel[RH_CID].ramdumpenabled = 0;
 			}
 		}
+		fastrpc_notify_drivers(me, cid);
 	} else if (code == SUBSYS_AFTER_POWERUP) {
 		pr_info("adsprpc: %s: %s subsystem is up\n",
 			__func__, gcinfo[cid].subsys);
@@ -6503,6 +6649,7 @@ bail:
 static void fastrpc_deinit(void)
 {
 	struct fastrpc_channel_ctx *chan = gcinfo;
+	struct fastrpc_apps *me = &gfa;
 	int i, j;
 
 	for (i = 0; i < NUM_CHANNELS; i++, chan++) {
@@ -6515,6 +6662,7 @@ static void fastrpc_deinit(void)
 		kfree(chan->rhvm.vmid);
 		kfree(chan->rhvm.vmperm);
 	}
+	mutex_destroy(&me->mut_uid);
 }
 
 static struct platform_driver fastrpc_driver = {
@@ -6626,7 +6774,7 @@ static int __init fastrpc_device_init(void)
 			pr_info("adsprpc: %s: SSR notifier registered for %s\n",
 				__func__, gcinfo[i].subsys);
 	}
-
+	me->channel[CDSP_DOMAIN_ID].rh_dump_dev = create_ramdump_device("cdsp_minidump", NULL);
 	err = register_rpmsg_driver(&fastrpc_rpmsg_client);
 	if (err) {
 		pr_err("Error: adsprpc: %s: register_rpmsg_driver failed with err %d\n",

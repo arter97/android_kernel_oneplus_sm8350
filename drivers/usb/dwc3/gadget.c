@@ -1873,6 +1873,9 @@ int __dwc3_gadget_ep_set_halt(struct dwc3_ep *dep, int value, int protocol)
 
 		dep->flags &= ~(DWC3_EP_STALL | DWC3_EP_WEDGE);
 
+		if (dep->gsi || dep->endless)
+			return 0;
+
 		dwc3_stop_active_transfer(dep, true, true);
 
 		list_for_each_entry_safe(req, tmp, &dep->started_list, list)
@@ -4104,7 +4107,7 @@ static irqreturn_t dwc3_check_event_buf(struct dwc3_event_buffer *evt)
 
 	dwc = evt->dwc;
 	start_time = ktime_get();
-	dwc->irq_cnt++;
+	atomic_inc(&dwc->irq_cnt);
 
 	/* controller reset is still pending */
 	if (dwc->err_evt_seen)
