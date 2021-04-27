@@ -332,6 +332,22 @@ enum hif_event_type {
 	/* Do check hif_hist_skip_event_record when adding new events */
 };
 
+/**
+ * enum hif_system_pm_state - System PM state
+ * HIF_SYSTEM_PM_STATE_ON: System in active state
+ * HIF_SYSTEM_PM_STATE_BUS_RESUMING: bus resume in progress as part of
+ *  system resume
+ * HIF_SYSTEM_PM_STATE_BUS_SUSPENDING: bus suspend in progress as part of
+ *  system suspend
+ * HIF_SYSTEM_PM_STATE_BUS_SUSPENDED: bus suspended as part of system suspend
+ */
+enum hif_system_pm_state {
+	HIF_SYSTEM_PM_STATE_ON,
+	HIF_SYSTEM_PM_STATE_BUS_RESUMING,
+	HIF_SYSTEM_PM_STATE_BUS_SUSPENDING,
+	HIF_SYSTEM_PM_STATE_BUS_SUSPENDED,
+};
+
 #ifdef WLAN_FEATURE_DP_EVENT_HISTORY
 
 #if defined(HIF_CONFIG_SLUB_DEBUG_ON)
@@ -1730,4 +1746,165 @@ int hif_disable_grp_irqs(struct hif_opaque_softc *scn);
  * Return: 0 on success. Error code on failure.
  */
 int hif_enable_grp_irqs(struct hif_opaque_softc *scn);
+
+enum hif_credit_exchange_type {
+	HIF_REQUEST_CREDIT,
+	HIF_PROCESS_CREDIT_REPORT,
+};
+
+enum hif_detect_latency_type {
+	HIF_DETECT_TASKLET,
+	HIF_DETECT_CREDIT,
+	HIF_DETECT_UNKNOWN
+};
+
+#ifdef HIF_DETECTION_LATENCY_ENABLE
+void hif_latency_detect_credit_record_time(
+	enum hif_credit_exchange_type type,
+	struct hif_opaque_softc *hif_ctx);
+
+void hif_latency_detect_timer_start(struct hif_opaque_softc *hif_ctx);
+void hif_latency_detect_timer_stop(struct hif_opaque_softc *hif_ctx);
+void hif_check_detection_latency(struct hif_softc *scn,
+				 bool from_timer,
+				 uint32_t bitmap_type);
+void hif_set_enable_detection(struct hif_opaque_softc *hif_ctx, bool value);
+#else
+static inline
+void hif_latency_detect_timer_start(struct hif_opaque_softc *hif_ctx)
+{}
+
+static inline
+void hif_latency_detect_timer_stop(struct hif_opaque_softc *hif_ctx)
+{}
+
+static inline
+void hif_latency_detect_credit_record_time(
+	enum hif_credit_exchange_type type,
+	struct hif_opaque_softc *hif_ctx)
+{}
+static inline
+void hif_check_detection_latency(struct hif_softc *scn,
+				 bool from_timer,
+				 uint32_t bitmap_type)
+{}
+
+static inline
+void hif_set_enable_detection(struct hif_opaque_softc *hif_ctx, bool value)
+{}
+#endif
+
+#ifdef SYSTEM_PM_CHECK
+/**
+ * __hif_system_pm_set_state() - Set system pm state
+ * @hif: hif opaque handle
+ * @state: system state
+ *
+ * Return:  None
+ */
+void __hif_system_pm_set_state(struct hif_opaque_softc *hif,
+			       enum hif_system_pm_state state);
+
+/**
+ * hif_system_pm_set_state_on() - Set system pm state to ON
+ * @hif: hif opaque handle
+ *
+ * Return:  None
+ */
+static inline
+void hif_system_pm_set_state_on(struct hif_opaque_softc *hif)
+{
+	__hif_system_pm_set_state(hif, HIF_SYSTEM_PM_STATE_ON);
+}
+
+/**
+ * hif_system_pm_set_state_resuming() - Set system pm state to resuming
+ * @hif: hif opaque handle
+ *
+ * Return:  None
+ */
+static inline
+void hif_system_pm_set_state_resuming(struct hif_opaque_softc *hif)
+{
+	__hif_system_pm_set_state(hif, HIF_SYSTEM_PM_STATE_BUS_RESUMING);
+}
+
+/**
+ * hif_system_pm_set_state_suspending() - Set system pm state to suspending
+ * @hif: hif opaque handle
+ *
+ * Return:  None
+ */
+static inline
+void hif_system_pm_set_state_suspending(struct hif_opaque_softc *hif)
+{
+	__hif_system_pm_set_state(hif, HIF_SYSTEM_PM_STATE_BUS_SUSPENDING);
+}
+
+/**
+ * hif_system_pm_set_state_suspended() - Set system pm state to suspended
+ * @hif: hif opaque handle
+ *
+ * Return:  None
+ */
+static inline
+void hif_system_pm_set_state_suspended(struct hif_opaque_softc *hif)
+{
+	__hif_system_pm_set_state(hif, HIF_SYSTEM_PM_STATE_BUS_SUSPENDED);
+}
+
+/**
+ * hif_system_pm_get_state() - Get system pm state
+ * @hif: hif opaque handle
+ *
+ * Return:  system state
+ */
+int32_t hif_system_pm_get_state(struct hif_opaque_softc *hif);
+
+/**
+ * hif_system_pm_state_check() - Check system state and trigger resume
+ *  if required
+ * @hif: hif opaque handle
+ *
+ * Return: 0 if system is in on state else error code
+ */
+int hif_system_pm_state_check(struct hif_opaque_softc *hif);
+#else
+static inline
+void __hif_system_pm_set_state(struct hif_opaque_softc *hif,
+			       enum hif_system_pm_state state)
+{
+}
+
+static inline
+void hif_system_pm_set_state_on(struct hif_opaque_softc *hif)
+{
+}
+
+static inline
+void hif_system_pm_set_state_resuming(struct hif_opaque_softc *hif)
+{
+}
+
+static inline
+void hif_system_pm_set_state_suspending(struct hif_opaque_softc *hif)
+{
+}
+
+static inline
+void hif_system_pm_set_state_suspended(struct hif_opaque_softc *hif)
+{
+}
+
+static inline
+int32_t hif_system_pm_get_state(struct hif_opaque_softc *hif)
+{
+	return 0;
+}
+
+static inline int hif_system_pm_state_check(struct hif_opaque_softc *hif)
+{
+	return 0;
+}
+#endif
 #endif /* _HIF_H_ */

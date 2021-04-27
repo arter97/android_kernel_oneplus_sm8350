@@ -358,6 +358,7 @@ qdf_freq_t wlan_reg_chan_band_to_freq(struct wlan_objmgr_pdev *pdev,
 				      uint8_t chan,
 				      uint8_t band_mask);
 
+#ifdef CONFIG_49GHZ_CHAN
 /**
  * wlan_reg_is_49ghz_freq() - Check if the given channel frequency is 4.9GHz
  * @freq: Channel frequency
@@ -366,6 +367,15 @@ qdf_freq_t wlan_reg_chan_band_to_freq(struct wlan_objmgr_pdev *pdev,
  */
 #define WLAN_REG_IS_49GHZ_FREQ(freq) wlan_reg_is_49ghz_freq(freq)
 bool wlan_reg_is_49ghz_freq(qdf_freq_t freq);
+
+#else
+
+#define WLAN_REG_IS_49GHZ_FREQ(freq) (false)
+static inline bool wlan_reg_is_49ghz_freq(qdf_freq_t freq)
+{
+	return false;
+}
+#endif /* CONFIG_49GHZ_CHAN */
 
 /**
  * wlan_reg_ch_num() - Get channel number from channel enum
@@ -1606,6 +1616,19 @@ enum band_info wlan_reg_band_bitmap_to_band_info(uint32_t band_bitmap);
 
 #if defined(CONFIG_BAND_6GHZ)
 /**
+ * wlan_reg_get_cur_6g_ap_pwr_type() - Get the current 6G regulatory AP power
+ * type.
+ * @pdev: Pointer to PDEV object.
+ * @reg_cur_6g_ap_pwr_type: The current regulatory 6G AP power type ie.
+ * LPI/SP/VLP.
+ *
+ * Return: QDF_STATUS.
+ */
+QDF_STATUS
+wlan_reg_get_cur_6g_ap_pwr_type(struct wlan_objmgr_pdev *pdev,
+				enum reg_6g_ap_type *reg_cur_6g_ap_pwr_type);
+
+/**
  * wlan_reg_get_cur_6g_client_type() - Get the current 6G regulatory client
  * type.
  * @pdev: Pointer to PDEV object.
@@ -1730,6 +1753,14 @@ wlan_reg_get_client_power_for_6ghz_ap(struct wlan_objmgr_pdev *pdev,
 enum reg_6g_ap_type
 wlan_reg_decide_6g_ap_pwr_type(struct wlan_objmgr_pdev *pdev);
 #else
+static inline QDF_STATUS
+wlan_reg_get_cur_6g_ap_pwr_type(struct wlan_objmgr_pdev *pdev,
+				enum reg_6g_ap_type *reg_cur_6g_ap_pwr_type)
+{
+	*reg_cur_6g_ap_pwr_type = REG_VERY_LOW_POWER_AP;
+	return QDF_STATUS_E_NOSUPPORT;
+}
+
 static inline QDF_STATUS
 wlan_reg_get_cur_6g_client_type(struct wlan_objmgr_pdev *pdev,
 				enum reg_6g_client_type

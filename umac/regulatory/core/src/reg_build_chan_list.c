@@ -671,6 +671,8 @@ static void reg_propagate_6g_mas_channel_list(
 				mas_chan_params->unspecified_ap_usable;
 	pdev_priv_obj->is_6g_channel_list_populated =
 		mas_chan_params->is_6g_channel_list_populated;
+	pdev_priv_obj->reg_6g_superid =
+		mas_chan_params->reg_6g_superid;
 }
 #else
 static inline void reg_propagate_6g_mas_channel_list(
@@ -1282,6 +1284,40 @@ void reg_propagate_mas_chan_list_to_pdev(struct wlan_objmgr_psoc *psoc,
 }
 
 /**
+ * reg_populate_49g_band_channels() - For all the valid 4.9GHz regdb channels
+ * in the master channel list, find the regulatory rules and call
+ * reg_fill_channel_info() to populate master channel list with txpower,
+ * antennagain, BW info, etc.
+ * @reg_rule_5g: Pointer to regulatory rule.
+ * @num_5g_reg_rules: Number of regulatory rules.
+ * @min_bw_5g: Minimum regulatory bandwidth.
+ * @mas_chan_list: Pointer to the master channel list.
+ */
+#ifdef CONFIG_49GHZ_CHAN
+static void
+reg_populate_49g_band_channels(struct cur_reg_rule *reg_rule_5g,
+			       uint32_t num_5g_reg_rules,
+			       uint16_t min_bw_5g,
+			       struct regulatory_channel *mas_chan_list)
+{
+	reg_populate_band_channels(MIN_49GHZ_CHANNEL,
+				   MAX_49GHZ_CHANNEL,
+				   reg_rule_5g,
+				   num_5g_reg_rules,
+				   min_bw_5g,
+				   mas_chan_list);
+}
+#else
+static void
+reg_populate_49g_band_channels(struct cur_reg_rule *reg_rule_5g,
+			       uint32_t num_5g_reg_rules,
+			       uint16_t min_bw_5g,
+			       struct regulatory_channel *mas_chan_list)
+{
+}
+#endif /* CONFIG_49GHZ_CHAN */
+
+/**
  * reg_populate_6g_band_channels() - For all the valid 6GHz regdb channels
  * in the master channel list, find the regulatory rules and call
  * reg_fill_channel_info() to populate master channel list with txpower,
@@ -1508,6 +1544,8 @@ static void reg_store_regulatory_ext_info_to_socpriv(
 	soc_reg->mas_chan_params[phy_id].ctry_code = regulat_info->ctry_code;
 	soc_reg->mas_chan_params[phy_id].reg_dmn_pair =
 		regulat_info->reg_dmn_pair;
+	soc_reg->mas_chan_params[phy_id].reg_6g_superid =
+		regulat_info->domain_code_6g_super_id;
 	qdf_mem_copy(soc_reg->mas_chan_params[phy_id].current_country,
 		     regulat_info->alpha2,
 		     REG_ALPHA2_LEN + 1);
@@ -1676,10 +1714,10 @@ reg_fill_master_channels(struct cur_regulatory_info *regulat_info,
 		reg_populate_band_channels(MIN_5GHZ_CHANNEL, MAX_5GHZ_CHANNEL,
 					   reg_rule_5g, num_5g_reg_rules,
 					   min_bw_5g, mas_chan_list_2g_5g);
-		reg_populate_band_channels(MIN_49GHZ_CHANNEL,
-					   MAX_49GHZ_CHANNEL,
-					   reg_rule_5g, num_5g_reg_rules,
-					   min_bw_5g, mas_chan_list_2g_5g);
+		reg_populate_49g_band_channels(reg_rule_5g,
+					       num_5g_reg_rules,
+					       min_bw_5g,
+					       mas_chan_list_2g_5g);
 	}
 
 	for (i = 0; i < REG_CURRENT_MAX_AP_TYPE; i++) {
@@ -2015,10 +2053,10 @@ QDF_STATUS reg_process_master_chan_list(
 		reg_populate_band_channels(MIN_5GHZ_CHANNEL, MAX_5GHZ_CHANNEL,
 					   reg_rule_5g, num_5g_reg_rules,
 					   min_bw_5g, mas_chan_list);
-		reg_populate_band_channels(MIN_49GHZ_CHANNEL,
-					   MAX_49GHZ_CHANNEL,
-					   reg_rule_5g, num_5g_reg_rules,
-					   min_bw_5g, mas_chan_list);
+		reg_populate_49g_band_channels(reg_rule_5g,
+					       num_5g_reg_rules,
+					       min_bw_5g,
+					       mas_chan_list);
 		reg_populate_6g_band_channels(reg_rule_5g,
 					      num_5g_reg_rules,
 					      min_bw_5g,

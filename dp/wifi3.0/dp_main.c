@@ -396,6 +396,7 @@ const int dp_stats_mapping_table[][STATS_TYPE_MAX] = {
 	{TXRX_FW_STATS_INVALID, TXRX_SOC_INTERRUPT_STATS},
 	{TXRX_FW_STATS_INVALID, TXRX_SOC_FSE_STATS},
 	{TXRX_FW_STATS_INVALID, TXRX_HAL_REG_WRITE_STATS},
+	{TXRX_FW_STATS_INVALID, TXRX_SOC_REO_HW_DESC_DUMP},
 	{HTT_DBG_EXT_STATS_PDEV_RX_RATE_EXT, TXRX_HOST_STATS_INVALID}
 };
 
@@ -5537,7 +5538,6 @@ static QDF_STATUS dp_vdev_attach_wifi3(struct cdp_soc_t *cdp_soc,
 	qdf_spinlock_create(&vdev->peer_list_lock);
 	TAILQ_INIT(&vdev->peer_list);
 	dp_peer_multipass_list_init(vdev);
-
 	if ((soc->intr_mode == DP_INTR_POLL) &&
 	    wlan_cfg_get_num_contexts(soc->wlan_cfg_ctx) != 0) {
 		if ((pdev->vdev_count == 0) ||
@@ -5574,14 +5574,19 @@ static QDF_STATUS dp_vdev_attach_wifi3(struct cdp_soc_t *cdp_soc,
 		vdev->ap_bridge_enabled = true;
 	else
 		vdev->ap_bridge_enabled = false;
+
 	QDF_TRACE(QDF_MODULE_ID_DP, QDF_TRACE_LEVEL_INFO,
 		  "%s: wlan_cfg_ap_bridge_enabled %d",
 		  __func__, vdev->ap_bridge_enabled);
 
 	dp_tx_vdev_attach(vdev);
 
-	if (pdev->vdev_count == 1)
-		dp_lro_hash_setup(soc, pdev);
+	if (!pdev->is_lro_hash_configured) {
+		if (QDF_IS_STATUS_SUCCESS(dp_lro_hash_setup(soc, pdev)))
+			pdev->is_lro_hash_configured = true;
+		else
+			dp_err("LRO hash setup failure!");
+	}
 
 	dp_info("Created vdev %pK ("QDF_MAC_ADDR_FMT")", vdev,
 		QDF_MAC_ADDR_REF(vdev->mac_addr.raw));
@@ -5836,6 +5841,7 @@ static QDF_STATUS dp_vdev_detach_wifi3(struct cdp_soc_t *cdp_soc,
 	if (vdev->opmode != wlan_op_mode_monitor)
 		dp_vdev_pdev_list_remove(soc, pdev, vdev);
 
+	pdev->vdev_count--;
 	/* release reference taken above for find */
 	dp_vdev_unref_delete(soc, vdev, DP_MOD_ID_CDP);
 
@@ -8237,6 +8243,10 @@ dp_print_host_stats(struct dp_vdev *vdev,
 	case TXRX_HAL_REG_WRITE_STATS:
 		hal_dump_reg_write_stats(pdev->soc->hal_soc);
 		hal_dump_reg_write_srng_stats(pdev->soc->hal_soc);
+		break;
+	case TXRX_SOC_REO_HW_DESC_DUMP:
+		dp_get_rx_reo_queue_info((struct cdp_soc_t *)pdev->soc,
+					 vdev->vdev_id);
 		break;
 	default:
 		dp_info("Wrong Input For TxRx Host Stats");
