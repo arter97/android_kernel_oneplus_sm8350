@@ -535,6 +535,8 @@ typedef enum {
     WMI_VDEV_GET_BIG_DATA_P2_CMDID,
     /** set TPC PSD/non-PSD power */
     WMI_VDEV_SET_TPC_POWER_CMDID,
+    /** IGMP OFFLOAD */
+    WMI_VDEV_IGMP_OFFLOAD_CMDID,
 
     /* peer specific commands */
 
@@ -28471,6 +28473,7 @@ static INLINE A_UINT8 *wmi_id_to_name(A_UINT32 wmi_command)
         WMI_RETURN_STRING(WMI_MLO_SETUP_CMDID);
         WMI_RETURN_STRING(WMI_MLO_READY_CMDID);
         WMI_RETURN_STRING(WMI_MLO_TEARDOWN_CMDID);
+        WMI_RETURN_STRING(WMI_VDEV_IGMP_OFFLOAD_CMDID);
     }
 
     return "Invalid WMI cmd";
@@ -28597,6 +28600,7 @@ typedef enum {
     WMI_REGULATORY_PHYMODE_NO11N    = 0x0008,  /* NO 11N */
     WMI_REGULATORY_PHYMODE_NO11AC   = 0x0010,  /* NO 11AC */
     WMI_REGULATORY_PHYMODE_NO11AX   = 0x0020,  /* NO 11AX */
+    WMI_REGULATORY_PHYMODE_NO11BE   = 0x0040,  /* NO 11BE */
 } WMI_REGULATORY_PHYBITMAP;
 
 typedef enum {
@@ -29478,6 +29482,8 @@ typedef enum _WMI_ADD_TWT_STATUS_T {
     WMI_ADD_TWT_STATUS_UNKNOWN_ERROR,       /* adding TWT dialog failed with an unknown reason */
     WMI_ADD_TWT_STATUS_AP_PARAMS_NOT_IN_RANGE,  /* peer AP wake interval, duration not in range */
     WMI_ADD_TWT_STATUS_AP_IE_VALIDATION_FAILED, /* peer AP IE Validation Failed */
+    WMI_ADD_TWT_STATUS_ROAM_IN_PROGRESS,    /* Roaming in progress */
+    WMI_ADD_TWT_STATUS_CHAN_SW_IN_PROGRESS, /* Channel switch in progress */
 } WMI_ADD_TWT_STATUS_T;
 
 typedef struct {
@@ -29529,6 +29535,7 @@ typedef enum _WMI_DEL_TWT_STATUS_T {
     WMI_DEL_TWT_STATUS_PEER_INIT_TEARDOWN,  /* Peer Initiated Teardown */
     WMI_DEL_TWT_STATUS_ROAMING,             /* Reason Roaming Start*/
     WMI_DEL_TWT_STATUS_CONCURRENCY,         /* Teardown due to concurrency */
+    WMI_DEL_TWT_STATUS_CHAN_SW_IN_PROGRESS, /* Channel switch in progress */
 } WMI_DEL_TWT_STATUS_T;
 
 typedef struct {
@@ -29557,6 +29564,7 @@ typedef enum _WMI_PAUSE_TWT_STATUS_T {
     WMI_PAUSE_TWT_STATUS_UNKNOWN_ERROR,       /* pausing TWT dialog failed with an unknown reason */
     WMI_PAUSE_TWT_STATUS_ALREADY_PAUSED,      /* The TWT dialog is already paused */
     WMI_PAUSE_TWT_STATUS_TWT_INFO_FRM_NOT_SUPPORTED, /* TWT information frame is not supported by AP */
+    WMI_PAUSE_TWT_STATUS_CHAN_SW_IN_PROGRESS, /* Channel switch in progress */
 } WMI_PAUSE_TWT_STATUS_T;
 
 typedef struct {
@@ -29587,6 +29595,7 @@ typedef enum _WMI_RESUME_TWT_STATUS_T {
     WMI_RESUME_TWT_STATUS_NO_ACK,              /* peer AP/STA did not ACK the request/response frame */
     WMI_RESUME_TWT_STATUS_UNKNOWN_ERROR,       /* resuming TWT dialog failed with an unknown reason */
     WMI_RESUME_TWT_STATUS_TWT_INFO_FRM_NOT_SUPPORTED, /* TWT information frame is not supported by AP */
+    WMI_RESUME_TWT_STATUS_CHAN_SW_IN_PROGRESS, /* Channel switch in progress */
 } WMI_RESUME_TWT_STATUS_T;
 
 typedef struct {
@@ -29617,6 +29626,7 @@ typedef enum _WMI_TWT_NUDGE_STATUS_T {
     WMI_NUDGE_TWT_STATUS_UNKNOWN_ERROR,       /* nudging TWT dialog failed with an unknown reason */
     WMI_NUDGE_TWT_STATUS_ALREADY_PAUSED,      /* The TWT dialog is already paused */
     WMI_NUDGE_TWT_STATUS_TWT_INFO_FRM_NOT_SUPPORTED, /* TWT information frame is not supported by AP */
+    WMI_NUDGE_TWT_STATUS_CHAN_SW_IN_PROGRESS, /* Channel switch in progress */
 } WMI_TWT_NUDGE_STATUS_T;
 
 typedef struct {
@@ -33960,6 +33970,24 @@ typedef struct {
     /** Return status. 0 for success, non-zero otherwise */
     A_UINT32 status;
 } wmi_mlo_teardown_complete_fixed_param;
+
+#define WMI_IGMP_OFFLOAD_SUPPORT_DISABLE_BITMASK    0x0
+#define WMI_IGMP_V1_OFFLOAD_SUPPORT_BITMASK         0x1
+#define WMI_IGMP_V2_OFFLOAD_SUPPORT_BITMASK         0x2
+#define WMI_IGMP_V3_OFFLOAD_SUPPORT_BITMASK         0x4
+#define WMI_IGMP_OFFLOAD_SUPPORT_ALL_VERSION        0x7
+
+typedef struct {
+    A_UINT32 tlv_header; /** TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_igmp_offload_fixed_param */
+    A_UINT32 vdev_id;                   /** VDEV identifier */
+    A_UINT32 enable;                    /** IGMP offload support enable/disable */
+    A_UINT32 version_support_bitmask;   /** IGMP version support v1, v2 and/or v3*/
+
+/* Following this structure are the TLVs:
+ *     WMI_IPV4_ADDR  grp_ip_address[num_mcast_ipv4_addr];
+ */
+} wmi_igmp_offload_fixed_param;
+
 
 
 /* ADD NEW DEFS HERE */
