@@ -231,6 +231,8 @@ __get_rbbm_clock_cntl_on(struct adreno_device *adreno_dev)
 		return 0x8AA8AA02;
 	else if (adreno_is_a612(adreno_dev) || adreno_is_a610(adreno_dev))
 		return 0xAAA8AA82;
+	else if (adreno_is_a702(adreno_dev))
+		return 0xAAAAAA82;
 	else
 		return 0x8AA8AA82;
 }
@@ -285,11 +287,21 @@ bool a6xx_cx_regulator_disable_wait(struct regulator *reg,
 	ktime_t tout = ktime_add_us(ktime_get(), timeout * 1000);
 	unsigned int val;
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
+	struct a6xx_gmu_device *gmu = to_a6xx_gmu(adreno_dev);
 
 	if (IS_ERR_OR_NULL(reg))
 		return true;
 
 	regulator_disable(reg);
+
+	/*
+	 * Check logical enable state of CX GDSC using regulator_is_enabled()
+	 * instead of checking physical state by CX_GDSCR register because
+	 * in a640 and a680, CX_GDSCR will not be disabled from kernel. It can
+	 * be turned off by AOP for CX Power collapse.
+	 */
+	if (adreno_is_a640(adreno_dev) || adreno_is_a680(adreno_dev))
+		return !(regulator_is_enabled(gmu->cx_gdsc));
 
 	for (;;) {
 		if (adreno_is_a619_holi(adreno_dev))
@@ -363,7 +375,7 @@ static void a6xx_hwcg_set(struct adreno_device *adreno_dev, bool on)
 	 */
 
 	if (gmu_core_isenabled(device) && !adreno_is_a612(adreno_dev) &&
-		!adreno_is_a610(adreno_dev))
+		!adreno_is_a610(adreno_dev) && !(adreno_is_a702(adreno_dev)))
 		gmu_core_regrmw(device,
 			A6XX_GPU_GMU_GX_SPTPRAC_CLOCK_CONTROL, 1, 0);
 	else if (adreno_is_a619_holi(adreno_dev))
@@ -382,7 +394,7 @@ static void a6xx_hwcg_set(struct adreno_device *adreno_dev, bool on)
 	 * Hence skip GMU_GX registers for A612.
 	 */
 	if (gmu_core_isenabled(device) && !adreno_is_a612(adreno_dev) &&
-		!adreno_is_a610(adreno_dev))
+		!adreno_is_a610(adreno_dev) && !adreno_is_a702(adreno_dev))
 		gmu_core_regrmw(device,
 			A6XX_GPU_GMU_GX_SPTPRAC_CLOCK_CONTROL, 0, 1);
 	else if (adreno_is_a619_holi(adreno_dev))
@@ -580,10 +592,12 @@ void a6xx_start(struct adreno_device *adreno_dev)
 	kgsl_regwrite(device, A6XX_UCHE_CACHE_WAYS, 0x4);
 
 	/* ROQ sizes are twice as big on a640/a680 than on a630 */
-	if (ADRENO_GPUREV(adreno_dev) >= ADRENO_REV_A635) {
+	if ((ADRENO_GPUREV(adreno_dev) >= ADRENO_REV_A635) &&
+		!adreno_is_a702(adreno_dev)) {
 		kgsl_regwrite(device, A6XX_CP_ROQ_THRESHOLDS_2, 0x02000140);
 		kgsl_regwrite(device, A6XX_CP_ROQ_THRESHOLDS_1, 0x8040362C);
-	} else if (adreno_is_a612(adreno_dev) || adreno_is_a610(adreno_dev)) {
+	} else if (adreno_is_a612(adreno_dev) || adreno_is_a610(adreno_dev) ||
+			adreno_is_a702(adreno_dev)) {
 		kgsl_regwrite(device, A6XX_CP_ROQ_THRESHOLDS_2, 0x00800060);
 		kgsl_regwrite(device, A6XX_CP_ROQ_THRESHOLDS_1, 0x40201b16);
 	} else {
@@ -598,6 +612,9 @@ void a6xx_start(struct adreno_device *adreno_dev)
 		/* For A612 and A610 Mem pool size is reduced to 48 */
 		kgsl_regwrite(device, A6XX_CP_MEM_POOL_SIZE, 48);
 		kgsl_regwrite(device, A6XX_CP_MEM_POOL_DBG_ADDR, 47);
+	} else if (adreno_is_a702(adreno_dev)) {
+		kgsl_regwrite(device, A6XX_CP_MEM_POOL_SIZE, 64);
+		kgsl_regwrite(device, A6XX_CP_MEM_POOL_DBG_ADDR, 63);
 	} else {
 		kgsl_regwrite(device, A6XX_CP_MEM_POOL_SIZE, 128);
 	}
@@ -707,6 +724,10 @@ void a6xx_start(struct adreno_device *adreno_dev)
 	/* Set the bit vccCacheSkipDis=1 to get rid of TSEskip logic */
 	if (a6xx_core->disable_tseskip)
 		kgsl_regrmw(device, A6XX_PC_DBG_ECO_CNTL, 0, (1 << 9));
+
+	/* Set the bit in HLSQ Cluster for A702 */
+	if (adreno_is_a702(adreno_dev))
+		kgsl_regwrite(device, A6XX_CP_CHICKEN_DBG, (1 << 24));
 
 	/* Enable the GMEM save/restore feature for preemption */
 	if (adreno_is_preemption_enabled(adreno_dev))

@@ -30,13 +30,17 @@ struct boot_stats {
 	uint32_t bootloader_end;
 	uint32_t bootloader_display;
 	uint32_t bootloader_load_kernel;
+#ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
+	uint32_t bootloader_load_kernel_start;
+	uint32_t bootloader_load_kernel_end;
+#endif
 };
 
 static void __iomem *mpm_counter_base;
 static uint32_t mpm_counter_freq;
 static struct boot_stats __iomem *boot_stats;
 
-#ifdef CONFIG_MSM_BOOT_TIME_MARKER
+#ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
 
 struct boot_marker {
 	char marker_name[BOOT_MARKER_MAX_LEN];
@@ -189,7 +193,7 @@ static ssize_t bootkpi_writer(struct kobject *obj, struct kobj_attribute *attr,
 	if (count >= MAX_STRING_LEN)
 		return -EINVAL;
 
-	rc = scnprintf(buf, count, "%s", user_buffer);
+	rc = scnprintf(buf, sizeof(buf) - 1, "%s", user_buffer);
 	if (rc < 0)
 		return rc;
 

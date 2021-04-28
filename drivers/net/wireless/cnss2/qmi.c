@@ -23,6 +23,7 @@
 #define BIN_BDF_FILE_NAME_PREFIX	"bdwlan.b"
 #define BIN_BDF_FILE_NAME_GF_PREFIX	"bdwlang.b"
 #define REGDB_FILE_NAME			"regdb.bin"
+#define HDS_FILE_NAME			"hds.bin"
 #define CHIP_ID_GF_MASK			0x10
 
 #define QDSS_TRACE_CONFIG_FILE		"qdss_trace_config"
@@ -39,6 +40,7 @@
 #define QMI_WLFW_MAX_RECV_BUF_SIZE	SZ_8K
 #define IMSPRIVATE_SERVICE_MAX_MSG_LEN	SZ_8K
 #define DMS_QMI_MAX_MSG_LEN		SZ_256
+#define DMS_MAC_NOT_PROVISIONED		16
 
 #define QMI_WLFW_MAC_READY_TIMEOUT_MS	50
 #define QMI_WLFW_MAC_READY_MAX_RETRY	200
@@ -558,6 +560,9 @@ static int cnss_get_bdf_file_name(struct cnss_plat_data *plat_priv,
 		break;
 	case CNSS_BDF_REGDB:
 		snprintf(filename_tmp, filename_len, REGDB_FILE_NAME);
+		break;
+	case CNSS_BDF_HDS:
+		snprintf(filename_tmp, filename_len, HDS_FILE_NAME);
 		break;
 	default:
 		cnss_pr_err("Invalid BDF type: %d\n",
@@ -2872,7 +2877,7 @@ int cnss_qmi_get_dms_mac(struct cnss_plat_data *plat_priv)
 
 	if  (!test_bit(CNSS_QMI_DMS_CONNECTED, &plat_priv->driver_state)) {
 		cnss_pr_err("DMS QMI connection not established\n");
-		return -EINVAL;
+		return -EAGAIN;
 	}
 	cnss_pr_dbg("Requesting DMS MAC address");
 
@@ -2903,8 +2908,13 @@ int cnss_qmi_get_dms_mac(struct cnss_plat_data *plat_priv)
 	}
 
 	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
-		cnss_pr_err("QMI_DMS_GET_MAC_ADDRESS_REQ_V01 failed, result: %d, err: %d\n",
-			    resp.resp.result, resp.resp.error);
+		if (resp.resp.error == DMS_MAC_NOT_PROVISIONED) {
+			cnss_pr_err("NV MAC address is not provisioned");
+			plat_priv->dms.nv_mac_not_prov = 1;
+		} else {
+			cnss_pr_err("QMI_DMS_GET_MAC_ADDRESS_REQ_V01 failed, result: %d, err: %d\n",
+				    resp.resp.result, resp.resp.error);
+		}
 		ret = -resp.resp.result;
 		goto out;
 	}
