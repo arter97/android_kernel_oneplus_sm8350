@@ -909,10 +909,12 @@ qdf_freq_t wlan_reg_chan_band_to_freq(struct wlan_objmgr_pdev *pdev,
 
 qdf_export_symbol(wlan_reg_chan_band_to_freq);
 
+#ifdef CONFIG_49GHZ_CHAN
 bool wlan_reg_is_49ghz_freq(qdf_freq_t freq)
 {
 	return reg_is_49ghz_freq(freq);
 }
+#endif /* CONFIG_49GHZ_CHAN */
 
 uint8_t wlan_reg_ch_num(uint32_t ch_enum)
 {
@@ -1313,6 +1315,13 @@ QDF_STATUS wlan_reg_get_unspecified_ap_usable(struct wlan_objmgr_pdev *pdev,
 					      bool *reg_unspecified_ap_usable)
 {
 	return reg_get_unspecified_ap_usable(pdev, reg_unspecified_ap_usable);
+}
+
+QDF_STATUS
+wlan_reg_get_cur_6g_ap_pwr_type(struct wlan_objmgr_pdev *pdev,
+				enum reg_6g_ap_type *reg_cur_6g_ap_pwr_type)
+{
+	return reg_get_cur_6g_ap_pwr_type(pdev, reg_cur_6g_ap_pwr_type);
 }
 
 QDF_STATUS
