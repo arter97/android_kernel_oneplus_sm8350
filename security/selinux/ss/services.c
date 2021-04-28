@@ -2059,7 +2059,6 @@ static int convert_context(struct context *oldc, struct context *newc, void *p)
 	context_init(newc);
 
 	/* Convert the user. */
-	rc = -EINVAL;
 	usrdatum = symtab_search(&args->newp->p_users,
 				 sym_name(args->oldp,
 					  SYM_USERS, oldc->user - 1));
@@ -2068,7 +2067,6 @@ static int convert_context(struct context *oldc, struct context *newc, void *p)
 	newc->user = usrdatum->value;
 
 	/* Convert the role. */
-	rc = -EINVAL;
 	role = symtab_search(&args->newp->p_roles,
 			     sym_name(args->oldp, SYM_ROLES, oldc->role - 1));
 	if (!role)
@@ -2076,7 +2074,6 @@ static int convert_context(struct context *oldc, struct context *newc, void *p)
 	newc->role = role->value;
 
 	/* Convert the type. */
-	rc = -EINVAL;
 	typdatum = symtab_search(&args->newp->p_types,
 				 sym_name(args->oldp,
 					  SYM_TYPES, oldc->type - 1));
@@ -2100,7 +2097,6 @@ static int convert_context(struct context *oldc, struct context *newc, void *p)
 		oc = args->newp->ocontexts[OCON_ISID];
 		while (oc && oc->sid[0] != SECINITSID_UNLABELED)
 			oc = oc->next;
-		rc = -EINVAL;
 		if (!oc) {
 			pr_err("SELinux:  unable to look up"
 				" the initial SIDs list\n");
