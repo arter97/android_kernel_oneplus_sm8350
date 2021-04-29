@@ -14,6 +14,12 @@
 			pr_debug(fmt, ##__VA_ARGS__);	\
 	} while (0)
 
+/*
+ * Current QBG context dump size is 2448 bytes (612 u32 members).
+ * Use greater buffer to accommodate future additions to QBG context.
+ */
+#define QBG_CONTEXT_LOCAL_BUF_SIZE	3072
+
 enum debug_mask {
 	QBG_DEBUG_BUS_READ	= BIT(0),
 	QBG_DEBUG_BUS_WRITE	= BIT(1),
@@ -86,6 +92,7 @@ enum QBG_ACCUM_INTERVAL_TYPE {
  * @battery:		Pointer to QBG battery data structure
  * @fifo_lock:		Lock for reading FIFO data
  * @data_lock:		Lock for reading kdata from QBG char device
+ * @context_lock:	Lock for reading/writing QBG context
  * @batt_id_chan:	IIO channel to read battery ID
  * @batt_temp_chan:	IIO channel to read battery temperature
  * @rtc:		RTC device to read real time
@@ -94,6 +101,7 @@ enum QBG_ACCUM_INTERVAL_TYPE {
  * @irq_name:		QBG interrupt name
  * @batt_type_str:	String array denoting battery type
  * @irq:		QBG irq number
+ * @context:		Pointer to QBG context dump buffer
  * @base:		Base address of QBG HW
  * @num_data_sdams:	Number of data sdams used for QBG
  * @batt_id_ohm:	Battery resistance in ohms
@@ -128,6 +136,7 @@ enum QBG_ACCUM_INTERVAL_TYPE {
  * @rconn_mohm:	Battery connector resistance
  * @previous_ep_time:	Previous timestamp when essential params stored
  * @current_time:	Current time stamp
+ * @context_count:	Size of the last QBG context dump stored
  * @profile_loaded:	Flag to indicated battery profile is loaded
  * @battery_missing:	Flag to indicate battery is missing
  * @data_ready:		Flag to indicate QBG data is ready
@@ -138,7 +147,7 @@ struct qti_qbg {
 	struct regmap		*regmap;
 	struct power_supply	*qbg_psy;
 	struct power_supply	*batt_psy;
-	struct class		*qbg_class;
+	struct class		qbg_class;
 	struct device		*qbg_device;
 	struct cdev		qbg_cdev;
 	dev_t			dev_no;
@@ -156,6 +165,7 @@ struct qti_qbg {
 	struct qbg_battery_data	*battery;
 	struct mutex		fifo_lock;
 	struct mutex		data_lock;
+	struct mutex		context_lock;
 	struct iio_channel	*batt_id_chan;
 	struct iio_channel	*batt_temp_chan;
 	struct rtc_device	*rtc;
@@ -164,6 +174,7 @@ struct qti_qbg {
 	const char		*irq_name;
 	const char		*batt_type_str;
 	int			irq;
+	u8			*context;
 	u32			base;
 	u32			sdam_base;
 	u32			num_data_sdams;
@@ -200,6 +211,7 @@ struct qti_qbg {
 	int			rconn_mohm;
 	unsigned long		previous_ep_time;
 	unsigned long		current_time;
+	int			context_count;
 	bool			profile_loaded;
 	bool			battery_missing;
 	bool			data_ready;

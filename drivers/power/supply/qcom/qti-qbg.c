@@ -1316,6 +1316,68 @@ static int qbg_get_sample_time_us(struct qti_qbg *chip)
 	return rc;
 }
 
+static ssize_t qbg_context_show(struct class *c,
+				struct class_attribute *attr, char *buf)
+{
+	struct qti_qbg *chip = container_of(c, struct qti_qbg, qbg_class);
+	int count;
+
+	if (!chip)
+		return -ENODEV;
+
+	if (!chip->context_count) {
+		qbg_dbg(chip, QBG_DEBUG_DEVICE, "Empty context buffer, nothing to show\n");
+		return 0;
+	}
+
+	mutex_lock(&chip->context_lock);
+	memcpy(buf, chip->context, chip->context_count);
+	count = chip->context_count;
+	chip->context_count = 0;
+	memset(chip->context, 0, QBG_CONTEXT_LOCAL_BUF_SIZE);
+	mutex_unlock(&chip->context_lock);
+
+	return count;
+}
+
+static ssize_t qbg_context_store(struct class *c,
+					struct class_attribute *attr,
+					const char *buf, size_t count)
+{
+	struct qti_qbg *chip = container_of(c, struct qti_qbg, qbg_class);
+
+	if (!chip)
+		return -ENODEV;
+
+	if (count > QBG_CONTEXT_LOCAL_BUF_SIZE) {
+		qbg_dbg(chip, QBG_DEBUG_DEVICE, "Context dump is greater than %d bytes\n",
+				QBG_CONTEXT_LOCAL_BUF_SIZE);
+		return -EINVAL;
+	}
+
+	if (!chip->context) {
+		chip->context = devm_kcalloc(chip->dev, 1,
+						QBG_CONTEXT_LOCAL_BUF_SIZE,
+						GFP_KERNEL);
+		if (!chip->context)
+			return -ENOMEM;
+	}
+
+	mutex_lock(&chip->context_lock);
+	memcpy(chip->context, buf, count);
+	chip->context_count = count;
+	mutex_unlock(&chip->context_lock);
+
+	return count;
+}
+static CLASS_ATTR_RW(qbg_context);
+
+static struct attribute *qbg_class_attrs[] = {
+	&class_attr_qbg_context.attr,
+	NULL,
+};
+ATTRIBUTE_GROUPS(qbg_class);
+
 static ssize_t qbg_device_read(struct file *file, char __user *buf, size_t count,
 			  loff_t *ppos)
 {
@@ -1596,14 +1658,15 @@ static int qbg_register_device(struct qti_qbg *chip)
 		goto unregister_chrdev;
 	}
 
-	chip->qbg_class = class_create(THIS_MODULE, "qbg");
-	if (IS_ERR_OR_NULL(chip->qbg_class)) {
-		pr_err("Failed to create qbg class\n");
-		rc = -EINVAL;
+	chip->qbg_class.name = "qbg";
+	chip->qbg_class.class_groups = qbg_class_groups;
+	rc = class_register(&chip->qbg_class);
+	if (rc < 0) {
+		pr_err("Failed to create qbg_class rc=%d\n", rc);
 		goto delete_cdev;
 	}
 
-	chip->qbg_device = device_create(chip->qbg_class, NULL, chip->dev_no,
+	chip->qbg_device = device_create(&chip->qbg_class, NULL, chip->dev_no,
 					NULL, "qbg");
 	if (IS_ERR(chip->qbg_device)) {
 		pr_err("Failed to create qbg_device\n");
@@ -1616,7 +1679,7 @@ static int qbg_register_device(struct qti_qbg *chip)
 	return 0;
 
 destroy_class:
-	class_destroy(chip->qbg_class);
+	class_unregister(&chip->qbg_class);
 delete_cdev:
 	cdev_del(&chip->qbg_cdev);
 unregister_chrdev:
@@ -1742,6 +1805,7 @@ static int qti_qbg_probe(struct platform_device *pdev)
 	INIT_WORK(&chip->udata_work, process_udata_work);
 	mutex_init(&chip->fifo_lock);
 	mutex_init(&chip->data_lock);
+	mutex_init(&chip->context_lock);
 	dev_set_drvdata(chip->dev, chip);
 	init_waitqueue_head(&chip->qbg_wait_q);
 
@@ -1849,8 +1913,10 @@ static int qti_qbg_remove(struct platform_device *pdev)
 	cancel_work_sync(&chip->udata_work);
 	mutex_destroy(&chip->fifo_lock);
 	mutex_destroy(&chip->data_lock);
+	mutex_destroy(&chip->context_lock);
 	cdev_del(&chip->qbg_cdev);
 	unregister_chrdev_region(chip->dev_no, 1);
+	class_unregister(&chip->qbg_class);
 
 	return 0;
 }
