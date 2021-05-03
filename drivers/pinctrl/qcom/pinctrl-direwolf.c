@@ -19,6 +19,7 @@
 
 #define REG_BASE 0x100000
 #define REG_SIZE 0x1000
+#define REG_DIRCONN 0x110000
 #define PINGROUP(id, f1, f2, f3, f4, f5, f6, f7, f8, f9)	\
 	{						\
 		.name = "gpio" #id,			\
@@ -42,6 +43,7 @@
 		.intr_cfg_reg = REG_BASE + 0x8 + REG_SIZE * id,	\
 		.intr_status_reg = REG_BASE + 0xc + REG_SIZE * id,	\
 		.intr_target_reg = REG_BASE + 0x8 + REG_SIZE * id,	\
+		.dir_conn_reg = REG_BASE + REG_DIRCONN,	\
 		.mux_bit = 2,			\
 		.pull_bit = 0,			\
 		.drv_bit = 6,			\
@@ -58,6 +60,7 @@
 		.intr_polarity_bit = 1,		\
 		.intr_detection_bit = 2,	\
 		.intr_detection_width = 2,	\
+		.dir_conn_en_bit = 8,		\
 	}
 
 #define SDC_QDSD_PINGROUP(pg_name, ctl, pull, drv)	\
@@ -2308,6 +2311,11 @@ static const struct msm_gpio_wakeirq_map direwolf_pdc_map[] = {
 	{ 221, 194 }, { 223, 195 }, { 225, 196 }, { 227, 197 },
 };
 
+static struct msm_dir_conn direwolf_dir_conn[] = {
+	  {-1, 0}, {-1, 0}, {-1, 0}, {-1, 0}, {-1, 0},
+	  {-1, 0}, {-1, 0}, {-1, 0}, {-1, 0}
+};
+
 static const struct msm_pinctrl_soc_data direwolf_pinctrl = {
 	.pins = direwolf_pins,
 	.npins = ARRAY_SIZE(direwolf_pins),
@@ -2318,6 +2326,7 @@ static const struct msm_pinctrl_soc_data direwolf_pinctrl = {
 	.ngpios = 229,
 	.wakeirq_map = direwolf_pdc_map,
 	.nwakeirq_map = ARRAY_SIZE(direwolf_pdc_map),
+	.dir_conn = direwolf_dir_conn,
 };
 
 static int direwolf_pinctrl_probe(struct platform_device *pdev)
