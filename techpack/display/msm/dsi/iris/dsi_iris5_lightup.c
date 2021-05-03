@@ -779,16 +779,6 @@ static int _iris_write_cmd_payload(struct dsi_cmd_desc *pdesc,
 		}
 	}
 
-	if (IRIS_IF_LOGVV()) {
-		int len = 0;
-
-		for (i = 0; i < pkt_cnt; i++) {
-			len = (pdesc[i].msg.tx_len > 16) ? 16 : pdesc[i].msg.tx_len;
-			print_hex_dump(KERN_ERR, "", DUMP_PREFIX_NONE, 16, 4,
-					pdesc[i].msg.tx_buf, len, false);
-		}
-	}
-
 	return 0;
 }
 
@@ -841,26 +831,6 @@ struct iris_ip_opt *iris_find_ip_opt(uint8_t ip, uint8_t opt_id)
 	}
 
 	return NULL;
-}
-
-static void _iris_print_ipopt(struct iris_ip_index  *pip_index)
-{
-	int32_t i = 0;
-	int32_t j = 0;
-	int32_t ip_cnt = IRIS_IP_CNT;
-
-	if (_iris_get_ip_idx_type(pip_index) == IRIS_LUT_PIP_IDX)
-		ip_cnt = LUT_IP_END - LUT_IP_START;
-
-	for (i = 0; i < ip_cnt; i++) {
-		for (j = 0; j < pip_index[i].opt_cnt; j++) {
-			struct iris_ip_opt *popt = &(pip_index[i].opt[j]);
-
-			IRIS_LOGI("%s(%d), ip: %02x, opt: %02x, cmd: %p, len: %d, link state: %#x",
-					__func__, __LINE__,
-					i, popt->opt_id, popt->cmd, popt->cmd_cnt, popt->link_state);
-		}
-	}
 }
 
 static void _iris_parse_appversion(
@@ -930,9 +900,6 @@ static int32_t _iris_add_cmd_to_ipidx(const struct iris_data *data,
 		cmd_index += pkt_cnt;
 	}
 	span = cmd_index - cmd_pos;
-
-	if (IRIS_IF_LOGVV())
-		_iris_print_ipopt(pip_index);
 
 	return span;
 }
@@ -1035,72 +1002,6 @@ static int32_t _iris_poll_each_section(const struct iris_cmd_header *hdr,
 EXIT_VAL:
 
 	IRIS_LOGE("%s(), cmd static is error!", __func__);
-	return rc;
-}
-
-static int32_t _iris_verify_dtsi(const struct iris_cmd_header *hdr,
-		struct iris_ip_index *pip_index)
-{
-	uint32_t *pval = NULL;
-	uint8_t tmp = 0;
-	int32_t rc = 0;
-	int32_t type = _iris_get_ip_idx_type(pip_index);
-
-	if (type >= IRIS_DTSI0_PIP_IDX && type <= IRIS_DTSI1_PIP_IDX) {
-		if (hdr->ip_type >= IRIS_IP_CNT) {
-			IRIS_LOGE("hdr->ip_type is  0x%0x out of max ip", hdr->ip_type);
-			rc = -EINVAL;
-		} else if (((hdr->opt_and_link >> 8) & 0xff)  > 1) {
-			IRIS_LOGE("hdr->opt link state not right 0x%0x", hdr->opt_and_link);
-			rc = -EINVAL;
-		}
-	} else {
-		if (hdr->ip_type >= LUT_IP_END || hdr->ip_type < LUT_IP_START) {
-			IRIS_LOGE("hdr->ip_type is  0x%0x out of ip range", hdr->ip_type);
-			rc = -EINVAL;
-		}
-	}
-
-	switch (hdr->dsi_type) {
-	case MIPI_DSI_DCS_SHORT_WRITE:
-	case MIPI_DSI_DCS_SHORT_WRITE_PARAM:
-	case MIPI_DSI_DCS_READ:
-	case MIPI_DSI_DCS_LONG_WRITE:
-	case MIPI_DSI_GENERIC_SHORT_WRITE_0_PARAM:
-	case MIPI_DSI_GENERIC_SHORT_WRITE_1_PARAM:
-	case MIPI_DSI_GENERIC_SHORT_WRITE_2_PARAM:
-	case MIPI_DSI_GENERIC_READ_REQUEST_0_PARAM:
-	case MIPI_DSI_GENERIC_READ_REQUEST_1_PARAM:
-	case MIPI_DSI_GENERIC_READ_REQUEST_2_PARAM:
-		break;
-	case MIPI_DSI_GENERIC_LONG_WRITE:
-		/*judge payload0 for iris header*/
-		pval = (uint32_t *)hdr + (sizeof(*hdr) >> 2);
-		tmp = *pval & 0x0f;
-		if (tmp == 0x00 || tmp == 0x05 || tmp == 0x0c || tmp == 0x08) {
-			break;
-		} else if (tmp == 0x04) {
-			if ((hdr->payload_len - 1) % 2 != 0) {
-				IRIS_LOGE("dlen is not right = %d", hdr->payload_len);
-				rc = -EINVAL;
-			}
-		} else {
-			IRIS_LOGE("payload hdr is not right = %0x", *pval);
-			rc = -EINVAL;
-		}
-		break;
-	default:
-		IRIS_LOGE("dsi type is not right %0x", hdr->dsi_type);
-		rc = -EINVAL;
-	}
-
-	if (rc) {
-		IRIS_LOGE("hdr info: %#x %#x %#x %#x %#x %#x",
-				hdr->dsi_type, hdr->last_pkt,
-				hdr->wait_us, hdr->ip_type,
-				hdr->opt_and_link, hdr->payload_len);
-	}
-
 	return rc;
 }
 
@@ -1249,14 +1150,6 @@ static int32_t _iris_poll_cmd_lists(const struct iris_data *data, int32_t data_c
 				IRIS_LOGE("%s: length error, ip = 0x%02x opt=0x%02x, len=%d",
 						__func__, hdr->ip_type, hdr->opt_and_link, hdr->payload_len);
 				return -EINVAL;
-			}
-
-			if (IRIS_IF_LOGVV()) {
-				rc = _iris_verify_dtsi(hdr, pip_index);
-				if (rc) {
-					IRIS_LOGE("%s(%d), verify dtis return: %d", __func__, __LINE__, rc);
-					return rc;
-				}
 			}
 
 			IRIS_LOGV("hdr info, type: 0x%02x, last: 0x%02x, wait: 0x%02x, ip: 0x%02x, opt: 0x%02x, len: %d.",
@@ -1433,11 +1326,6 @@ static void _iris_add_cmd_seq(struct iris_ctrl_opt *ctrl_opt,
 		ctrl_opt[i].ip = ip & 0xff;
 		ctrl_opt[i].opt_id = opt_id & 0xff;
 		ctrl_opt[i].skip_last = skip_last & 0xff;
-
-		if (IRIS_IF_LOGV()) {
-			IRIS_LOGE("ip = %d opt = %d  skip=%d",
-					ip, opt_id, skip_last);
-		}
 	}
 }
 
@@ -1839,45 +1727,6 @@ void iris_print_desc_cmds(struct dsi_cmd_desc *p, int cmd_cnt, int state)
 
 static void _iris_print_spec_cmds(struct dsi_cmd_desc *p, int cmd_cnt)
 {
-	int i = 0;
-	int j = 0;
-	int value_count = 0;
-	int print_count = 0;
-	struct dsi_cmd_desc *pcmd = NULL;
-	uint32_t *pval = NULL;
-
-	if (IRIS_IF_NOT_LOGD())
-		return;
-
-	IRIS_LOGD("%s(), package count in cmd list: %d", __func__, cmd_cnt);
-	for (i = 0; i < cmd_cnt; i++) {
-		pcmd = p + i;
-		value_count = pcmd->msg.tx_len/sizeof(uint32_t);
-		print_count = value_count;
-		if (value_count > 16)
-			print_count = 16;
-		pval = (uint32_t *)pcmd->msg.tx_buf;
-		if (i == 0 || i == cmd_cnt-1) {
-			IRIS_LOGD("%s(), package: %d, type: 0x%02x, last: %s, channel: 0x%02x, flags: 0x%04x, wait: 0x%02x, send size: %zu.",
-					__func__, i,
-					pcmd->msg.type, pcmd->last_command?"true":"false", pcmd->msg.channel,
-					pcmd->msg.flags, pcmd->post_wait_ms, pcmd->msg.tx_len);
-
-			if (IRIS_IF_NOT_LOGV())
-				continue;
-
-			IRIS_LOGV("%s(), payload value count: %d, print count: %d, ocp type: 0x%08x, addr: 0x%08x",
-					__func__, value_count, print_count, pval[0], pval[1]);
-			for (j = 2; j < print_count; j++)
-				IRIS_LOGV("0x%08x", pval[j]);
-
-			if (i == cmd_cnt-1 && value_count > 4 && print_count != value_count) {
-				IRIS_LOGV("%s(), payload tail: 0x%08x, 0x%08x, 0x%08x, 0x%08x.", __func__,
-						pval[value_count-4], pval[value_count-3],
-						pval[value_count-2], pval[value_count-1]);
-			}
-		}
-	}
 }
 
 static void _iris_print_dtsi_cmds_for_lk(struct dsi_cmd_desc *cmds,

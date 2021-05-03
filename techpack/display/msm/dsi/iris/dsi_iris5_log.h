@@ -30,7 +30,7 @@
 
 #ifndef IRIS_PR
 #define IRIS_PR(TAG, format, ...)	\
-	pr_err("%s%s " format "\n", IRIS_LOG_PREFIX, TAG, ## __VA_ARGS__)
+	pr_debug("%s%s " format "\n", IRIS_LOG_PREFIX, TAG, ## __VA_ARGS__)
 #endif
 
 #ifndef IRIS_LOG_IF
@@ -62,32 +62,32 @@ int iris_get_loglevel(void);
  */
 #ifndef IRIS_LOGE
 #define IRIS_LOGE(...)	\
-	IRIS_LOG_IF(true, " E", __VA_ARGS__)
+	IRIS_LOG_IF(false, " E", __VA_ARGS__)
 #endif
 
 #ifndef IRIS_LOGW
 #define IRIS_LOGW(...)	\
-	IRIS_LOG_IF(iris_get_loglevel() > 0, " W", __VA_ARGS__)
+	IRIS_LOG_IF(false, " W", __VA_ARGS__)
 #endif
 
 #ifndef IRIS_LOGI
 #define IRIS_LOGI(...)	\
-	IRIS_LOG_IF(iris_get_loglevel() > 1, " I", __VA_ARGS__)
+	IRIS_LOG_IF(false, " I", __VA_ARGS__)
 #endif
 
 #ifndef IRIS_LOGD
 #define IRIS_LOGD(...)	\
-	IRIS_LOG_IF(iris_get_loglevel() > 2, " D",  __VA_ARGS__)
+	IRIS_LOG_IF(false, " D",  __VA_ARGS__)
 #endif
 
 #ifndef IRIS_LOGV
 #define IRIS_LOGV(...)	\
-	IRIS_LOG_IF(iris_get_loglevel() > 3, " V", __VA_ARGS__)
+	IRIS_LOG_IF(false, " V", __VA_ARGS__)
 #endif
 
 #ifndef IRIS_LOGVV
 #define IRIS_LOGVV(...)	\
-	IRIS_LOG_IF(iris_get_loglevel() > 4, " VV", __VA_ARGS__)
+	IRIS_LOG_IF(false, " VV", __VA_ARGS__)
 #endif
 
 #ifndef IRIS_IF_LOGI

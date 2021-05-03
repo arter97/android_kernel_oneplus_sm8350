@@ -2959,24 +2959,6 @@ int32_t iris_parse_default_pq_param(struct device_node *np,
 		k -= 1;
 	}
 
-	if (IRIS_IF_LOGV()) {
-		IRIS_LOGE("ip_cnt = %0x", pinit_val->ip_cnt);
-		for (i = 0; i < pinit_val->ip_cnt; i++) {
-			char ptr[256];
-			int32_t len = 0;
-			int32_t sum = 256;
-			struct iris_pq_ipopt_val *pval = &(pinit_val->val[i]);
-
-			snprintf(ptr, sum, "ip is %0x opt is ", pval->ip);
-			for (j = 0; j < pval->opt_cnt; j++) {
-				len = strlen(ptr);
-				sum -= len;
-				snprintf(ptr + len, sum, "%0x ", pval->popt[j]);
-			}
-			IRIS_LOGE("%s", ptr);
-		}
-	}
-
 	return rc;
 }
 

@@ -270,11 +270,6 @@ u32 iris_ocp_read(u32 address, u32 mode)
 	return value;
 }
 
-static void _iris_dump_packet(u8 *data, int size)
-{
-	print_hex_dump(KERN_ERR, "", DUMP_PREFIX_NONE, 16, 4, data, size, false);
-}
-
 void iris_write_test(struct dsi_panel *panel, u32 iris_addr,
 		int ocp_type, u32 pkt_size)
 {
@@ -321,9 +316,6 @@ void iris_write_test(struct dsi_panel *panel, u32 iris_addr,
 	iris_cmd.msg.tx_len = ocp_cmd.cmd_len;
 
 	iris_dsi_send_cmds(panel, &iris_cmd, 1, DSI_CMD_SET_STATE_HS);
-
-	if (IRIS_IF_LOGD())
-		_iris_dump_packet(ocp_cmd.cmd, ocp_cmd.cmd_len);
 }
 
 void iris_write_test_muti_pkt(struct dsi_panel *panel,
@@ -399,13 +391,6 @@ void iris_write_test_muti_pkt(struct dsi_panel *panel,
 	IRIS_LOGI("%s(), total count: %#x, iris addr: %#x, test value: %#x",
 			__func__, total_cnt, iris_addr, test_value);
 	iris_dsi_send_cmds(panel, iris_test_cmd, total_cnt, DSI_CMD_SET_STATE_HS);
-
-	if (IRIS_IF_NOT_LOGV())
-		return;
-
-	for (cnt = 0; cnt < total_cnt; cnt++)
-		_iris_dump_packet(ocp_test_cmd[cnt].cmd,
-				ocp_test_cmd[cnt].cmd_len);
 }
 
 int iris_dsi_send_cmds(struct dsi_panel *panel,
@@ -448,9 +433,6 @@ int iris_dsi_send_cmds(struct dsi_panel *panel,
 		len = ops->transfer(panel->host, &cmds->msg);
 		dsi_display_clk_ctrl(display->dsi_clk_handle,
 				DSI_ALL_CLKS, DSI_CLK_OFF);
-
-		if (IRIS_IF_LOGVV())
-			_iris_dump_packet((u8 *)cmds->msg.tx_buf, cmds->msg.tx_len);
 
 		if (len < 0) {
 			rc = len;

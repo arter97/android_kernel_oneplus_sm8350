@@ -243,9 +243,6 @@ int iris_switch(struct dsi_panel *panel,
 	pcfg->ap_te = refresh_rate;
 	pcfg->next_fps_for_iris = refresh_rate;
 
-	if (IRIS_IF_LOGI())
-		ktime = ktime_get();
-
 	if (lightup_opt & 0x8) {
 		rc = iris_dsi_send_cmds(panel, switch_cmds->cmds, switch_cmds->count, switch_cmds->state);
 		IRIS_LOGI("%s(), switch between ABYP and ABYP, total cost '%d us'",
