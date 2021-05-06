@@ -821,7 +821,7 @@ int cam_cdm_process_cmd(void *hw_priv,
 	}
 	case CAM_CDM_HW_INTF_DUMP_DBG_REGS:
 	{
-		uint32_t *handle = cmd_args;
+//		uint32_t *handle = cmd_args;
 
 		if (sizeof(uint32_t) != arg_size) {
 			CAM_ERR(CAM_CDM,

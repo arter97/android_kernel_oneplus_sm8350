@@ -49,7 +49,7 @@ static int cam_jpeg_process_next_hw_update(void *priv, void *data,
 	struct cam_hw_done_event_data *buf_data)
 {
 	int rc;
-	int i = 0;
+//	int i = 0;
 	struct cam_jpeg_hw_mgr *hw_mgr = priv;
 	struct cam_hw_update_entry *cmd;
 	struct cam_cdm_bl_request *cdm_cmd;

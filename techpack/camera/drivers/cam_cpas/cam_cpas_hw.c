@@ -28,8 +28,8 @@ static void cam_cpas_process_bw_overrides(
 	struct cam_cpas_bus_client *bus_client, uint64_t *ab, uint64_t *ib,
 	const struct cam_cpas_debug_settings *cpas_settings)
 {
-	uint64_t curr_ab = *ab;
-	uint64_t curr_ib = *ib;
+//	uint64_t curr_ab = *ab;
+//	uint64_t curr_ib = *ib;
 	size_t name_len = strlen(bus_client->common_data.name);
 
 	if (!cpas_settings) {

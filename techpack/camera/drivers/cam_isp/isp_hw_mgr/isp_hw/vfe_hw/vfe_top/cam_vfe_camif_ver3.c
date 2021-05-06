@@ -803,8 +803,8 @@ static int cam_vfe_camif_ver3_sof_irq_debug(
 int cam_vfe_camif_ver3_dump_timestamps(
 	struct cam_isp_resource_node *rsrc_node, void *cmd_args)
 {
-	struct cam_vfe_mux_camif_ver3_data *camif_priv =
-		(struct cam_vfe_mux_camif_ver3_data *)rsrc_node->res_priv;
+/*	struct cam_vfe_mux_camif_ver3_data *camif_priv =
+		(struct cam_vfe_mux_camif_ver3_data *)rsrc_node->res_priv; */
 
 	CAM_INFO(CAM_ISP,
 		"CAMIF ERROR time %lld:%lld SOF %lld:%lld EPOCH %lld:%lld EOF %lld:%lld",

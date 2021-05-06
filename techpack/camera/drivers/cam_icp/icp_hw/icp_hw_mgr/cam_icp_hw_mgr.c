@@ -2017,7 +2017,7 @@ static int cam_icp_mgr_cleanup_ctx(struct cam_icp_hw_ctx_data *ctx_data)
 
 	return 0;
 }
-
+/*
 static const char *cam_icp_error_handle_id_to_type(
 	uint32_t error_handle)
 {
@@ -2080,7 +2080,7 @@ static const char *cam_icp_error_handle_id_to_type(
 		break;
 	}
 	return name;
-}
+} */
 
 static int cam_icp_mgr_handle_frame_process(uint32_t *msg_ptr, int flag)
 {

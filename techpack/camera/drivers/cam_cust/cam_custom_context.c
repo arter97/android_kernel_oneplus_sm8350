@@ -38,8 +38,8 @@ static int __cam_custom_ctx_apply_req_in_activated(
 	struct cam_context *ctx, struct cam_req_mgr_apply_request *apply)
 {
 	int rc = 0;
-	struct cam_custom_context *custom_ctx =
-		(struct cam_custom_context *) ctx->ctx_priv;
+/*	struct cam_custom_context *custom_ctx =
+		(struct cam_custom_context *) ctx->ctx_priv; */
 
 	rc = __cam_custom_ctx_apply_req_in_activated_state(
 		ctx, apply, CAM_CUSTOM_CTX_ACTIVATED_APPLIED);

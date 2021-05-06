@@ -200,7 +200,7 @@ static void __cam_isp_ctx_update_state_monitor_array(
 	ctx_isp->cam_isp_ctx_state_monitor[iterator].evt_time_stamp =
 		jiffies_to_msecs(jiffies) - ctx_isp->init_timestamp;
 }
-
+/*
 static const char *__cam_isp_ctx_substate_val_to_type(
 	enum cam_isp_ctx_activated_substate type)
 {
@@ -247,7 +247,7 @@ static const char *__cam_isp_hw_evt_val_to_type(
 	default:
 		return "CAM_ISP_EVENT_INVALID";
 	}
-}
+} */
 
 static void __cam_isp_ctx_dump_state_monitor_array(
 	struct cam_isp_context *ctx_isp)
@@ -725,7 +725,7 @@ static void __cam_isp_ctx_send_sof_timestamp(
 	uint32_t sof_event_status)
 {
 	struct cam_req_mgr_message   req_msg;
-	struct cam_context *ctx = ctx_isp->base;
+//	struct cam_context *ctx = ctx_isp->base;
 
     if ((!ctx_isp->is_anchor_instance) &&
         (sof_event_status == CAM_REQ_MGR_SOF_EVENT_SUCCESS)) {
@@ -1046,7 +1046,7 @@ static int __cam_isp_handle_deferred_buf_done(
 	int rc = 0;
 	struct cam_isp_ctx_req *req_isp =
 		(struct cam_isp_ctx_req *) req->req_priv;
-	struct cam_context *ctx = ctx_isp->base;
+//	struct cam_context *ctx = ctx_isp->base;
 
 	CAM_DBG(CAM_ISP,
 		"ctx[%d] : Req %llu : Handling %d deferred buf_dones num_acked=%d, bubble_handling=%d",
@@ -3280,8 +3280,8 @@ static int __cam_isp_ctx_apply_req_in_sof(
 	struct cam_context *ctx, struct cam_req_mgr_apply_request *apply)
 {
 	int rc = 0;
-	struct cam_isp_context *ctx_isp =
-		(struct cam_isp_context *) ctx->ctx_priv;
+/*	struct cam_isp_context *ctx_isp =
+		(struct cam_isp_context *) ctx->ctx_priv; */
 
 	CAM_DBG(CAM_ISP, "current Substate[%s]",
 		__cam_isp_ctx_substate_val_to_type(
@@ -3304,8 +3304,8 @@ static int __cam_isp_ctx_apply_req_in_epoch(
 	struct cam_context *ctx, struct cam_req_mgr_apply_request *apply)
 {
 	int rc = 0;
-	struct cam_isp_context *ctx_isp =
-		(struct cam_isp_context *) ctx->ctx_priv;
+/*	struct cam_isp_context *ctx_isp =
+		(struct cam_isp_context *) ctx->ctx_priv; */
 
 	CAM_DBG(CAM_ISP, "current Substate[%s]",
 		__cam_isp_ctx_substate_val_to_type(
@@ -3328,8 +3328,8 @@ static int __cam_isp_ctx_apply_req_in_bubble(
 	struct cam_context *ctx, struct cam_req_mgr_apply_request *apply)
 {
 	int rc = 0;
-	struct cam_isp_context *ctx_isp =
-		(struct cam_isp_context *) ctx->ctx_priv;
+/*	struct cam_isp_context *ctx_isp =
+		(struct cam_isp_context *) ctx->ctx_priv; */
 
 	CAM_DBG(CAM_ISP, "current Substate[%s]",
 		__cam_isp_ctx_substate_val_to_type(
@@ -4281,8 +4281,8 @@ static int __cam_isp_ctx_rdi_only_apply_req_top_state(
 	struct cam_context *ctx, struct cam_req_mgr_apply_request *apply)
 {
 	int rc = 0;
-	struct cam_isp_context *ctx_isp =
-		(struct cam_isp_context *) ctx->ctx_priv;
+/*	struct cam_isp_context *ctx_isp =
+		(struct cam_isp_context *) ctx->ctx_priv; */
 
 	CAM_DBG(CAM_ISP, "current Substate[%s]",
 		__cam_isp_ctx_substate_val_to_type(
