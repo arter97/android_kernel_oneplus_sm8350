@@ -105,7 +105,7 @@ void pm_silentmode_user_update(struct kobject *kobj, int val)
 	if (kobj != NULL) {
 		atomic_set(&pm_silentmode_userspace_cntrl, USERSPACE_CONTROL_ENABLED);
 		atomic_set(&pm_silent_mode_enable, val);
-		sysfs_notify(kobj, NULL, "silent-notify");
+		sysfs_notify(kobj, NULL, "pm_silentmode_kernel_state");
 	}
 }
 
@@ -119,7 +119,7 @@ int  pm_silentmode_update(int val, struct kobject *kobj, bool us)
 	pr_debug("%s:Driver update to sysfs\n", __func__);
 	pm_silentmode_kernel_set(val ^ 1);
 	pm_silentmode_hw_state_set((val ^ 1));
-	sysfs_notify(power_kobj, NULL, "silent-notify");
+	sysfs_notify(power_kobj, NULL, "pm_silentmode_kernel_state");
 	pm_silent_mode_cb_chain();
 
 	return 0;
