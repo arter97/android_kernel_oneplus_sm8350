@@ -1439,7 +1439,7 @@ enum oplus_chg_ffc_temp_region oplus_chg_comm_get_ffc_temp_region(struct oplus_c
 		}
 		comm_dev->ffc_temp_region = temp_region;
 	} else if (comm_dev->ffc_temp_region < temp_region) {
-		for (i = 0; i < BATT_TEMP_INVALID - 1; i++) {
+		for (i = 0; i < FFC_TEMP_INVALID - 1; i++) {
 			if (i == (temp_region - 1))
 				comm_dev->ffc_temp_dynamic_thr[i] =
 					comm_dev->ffc_temp_dynamic_thr[i] - BATT_TEMP_HYST;
