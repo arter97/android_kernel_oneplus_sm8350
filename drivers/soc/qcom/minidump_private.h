@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2017-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2019,2021, The Linux Foundation. All rights reserved.
  */
 
 #ifndef __MINIDUMP_PRIVATE_H
@@ -75,5 +75,41 @@ struct md_global_toc {
 	u32			md_enable_status;
 	struct md_ss_toc	md_ss_toc[MAX_NUM_OF_SS];
 };
+
+/**
+ * md_ops: Minidump operations
+ * @get_toc_init : Get toc initialization status
+ * @get_revision : Get Minidump revision
+ * @get_enable_status : Get Minidump enable status
+ * @set_ss_toc_init : Set subsystem toc initialization status
+ * @get_ss_toc_init : Get subsystem toc initialization status
+ * @set_ss_enable_status: Set subsystem enable status
+ * @get_ss_enable_status: Get subsystem enable status
+ * @set_ss_encryption: Set subsystem encryption
+ * @set_ss_region_base: Set subsystem region base address
+ * @get_ss_region_base: Get subsystem region base address
+ * @set_ss_region_count: Set subsystem region count
+ * @get_ss_region_count: Get subsystem region count
+ */
+struct md_ops {
+	bool		(*get_toc_init)(void);
+	u32		(*get_revision)(void);
+	u32		(*get_enable_status)(void);
+	void		(*set_ss_toc_init)(u32 init);
+	u32		(*get_ss_toc_init)(void);
+	void		(*set_ss_enable_status)(bool enable);
+	u32		(*get_ss_enable_status)(void);
+	void		(*set_ss_encryption)(bool required, u32 status);
+	void		(*set_ss_region_base)(u64 base);
+	u64		(*get_ss_region_base)(void);
+	void		(*set_ss_region_count)(u32 count);
+	u32		(*get_ss_region_count)(void);
+};
+
+struct md_init_data {
+	const struct md_ops	*ops;
+};
+
+extern int msm_minidump_probe(const struct md_init_data *data);
 
 #endif

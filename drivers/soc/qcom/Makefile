@@ -54,6 +54,7 @@ obj-$(CONFIG_QCOM_SDMSHRIKE_LLCC) += llcc-sdmshrike.o
 obj-$(CONFIG_QCOM_SM6150_LLCC) += llcc-sm6150.o
 obj-$(CONFIG_QCOM_DIREWOLF_LLCC) += llcc-direwolf.o
 obj-$(CONFIG_QCOM_MINIDUMP) += msm_minidump.o minidump_log.o
+obj-$(CONFIG_QCOM_MINIDUMP_SMEM) += minidump_smem.o
 obj-$(CONFIG_QCOM_MEM_OFFLINE) += mem-offline.o
 obj-$(CONFIG_QCOM_MEM_BUF) += mem-buf.o mem_buf_dma_buf.o
 obj-$(CONFIG_QCOM_MEMORY_DUMP_V2) += memory_dump_v2.o
