@@ -89,23 +89,6 @@ static int anx7625_reg_read(struct anx7625_data *ctx,
 	return ret;
 }
 
-static int anx7625_reg_block_read(struct anx7625_data *ctx,
-				  struct i2c_client *client,
-				  u8 reg_addr, u8 len, u8 *buf)
-{
-	int ret;
-	struct device *dev = &client->dev;
-
-	i2c_access_workaround(ctx, client);
-
-	ret = i2c_smbus_read_i2c_block_data(client, reg_addr, len, buf);
-	if (ret < 0)
-		DRM_DEV_ERROR(dev, "read i2c block fail id=%x:%x\n",
-			      client->addr, reg_addr);
-
-	return ret;
-}
-
 static int anx7625_reg_write(struct anx7625_data *ctx,
 			     struct i2c_client *client,
 			     u8 reg_addr, u8 reg_val)
@@ -162,37 +145,6 @@ static int anx7625_write_and_or(struct anx7625_data *ctx,
 
 	return anx7625_reg_write(ctx, client,
 				 offset, (val & and_mask) | (or_mask));
-}
-
-static int anx7625_read_ctrl_status_p0(struct anx7625_data *ctx)
-{
-	return anx7625_reg_read(ctx, ctx->i2c.rx_p0_client, AP_AUX_CTRL_STATUS);
-}
-
-static int wait_aux_op_finish(struct anx7625_data *ctx)
-{
-	struct device *dev = &ctx->client->dev;
-	int val;
-	int ret;
-
-	ret = readx_poll_timeout(anx7625_read_ctrl_status_p0,
-				 ctx, val,
-				 (!(val & AP_AUX_CTRL_OP_EN) || (val < 0)),
-				 2000,
-				 2000 * 150);
-	if (ret) {
-		DRM_DEV_ERROR(dev, "aux operation fail!\n");
-		return -EIO;
-	}
-
-	val = anx7625_reg_read(ctx, ctx->i2c.rx_p0_client,
-			       AP_AUX_CTRL_STATUS);
-	if (val < 0 || (val & 0x0F)) {
-		DRM_DEV_ERROR(dev, "aux status %02x\n", val);
-		val = -EIO;
-	}
-
-	return val;
 }
 
 static int anx7625_video_mute_control(struct anx7625_data *ctx,
@@ -632,246 +584,6 @@ static void anx7625_dp_stop(struct anx7625_data *ctx)
 		DRM_DEV_ERROR(dev, "IO error : mute video fail\n");
 }
 
-static int sp_tx_rst_aux(struct anx7625_data *ctx)
-{
-	int ret;
-
-	ret = anx7625_write_or(ctx, ctx->i2c.tx_p2_client, RST_CTRL2,
-			       AUX_RST);
-	ret |= anx7625_write_and(ctx, ctx->i2c.tx_p2_client, RST_CTRL2,
-				 ~AUX_RST);
-	return ret;
-}
-
-static int sp_tx_aux_wr(struct anx7625_data *ctx, u8 offset)
-{
-	int ret;
-
-	ret = anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
-				AP_AUX_BUFF_START, offset);
-	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
-				 AP_AUX_COMMAND, 0x04);
-	ret |= anx7625_write_or(ctx, ctx->i2c.rx_p0_client,
-				AP_AUX_CTRL_STATUS, AP_AUX_CTRL_OP_EN);
-	return (ret | wait_aux_op_finish(ctx));
-}
-
-static int sp_tx_aux_rd(struct anx7625_data *ctx, u8 len_cmd)
-{
-	int ret;
-
-	ret = anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
-				AP_AUX_COMMAND, len_cmd);
-	ret |= anx7625_write_or(ctx, ctx->i2c.rx_p0_client,
-				AP_AUX_CTRL_STATUS, AP_AUX_CTRL_OP_EN);
-	return (ret | wait_aux_op_finish(ctx));
-}
-
-static int sp_tx_get_edid_block(struct anx7625_data *ctx)
-{
-	int c = 0;
-	struct device *dev = &ctx->client->dev;
-
-	sp_tx_aux_wr(ctx, 0x7e);
-	sp_tx_aux_rd(ctx, 0x01);
-	c = anx7625_reg_read(ctx, ctx->i2c.rx_p0_client, AP_AUX_BUFF_START);
-	if (c < 0) {
-		DRM_DEV_ERROR(dev, "IO error : access AUX BUFF.\n");
-		return -EIO;
-	}
-
-	DRM_DEV_DEBUG_DRIVER(dev, " EDID Block = %d\n", c + 1);
-
-	if (c > MAX_EDID_BLOCK)
-		c = 1;
-
-	return c;
-}
-
-static int edid_read(struct anx7625_data *ctx,
-		     u8 offset, u8 *pblock_buf)
-{
-	int ret, cnt;
-	struct device *dev = &ctx->client->dev;
-
-	for (cnt = 0; cnt <= EDID_TRY_CNT; cnt++) {
-		sp_tx_aux_wr(ctx, offset);
-		/* Set I2C read com 0x01 mot = 0 and read 16 bytes */
-		ret = sp_tx_aux_rd(ctx, 0xf1);
-
-		if (ret) {
-			sp_tx_rst_aux(ctx);
-			DRM_DEV_DEBUG_DRIVER(dev, "edid read fail, reset!\n");
-		} else {
-			ret = anx7625_reg_block_read(ctx, ctx->i2c.rx_p0_client,
-						     AP_AUX_BUFF_START,
-						     MAX_DPCD_BUFFER_SIZE,
-						     pblock_buf);
-			if (ret > 0)
-				break;
-		}
-	}
-
-	if (cnt > EDID_TRY_CNT)
-		return -EIO;
-
-	return 0;
-}
-
-static int segments_edid_read(struct anx7625_data *ctx,
-			      u8 segment, u8 *buf, u8 offset)
-{
-	u8 cnt;
-	int ret;
-	struct device *dev = &ctx->client->dev;
-
-	/* Write address only */
-	ret = anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
-				AP_AUX_ADDR_7_0, 0x30);
-	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
-				 AP_AUX_COMMAND, 0x04);
-	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
-				 AP_AUX_CTRL_STATUS,
-				 AP_AUX_CTRL_ADDRONLY | AP_AUX_CTRL_OP_EN);
-
-	ret |= wait_aux_op_finish(ctx);
-	/* Write segment address */
-	ret |= sp_tx_aux_wr(ctx, segment);
-	/* Data read */
-	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
-				 AP_AUX_ADDR_7_0, 0x50);
-	if (ret) {
-		DRM_DEV_ERROR(dev, "IO error : aux initial fail.\n");
-		return ret;
-	}
-
-	for (cnt = 0; cnt <= EDID_TRY_CNT; cnt++) {
-		sp_tx_aux_wr(ctx, offset);
-		/* Set I2C read com 0x01 mot = 0 and read 16 bytes */
-		ret = sp_tx_aux_rd(ctx, 0xf1);
-
-		if (ret) {
-			ret = sp_tx_rst_aux(ctx);
-			DRM_DEV_ERROR(dev, "segment read fail, reset!\n");
-		} else {
-			ret = anx7625_reg_block_read(ctx, ctx->i2c.rx_p0_client,
-						     AP_AUX_BUFF_START,
-						     MAX_DPCD_BUFFER_SIZE, buf);
-			if (ret > 0)
-				break;
-		}
-	}
-
-	if (cnt > EDID_TRY_CNT)
-		return -EIO;
-
-	return 0;
-}
-
-static int sp_tx_edid_read(struct anx7625_data *ctx,
-			   u8 *pedid_blocks_buf)
-{
-	u8 offset, edid_pos;
-	int count, blocks_num;
-	u8 pblock_buf[MAX_DPCD_BUFFER_SIZE];
-	u8 i, j;
-	u8 g_edid_break = 0;
-	int ret;
-	struct device *dev = &ctx->client->dev;
-
-	/* Address initial */
-	ret = anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
-				AP_AUX_ADDR_7_0, 0x50);
-	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
-				 AP_AUX_ADDR_15_8, 0);
-	ret |= anx7625_write_and(ctx, ctx->i2c.rx_p0_client,
-				 AP_AUX_ADDR_19_16, 0xf0);
-	if (ret < 0) {
-		DRM_DEV_ERROR(dev, "access aux channel IO error.\n");
-		return -EIO;
-	}
-
-	blocks_num = sp_tx_get_edid_block(ctx);
-	if (blocks_num < 0)
-		return blocks_num;
-
-	count = 0;
-
-	do {
-		switch (count) {
-		case 0:
-		case 1:
-			for (i = 0; i < 8; i++) {
-				offset = (i + count * 8) * MAX_DPCD_BUFFER_SIZE;
-				g_edid_break = edid_read(ctx, offset,
-							 pblock_buf);
-
-				if (g_edid_break)
-					break;
-
-				memcpy(&pedid_blocks_buf[offset],
-				       pblock_buf,
-				       MAX_DPCD_BUFFER_SIZE);
-			}
-
-			break;
-		case 2:
-			offset = 0x00;
-
-			for (j = 0; j < 8; j++) {
-				edid_pos = (j + count * 8) *
-					MAX_DPCD_BUFFER_SIZE;
-
-				if (g_edid_break == 1)
-					break;
-
-				segments_edid_read(ctx, count / 2,
-						   pblock_buf, offset);
-				memcpy(&pedid_blocks_buf[edid_pos],
-				       pblock_buf,
-				       MAX_DPCD_BUFFER_SIZE);
-				offset = offset + 0x10;
-			}
-
-			break;
-		case 3:
-			offset = 0x80;
-
-			for (j = 0; j < 8; j++) {
-				edid_pos = (j + count * 8) *
-					MAX_DPCD_BUFFER_SIZE;
-				if (g_edid_break == 1)
-					break;
-
-				segments_edid_read(ctx, count / 2,
-						   pblock_buf, offset);
-				memcpy(&pedid_blocks_buf[edid_pos],
-				       pblock_buf,
-				       MAX_DPCD_BUFFER_SIZE);
-				offset = offset + 0x10;
-			}
-
-			break;
-		default:
-			break;
-		}
-
-		count++;
-
-	} while (blocks_num >= count);
-
-	/* Check edid data */
-	if (!drm_edid_is_valid((struct edid *)pedid_blocks_buf)) {
-		DRM_DEV_ERROR(dev, "WARNING! edid check fail!\n");
-		return -EINVAL;
-	}
-
-	/* Reset aux channel */
-	sp_tx_rst_aux(ctx);
-
-	return (blocks_num + 1);
-}
-
 static void anx7625_power_on(struct anx7625_data *ctx)
 {
 	struct device *dev = &ctx->client->dev;
@@ -1248,7 +960,8 @@ static int anx7625_parse_dt(struct device *dev,
 	if (!panel)
 		return -ENODEV;
 
-	pdata->panel_bridge = devm_drm_panel_bridge_add(dev, panel);
+	pdata->panel_bridge = devm_drm_panel_bridge_add(dev, panel,
+			DRM_MODE_CONNECTOR_DSI);
 	if (IS_ERR(pdata->panel_bridge))
 		return PTR_ERR(pdata->panel_bridge);
 	DRM_DEV_DEBUG_DRIVER(dev, "get panel node.\n");
@@ -1259,50 +972,6 @@ static int anx7625_parse_dt(struct device *dev,
 static inline struct anx7625_data *bridge_to_anx7625(struct drm_bridge *bridge)
 {
 	return container_of(bridge, struct anx7625_data, bridge);
-}
-
-static struct edid *anx7625_get_edid(struct anx7625_data *ctx)
-{
-	struct device *dev = &ctx->client->dev;
-	struct s_edid_data *p_edid = &ctx->slimport_edid_p;
-	int edid_num;
-	u8 *edid;
-
-	edid = kmalloc(FOUR_BLOCK_SIZE, GFP_KERNEL);
-	if (!edid) {
-		DRM_DEV_ERROR(dev, "Fail to allocate buffer\n");
-		return NULL;
-	}
-
-	if (ctx->slimport_edid_p.edid_block_num > 0) {
-		memcpy(edid, ctx->slimport_edid_p.edid_raw_data,
-		       FOUR_BLOCK_SIZE);
-		return (struct edid *)edid;
-	}
-
-	anx7625_low_power_mode_check(ctx, 1);
-	edid_num = sp_tx_edid_read(ctx, p_edid->edid_raw_data);
-	anx7625_low_power_mode_check(ctx, 0);
-
-	if (edid_num < 1) {
-		DRM_DEV_ERROR(dev, "Fail to read EDID: %d\n", edid_num);
-		kfree(edid);
-		return NULL;
-	}
-
-	p_edid->edid_block_num = edid_num;
-
-	memcpy(edid, ctx->slimport_edid_p.edid_raw_data, FOUR_BLOCK_SIZE);
-	return (struct edid *)edid;
-}
-
-static enum drm_connector_status anx7625_sink_detect(struct anx7625_data *ctx)
-{
-	struct device *dev = &ctx->client->dev;
-
-	DRM_DEV_DEBUG_DRIVER(dev, "sink detect, return connected\n");
-
-	return connector_status_connected;
 }
 
 static int anx7625_attach_dsi(struct anx7625_data *ctx)
@@ -1360,16 +1029,13 @@ static void anx7625_bridge_detach(struct drm_bridge *bridge)
 	}
 }
 
-static int anx7625_bridge_attach(struct drm_bridge *bridge,
-				 enum drm_bridge_attach_flags flags)
+static int anx7625_bridge_attach(struct drm_bridge *bridge)
 {
 	struct anx7625_data *ctx = bridge_to_anx7625(bridge);
 	int err;
 	struct device *dev = &ctx->client->dev;
 
 	DRM_DEV_DEBUG_DRIVER(dev, "drm attach\n");
-	if (!(flags & DRM_BRIDGE_ATTACH_NO_CONNECTOR))
-		return -EINVAL;
 
 	if (!bridge->encoder) {
 		DRM_DEV_ERROR(dev, "Parent encoder object not found");
@@ -1385,7 +1051,7 @@ static int anx7625_bridge_attach(struct drm_bridge *bridge,
 	if (ctx->pdata.panel_bridge) {
 		err = drm_bridge_attach(bridge->encoder,
 					ctx->pdata.panel_bridge,
-					&ctx->bridge, flags);
+					&ctx->bridge);
 		if (err) {
 			DRM_DEV_ERROR(dev,
 				      "Fail to attach panel bridge: %d\n", err);
@@ -1400,7 +1066,6 @@ static int anx7625_bridge_attach(struct drm_bridge *bridge,
 
 static enum drm_mode_status
 anx7625_bridge_mode_valid(struct drm_bridge *bridge,
-			  const struct drm_display_info *info,
 			  const struct drm_display_mode *mode)
 {
 	struct anx7625_data *ctx = bridge_to_anx7625(bridge);
@@ -1609,28 +1274,6 @@ static void anx7625_bridge_disable(struct drm_bridge *bridge)
 	anx7625_low_power_mode_check(ctx, 0);
 }
 
-static enum drm_connector_status
-anx7625_bridge_detect(struct drm_bridge *bridge)
-{
-	struct anx7625_data *ctx = bridge_to_anx7625(bridge);
-	struct device *dev = &ctx->client->dev;
-
-	DRM_DEV_DEBUG_DRIVER(dev, "drm bridge detect\n");
-
-	return anx7625_sink_detect(ctx);
-}
-
-static struct edid *anx7625_bridge_get_edid(struct drm_bridge *bridge,
-					    struct drm_connector *connector)
-{
-	struct anx7625_data *ctx = bridge_to_anx7625(bridge);
-	struct device *dev = &ctx->client->dev;
-
-	DRM_DEV_DEBUG_DRIVER(dev, "drm bridge get edid\n");
-
-	return anx7625_get_edid(ctx);
-}
-
 static const struct drm_bridge_funcs anx7625_bridge_funcs = {
 	.attach = anx7625_bridge_attach,
 	.detach = anx7625_bridge_detach,
@@ -1639,8 +1282,6 @@ static const struct drm_bridge_funcs anx7625_bridge_funcs = {
 	.mode_set = anx7625_bridge_mode_set,
 	.mode_fixup = anx7625_bridge_mode_fixup,
 	.enable = anx7625_bridge_enable,
-	.detect = anx7625_bridge_detect,
-	.get_edid = anx7625_bridge_get_edid,
 };
 
 static int anx7625_register_i2c_dummy_clients(struct anx7625_data *ctx,
@@ -1786,8 +1427,6 @@ static int anx7625_i2c_probe(struct i2c_client *client,
 
 	platform->bridge.funcs = &anx7625_bridge_funcs;
 	platform->bridge.of_node = client->dev.of_node;
-	platform->bridge.ops = DRM_BRIDGE_OP_EDID | DRM_BRIDGE_OP_HPD;
-	platform->bridge.type = DRM_MODE_CONNECTOR_eDP;
 	drm_bridge_add(&platform->bridge);
 
 	DRM_DEV_DEBUG_DRIVER(dev, "probe done\n");
