@@ -6411,7 +6411,7 @@ static int msm_pcie_remove(struct platform_device *pdev)
 {
 	int ret = 0;
 	int rc_idx;
-	struct msm_pcie_device_info *dev_info;
+	struct msm_pcie_device_info *dev_info, *temp;
 
 	mutex_lock(&pcie_drv.drv_lock);
 
@@ -6431,14 +6431,16 @@ static int msm_pcie_remove(struct platform_device *pdev)
 	msm_pcie_gpio_deinit(&msm_pcie_dev[rc_idx]);
 	msm_pcie_release_resources(&msm_pcie_dev[rc_idx]);
 
-	list_for_each_entry(dev_info, &msm_pcie_dev[rc_idx].enum_ep_list,
-			    pcidev_node) {
+	list_for_each_entry_safe(dev_info, temp,
+				 &msm_pcie_dev[rc_idx].enum_ep_list,
+				 pcidev_node) {
 		list_del(&dev_info->pcidev_node);
 		kfree(dev_info);
 	}
 
-	list_for_each_entry(dev_info, &msm_pcie_dev[rc_idx].susp_ep_list,
-			    pcidev_node) {
+	list_for_each_entry_safe(dev_info, temp,
+				 &msm_pcie_dev[rc_idx].susp_ep_list,
+				 pcidev_node) {
 		list_del(&dev_info->pcidev_node);
 		kfree(dev_info);
 	}
@@ -7816,7 +7818,7 @@ int msm_pcie_pm_control(enum msm_pcie_pm_opt pm_opt, u32 busnr, void *user,
 	struct pci_dev *dev;
 	unsigned long flags;
 	struct msm_pcie_dev_t *pcie_dev;
-	struct msm_pcie_device_info *dev_info_itr, *dev_info = NULL;
+	struct msm_pcie_device_info *dev_info_itr, *temp, *dev_info = NULL;
 	struct pci_dev *pcidev;
 
 	if (!user) {
@@ -7884,8 +7886,8 @@ int msm_pcie_pm_control(enum msm_pcie_pm_opt pm_opt, u32 busnr, void *user,
 		 * add it to suspend ep list. Reject susp if list is still not
 		 * empty.
 		 */
-		list_for_each_entry(dev_info_itr, &pcie_dev->enum_ep_list,
-				    pcidev_node) {
+		list_for_each_entry_safe(dev_info_itr, temp,
+					 &pcie_dev->enum_ep_list, pcidev_node) {
 			if (dev_info_itr->dev == pcidev) {
 				list_del(&dev_info_itr->pcidev_node);
 				dev_info = dev_info_itr;
@@ -7945,8 +7947,8 @@ int msm_pcie_pm_control(enum msm_pcie_pm_opt pm_opt, u32 busnr, void *user,
 
 		/* when link was suspended and link resume is requested */
 		mutex_lock(&pcie_dev->enumerate_lock);
-		list_for_each_entry(dev_info_itr, &pcie_dev->susp_ep_list,
-				    pcidev_node) {
+		list_for_each_entry_safe(dev_info_itr, temp,
+					 &pcie_dev->susp_ep_list, pcidev_node) {
 			if (dev_info_itr->dev == user) {
 				list_del(&dev_info_itr->pcidev_node);
 				dev_info = dev_info_itr;
@@ -8135,7 +8137,7 @@ int msm_pcie_deregister_event(struct msm_pcie_register_event *reg)
 {
 	struct msm_pcie_dev_t *pcie_dev;
 	struct pci_dev *pcidev;
-	struct msm_pcie_register_event *reg_itr;
+	struct msm_pcie_register_event *reg_itr, *temp;
 	unsigned long flags;
 
 	if (!reg) {
@@ -8159,7 +8161,8 @@ int msm_pcie_deregister_event(struct msm_pcie_register_event *reg)
 	pcidev = (struct pci_dev *)reg->user;
 
 	spin_lock_irqsave(&pcie_dev->evt_reg_list_lock, flags);
-	list_for_each_entry(reg_itr, &pcie_dev->event_reg_list, node) {
+	list_for_each_entry_safe(reg_itr, temp, &pcie_dev->event_reg_list,
+				 node) {
 		if (reg_itr->user == reg->user) {
 			list_del(&reg->node);
 			spin_unlock_irqrestore(&pcie_dev->evt_reg_list_lock, flags);
