@@ -7,6 +7,7 @@
 #ifndef __DRIVERS_INTERCONNECT_QCOM_ICC_RPMH_H__
 #define __DRIVERS_INTERCONNECT_QCOM_ICC_RPMH_H__
 
+#include <linux/platform_device.h>
 #include <linux/regmap.h>
 #include <dt-bindings/interconnect/qcom,icc.h>
 
@@ -151,5 +152,7 @@ int qcom_icc_bcm_init(struct qcom_icc_bcm *bcm, struct device *dev);
 void qcom_icc_pre_aggregate(struct icc_node *node);
 int qcom_icc_enable_qos_deps(struct qcom_icc_provider *qp);
 void qcom_icc_disable_qos_deps(struct qcom_icc_provider *qp);
-
+int qcom_icc_rpmh_probe(struct platform_device *pdev);
+int qcom_icc_rpmh_remove(struct platform_device *pdev);
+void qcom_icc_rpmh_sync_state(struct device *dev);
 #endif
