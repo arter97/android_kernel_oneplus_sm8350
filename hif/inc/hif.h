@@ -45,6 +45,10 @@ extern "C" {
 typedef void __iomem *A_target_id_t;
 typedef void *hif_handle_t;
 
+#if defined(HIF_IPCI) && defined(FEATURE_HAL_DELAYED_REG_WRITE)
+#define HIF_WORK_DRAIN_WAIT_CNT 10
+#endif
+
 #define HIF_TYPE_AR6002   2
 #define HIF_TYPE_AR6003   3
 #define HIF_TYPE_AR6004   5
@@ -1059,6 +1063,26 @@ static inline char *rtpm_string_from_dbgid(wlan_rtpm_dbgid id)
 }
 
 /**
+ * enum hif_ep_vote_type - hif ep vote type
+ * HIF_EP_VOTE_DP_ACCESS: vote type is specific DP
+ * HIF_EP_VOTE_NONDP_ACCESS: ep vote for over all access
+ */
+enum hif_ep_vote_type {
+	HIF_EP_VOTE_DP_ACCESS,
+	HIF_EP_VOTE_NONDP_ACCESS
+};
+
+/**
+ * enum hif_ep_vote_access - hif ep vote access
+ * HIF_EP_VOTE_ACCESS_ENABLE: Enable ep voting
+ * HIF_EP_VOTE_ACCESS_DISABLE: disable ep voting
+ */
+enum hif_ep_vote_access {
+	HIF_EP_VOTE_ACCESS_ENABLE,
+	HIF_EP_VOTE_ACCESS_DISABLE
+};
+
+/**
  * enum hif_pm_link_state - hif link state
  * HIF_PM_LINK_STATE_DOWN: hif link state is down
  * HIF_PM_LINK_STATE_UP: hif link state is up
@@ -1066,6 +1090,28 @@ static inline char *rtpm_string_from_dbgid(wlan_rtpm_dbgid id)
 enum hif_pm_link_state {
 	HIF_PM_LINK_STATE_DOWN,
 	HIF_PM_LINK_STATE_UP
+};
+
+/**
+ * enum hif_pm_htc_stats - hif runtime PM stats for HTC layer
+ * HIF_PM_HTC_STATS_GET_HTT_RESPONSE: PM stats for RTPM GET for HTT packets
+				      with response
+ * HIF_PM_HTC_STATS_GET_HTT_NO_RESPONSE: PM stats for RTPM GET for HTT packets
+					 with no response
+ * HIF_PM_HTC_STATS_PUT_HTT_RESPONSE: PM stats for RTPM PUT for HTT packets
+				      with response
+ * HIF_PM_HTC_STATS_PUT_HTT_NO_RESPONSE: PM stats for RTPM PUT for HTT packets
+					 with no response
+ * HIF_PM_HTC_STATS_PUT_HTT_ERROR: PM stats for RTPM PUT for failed HTT packets
+ * HIF_PM_HTC_STATS_PUT_HTC_CLEANUP: PM stats for RTPM PUT during HTC cleanup
+ */
+enum hif_pm_htc_stats {
+	HIF_PM_HTC_STATS_GET_HTT_RESPONSE,
+	HIF_PM_HTC_STATS_GET_HTT_NO_RESPONSE,
+	HIF_PM_HTC_STATS_PUT_HTT_RESPONSE,
+	HIF_PM_HTC_STATS_PUT_HTT_NO_RESPONSE,
+	HIF_PM_HTC_STATS_PUT_HTT_ERROR,
+	HIF_PM_HTC_STATS_PUT_HTC_CLEANUP,
 };
 
 #ifdef FEATURE_RUNTIME_PM
@@ -1105,6 +1151,9 @@ void hif_pm_runtime_mark_dp_rx_busy(struct hif_opaque_softc *hif_ctx);
 int hif_pm_runtime_is_dp_rx_busy(struct hif_opaque_softc *hif_ctx);
 qdf_time_t hif_pm_runtime_get_dp_rx_busy_mark(struct hif_opaque_softc *hif_ctx);
 int hif_pm_runtime_sync_resume(struct hif_opaque_softc *hif_ctx);
+void hif_pm_runtime_update_stats(struct hif_opaque_softc *hif_ctx,
+				 wlan_rtpm_dbgid rtpm_dbgid,
+				 enum hif_pm_htc_stats stats);
 
 /**
  * hif_pm_set_link_state() - set link state during RTPM
@@ -1199,6 +1248,11 @@ static inline
 void hif_pm_set_link_state(struct hif_opaque_softc *hif_handle, uint8_t val)
 {}
 
+static inline
+void hif_pm_runtime_update_stats(struct hif_opaque_softc *hif_ctx,
+				 wlan_rtpm_dbgid rtpm_dbgid,
+				 enum hif_pm_htc_stats stats)
+{}
 #endif
 
 void hif_enable_power_management(struct hif_opaque_softc *hif_ctx,
@@ -1640,6 +1694,39 @@ hif_softc_to_hif_opaque_softc(struct hif_softc *hif_handle)
 {
 	return (struct hif_opaque_softc *)hif_handle;
 }
+
+#if defined(HIF_IPCI) && defined(FEATURE_HAL_DELAYED_REG_WRITE)
+QDF_STATUS hif_try_prevent_ep_vote_access(struct hif_opaque_softc *hif_ctx);
+void hif_allow_ep_vote_access(struct hif_opaque_softc *hif_ctx);
+void hif_set_ep_vote_access(struct hif_opaque_softc *hif_ctx,
+			    uint8_t type, uint8_t access);
+uint8_t hif_get_ep_vote_access(struct hif_opaque_softc *hif_ctx,
+			       uint8_t type);
+#else
+static inline QDF_STATUS
+hif_try_prevent_ep_vote_access(struct hif_opaque_softc *hif_ctx)
+{
+	return QDF_STATUS_SUCCESS;
+}
+
+static inline void
+hif_allow_ep_vote_access(struct hif_opaque_softc *hif_ctx)
+{
+}
+
+static inline void
+hif_set_ep_vote_access(struct hif_opaque_softc *hif_ctx,
+		       uint8_t type, uint8_t access)
+{
+}
+
+static inline uint8_t
+hif_get_ep_vote_access(struct hif_opaque_softc *hif_ctx,
+		       uint8_t type)
+{
+	return HIF_EP_VOTE_ACCESS_ENABLE;
+}
+#endif
 
 #ifdef FORCE_WAKE
 /**

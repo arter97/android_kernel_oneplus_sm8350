@@ -4803,8 +4803,10 @@ extract_cp_stats_more_pending_tlv(wmi_unified_t wmi, void *evt_buf,
 	wmi_ctrl_path_stats_event_fixed_param *ev;
 
 	param_buf = (WMI_CTRL_PATH_STATS_EVENTID_param_tlvs *)evt_buf;
-	if (!param_buf)
+	if (!param_buf) {
+		wmi_err_rl("param_buf is NULL");
 		return QDF_STATUS_E_FAILURE;
+	}
 	ev = (wmi_ctrl_path_stats_event_fixed_param *)param_buf->fixed_param;
 
 	*more_flag = ev->more;
@@ -10236,6 +10238,7 @@ static QDF_STATUS extract_mgmt_rx_params_tlv(wmi_unified_t wmi_handle,
 	hdr->flags = ev_hdr->flags;
 	hdr->rssi = ev_hdr->rssi;
 	hdr->tsf_delta = ev_hdr->tsf_delta;
+	hdr->tsf_l32 = ev_hdr->rx_tsf_l32;
 	for (i = 0; i < ATH_MAX_ANTENNA; i++)
 		hdr->rssi_ctl[i] = ev_hdr->rssi_ctl[i];
 
