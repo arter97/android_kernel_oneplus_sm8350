@@ -3286,7 +3286,8 @@ mlme_update_vht_cap(struct wlan_objmgr_psoc *psoc, struct wma_tgt_vht_cap *cfg)
 	 */
 	if (vht_cap_info->ampdu_len > cfg->vht_max_mpdu)
 		vht_cap_info->ampdu_len = cfg->vht_max_mpdu;
-
+	if (vht_cap_info->ampdu_len >= 1)
+		mlme_obj->cfg.ht_caps.ht_cap_info.maximal_amsdu_size = 1;
 	value = (CFG_VHT_BASIC_MCS_SET_STADEF & VHT_MCS_1x1) |
 		vht_cap_info->basic_mcs_set;
 	if (vht_cap_info->enable2x2)
@@ -4752,4 +4753,15 @@ bool wlan_mlme_is_local_tpe_pref(struct wlan_objmgr_psoc *psoc)
 		return false;
 
 	return mlme_obj->cfg.power.use_local_tpe;
+}
+
+bool wlan_mlme_skip_tpe(struct wlan_objmgr_psoc *psoc)
+{
+	struct wlan_mlme_psoc_ext_obj *mlme_obj;
+
+	mlme_obj = mlme_get_psoc_ext_obj(psoc);
+	if (!mlme_obj)
+		return false;
+
+	return mlme_obj->cfg.power.skip_tpe;
 }

@@ -94,6 +94,9 @@
  */
 #define AP_OFF_RSSI_OFFSET 20
 
+/* Default beacon interval of 100 ms */
+#define CUSTOM_CONC_GO_BI 100
+
 /**
  * struct mlme_cfg_str - generic structure for all mlme CFG string items
  *
@@ -2089,6 +2092,7 @@ struct mlme_power_usage {
  * @current_tx_power_level: current tx power level
  * @local_power_constraint: local power constraint
  * @use_local_tpe: preference to use local or regulatory TPE
+ * @skip_tpe: option to not consider TPE values in 2.4G/5G bands
  */
 struct wlan_mlme_power {
 	struct mlme_max_tx_power_24 max_tx_power_24;
@@ -2101,6 +2105,7 @@ struct wlan_mlme_power {
 	uint8_t current_tx_power_level;
 	uint8_t local_power_constraint;
 	bool use_local_tpe;
+	bool skip_tpe;
 };
 
 /*
@@ -2485,4 +2490,21 @@ struct wlan_ies {
 	uint16_t len;
 	uint8_t *data;
 };
+
+/**
+ * struct wlan_change_bi - Message struct to update beacon interval
+ * @message_type: type of message
+ * @length: length of message
+ * @beacon_interval: beacon interval to update to (seconds)
+ * @bssid: BSSID of vdev
+ * @session_id: session ID of vdev
+ */
+struct wlan_change_bi {
+	uint16_t message_type;
+	uint16_t length;
+	uint16_t beacon_interval;
+	struct qdf_mac_addr bssid;
+	uint8_t session_id;
+};
+
 #endif
