@@ -2881,6 +2881,9 @@ static void smblite_lib_handle_apsd_done(struct smb_charger *chg, bool rising)
 
 	apsd_result = smblite_lib_update_usb_type(chg, apsd_result->val);
 
+	/* set the ICL based on charger type */
+	update_sw_icl_max(chg, apsd_result->val);
+
 	switch (apsd_result->bit) {
 	case SDP_CHARGER_BIT:
 	case CDP_CHARGER_BIT:
