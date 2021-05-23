@@ -1436,27 +1436,9 @@ int subsystem_restart_dev(struct subsys_device *dev)
 		return 0;
 	}
 
-	switch (dev->restart_level) {
+	// Always assume RESET_SUBSYS_COUPLED
+	__subsystem_restart_dev(dev);
 
-	case RESET_SUBSYS_COUPLED:
-		__subsystem_restart_dev(dev);
-		break;
-	case RESET_SOC:
-		#if IS_ENABLED(CONFIG_OEM_BOOT_MODE)
-		if (get_small_board_1_absent() == 1) {
-			pr_warn("small board absent restart %s\n", name);
-			__subsystem_restart_dev(dev);
-		} else
-		#endif
-		{
-			__pm_stay_awake(dev->ssr_wlock);
-			schedule_work(&dev->device_restart_work);
-		}
-		return 0;
-	default:
-		panic("subsys-restart: Unknown restart level!\n");
-		break;
-	}
 	module_put(dev->owner);
 	put_device(&dev->dev);
 
