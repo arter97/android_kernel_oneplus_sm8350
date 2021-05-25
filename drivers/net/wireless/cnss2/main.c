@@ -157,6 +157,26 @@ int cnss_get_mem_segment_info(enum cnss_remote_mem_type type,
 }
 EXPORT_SYMBOL(cnss_get_mem_segment_info);
 
+int cnss_set_feature_list(struct cnss_plat_data *plat_priv,
+			  enum cnss_feature_v01 feature)
+{
+	if (unlikely(!plat_priv || feature >= CNSS_MAX_FEATURE_V01))
+		return -EINVAL;
+
+	plat_priv->feature_list |= 1 << feature;
+	return 0;
+}
+
+int cnss_get_feature_list(struct cnss_plat_data *plat_priv,
+			  u64 *feature_list)
+{
+	if (unlikely(!plat_priv))
+		return -EINVAL;
+
+	*feature_list = plat_priv->feature_list;
+	return 0;
+}
+
 static int cnss_pm_notify(struct notifier_block *b,
 			  unsigned long event, void *p)
 {
@@ -3116,6 +3136,7 @@ static int cnss_probe(struct platform_device *plat_dev)
 	struct cnss_plat_data *plat_priv;
 	const struct of_device_id *of_id;
 	const struct platform_device_id *device_id;
+	int retry = 0;
 
 	if (cnss_get_plat_priv(plat_dev)) {
 		cnss_pr_err("Driver is already initialized!\n");
@@ -3162,19 +3183,9 @@ static int cnss_probe(struct platform_device *plat_dev)
 	if (ret)
 		goto reset_ctx;
 
-	if (!test_bit(SKIP_DEVICE_BOOT, &plat_priv->ctrl_params.quirks)) {
-		ret = cnss_power_on_device(plat_priv);
-		if (ret)
-			goto free_res;
-
-		ret = cnss_bus_init(plat_priv);
-		if (ret)
-			goto power_off;
-	}
-
 	ret = cnss_register_esoc(plat_priv);
 	if (ret)
-		goto deinit_bus;
+		goto free_res;
 
 	ret = cnss_register_bus_scale(plat_priv);
 	if (ret)
@@ -3204,6 +3215,28 @@ static int cnss_probe(struct platform_device *plat_dev)
 	if (ret)
 		goto destroy_debugfs;
 
+	/* Make sure all platform related init are done before
+	 * device power on and bus init.
+	 */
+	if (!test_bit(SKIP_DEVICE_BOOT, &plat_priv->ctrl_params.quirks)) {
+retry:
+		ret = cnss_power_on_device(plat_priv, true);
+		if (ret)
+			goto deinit_misc;
+
+		ret = cnss_bus_init(plat_priv);
+		if (ret) {
+			if ((ret != -EPROBE_DEFER) &&
+			    retry++ < POWER_ON_RETRY_MAX_TIMES) {
+				cnss_power_off_device(plat_priv);
+				cnss_pr_dbg("Retry cnss_bus_init #%d\n", retry);
+				msleep(POWER_ON_RETRY_DELAY_MS * retry);
+				goto retry;
+			}
+			goto power_off;
+		}
+	}
+
 	cnss_register_coex_service(plat_priv);
 	cnss_register_ims_service(plat_priv);
 
@@ -3215,6 +3248,11 @@ static int cnss_probe(struct platform_device *plat_dev)
 
 	return 0;
 
+power_off:
+	if (!test_bit(SKIP_DEVICE_BOOT, &plat_priv->ctrl_params.quirks))
+		cnss_power_off_device(plat_priv);
+deinit_misc:
+	cnss_misc_deinit(plat_priv);
 destroy_debugfs:
 	cnss_debugfs_destroy(plat_priv);
 deinit_dms:
@@ -3229,12 +3267,6 @@ unreg_bus_scale:
 	cnss_unregister_bus_scale(plat_priv);
 unreg_esoc:
 	cnss_unregister_esoc(plat_priv);
-deinit_bus:
-	if (!test_bit(SKIP_DEVICE_BOOT, &plat_priv->ctrl_params.quirks))
-		cnss_bus_deinit(plat_priv);
-power_off:
-	if (!test_bit(SKIP_DEVICE_BOOT, &plat_priv->ctrl_params.quirks))
-		cnss_power_off_device(plat_priv);
 free_res:
 	cnss_put_resources(plat_priv);
 reset_ctx:
@@ -3251,15 +3283,15 @@ static int cnss_remove(struct platform_device *plat_dev)
 	cnss_genl_exit();
 	cnss_unregister_ims_service(plat_priv);
 	cnss_unregister_coex_service(plat_priv);
+	cnss_bus_deinit(plat_priv);
 	cnss_misc_deinit(plat_priv);
 	cnss_debugfs_destroy(plat_priv);
-	cnss_qmi_deinit(plat_priv);
 	cnss_dms_deinit(plat_priv);
+	cnss_qmi_deinit(plat_priv);
 	cnss_event_work_deinit(plat_priv);
 	cnss_remove_sysfs(plat_priv);
 	cnss_unregister_bus_scale(plat_priv);
 	cnss_unregister_esoc(plat_priv);
-	cnss_bus_deinit(plat_priv);
 	cnss_put_resources(plat_priv);
 	platform_set_drvdata(plat_dev, NULL);
 	plat_env = NULL;

@@ -43,6 +43,8 @@
 #define CNSS_RAMDUMP_VERSION		0
 #define MAX_FIRMWARE_NAME_LEN		40
 #define FW_V2_NUMBER                    2
+#define POWER_ON_RETRY_MAX_TIMES        3
+#define POWER_ON_RETRY_DELAY_MS         200
 
 #define CNSS_EVENT_SYNC   BIT(0)
 #define CNSS_EVENT_UNINTERRUPTIBLE BIT(1)
@@ -502,6 +504,7 @@ struct cnss_plat_data {
 	u32 hw_trc_override;
 	u32 is_converged_dt;
 	struct device_node *dev_node;
+	u64 feature_list;
 };
 
 #ifdef CONFIG_ARCH_QCOM
@@ -543,7 +546,7 @@ void cnss_put_clk(struct cnss_plat_data *plat_priv);
 int cnss_vreg_unvote_type(struct cnss_plat_data *plat_priv,
 			  enum cnss_vreg_type type);
 int cnss_get_pinctrl(struct cnss_plat_data *plat_priv);
-int cnss_power_on_device(struct cnss_plat_data *plat_priv);
+int cnss_power_on_device(struct cnss_plat_data *plat_priv, bool reset);
 void cnss_power_off_device(struct cnss_plat_data *plat_priv);
 bool cnss_is_device_powered_on(struct cnss_plat_data *plat_priv);
 int cnss_register_subsys(struct cnss_plat_data *plat_priv);
@@ -573,4 +576,8 @@ int cnss_request_firmware_direct(struct cnss_plat_data *plat_priv,
 				 const char *filename);
 void cnss_disable_redundant_vreg(struct cnss_plat_data *plat_priv);
 int cnss_gpio_get_value(struct cnss_plat_data *plat_priv, int gpio_num);
+int cnss_set_feature_list(struct cnss_plat_data *plat_priv,
+			  enum cnss_feature_v01 feature);
+int cnss_get_feature_list(struct cnss_plat_data *plat_priv,
+			  u64 *feature_list);
 #endif /* _CNSS_MAIN_H */
