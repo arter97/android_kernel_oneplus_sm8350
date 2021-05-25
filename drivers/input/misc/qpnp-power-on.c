@@ -6,6 +6,7 @@
 #include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
+#include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/input.h>
 #include <linux/interrupt.h>
@@ -229,6 +230,7 @@ struct qpnp_pon {
 	struct list_head	list;
 	struct mutex		restore_lock;
 	struct delayed_work	bark_work;
+	struct delayed_work	sync_work;
 	struct dentry		*debugfs;
 	u16			base;
 	u16			pbs_base;
@@ -1032,8 +1034,10 @@ static int qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
 
 		if ((pon_rt_sts & pon_rt_bit) == 0) {
 			pr_info("Power-Key UP\n");
+			cancel_delayed_work(&pon->sync_work);
 		} else {
 			pr_info("Power-Key DOWN\n");
+			schedule_delayed_work(&pon->sync_work, msecs_to_jiffies(1000));
 		}
 
 		break;
@@ -1221,6 +1225,14 @@ static void bark_work_func(struct work_struct *work)
 		/* Re-arm the work */
 		schedule_delayed_work(&pon->bark_work, QPNP_KEY_STATUS_DELAY);
 	}
+}
+
+// Do an emergency sync and a full sync
+static void sync_work_func(struct work_struct *work)
+{
+	emergency_sync_synchronous();
+	msleep(20);
+	ksys_sync();
 }
 
 static irqreturn_t qpnp_resin_bark_irq(int irq, void *_pon)
@@ -2452,6 +2464,7 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 	dev_set_drvdata(dev, pon);
 
 	INIT_DELAYED_WORK(&pon->bark_work, bark_work_func);
+	INIT_DELAYED_WORK(&pon->sync_work, sync_work_func);
 
 	rc = qpnp_pon_parse_dt_power_off_config(pon);
 	if (rc)
