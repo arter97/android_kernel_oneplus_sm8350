@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
  */
 #include "hab.h"
 
@@ -86,7 +86,7 @@ static long hab_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 	void *send_data;
 	unsigned char data[256] = { 0 };
 	long ret = 0;
-	char names[30];
+	char names[30] = { 0 };
 
 	if (_IOC_SIZE(cmd) && (cmd & IOC_IN)) {
 		if (_IOC_SIZE(cmd) > sizeof(data))
