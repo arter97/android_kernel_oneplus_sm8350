@@ -578,8 +578,20 @@ long hab_vchan_send(struct uhab_context *ctx,
 	} else if (flags & HABMM_SOCKET_XVM_SCHE_TEST_ACK) {
 		HAB_HEADER_SET_TYPE(header, HAB_PAYLOAD_TYPE_SCHE_MSG_ACK);
 	} else if (flags & HABMM_SOCKET_XVM_SCHE_RESULT_REQ) {
+		if (sizebytes < sizeof(unsigned long long)) {
+			pr_err("Message buffer too small, %lu bytes, expect %d\n",
+				sizebytes,
+				sizeof(unsigned long long));
+			return -EINVAL;
+		}
 		HAB_HEADER_SET_TYPE(header, HAB_PAYLOAD_TYPE_SCHE_RESULT_REQ);
 	} else if (flags & HABMM_SOCKET_XVM_SCHE_RESULT_RSP) {
+		if (sizebytes < 3 * sizeof(unsigned long long)) {
+			pr_err("Message buffer too small, %lu bytes, expect %d\n",
+				sizebytes,
+				3 * sizeof(unsigned long long));
+			return -EINVAL;
+		}
 		HAB_HEADER_SET_TYPE(header, HAB_PAYLOAD_TYPE_SCHE_RESULT_RSP);
 	} else {
 		HAB_HEADER_SET_TYPE(header, HAB_PAYLOAD_TYPE_MSG);
