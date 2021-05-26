@@ -1564,11 +1564,11 @@ static void a5xx_start(struct adreno_device *adreno_dev)
 	if (device->mmu.secured) {
 		kgsl_regwrite(device, A5XX_RBBM_SECVID_TSB_CNTL, 0x0);
 		kgsl_regwrite(device, A5XX_RBBM_SECVID_TSB_TRUSTED_BASE_LO,
-			lower_32_bits(KGSL_IOMMU_SECURE_BASE(&device->mmu)));
+			lower_32_bits(device->mmu.secure_base));
 		kgsl_regwrite(device, A5XX_RBBM_SECVID_TSB_TRUSTED_BASE_HI,
-			upper_32_bits(KGSL_IOMMU_SECURE_BASE(&device->mmu)));
+			upper_32_bits(device->mmu.secure_base));
 		kgsl_regwrite(device, A5XX_RBBM_SECVID_TSB_TRUSTED_SIZE,
-			KGSL_IOMMU_SECURE_SIZE);
+			device->mmu.secure_size);
 	}
 
 	a5xx_preemption_start(adreno_dev);

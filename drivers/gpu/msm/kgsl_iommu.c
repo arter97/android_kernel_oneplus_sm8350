@@ -932,13 +932,13 @@ static void setup_64bit_pagetable(struct kgsl_mmu *mmu,
 		struct kgsl_iommu_pt *pt)
 {
 	if (mmu->secured && pagetable->name == KGSL_MMU_SECURE_PT) {
-		pt->compat_va_start = KGSL_IOMMU_SECURE_BASE(mmu);
+		pt->compat_va_start = mmu->secure_base;
 		pt->compat_va_end = KGSL_IOMMU_SECURE_END(mmu);
-		pt->va_start = KGSL_IOMMU_SECURE_BASE(mmu);
+		pt->va_start = mmu->secure_base;
 		pt->va_end = KGSL_IOMMU_SECURE_END(mmu);
 	} else {
 		pt->compat_va_start = KGSL_IOMMU_SVM_BASE32(mmu);
-		pt->compat_va_end = KGSL_IOMMU_SECURE_BASE(mmu);
+		pt->compat_va_end = mmu->secure_base;
 		pt->va_start = KGSL_IOMMU_VA_BASE64;
 		pt->va_end = KGSL_IOMMU_VA_END64;
 	}
@@ -947,7 +947,7 @@ static void setup_64bit_pagetable(struct kgsl_mmu *mmu,
 		pagetable->name != KGSL_MMU_SECURE_PT) {
 		if (kgsl_is_compat_task()) {
 			pt->svm_start = KGSL_IOMMU_SVM_BASE32(mmu);
-			pt->svm_end = KGSL_IOMMU_SECURE_BASE(mmu);
+			pt->svm_end = mmu->secure_base;
 		} else {
 			pt->svm_start = KGSL_IOMMU_SVM_BASE64;
 			pt->svm_end = KGSL_IOMMU_SVM_END64;
@@ -961,13 +961,13 @@ static void setup_32bit_pagetable(struct kgsl_mmu *mmu,
 {
 	if (mmu->secured) {
 		if (pagetable->name == KGSL_MMU_SECURE_PT) {
-			pt->compat_va_start = KGSL_IOMMU_SECURE_BASE(mmu);
+			pt->compat_va_start = mmu->secure_base;
 			pt->compat_va_end = KGSL_IOMMU_SECURE_END(mmu);
-			pt->va_start = KGSL_IOMMU_SECURE_BASE(mmu);
+			pt->va_start = mmu->secure_base;
 			pt->va_end = KGSL_IOMMU_SECURE_END(mmu);
 		} else {
 			pt->va_start = KGSL_IOMMU_SVM_BASE32(mmu);
-			pt->va_end = KGSL_IOMMU_SECURE_BASE(mmu);
+			pt->va_end = mmu->secure_base;
 			pt->compat_va_start = pt->va_start;
 			pt->compat_va_end = pt->va_end;
 		}
@@ -2484,6 +2484,14 @@ int kgsl_iommu_probe(struct kgsl_device *device)
 
 	if (of_property_read_bool(node, "qcom,global_pt"))
 		set_bit(KGSL_MMU_GLOBAL_PAGETABLE, &mmu->features);
+
+	if (of_property_read_u32(node, "qcom,secure-size", &mmu->secure_size))
+		mmu->secure_size = KGSL_IOMMU_SECURE_SIZE;
+	else if (mmu->secure_size >
+			(KGSL_IOMMU_SECURE_END(mmu) - KGSL_IOMMU_SVM_BASE32(mmu)))
+		mmu->secure_size = KGSL_IOMMU_SECURE_SIZE;
+
+	mmu->secure_base = KGSL_IOMMU_SECURE_END(mmu) - mmu->secure_size;
 
 	/* Fill out the rest of the devices in the node */
 	of_platform_populate(node, NULL, NULL, &pdev->dev);
