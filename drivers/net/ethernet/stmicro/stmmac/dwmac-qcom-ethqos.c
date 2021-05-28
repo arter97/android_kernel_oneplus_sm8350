@@ -1260,6 +1260,49 @@ static void qcom_ethqos_bringup_iface(struct work_struct *work)
 	ETHQOSINFO("exit\n");
 }
 
+static void read_mac_addr_from_fuse_reg(struct device_node *np)
+{
+	int ret, i, count, x;
+	u32 mac_efuse_prop, efuse_size = 8;
+	u64 mac_addr;
+
+	/* If the property doesn't exist or empty return */
+	count = of_property_count_u32_elems(np, "mac-efuse-addr");
+	if (!count || count < 0)
+		return;
+
+	/* Loop over all addresses given until we get valid address */
+	for (x = 0; x < count; x++) {
+		void __iomem *mac_efuse_addr;
+
+		ret = of_property_read_u32_index(np, "mac-efuse-addr",
+						 x, &mac_efuse_prop);
+		if (!ret) {
+			mac_efuse_addr = ioremap(mac_efuse_prop, efuse_size);
+			if (!mac_efuse_addr)
+				continue;
+
+			mac_addr = readq(mac_efuse_addr);
+			ETHQOSINFO("Mac address read: %llx\n", mac_addr);
+
+			/* create byte array out of value read from efuse */
+			for (i = 0; i < ETH_ALEN ; i++) {
+				pparams.mac_addr[ETH_ALEN - 1 - i] =
+					mac_addr & 0xff;
+				mac_addr = mac_addr >> 8;
+			}
+
+			iounmap(mac_efuse_addr);
+
+			/* if valid address is found set cookie & return */
+			pparams.is_valid_mac_addr =
+				is_valid_ether_addr(pparams.mac_addr);
+			if (pparams.is_valid_mac_addr)
+				return;
+		}
+	}
+}
+
 static void ethqos_is_ipv4_NW_stack_ready(struct work_struct *work)
 {
 	struct delayed_work *dwork;
@@ -1612,6 +1655,9 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	ret = clk_prepare_enable(ethqos->rgmii_clk);
 	if (ret)
 		goto err_mem;
+
+	/* Read mac address from fuse register */
+	read_mac_addr_from_fuse_reg(np);
 
 	/*Initialize Early ethernet to false*/
 	ethqos->early_eth_enabled = false;
