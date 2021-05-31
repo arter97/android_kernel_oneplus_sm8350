@@ -975,7 +975,7 @@ static int oplus_chg_comm_lcd_active_call(struct notifier_block *nb,
 	unsigned int blank = *(unsigned int *)(evdata->data);
 
 	if (val != DRM_PANEL_EARLY_EVENT_BLANK)
-		return NOTIFY_BAD;
+		return NOTIFY_DONE;
 
 	switch (blank) {
 	case DRM_PANEL_BLANK_POWERDOWN:
