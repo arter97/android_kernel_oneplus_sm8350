@@ -1289,7 +1289,7 @@ static void fastrpc_mmap_free(struct fastrpc_mmap *map, uint32_t flags)
 			dma_free_attrs(me->dev, map->size, (void *)map->va,
 			(dma_addr_t)map->phys, (unsigned long)map->attr);
 		}
-	} else if (map->flags == FASTRPC_DMAHANDLE_NOMAP) {
+	} else if (fl && map->flags == FASTRPC_DMAHANDLE_NOMAP) {
 		trace_fastrpc_dma_unmap(fl->cid, map->phys, map->size);
 		if (!IS_ERR_OR_NULL(map->table))
 			dma_buf_unmap_attachment(map->attach, map->table,
@@ -1298,7 +1298,7 @@ static void fastrpc_mmap_free(struct fastrpc_mmap *map, uint32_t flags)
 			dma_buf_detach(map->buf, map->attach);
 		if (!IS_ERR_OR_NULL(map->buf))
 			dma_buf_put(map->buf);
-	} else {
+	} else if (fl) {
 		int destVM[1] = {VMID_HLOS};
 		int destVMperm[1] = {PERM_READ | PERM_WRITE | PERM_EXEC};
 
@@ -3885,7 +3885,7 @@ static int fastrpc_init_create_static_process(struct fastrpc_file *fl,
 			err = fastrpc_mmap_create(fl, -1, 0, init->mem,
 				 init->memlen, ADSP_MMAP_REMOTE_HEAP_ADDR, &mem);
 			mutex_unlock(&fl->map_mutex);
-			if (err)
+			if (err || !mem)
 				goto bail;
 			spin_lock(&me->hlock);
 			mem->in_use = true;
@@ -3897,7 +3897,7 @@ static int fastrpc_init_create_static_process(struct fastrpc_file *fl,
 		 * If remote-heap VMIDs are defined in DTSI, then do
 		 * hyp_assign from HLOS to those VMs (LPASS, ADSP).
 		 */
-		if (rhvm->vmid && mem && !mem->is_persistent) {
+		if (rhvm->vmid && !mem->is_persistent) {
 			err = hyp_assign_phys(phys, (uint64_t)size,
 				hlosvm, 1,
 				rhvm->vmid, rhvm->vmperm, rhvm->vmcount);
