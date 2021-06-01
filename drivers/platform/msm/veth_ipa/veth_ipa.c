@@ -653,6 +653,8 @@ int veth_ipa_offload_connect(struct veth_ipa_dev *pdata)
 
 	int ret = 0;
 
+	/* reset the outstanding pkt count*/
+	atomic_set(&pdata->outstanding_pkts, 0);
 	/* Hard code SMMU Enable for PHASE 1*/
 	emac_emb_smmu_ctx.valid = true;
 	VETH_IPA_DEBUG("%s - begin smmu_s2_enb=%d\n", __func__,
