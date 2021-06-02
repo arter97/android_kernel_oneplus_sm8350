@@ -301,7 +301,7 @@ static int __init get_dsi_panel_init(char *str)
 	} else if (!strcmp(buf, "qcom,mdss_dsi_samsung_amb655x_dsc_cmd:")) {
 		lcd_type = 2;
 	} else if ((!strcmp(buf, "qcom,mdss_dsi_samsung_amb670yf01_dsc_cmd:")) ||
-		(!strcmp(buf, "qcom,mdss_dsi_samsung_amb670yf01_o_dsc_cm"))) {
+		(!strcmp(buf, "qcom,mdss_dsi_samsung_amb670yf01_o_dsc_cmd:"))) {
 		lcd_type = 3;
 	}
 
@@ -360,6 +360,8 @@ static int __init get_backlight_version(char *str)
 
 static int __init op_cmdline_init(void)
 {
+	strcpy(op_cmdline, saved_command_line);
+
 	pr_info("%s:%s\n", __func__, op_cmdline);
 
 	boot_mode_init(CMDLINE_BOOT_MODE);
