@@ -1508,7 +1508,8 @@ static int hgsl_ioctl_hsync_fence_create(struct file *filep,
 
 	copy_from_user(&param, USRPTR(arg), sizeof(param));
 
-	if (param.context_id >= HGSL_CONTEXT_NUM)
+	if ((param.context_id >= HGSL_CONTEXT_NUM) ||
+		(param.context_id < 0))
 		return -EINVAL;
 
 	read_lock(&hgsl->ctxt_lock);
