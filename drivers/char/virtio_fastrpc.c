@@ -136,7 +136,7 @@ struct virt_fastrpc_buf {
 
 struct virt_fastrpc_dmahandle {
 	u32 fd;
-	u32 offset;
+	u64 offset;
 };
 
 struct virt_invoke_msg {
@@ -976,7 +976,7 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 			/* fill in dma handle list */
 			hlist = i - bufs;
 			handle[hlist].fd = fds[i];
-			handle[hlist].offset = (u32)lpra[i].buf.pv;
+			handle[hlist].offset = (u64)lpra[i].buf.pv;
 			/* copy dma handle sglist to data area */
 			table = maps[i]->table;
 			rpra[i].pv = lpra[i].buf.len;
