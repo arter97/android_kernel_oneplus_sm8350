@@ -165,4 +165,12 @@ struct kgsl_iommu_pt {
 	uint64_t compat_va_end;
 };
 
+/**
+ * kgsl_set_smmu_aperture - set SMMU Aperture for user context
+ * @device: A GPU device handle
+ *
+ * Return: 0 on success or negative on failure.
+ */
+int kgsl_set_smmu_aperture(struct kgsl_device *device);
+
 #endif

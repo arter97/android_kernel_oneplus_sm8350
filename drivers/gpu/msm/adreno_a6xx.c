@@ -1206,7 +1206,7 @@ int a6xx_rb_start(struct adreno_device *adreno_dev)
 	 * Take the GPU out of secure mode. Try the zap shader if it is loaded,
 	 * otherwise just try to write directly to the secure control register
 	 */
-	if (!adreno_dev->zap_loaded)
+	if (!adreno_dev->zap_handle)
 		kgsl_regwrite(device, A6XX_RBBM_SECVID_TRUST_CNTL, 0);
 	else {
 		cmds = adreno_ringbuffer_allocspace(rb, 2);

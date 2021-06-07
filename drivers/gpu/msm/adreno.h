@@ -476,7 +476,7 @@ struct adreno_gpu_core {
  * @gpu_llc_slice_enable: To enable the GPU system cache slice or not
  * @gpuhtw_llc_slice: GPU pagetables system cache slice descriptor
  * @gpuhtw_llc_slice_enable: To enable the GPUHTW system cache slice or not
- * @zap_loaded: Used to track if zap was successfully loaded or not
+ * @zap_handle: Used to track if zap was successfully loaded or not
  */
 struct adreno_device {
 	struct kgsl_device dev;    /* Must be first field in this struct */
@@ -563,7 +563,7 @@ struct adreno_device {
 	bool gpu_llc_slice_enable;
 	void *gpuhtw_llc_slice;
 	bool gpuhtw_llc_slice_enable;
-	unsigned int zap_loaded;
+	void *zap_handle;
 	/**
 	 * @critpkts: Memory descriptor for 5xx critical packets if applicable
 	 */
