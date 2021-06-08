@@ -238,7 +238,7 @@ static ssize_t mpm_timer_read(struct kobject *obj, struct kobj_attribute *attr,
 }
 
 static struct kobj_attribute kpi_values_attribute =
-	__ATTR(kpi_values, 0644, bootkpi_reader, bootkpi_writer);
+	__ATTR(kpi_values, 0664, bootkpi_reader, bootkpi_writer);
 
 static struct kobj_attribute mpm_timer_attribute =
 	__ATTR(mpm_timer, 0444, mpm_timer_read, NULL);
