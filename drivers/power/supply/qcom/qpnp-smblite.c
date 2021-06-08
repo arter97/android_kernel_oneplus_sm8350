@@ -208,6 +208,8 @@ static int smblite_chg_config_init(struct smblite *chip)
 		chg->base = smb_base[PM5100];
 		chg->param = smblite_pm5100_params;
 		chg->name = "PM5100_charger";
+		chg->connector_type = QTI_POWER_SUPPLY_CONNECTOR_MICRO_USB;
+		chg->use_extcon = true;
 		break;
 	default:
 		pr_err("Unsupported PMIC subtype=%d\n", chg->subtype);
@@ -1021,6 +1023,10 @@ static int smblite_init_connector_type(struct smb_charger *chg)
 {
 	int rc, type = 0;
 	u8 val = 0;
+
+	/* PM5100 only support uUSB */
+	if (chg->subtype == PM5100)
+		return 0;
 
 	rc = smblite_lib_read(chg, TYPEC_U_USB_CFG_REG(chg->base), &val);
 	if (rc < 0) {
@@ -1877,7 +1883,6 @@ static int smblite_probe(struct platform_device *pdev)
 	struct smb_charger *chg;
 	int rc = 0;
 	union power_supply_propval pval = {0, };
-	const struct apsd_result *apsd;
 
 	indio_dev = devm_iio_device_alloc(&pdev->dev, sizeof(*chip));
 	if (!indio_dev)
@@ -2021,10 +2026,8 @@ static int smblite_probe(struct platform_device *pdev)
 	if (rc < 0)
 		pr_err("Couldn't read usb present rc=%d\n", rc);
 
-	apsd = smblite_lib_get_apsd_result(chg);
-
-	pr_info("%s charger probed successfully, charger_present=%d, type=%s\n",
-			chg->name, pval.intval, apsd->name);
+	pr_info("%s charger probed successfully, charger_present=%d\n",
+			chg->name, pval.intval);
 	return rc;
 
 disable_irq:
