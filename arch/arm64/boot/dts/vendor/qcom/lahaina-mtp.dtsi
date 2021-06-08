@@ -35,14 +35,15 @@
 
 	qcom,qbt_handler {
 		compatible = "qcom,qbt-handler";
-		qcom,ipc-gpio = <&tlmm 38 0>;
+		//qcom,ipc-gpio = <&tlmm 38 0>;
 		qcom,finger-detect-gpio = <&tlmm 39 0>;
+		status = "disable";
 	};
 
 	extcon_usb1: extcon_usb1 {
 		compatible = "linux,extcon-usb-gpio";
 		vbus-gpio =  <&pm8350_gpios 9 GPIO_ACTIVE_HIGH>;
-		id-gpio = <&tlmm 51 GPIO_ACTIVE_HIGH>;
+		//id-gpio = <&tlmm 51 GPIO_ACTIVE_HIGH>;
 		vbus-out-gpio = <&pm8350_gpios 8 GPIO_ACTIVE_HIGH>;
 
 		pinctrl-names = "default";
@@ -115,7 +116,7 @@
 
 &sdhc_2 {
 	vdd-supply = <&pm8350c_l9>;
-	qcom,vdd-voltage-level = <2950000 2960000>;
+	qcom,vdd-voltage-level = <2800000 2960000>;
 	qcom,vdd-current-level = <200 800000>;
 
 	vdd-io-supply = <&pm8350c_l6>;
@@ -177,17 +178,17 @@
 };
 
 &pm8350c_switch0 {
-	qcom,led-mask = <9>; /* Channels 1 & 4 */
+	qcom,led-mask = <1>; /* Channels 1 & 4 */
 	qcom,symmetry-en;
 };
 
 &pm8350c_switch1 {
-	qcom,led-mask = <6>; /* Channels 2 & 3 */
+	qcom,led-mask = <2>; /* Channels 2 & 3 */
 	qcom,symmetry-en;
 };
 
 &pm8350c_switch2 {
-	qcom,led-mask = <15>; /* All Channels */
+	qcom,led-mask = <3>; /* All Channels */
 	qcom,symmetry-en;
 };
 
@@ -224,27 +225,4 @@
 	status = "ok";
 };
 
-&qupv3_se15_i2c {
-	status = "ok";
-	qcom,clk-freq-out = <1000000>;
-	#address-cells = <1>;
-	#size-cells = <0>;
-	nq@28 {
-		compatible = "qcom,sn-nci";
-		reg = <0x28>;
-		qcom,sn-irq = <&tlmm 87 0x00>;
-		qcom,sn-ven = <&tlmm 62 0x00>;
-		qcom,sn-firm = <&tlmm 86 0x00>;
-		qcom,sn-clkreq = <&tlmm 63 0x00>;
-		interrupt-parent = <&tlmm>;
-		interrupts = <87 0>;
-		interrupt-names = "nfc_irq";
-		pinctrl-names = "nfc_active", "nfc_suspend";
-		pinctrl-0 = <&nfc_int_active &nfc_enable_active
-				&nfc_clk_req_active &nfc_fwdl_active>;
-		pinctrl-1 = <&nfc_int_suspend &nfc_enable_suspend
-				&nfc_clk_req_suspend &nfc_fwdl_suspend>;
-	};
-};
 
-#include "camera/lahaina-camera-sensor-mtp.dtsi"

@@ -1,4 +1,5 @@
 #include "lahaina-sde-display-common.dtsi"
+#include <dt-bindings/clock/qcom,rpmh.h>
 
 &tlmm {
 	display_panel_avdd_default: display_panel_avdd_default {
@@ -23,13 +24,13 @@
 		regulator-min-microvolt = <5500000>;
 		regulator-max-microvolt = <5500000>;
 		regulator-enable-ramp-delay = <233>;
-		gpio = <&tlmm 12 0>;
+//		gpio = <&tlmm 12 0>;
 		enable-active-high;
 		regulator-boot-on;
 		proxy-supply = <&display_panel_avdd>;
 		qcom,proxy-consumer-enable;
 		pinctrl-names = "default";
-		pinctrl-0 = <&display_panel_avdd_default>;
+//		pinctrl-0 = <&display_panel_avdd_default>;
 	};
 
 	sde_wb: qcom,wb-display@0 {
@@ -55,7 +56,8 @@
 			 <&mdss_dsi_phy1 BYTECLK_SRC_1_CLK>,
 			 <&mdss_dsi_phy1 PCLK_SRC_1_CLK>,
 			 <&mdss_dsi_phy1 SHADOW_BYTECLK_SRC_1_CLK>,
-			 <&mdss_dsi_phy1 SHADOW_PCLK_SRC_1_CLK>;
+			 <&mdss_dsi_phy1 SHADOW_PCLK_SRC_1_CLK>,
+			 <&clock_rpmh RPMH_DIV_CLK1>;
 	clock-names = "mux_byte_clk0", "mux_pixel_clk0",
 			"cphy_byte_clk0", "cphy_pixel_clk0",
 			"src_byte_clk0", "src_pixel_clk0",
@@ -63,7 +65,7 @@
 			"mux_byte_clk1", "mux_pixel_clk1",
 			"cphy_byte_clk1", "cphy_pixel_clk1",
 			"src_byte_clk1", "src_pixel_clk1",
-			"shadow_byte_clk1", "shadow_pixel_clk1";
+			"shadow_byte_clk1", "shadow_pixel_clk1", "div_clk";
 
 	pinctrl-names = "panel_active", "panel_suspend";
 	pinctrl-0 = <&sde_dsi_active &sde_te_active>;
@@ -72,8 +74,8 @@
 	qcom,platform-te-gpio = <&tlmm 82 0>;
 	qcom,panel-te-source = <0>;
 
-	vddio-supply = <&L12C>;
-	vdd-supply = <&L13C>;
+	vddi-supply = <&L12C>;
+	vci-supply = <&L13C>;
 	avdd-supply = <&display_panel_avdd>;
 	lab-supply = <&ab_vreg>;
 	ibb-supply = <&ibb_vreg>;
@@ -87,11 +89,12 @@
 		 <&mdss_dsi_phy1 BYTECLK_MUX_1_CLK>,
 		 <&mdss_dsi_phy1 PCLK_MUX_1_CLK>,
 		 <&mdss_dsi_phy1 CPHY_BYTECLK_SRC_1_CLK>,
-		 <&mdss_dsi_phy1 CPHY_PCLK_SRC_1_CLK>;
+		 <&mdss_dsi_phy1 CPHY_PCLK_SRC_1_CLK>,
+		 <&clock_rpmh RPMH_DIV_CLK1>;
 	clock-names = "mux_byte_clk0", "mux_pixel_clk0",
 			"cphy_byte_clk0", "cphy_pixel_clk0",
 			"mux_byte_clk1", "mux_pixel_clk1",
-			"cphy_byte_clk1", "cphy_pixel_clk1";
+			"cphy_byte_clk1", "cphy_pixel_clk1", "div_clk";
 
 	pinctrl-names = "panel_active", "panel_suspend";
 	pinctrl-0 = <&sde_dsi1_active &sde_te1_active>;
@@ -221,3 +224,7 @@
 		};
 	};
 };
+
+#include "pxlw/pxlw-iris5.dtsi"
+#include "pxlw/dsi-panel-pxlw.dtsi"
+

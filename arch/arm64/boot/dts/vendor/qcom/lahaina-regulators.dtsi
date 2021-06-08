@@ -349,9 +349,9 @@
 		S1C: pm8350c_s1: regulator-pm8350c-s1 {
 			regulator-name = "pm8350c_s1";
 			qcom,set = <RPMH_REGULATOR_SET_ALL>;
-			regulator-min-microvolt = <1800000>;
-			regulator-max-microvolt = <1952000>;
-			qcom,init-voltage = <1880000>;
+			regulator-min-microvolt = <1880000>;
+			regulator-max-microvolt = <2000000>;
+			qcom,init-voltage = <2000000>;
 		};
 	};
 
@@ -691,7 +691,7 @@
 		L9C: pm8350c_l9: regulator-pm8350c-l9 {
 			regulator-name = "pm8350c_l9";
 			qcom,set = <RPMH_REGULATOR_SET_ALL>;
-			regulator-min-microvolt = <2960000>;
+			regulator-min-microvolt = <2800000>;
 			regulator-max-microvolt = <3008000>;
 			qcom,init-voltage = <2960000>;
 			qcom,init-mode = <RPMH_REGULATOR_MODE_HPM>;
@@ -770,7 +770,7 @@
 			regulator-name = "pm8350c_l13";
 			qcom,set = <RPMH_REGULATOR_SET_ALL>;
 			regulator-min-microvolt = <3000000>;
-			regulator-max-microvolt = <3000000>;
+			regulator-max-microvolt = <3200000>;
 			qcom,init-voltage = <3000000>;
 			qcom,init-mode = <RPMH_REGULATOR_MODE_HPM>;
 			qcom,proxy-consumer-enable;
