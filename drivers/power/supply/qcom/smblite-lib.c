@@ -364,8 +364,6 @@ int smblite_lib_set_usb_suspend(struct smb_charger *chg, bool suspend)
 static const char * const smblite_lib_qg_ext_iio_chan[] = {
 	[SMB5_QG_DEBUG_BATTERY] = "debug_battery",
 	[SMB5_QG_CAPACITY] = "capacity",
-	[SMB5_QG_REAL_CAPACITY] = "real_capacity",
-	[SMB5_QG_CC_SOC] = "cc_soc",
 	[SMB5_QG_CURRENT_NOW] = "current_now",
 	[SMB5_QG_VOLTAGE_NOW] = "voltage_now",
 	[SMB5_QG_VOLTAGE_MAX] = "voltage_max",
