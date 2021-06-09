@@ -593,6 +593,7 @@ struct smb_charger {
 	bool			dpdm_enabled;
 	bool			apsd_ext_timeout;
 	bool			qc3p5_detected;
+	int			qc3p5_detected_mw;
 
 	/* workaround flag */
 	int		real_charger_type;
@@ -844,4 +845,5 @@ int smblib_get_prop_voltage_wls_output(struct smb_charger *chg,
 int smblib_get_prop_dc_voltage_now(struct smb_charger *chg,
 				union power_supply_propval *val);
 
+void smblib_moisture_detection_enable(struct smb_charger *chg, int pval);
 #endif /* __SMB5_CHARGER_H */

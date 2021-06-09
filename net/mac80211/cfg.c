@@ -698,7 +698,8 @@ void sta_set_rate_info_tx(struct sta_info *sta,
 		u16 brate;
 
 		sband = ieee80211_get_sband(sta->sdata);
-		if (sband) {
+		WARN_ON_ONCE(sband && !sband->bitrates);
+		if (sband && sband->bitrates) {
 			brate = sband->bitrates[rate->idx].bitrate;
 			rinfo->legacy = DIV_ROUND_UP(brate, 1 << shift);
 		}
@@ -1476,6 +1477,8 @@ static int sta_apply_parameters(struct ieee80211_local *local,
 	}
 
 	if (params->supported_rates && params->supported_rates_len) {
+		if (sband->band >= NUM_NL80211_BANDS)
+			return -EINVAL;
 		ieee80211_parse_bitrates(&sdata->vif.bss_conf.chandef,
 					 sband, params->supported_rates,
 					 params->supported_rates_len,

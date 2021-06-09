@@ -4,12 +4,12 @@
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/of.h>
+#include <linux/of_gpio.h>
 #include <linux/pinctrl/consumer.h>
 #include <linux/regulator/consumer.h>
 #if IS_ENABLED(CONFIG_QCOM_COMMAND_DB)
 #include <soc/qcom/cmd-db.h>
 #endif
-#include <linux/of_gpio.h>
 
 #include "main.h"
 #include "debug.h"
@@ -54,12 +54,13 @@ static struct cnss_clk_cfg cnss_clk_list[] = {
 #define WLAN_EN_GPIO			"wlan-en-gpio"
 #define BT_EN_GPIO			"qcom,bt-en-gpio"
 #define XO_CLK_GPIO			"qcom,xo-clk-gpio"
+#define SW_CTRL_GPIO			"qcom,sw-ctrl-gpio"
 #define WLAN_EN_ACTIVE			"wlan_en_active"
 #define WLAN_EN_SLEEP			"wlan_en_sleep"
 #define WLAN_VREGS_PROP			"wlan_vregs"
 
 #define BOOTSTRAP_DELAY			1000
-#define WLAN_ENABLE_DELAY		1000
+#define WLAN_ENABLE_DELAY		10000
 
 #define TCS_CMD_DATA_ADDR_OFFSET	0x4
 #define TCS_OFFSET			0xC8
@@ -783,9 +784,21 @@ int cnss_get_pinctrl(struct cnss_plat_data *plat_priv)
 							      XO_CLK_GPIO, 0);
 		cnss_pr_dbg("QCA6490 XO_CLK GPIO: %d\n",
 			    pinctrl_info->xo_clk_gpio);
+		cnss_set_feature_list(plat_priv, BOOTSTRAP_CLOCK_SELECT_V01);
 	} else {
 		pinctrl_info->xo_clk_gpio = -EINVAL;
 	}
+
+	if (of_find_property(dev->of_node, SW_CTRL_GPIO, NULL)) {
+		pinctrl_info->sw_ctrl_gpio = of_get_named_gpio(dev->of_node,
+							       SW_CTRL_GPIO,
+							       0);
+		cnss_pr_dbg("Switch control GPIO: %d\n",
+			    pinctrl_info->sw_ctrl_gpio);
+	} else {
+		pinctrl_info->sw_ctrl_gpio = -EINVAL;
+	}
+
 	return 0;
 out:
 	return ret;
@@ -864,7 +877,13 @@ static int cnss_select_pinctrl_state(struct cnss_plat_data *plat_priv,
 					    ret);
 				goto out;
 			}
-			udelay(WLAN_ENABLE_DELAY);
+			/* As spec shown, it needs at least 4ms delay
+			 * between wlan_en become active and pcie reset
+			 * de-assert for qca6390. And it needs at least
+			 * 10ms for qca6174. So add 10ms-11ms delay here.
+			 */
+			usleep_range(WLAN_ENABLE_DELAY,
+				     WLAN_ENABLE_DELAY + 1000);
 		}
 		cnss_set_xo_clk_gpio_state(plat_priv, false);
 	} else {
@@ -936,7 +955,24 @@ set_wlan_en:
 	return ret;
 }
 
-int cnss_power_on_device(struct cnss_plat_data *plat_priv)
+int cnss_gpio_get_value(struct cnss_plat_data *plat_priv, int gpio_num)
+{
+	int ret;
+
+	if (gpio_num < 0)
+		return -EINVAL;
+
+	ret = gpio_direction_input(gpio_num);
+	if (ret) {
+		cnss_pr_err("Failed to set direction of GPIO(%d), err = %d",
+			    gpio_num, ret);
+		return -EINVAL;
+	}
+
+	return gpio_get_value(gpio_num);
+}
+
+int cnss_power_on_device(struct cnss_plat_data *plat_priv, bool reset)
 {
 	int ret = 0;
 
@@ -955,6 +991,23 @@ int cnss_power_on_device(struct cnss_plat_data *plat_priv)
 	if (ret) {
 		cnss_pr_err("Failed to turn on clocks, err = %d\n", ret);
 		goto vreg_off;
+	}
+	if (reset) {
+		/* The default state of wlan_en maybe not low,
+		 * according to datasheet, we should put wlan_en
+		 * to low first, and trigger high.
+		 * And the default delay for qca6390 is at least 4ms,
+		 * for qcn7605/qca6174, it is 10us. For safe, set 5ms delay
+		 * here.
+		 */
+		ret = cnss_select_pinctrl_state(plat_priv, false);
+		if (ret) {
+			cnss_pr_err("Failed to select pinctrl state, err = %d\n",
+				    ret);
+			goto clk_off;
+		}
+
+		usleep_range(4000, 5000);
 	}
 
 	ret = cnss_select_pinctrl_enable(plat_priv);
@@ -1214,5 +1267,5 @@ int cnss_dev_specific_power_on(struct cnss_plat_data *plat_priv)
 		return ret;
 
 	plat_priv->powered_on = false;
-	return cnss_power_on_device(plat_priv);
+	return cnss_power_on_device(plat_priv, false);
 }

@@ -32,18 +32,14 @@ static DECLARE_WAIT_QUEUE_HEAD(avb_class_b_msg_wq);
 
 static int strlcmp(const char *s, const char *t, size_t n)
 {
-	int ret;
-
 	while (n-- && *t != '\0') {
 		if (*s != *t) {
-			ret = ((unsigned char)*s - (unsigned char)*t);
-			n = 0;
+			return ((unsigned char)*s - (unsigned char)*t);
 		} else {
 			++s, ++t;
-			ret = (unsigned char)*s;
 		}
 	}
-	return ret;
+	return (unsigned char)*s;
 }
 
 static void align_target_time_reg(u32 ch, void __iomem *ioaddr,
@@ -258,10 +254,16 @@ int ppsout_config(struct stmmac_priv *priv, struct pps_cfg *eth_pps_cfg)
 	return 0;
 }
 
-int ethqos_init_pps(struct stmmac_priv *priv)
+int ethqos_init_pps(void *priv_n)
 {
+	struct stmmac_priv *priv;
 	u32 value;
 	struct pps_cfg eth_pps_cfg = {0};
+
+	if (!priv_n)
+		return -ENODEV;
+
+	priv = priv_n;
 
 	priv->ptpaddr = priv->ioaddr + PTP_GMAC4_OFFSET;
 	value = (PTP_TCR_TSENA | PTP_TCR_TSCFUPDT | PTP_TCR_TSUPDT);
@@ -456,4 +458,18 @@ fail_alloc_cdev:
 	unregister_chrdev_region(*pps_dev_t, 1);
 alloc_chrdev1_region_fail:
 		return ret;
+}
+
+int ethqos_remove_pps_dev(struct qcom_ethqos *ethqos)
+{
+	device_destroy(ethqos->avb_class_a_class, ethqos->avb_class_a_dev_t);
+	class_destroy(ethqos->avb_class_a_class);
+	cdev_del(ethqos->avb_class_a_cdev);
+	unregister_chrdev_region(ethqos->avb_class_a_dev_t, 1);
+
+	device_destroy(ethqos->avb_class_b_class, ethqos->avb_class_b_dev_t);
+	class_destroy(ethqos->avb_class_b_class);
+	cdev_del(ethqos->avb_class_b_cdev);
+	unregister_chrdev_region(ethqos->avb_class_b_dev_t, 1);
+	return 0;
 }

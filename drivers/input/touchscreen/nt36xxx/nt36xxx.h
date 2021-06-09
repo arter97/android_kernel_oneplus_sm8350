@@ -198,15 +198,19 @@ struct nvt_ts_data {
 	struct mutex nvt_clk_io_ctrl_mutex;
 	const char *touch_environment;
 	struct completion trusted_touch_powerdown;
+	struct completion touch_suspend_resume;
+	struct completion trusted_touch_interrupt;
 	struct clk *core_clk;
 	struct clk *iface_clk;
 	atomic_t trusted_touch_initialized;
 	atomic_t trusted_touch_enabled;
 	atomic_t trusted_touch_underway;
+	atomic_t suspend_resume_underway;
 	atomic_t trusted_touch_event;
 	atomic_t trusted_touch_abort_status;
 	atomic_t delayed_vm_probe_pending;
 	atomic_t trusted_touch_mode;
+	atomic_t pvm_interrupt_underway;
 #endif
 };
 

@@ -88,6 +88,9 @@
 /* ID for Microsoft OS String */
 #define GSI_MBIM_OS_STRING_ID 0xEE
 
+static char compatible_id[256] = "ALTRCFG";
+static char sub_compatible_id[8];
+
 #define EVT_NONE			0
 #define EVT_UNINITIALIZED		1
 #define EVT_INITIALIZED			2
@@ -309,6 +312,7 @@ struct f_gsi {
 	struct gsi_ctrl_port c_port;
 	void *ipc_log_ctxt;
 	bool rmnet_dtr_status;
+	bool rmnet_use_tcm_mem;
 
 	bool rwake_inprogress;
 
