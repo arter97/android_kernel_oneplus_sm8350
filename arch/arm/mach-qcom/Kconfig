@@ -94,6 +94,8 @@ config ARCH_MONACO
 	select COMMON_CLK_QCOM
 	select QCOM_GDSC
 	select GENERIC_CLOCKEVENTS_BROADCAST
+        select VIDEOBUF2_CORE
+        select VIDEOBUF2_DMA_SG
 
 config ARCH_SCUBA
 	bool "Enable support for Qualcomm Technologies, Inc. SCUBA"
