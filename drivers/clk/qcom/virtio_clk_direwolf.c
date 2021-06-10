@@ -102,6 +102,7 @@ static const char * const direwolf_gcc_virtio_clocks[] = {
 	[GCC_DDRSS_PCIE_SF_TBU_CLK] = "gcc_ddrss_pcie_sf_tbu_clk",
 	[GCC_AGGRE_NOC_PCIE_4_AXI_CLK] = "gcc_aggre_noc_pcie_4_axi_clk",
 	[GCC_AGGRE_NOC_PCIE_SOUTH_SF_AXI_CLK] = "gcc_aggre_noc_pcie_south_sf_axi_clk",
+	[GCC_CNOC_PCIE4_QX_CLK] = "gcc_cnoc_pcie4_qx_clk",
 	[GCC_PCIE_4_PIPEDIV2_CLK] = "gcc_pcie_4_pipediv2_clk",
 };
 
@@ -111,15 +112,20 @@ static const char * const direwolf_gcc_virtio_resets[] = {
 	[GCC_USB2_PHY_SEC_BCR] = "gcc_usb2_phy_sec_bcr",
 	[GCC_USB30_PRIM_BCR] = "gcc_usb30_prim_master_clk",
 	[GCC_USB30_SEC_BCR] = "gcc_usb30_sec_master_clk",
-	[GCC_PCIE_2A_BCR] = "gcc_pcie_2a_mstr_axi_clk",
+	[GCC_PCIE_2A_BCR] = "gcc_pcie_2a_bcr",
+	[GCC_PCIE_2A_PHY_BCR] = "gcc_pcie_2a_phy_bcr",
 	[GCC_PCIE_2A_PHY_NOCSR_COM_PHY_BCR] = "gcc_pcie_2a_phy_nocsr_com_phy_bcr",
-	[GCC_PCIE_2B_BCR] = "gcc_pcie_2b_mstr_axi_clk",
+	[GCC_PCIE_2B_BCR] = "gcc_pcie_2b_bcr",
+	[GCC_PCIE_2B_PHY_BCR] = "gcc_pcie_2b_phy_bcr",
 	[GCC_PCIE_2B_PHY_NOCSR_COM_PHY_BCR] = "gcc_pcie_2b_phy_nocsr_com_phy_bcr",
-	[GCC_PCIE_3A_BCR] = "gcc_pcie_3a_mstr_axi_clk",
+	[GCC_PCIE_3A_BCR] = "gcc_pcie_3a_bcr",
+	[GCC_PCIE_3A_PHY_BCR] = "gcc_pcie_3a_phy_bcr",
 	[GCC_PCIE_3A_PHY_NOCSR_COM_PHY_BCR] = "gcc_pcie_3a_phy_nocsr_com_phy_bcr",
-	[GCC_PCIE_3B_BCR] = "gcc_pcie_3b_mstr_axi_clk",
+	[GCC_PCIE_3B_BCR] = "gcc_pcie_3b_bcr",
+	[GCC_PCIE_3B_PHY_BCR] = "gcc_pcie_3b_phy_bcr",
 	[GCC_PCIE_3B_PHY_NOCSR_COM_PHY_BCR] = "gcc_pcie_3b_phy_nocsr_com_phy_bcr",
-	[GCC_PCIE_4_BCR] = "gcc_pcie_4_mstr_axi_clk",
+	[GCC_PCIE_4_BCR] = "gcc_pcie_4_bcr",
+	[GCC_PCIE_4_PHY_BCR] = "gcc_pcie_4_phy_bcr",
 	[GCC_PCIE_4_PHY_NOCSR_COM_PHY_BCR] = "gcc_pcie_4_phy_nocsr_com_phy_bcr",
 };
 
