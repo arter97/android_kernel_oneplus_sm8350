@@ -14,17 +14,22 @@
 			pr_debug(fmt, ##__VA_ARGS__);	\
 	} while (0)
 
+/*
+ * Current QBG context dump size is 2448 bytes (612 u32 members).
+ * Use greater buffer to accommodate future additions to QBG context.
+ */
+#define QBG_CONTEXT_LOCAL_BUF_SIZE	3072
+
 enum debug_mask {
 	QBG_DEBUG_BUS_READ	= BIT(0),
 	QBG_DEBUG_BUS_WRITE	= BIT(1),
-	QBG_DEBUG_FIFO		= BIT(2),
+	QBG_DEBUG_SDAM		= BIT(2),
 	QBG_DEBUG_IRQ		= BIT(3),
 	QBG_DEBUG_DEVICE	= BIT(4),
 	QBG_DEBUG_PROFILE	= BIT(5),
 	QBG_DEBUG_SOC		= BIT(6),
-	QBG_DEBUG_SDAM		= BIT(7),
-	QBG_DEBUG_STATUS	= BIT(8),
-	QBG_DEBUG_PON		= BIT(9),
+	QBG_DEBUG_STATUS	= BIT(7),
+	QBG_DEBUG_PON		= BIT(8),
 };
 
 enum qbg_sdam {
@@ -35,6 +40,32 @@ enum qbg_sdam {
 	SDAM_DATA2,
 	SDAM_DATA3,
 	SDAM_DATA4,
+};
+
+enum qbg_data_tag {
+	QBG_DATA_TAG_FAST_CHAR,
+};
+
+enum QBG_SAMPLE_NUM_TYPE {
+	SAMPLE_NUM_1,
+	SAMPLE_NUM_2,
+	SAMPLE_NUM_4,
+	SAMPLE_NUM_8,
+	SAMPLE_NUM_16,
+	SAMPLE_NUM_32,
+	QBG_SAMPLE_NUM_INVALID,
+};
+
+enum QBG_ACCUM_INTERVAL_TYPE {
+	ACCUM_INTERVAL_100MS,
+	ACCUM_INTERVAL_200MS,
+	ACCUM_INTERVAL_500MS,
+	ACCUM_INTERVAL_1000MS,
+	ACCUM_INTERVAL_2000MS,
+	ACCUM_INTERVAL_5000MS,
+	ACCUM_INTERVAL_10000MS,
+	ACCUM_INTERVAL_100000MS,
+	ACCUM_INTERVAL_INVALID,
 };
 
 /**
@@ -61,6 +92,7 @@ enum qbg_sdam {
  * @battery:		Pointer to QBG battery data structure
  * @fifo_lock:		Lock for reading FIFO data
  * @data_lock:		Lock for reading kdata from QBG char device
+ * @context_lock:	Lock for reading/writing QBG context
  * @batt_id_chan:	IIO channel to read battery ID
  * @batt_temp_chan:	IIO channel to read battery temperature
  * @rtc:		RTC device to read real time
@@ -69,9 +101,13 @@ enum qbg_sdam {
  * @irq_name:		QBG interrupt name
  * @batt_type_str:	String array denoting battery type
  * @irq:		QBG irq number
+ * @context:		Pointer to QBG context dump buffer
  * @base:		Base address of QBG HW
- * @num_sdams:		Number of sdams used for QBG
+ * @num_data_sdams:	Number of data sdams used for QBG
  * @batt_id_ohm:	Battery resistance in ohms
+ * @sdam_batt_id:	Battery ID stored and retrieved from SDAM
+ * @essential_param_revid:	QBG essential parameters revision ID
+ * @sample_time_us:	Array of accumulator sample time in each QBG HW state
  * @debug_mask:		Debug mask to enable/disable debug prints
  * @pon_ocv:		Power-on OCV of QBG device
  * @pon_ibat:		Power-on current of QBG device
@@ -100,6 +136,7 @@ enum qbg_sdam {
  * @rconn_mohm:	Battery connector resistance
  * @previous_ep_time:	Previous timestamp when essential params stored
  * @current_time:	Current time stamp
+ * @context_count:	Size of the last QBG context dump stored
  * @profile_loaded:	Flag to indicated battery profile is loaded
  * @battery_missing:	Flag to indicate battery is missing
  * @data_ready:		Flag to indicate QBG data is ready
@@ -110,7 +147,7 @@ struct qti_qbg {
 	struct regmap		*regmap;
 	struct power_supply	*qbg_psy;
 	struct power_supply	*batt_psy;
-	struct class		*qbg_class;
+	struct class		qbg_class;
 	struct device		*qbg_device;
 	struct cdev		qbg_cdev;
 	dev_t			dev_no;
@@ -128,6 +165,7 @@ struct qti_qbg {
 	struct qbg_battery_data	*battery;
 	struct mutex		fifo_lock;
 	struct mutex		data_lock;
+	struct mutex		context_lock;
 	struct iio_channel	*batt_id_chan;
 	struct iio_channel	*batt_temp_chan;
 	struct rtc_device	*rtc;
@@ -136,11 +174,14 @@ struct qti_qbg {
 	const char		*irq_name;
 	const char		*batt_type_str;
 	int			irq;
+	u8			*context;
 	u32			base;
 	u32			sdam_base;
-	u32			num_sdams;
 	u32			num_data_sdams;
 	u32			batt_id_ohm;
+	u32			sdam_batt_id;
+	u32			essential_param_revid;
+	u32			sample_time_us[QBG_STATE_MAX];
 	u32			*debug_mask;
 	int			pon_ocv;
 	int			pon_ibat;
@@ -170,6 +211,7 @@ struct qti_qbg {
 	int			rconn_mohm;
 	unsigned long		previous_ep_time;
 	unsigned long		current_time;
+	int			context_count;
 	bool			profile_loaded;
 	bool			battery_missing;
 	bool			data_ready;
