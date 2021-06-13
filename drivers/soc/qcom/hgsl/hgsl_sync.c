@@ -289,7 +289,7 @@ int hgsl_isync_timeline_create(struct hgsl_priv *priv,
 }
 
 int hgsl_isync_fence_create(struct hgsl_priv *priv, uint32_t timeline_id,
-						uint32_t ts, int *fence_fd)
+				uint32_t ts, bool ts_is_valid, int *fence_fd)
 {
 	struct hgsl_isync_timeline *timeline = NULL;
 	struct hgsl_isync_fence *fence = NULL;
@@ -314,7 +314,7 @@ int hgsl_isync_fence_create(struct hgsl_priv *priv, uint32_t timeline_id,
 	fence->timeline = timeline;
 
 	/* set a minimal ts if user don't set it */
-	if (ts == 0)
+	if (!ts_is_valid)
 		ts = 1;
 
 	fence->ts = ts;
@@ -529,7 +529,7 @@ static bool hgsl_isync_has_signaled(struct dma_fence *base)
 	if (base) {
 		fence = container_of(base, struct hgsl_isync_fence, fence);
 		timeline = fence->timeline;
-		if (timeline && timeline->last_ts > 0)
+		if (timeline)
 			return hgsl_ts_ge(timeline->last_ts, fence->ts);
 	}
 
