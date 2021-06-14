@@ -1061,10 +1061,10 @@ struct dwc3_scratchpad_array {
  * @role_sw: usb_role_switch handle
  * @role_switch_default_mode: default operation mode of controller while
  *			usb role is USB_ROLE_NONE.
- * @usb2_phy: pointer to USB2 PHY 0
- * @usb2_phy1: pointer to USB2 PHY 1
- * @usb3_phy: pointer to USB3 PHY 0
- * @usb3_phy: pointer to USB3 PHY 1
+ * @usb2_phy: array of pointers to USB2 PHYs
+ * @usb3_phy: array of pointers to USB3 PHYs
+ * @num_hsphy: Number of HS ports controlled by the core
+ * @num_dsphy: Number of SS ports controlled by the core
  * @usb2_generic_phy: pointer to USB2 PHY
  * @usb3_generic_phy: pointer to USB3 PHY
  * @phys_ready: flag to indicate that PHYs are ready
@@ -1203,8 +1203,10 @@ struct dwc3 {
 
 	struct reset_control	*reset;
 
-	struct usb_phy		*usb2_phy, *usb2_phy1;
-	struct usb_phy		*usb3_phy, *usb3_phy1;
+	struct usb_phy		**usb2_phy;
+	struct usb_phy		**usb3_phy;
+	u32			num_hsphy;
+	u32			num_ssphy;
 
 	struct phy		*usb2_generic_phy;
 	struct phy		*usb3_generic_phy;
