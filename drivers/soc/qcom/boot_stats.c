@@ -19,11 +19,19 @@
 #include <linux/uaccess.h>
 #include <soc/qcom/boot_stats.h>
 
-#define MAX_STRING_LEN 256
-#define BOOT_MARKER_MAX_LEN 50
-#define MSM_ARCH_TIMER_FREQ     19200000
-#define BOOTKPI_BUF_SIZE (2 * PAGE_SIZE)
+#define MARKER_STRING_WIDTH 40
+#define TS_WHOLE_NUM_WIDTH 8
+#define TS_PRECISION_WIDTH 3
+/* Field width to consider the spaces, 's' character and \n */
+#define TIME_FIELD_MISC 4
+#define TIME_FIELD_WIDTH \
+	(TS_WHOLE_NUM_WIDTH + TS_PRECISION_WIDTH + TIME_FIELD_MISC)
+
+#define MARKER_TOTAL_LEN (MARKER_STRING_WIDTH + TIME_FIELD_WIDTH)
+#define MAX_NUM_MARKERS (PAGE_SIZE / MARKER_TOTAL_LEN)
+#define BOOTKPI_BUF_SIZE PAGE_SIZE
 #define TIMER_KHZ 32768
+#define MSM_ARCH_TIMER_FREQ     19200000
 
 struct boot_stats {
 	uint32_t bootloader_start;
@@ -43,7 +51,7 @@ static struct boot_stats __iomem *boot_stats;
 #ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
 
 struct boot_marker {
-	char marker_name[BOOT_MARKER_MAX_LEN];
+	char marker_name[MARKER_STRING_WIDTH];
 	unsigned long long timer_value;
 	struct list_head list;
 	spinlock_t slock;
@@ -52,6 +60,7 @@ struct boot_marker {
 static struct boot_marker boot_marker_list;
 static struct kobject *bootkpi_obj;
 static struct attribute_group *attr_grp;
+static int num_markers;
 
 unsigned long long msm_timer_get_sclk_ticks(void)
 {
@@ -112,9 +121,15 @@ static void _create_boot_marker(const char *name,
 {
 	struct boot_marker *new_boot_marker;
 
-	pr_debug("%-41s:%llu.%03llu seconds\n", name,
-			timer_value/TIMER_KHZ,
-			((timer_value % TIMER_KHZ)
+	if (num_markers >= MAX_NUM_MARKERS) {
+		pr_err("boot_stats: Cannot create marker. Limit exceeded!\n");
+		BUG();
+	}
+
+	pr_debug("%-*s%*llu.%0*llu seconds\n",
+			MARKER_STRING_WIDTH, name,
+			TS_WHOLE_NUM_WIDTH, timer_value/TIMER_KHZ,
+			TS_PRECISION_WIDTH, ((timer_value % TIMER_KHZ)
 			 * 1000) / TIMER_KHZ);
 
 	new_boot_marker = kmalloc(sizeof(*new_boot_marker), GFP_ATOMIC);
@@ -128,6 +143,7 @@ static void _create_boot_marker(const char *name,
 	spin_lock(&boot_marker_list.slock);
 	list_add_tail(&(new_boot_marker->list), &(boot_marker_list.list));
 	spin_unlock(&boot_marker_list.slock);
+	num_markers++;
 }
 
 static void boot_marker_cleanup(void)
@@ -178,38 +194,40 @@ static void set_bootloader_stats(void)
 static ssize_t bootkpi_reader(struct kobject *obj, struct kobj_attribute *attr,
 		char *user_buffer)
 {
-	int rc = 0;
-	char *buf;
 	int temp = 0;
 	struct boot_marker *marker;
-
-	buf = kmalloc(BOOTKPI_BUF_SIZE, GFP_KERNEL);
-	if (!buf)
-		return -ENOMEM;
+	unsigned long ts_whole_num, ts_precision;
 
 	spin_lock(&boot_marker_list.slock);
 	list_for_each_entry(marker, &boot_marker_list.list, list) {
 		WARN_ON((BOOTKPI_BUF_SIZE - temp) <= 0);
-		temp += scnprintf(buf + temp, BOOTKPI_BUF_SIZE - temp,
-				"%-41s:%llu.%03llu seconds\n",
-				marker->marker_name,
-				marker->timer_value/TIMER_KHZ,
-				(((marker->timer_value % TIMER_KHZ)
-				  * 1000) / TIMER_KHZ));
+
+		ts_whole_num = marker->timer_value/TIMER_KHZ;
+		ts_precision = ((marker->timer_value % TIMER_KHZ) * 1000) / TIMER_KHZ;
+
+		/*
+		 * Field width of
+		 * Marker name		- MARKER_STRING_WIDTH
+		 * Timestamp		- TS_WHOLE_NUM_WIDTH
+		 * Timestamp precision	- TS_PRECISION_WIDTH
+		 */
+		temp += scnprintf(user_buffer + temp, BOOTKPI_BUF_SIZE - temp,
+				"%-*s%*llu.%0*llu s\n",
+				MARKER_STRING_WIDTH, marker->marker_name,
+				TS_WHOLE_NUM_WIDTH, ts_whole_num,
+				TS_PRECISION_WIDTH, ts_precision);
 	}
 	spin_unlock(&boot_marker_list.slock);
-	rc = scnprintf(user_buffer, temp + 1, "%s\n", buf);
-	kfree(buf);
-	return rc;
+	return temp;
 }
 
 static ssize_t bootkpi_writer(struct kobject *obj, struct kobj_attribute *attr,
 		const char *user_buffer, size_t count)
 {
 	int rc = 0;
-	char buf[MAX_STRING_LEN];
+	char buf[MARKER_STRING_WIDTH];
 
-	if (count >= MAX_STRING_LEN)
+	if (count >= MARKER_STRING_WIDTH)
 		return -EINVAL;
 
 	rc = scnprintf(buf, sizeof(buf) - 1, "%s", user_buffer);
@@ -238,7 +256,7 @@ static ssize_t mpm_timer_read(struct kobject *obj, struct kobj_attribute *attr,
 }
 
 static struct kobj_attribute kpi_values_attribute =
-	__ATTR(kpi_values, 0644, bootkpi_reader, bootkpi_writer);
+	__ATTR(kpi_values, 0664, bootkpi_reader, bootkpi_writer);
 
 static struct kobj_attribute mpm_timer_attribute =
 	__ATTR(mpm_timer, 0444, mpm_timer_read, NULL);
