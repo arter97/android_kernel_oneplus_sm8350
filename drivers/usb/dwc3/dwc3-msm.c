@@ -44,6 +44,9 @@
 #include <linux/usb/dwc3-msm.h>
 #include <linux/usb/role.h>
 #include <linux/usb/redriver.h>
+#ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
+#include <soc/qcom/boot_stats.h>
+#endif
 
 #include "core.h"
 #include "gadget.h"
@@ -440,6 +443,9 @@ struct dwc3_msm {
 	struct clk		*utmi_clk_src;
 	struct clk		*bus_aggr_clk;
 	struct clk		*noc_aggr_clk;
+	struct clk		*noc_aggr_north_clk;
+	struct clk		*noc_aggr_south_clk;
+	struct clk		*noc_sys_clk;
 	struct clk		*cfg_ahb_clk;
 	struct reset_control	*core_reset;
 	struct regulator	*dwc3_gdsc;
@@ -3315,6 +3321,9 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool force_power_collapse,
 	clk_set_rate(mdwc->core_clk, 19200000);
 	clk_disable_unprepare(mdwc->core_clk);
 	clk_disable_unprepare(mdwc->noc_aggr_clk);
+	clk_disable_unprepare(mdwc->noc_aggr_north_clk);
+	clk_disable_unprepare(mdwc->noc_aggr_south_clk);
+	clk_disable_unprepare(mdwc->noc_sys_clk);
 	/*
 	 * Disable iface_clk only after core_clk as core_clk has FSM
 	 * depedency on iface_clk. Hence iface_clk should be turned off
@@ -3438,6 +3447,9 @@ static int dwc3_msm_resume(struct dwc3_msm *mdwc)
 	 */
 	clk_prepare_enable(mdwc->iface_clk);
 	clk_prepare_enable(mdwc->noc_aggr_clk);
+	clk_prepare_enable(mdwc->noc_aggr_north_clk);
+	clk_prepare_enable(mdwc->noc_aggr_south_clk);
+	clk_prepare_enable(mdwc->noc_sys_clk);
 
 	core_clk_rate = mdwc->core_clk_rate;
 	if (mdwc->in_host_mode && mdwc->max_rh_port_speed == USB_SPEED_HIGH) {
@@ -3810,6 +3822,14 @@ static irqreturn_t msm_dwc3_pwr_irq(int irq, void *data)
 
 	dwc->t_pwr_evt_irq = ktime_get();
 	dev_dbg(mdwc->dev, "%s received\n", __func__);
+
+	if (mdwc->drd_state == DRD_STATE_PERIPHERAL_SUSPEND) {
+		dev_info(mdwc->dev, "USB Resume start\n");
+#ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
+		place_marker("M - USB device resume started");
+#endif
+	}
+
 	/*
 	 * When in Low Power Mode, can't read PWR_EVNT_IRQ_STAT_REG to acertain
 	 * which interrupts have been triggered, as the clocks are disabled.
@@ -3915,6 +3935,20 @@ static int dwc3_msm_get_clk_gdsc(struct dwc3_msm *mdwc)
 	mdwc->noc_aggr_clk = devm_clk_get(mdwc->dev, "noc_aggr_clk");
 	if (IS_ERR(mdwc->noc_aggr_clk))
 		mdwc->noc_aggr_clk = NULL;
+
+	mdwc->noc_aggr_north_clk = devm_clk_get(mdwc->dev,
+						"noc_aggr_north_clk");
+	if (IS_ERR(mdwc->noc_aggr_north_clk))
+		mdwc->noc_aggr_north_clk = NULL;
+
+	mdwc->noc_aggr_south_clk = devm_clk_get(mdwc->dev,
+						"noc_aggr_south_clk");
+	if (IS_ERR(mdwc->noc_aggr_south_clk))
+		mdwc->noc_aggr_south_clk = NULL;
+
+	mdwc->noc_sys_clk = devm_clk_get(mdwc->dev, "noc_sys_clk");
+	if (IS_ERR(mdwc->noc_sys_clk))
+		mdwc->noc_sys_clk = NULL;
 
 	if (of_property_match_string(mdwc->dev->of_node,
 				"clock-names", "cfg_ahb_clk") >= 0) {
@@ -4022,7 +4056,7 @@ static int dwc3_msm_vbus_notifier(struct notifier_block *nb,
 	 * Drive a pulse on DP to ensure proper CDP detection
 	 * and only when the vbus connect event is a valid one.
 	 */
-	if (get_chg_type(mdwc) == POWER_SUPPLY_TYPE_USB_CDP &&
+	if (get_chg_type(mdwc) == POWER_SUPPLY_USB_TYPE_CDP &&
 			mdwc->vbus_active && !mdwc->check_eud_state) {
 		dev_dbg(mdwc->dev, "Connected to CDP, pull DP up\n");
 		mdwc->hs_phy->charger_detect(mdwc->hs_phy);
@@ -5030,6 +5064,9 @@ static int dwc3_msm_remove(struct platform_device *pdev)
 	if (ret_pm < 0) {
 		dev_err(mdwc->dev,
 			"pm_runtime_get_sync failed with %d\n", ret_pm);
+		clk_prepare_enable(mdwc->noc_aggr_north_clk);
+		clk_prepare_enable(mdwc->noc_aggr_south_clk);
+		clk_prepare_enable(mdwc->noc_sys_clk);
 		clk_prepare_enable(mdwc->noc_aggr_clk);
 		clk_prepare_enable(mdwc->utmi_clk);
 		clk_prepare_enable(mdwc->core_clk);
@@ -5841,6 +5878,14 @@ static int dwc3_msm_pm_resume(struct device *dev)
 	dbg_event(0xFF, "PM Res", 0);
 
 	atomic_set(&mdwc->pm_suspended, 0);
+
+	if (atomic_read(&dwc->in_lpm) &&
+			mdwc->drd_state == DRD_STATE_PERIPHERAL_SUSPEND) {
+		dev_info(mdwc->dev, "USB Resume start\n");
+#ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
+		place_marker("M - USB device resume started");
+#endif
+	}
 
 	if (!mdwc->in_host_mode) {
 		/* kick in otg state machine */
