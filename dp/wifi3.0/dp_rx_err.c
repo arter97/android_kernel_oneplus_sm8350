@@ -336,6 +336,7 @@ more_msdu_link_desc:
 		}
 
 		rx_desc_pool = &soc->rx_desc_buf[rx_desc->pool_id];
+		dp_ipa_rx_buf_smmu_mapping_lock(soc);
 		dp_ipa_handle_rx_buf_smmu_mapping(soc, rx_desc->nbuf,
 						  rx_desc_pool->buf_size,
 						  false);
@@ -343,6 +344,7 @@ more_msdu_link_desc:
 					     QDF_DMA_FROM_DEVICE,
 					     rx_desc_pool->buf_size);
 		rx_desc->unmapped = 1;
+		dp_ipa_rx_buf_smmu_mapping_unlock(soc);
 
 		rx_desc->rx_buf_start = qdf_nbuf_data(rx_desc->nbuf);
 
@@ -585,6 +587,7 @@ more_msdu_link_desc:
 		}
 
 		rx_desc_pool = &soc->rx_desc_buf[rx_desc->pool_id];
+		dp_ipa_rx_buf_smmu_mapping_lock(soc);
 		dp_ipa_handle_rx_buf_smmu_mapping(soc, nbuf,
 						  rx_desc_pool->buf_size,
 						  false);
@@ -592,6 +595,7 @@ more_msdu_link_desc:
 					     QDF_DMA_FROM_DEVICE,
 					     rx_desc_pool->buf_size);
 		rx_desc->unmapped = 1;
+		dp_ipa_rx_buf_smmu_mapping_unlock(soc);
 
 		QDF_NBUF_CB_RX_PKT_LEN(nbuf) = msdu_list.msdu_info[i].msdu_len;
 		rx_bufs_used++;
@@ -796,6 +800,7 @@ void dp_rx_err_handle_bar(struct dp_soc *soc,
 	unsigned char type, subtype;
 	uint16_t start_seq_num;
 	uint32_t tid;
+	QDF_STATUS status;
 	struct ieee80211_frame_bar *bar;
 
 	/*
@@ -824,9 +829,15 @@ void dp_rx_err_handle_bar(struct dp_soc *soc,
 	dp_info_rl("tid %u window_size %u start_seq_num %u",
 		   tid, peer->rx_tid[tid].ba_win_size, start_seq_num);
 
-	dp_rx_tid_update_wifi3(peer, tid,
-			       peer->rx_tid[tid].ba_win_size,
-			       start_seq_num);
+	status = dp_rx_tid_update_wifi3(peer, tid,
+					peer->rx_tid[tid].ba_win_size,
+					start_seq_num);
+	if (status != QDF_STATUS_SUCCESS) {
+		dp_err_rl("failed to handle bar frame update rx tid");
+		DP_STATS_INC(soc, rx.err.bar_handle_fail_count, 1);
+	} else {
+		DP_STATS_INC(soc, rx.err.ssn_update_count, 1);
+	}
 }
 
 /**
@@ -861,6 +872,7 @@ dp_rx_bar_frame_handle(struct dp_soc *soc,
 
 	nbuf = rx_desc->nbuf;
 	rx_desc_pool = &soc->rx_desc_buf[rx_desc->pool_id];
+	dp_ipa_rx_buf_smmu_mapping_lock(soc);
 	dp_ipa_handle_rx_buf_smmu_mapping(soc, nbuf,
 					  rx_desc_pool->buf_size,
 					  false);
@@ -868,6 +880,7 @@ dp_rx_bar_frame_handle(struct dp_soc *soc,
 				     QDF_DMA_FROM_DEVICE,
 				     rx_desc_pool->buf_size);
 	rx_desc->unmapped = 1;
+	dp_ipa_rx_buf_smmu_mapping_unlock(soc);
 	rx_tlv_hdr = qdf_nbuf_data(nbuf);
 	peer_id =
 		hal_rx_mpdu_start_sw_peer_id_get(soc->hal_soc,
@@ -2108,6 +2121,7 @@ dp_rx_wbm_err_process(struct dp_intr *int_ctx, struct dp_soc *soc,
 
 		nbuf = rx_desc->nbuf;
 		rx_desc_pool = &soc->rx_desc_buf[rx_desc->pool_id];
+		dp_ipa_rx_buf_smmu_mapping_lock(soc);
 		dp_ipa_handle_rx_buf_smmu_mapping(soc, nbuf,
 						  rx_desc_pool->buf_size,
 						  false);
@@ -2115,6 +2129,7 @@ dp_rx_wbm_err_process(struct dp_intr *int_ctx, struct dp_soc *soc,
 					     QDF_DMA_FROM_DEVICE,
 					     rx_desc_pool->buf_size);
 		rx_desc->unmapped = 1;
+		dp_ipa_rx_buf_smmu_mapping_unlock(soc);
 
 		/*
 		 * save the wbm desc info in nbuf TLV. We will need this
@@ -2503,6 +2518,7 @@ dp_rx_err_mpdu_pop(struct dp_soc *soc, uint32_t mac_id,
 
 					rx_desc_pool = &soc->
 						rx_desc_buf[rx_desc->pool_id];
+					dp_ipa_rx_buf_smmu_mapping_lock(soc);
 					dp_ipa_handle_rx_buf_smmu_mapping(
 							soc, msdu,
 							rx_desc_pool->buf_size,
@@ -2512,6 +2528,7 @@ dp_rx_err_mpdu_pop(struct dp_soc *soc, uint32_t mac_id,
 						QDF_DMA_FROM_DEVICE,
 						rx_desc_pool->buf_size);
 					rx_desc->unmapped = 1;
+					dp_ipa_rx_buf_smmu_mapping_unlock(soc);
 
 					QDF_TRACE(QDF_MODULE_ID_DP,
 						QDF_TRACE_LEVEL_DEBUG,
@@ -2635,6 +2652,7 @@ dp_wbm_int_err_mpdu_pop(struct dp_soc *soc, uint32_t mac_id,
 	struct hal_buf_info buf_info;
 	uint32_t rx_bufs_used = 0, msdu_cnt, i;
 	uint32_t rx_link_buf_info[HAL_RX_BUFFINFO_NUM_DWORDS];
+	struct rx_desc_pool *rx_desc_pool;
 
 	msdu = 0;
 
@@ -2662,10 +2680,23 @@ dp_wbm_int_err_mpdu_pop(struct dp_soc *soc, uint32_t mac_id,
 							soc,
 							msdu_list.sw_cookie[i]);
 				qdf_assert_always(rx_desc);
+				rx_desc_pool =
+					&soc->rx_desc_buf[rx_desc->pool_id];
 				msdu = rx_desc->nbuf;
 
-				qdf_nbuf_unmap_single(soc->osdev, msdu,
-						      QDF_DMA_FROM_DEVICE);
+				dp_ipa_rx_buf_smmu_mapping_lock(soc);
+				dp_ipa_handle_rx_buf_smmu_mapping(
+						soc, msdu,
+						rx_desc_pool->buf_size,
+						false);
+
+				qdf_nbuf_unmap_nbytes_single(
+							soc->osdev,
+							msdu,
+							QDF_DMA_FROM_DEVICE,
+							rx_desc_pool->buf_size);
+				rx_desc->unmapped = 1;
+				dp_ipa_rx_buf_smmu_mapping_unlock(soc);
 
 				dp_rx_buffer_pool_nbuf_free(soc, msdu,
 							    rx_desc->pool_id);
@@ -2740,6 +2771,7 @@ dp_handle_wbm_internal_error(struct dp_soc *soc, void *hal_desc,
 
 		if (rx_desc && rx_desc->nbuf) {
 			rx_desc_pool = &soc->rx_desc_buf[rx_desc->pool_id];
+			dp_ipa_rx_buf_smmu_mapping_lock(soc);
 			dp_ipa_handle_rx_buf_smmu_mapping(
 						soc, rx_desc->nbuf,
 						rx_desc_pool->buf_size,
@@ -2748,6 +2780,7 @@ dp_handle_wbm_internal_error(struct dp_soc *soc, void *hal_desc,
 						     QDF_DMA_FROM_DEVICE,
 						     rx_desc_pool->buf_size);
 			rx_desc->unmapped = 1;
+			dp_ipa_rx_buf_smmu_mapping_unlock(soc);
 
 			dp_rx_buffer_pool_nbuf_free(soc, rx_desc->nbuf,
 						    rx_desc->pool_id);

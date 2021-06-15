@@ -8548,14 +8548,17 @@ enum qca_wlan_twt_setup_state {
  * @QCA_WLAN_VENDOR_ATTR_TWT_SETUP_MAC_ADDR: 6-byte MAC address
  * Represents the MAC address of the peer for which the TWT session
  * is being configured. This is used in AP mode to represent the respective
- * client. In AP mode, this is an optional parameter for response and is
- * a required parameter for
- * 1. TWT SET Request
- * 2. TWT GET Request
- * 3. TWT TERMINATE Request
- * 4. TWT SUSPEND Request
+ * client
+ * In AP mode, this is a required parameter in response for
+ * 1. TWT SET
+ * 2. TWT GET
+ * 3. TWT TERMINATE
+ * 4. TWT SUSPEND
  * In STA mode, this is an optional parameter in request and response for
  * the above four TWT operations.
+ * In AP mode, this is a required parameter in request for
+ * 1. TWT GET
+ * 2. TWT TERMINATE
  *
  * @QCA_WLAN_VENDOR_ATTR_TWT_SETUP_MIN_WAKE_INTVL: Optional (u32)
  * Minimum tolerance limit of wake interval parameter in microseconds.
@@ -8655,6 +8658,8 @@ enum qca_wlan_vendor_attr_twt_setup {
  * request due to roaming in progress.
  * @QCA_WLAN_VENDOR_TWT_STATUS_CHANNEL_SWITCH_IN_PROGRESS: FW rejected the TWT
  * setup request due to channel switch in progress.
+ * @QCA_WLAN_VENDOR_TWT_STATUS_SCAN_IN_PROGRESS: FW rejected the TWT setup
+ * request due to scan in progress.
  */
 enum qca_wlan_vendor_twt_status {
 	QCA_WLAN_VENDOR_TWT_STATUS_OK = 0,
@@ -8678,6 +8683,7 @@ enum qca_wlan_vendor_twt_status {
 	QCA_WLAN_VENDOR_TWT_STATUS_SCC_MCC_CONCURRENCY_TERMINATE = 18,
 	QCA_WLAN_VENDOR_TWT_STATUS_ROAMING_IN_PROGRESS = 19,
 	QCA_WLAN_VENDOR_TWT_STATUS_CHANNEL_SWITCH_IN_PROGRESS = 20,
+	QCA_WLAN_VENDOR_TWT_STATUS_SCAN_IN_PROGRESS = 21,
 };
 
 /**
