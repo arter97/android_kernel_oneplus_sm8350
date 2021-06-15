@@ -3213,6 +3213,7 @@ int gsi_stop_channel(unsigned long chan_hdl)
 	int res;
 	uint32_t val;
 	struct gsi_chan_ctx *ctx;
+	unsigned long flags;
 
 	if (!gsi_ctx) {
 		pr_err("%s:%d gsi context not allocated\n", __func__, __LINE__);
@@ -3277,6 +3278,15 @@ int gsi_stop_channel(unsigned long chan_hdl)
 		GSIERR("chan=%lu busy try again\n", chan_hdl);
 		res = -GSI_STATUS_AGAIN;
 		goto free_lock;
+	}
+
+	/* If channel is stopped succesfully and has an event with IRQ type MSI
+		- clear IEOB */
+	if (ctx->evtr && ctx->evtr->props.intr == GSI_INTR_MSI) {
+		spin_lock_irqsave(&ctx->evtr->ring.slock, flags);
+		gsi_writel(1 << ctx->evtr->id, gsi_ctx->base +
+			GSI_EE_n_CNTXT_SRC_IEOB_IRQ_CLR_OFFS(gsi_ctx->per.ee));
+		spin_unlock_irqrestore(&ctx->evtr->ring.slock, flags);
 	}
 
 	res = GSI_STATUS_SUCCESS;
@@ -3652,6 +3662,7 @@ EXPORT_SYMBOL(gsi_query_channel_info);
 int gsi_is_channel_empty(unsigned long chan_hdl, bool *is_empty)
 {
 	struct gsi_chan_ctx *ctx;
+	struct gsi_evt_ctx *ev_ctx;
 	spinlock_t *slock;
 	unsigned long flags;
 	uint64_t rp;
@@ -3687,8 +3698,11 @@ int gsi_is_channel_empty(unsigned long chan_hdl, bool *is_empty)
 	spin_lock_irqsave(slock, flags);
 
 	if (ctx->props.dir == GSI_CHAN_DIR_FROM_GSI && ctx->evtr) {
-		rp = gsi_readl(gsi_ctx->base +
-			GSI_EE_n_EV_CH_k_CNTXT_4_OFFS(ctx->evtr->id, ee));
+		ev_ctx = &gsi_ctx->evtr[ctx->evtr->id];
+		/* Read the event ring rp from DDR to avoid mismatch */
+		rp = ev_ctx->props.gsi_read_event_ring_rp(&ev_ctx->props,
+					ev_ctx->id, ee);
+
 		rp |= ctx->evtr->ring.rp & 0xFFFFFFFF00000000;
 		ctx->evtr->ring.rp = rp;
 
