@@ -347,7 +347,7 @@ static const struct pll_vco gpll3_vco[] = {
 	{ 700000000, 1400000000, 0 },
 };
 
-static struct clk_alpha_pll gpll3_out_main = {
+static struct clk_alpha_pll gpll3 = {
 	.offset = 0x22000,
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_DEFAULT],
 	.flags = SUPPORTS_SLEW,
@@ -355,7 +355,7 @@ static struct clk_alpha_pll gpll3_out_main = {
 	.num_vco = ARRAY_SIZE(gpll3_vco),
 	.clkr = {
 		.hw.init = &(struct clk_init_data){
-			.name = "gpll3_out_main",
+			.name = "gpll3",
 			.parent_names = (const char *[]){ "bi_tcxo" },
 			.num_parents = 1,
 			.ops = &clk_alpha_pll_slew_ops,
@@ -366,6 +366,20 @@ static struct clk_alpha_pll gpll3_out_main = {
 			.rate_max = (unsigned long[VDD_NUM]) {
 				[VDD_NOMINAL] = 1400000000},
 		},
+	},
+};
+
+static struct clk_alpha_pll_postdiv gpll3_out_main = {
+	.offset = 0x22000,
+	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_DEFAULT],
+	.width = 4,
+	.post_div_shift = 8,
+	.clkr.hw.init = &(struct clk_init_data){
+		.name = "gpll3_out_main",
+		.parent_names = (const char *[]){ "gpll3" },
+		.num_parents = 1,
+		.flags = CLK_SET_RATE_PARENT,
+		.ops = &clk_alpha_pll_postdiv_ro_ops,
 	},
 };
 
@@ -892,12 +906,21 @@ static struct clk_rcg2 byte0_clk_src = {
 	.mnd_width = 0,
 	.hid_width = 5,
 	.parent_map = gcc_parent_map_5,
-	.clkr.hw.init = &(struct clk_init_data){
-		.name = "byte0_clk_src",
-		.parent_names = gcc_parent_names_5,
-		.num_parents = ARRAY_SIZE(gcc_parent_names_5),
-		.flags = CLK_SET_RATE_PARENT,
-		.ops = &clk_byte2_ops,
+	.clkr = {
+		.hw.init = &(struct clk_init_data){
+			.name = "byte0_clk_src",
+			.parent_names = gcc_parent_names_5,
+			.num_parents = ARRAY_SIZE(gcc_parent_names_5),
+			.flags = CLK_SET_RATE_PARENT | CLK_GET_RATE_NOCACHE,
+			.ops = &clk_byte2_ops,
+		},
+		.vdd_data = {
+			.vdd_class = &vdd_cx,
+			.num_rate_max = VDD_NUM,
+			.rate_max = (unsigned long[VDD_NUM]) {
+				[VDD_LOW] = 125000000,
+				[VDD_NOMINAL] = 187500000},
+		},
 	},
 };
 
@@ -1004,10 +1027,10 @@ static const struct freq_tbl ftbl_gfx3d_clk_src[] = {
 	F(270000000, P_GPLL6_OUT_AUX,  4, 0, 0),
 	F(320000000, P_GPLL0_OUT_MAIN, 2.5, 0, 0),
 	F(400000000, P_GPLL0_OUT_MAIN, 2, 0, 0),
-	F(484800000, P_GPLL3_OUT_MAIN, 2, 0, 0),
-	F(523200000, P_GPLL3_OUT_MAIN, 2, 0, 0),
-	F(550000000, P_GPLL3_OUT_MAIN, 2, 0, 0),
-	F(598000000, P_GPLL3_OUT_MAIN, 2, 0, 0),
+	F(484800000, P_GPLL3_OUT_MAIN, 1, 0, 0),
+	F(523200000, P_GPLL3_OUT_MAIN, 1, 0, 0),
+	F(550000000, P_GPLL3_OUT_MAIN, 1, 0, 0),
+	F(598000000, P_GPLL3_OUT_MAIN, 1, 0, 0),
 	{ }
 };
 
@@ -1249,12 +1272,21 @@ static struct clk_rcg2 pclk0_clk_src = {
 	.mnd_width = 8,
 	.hid_width = 5,
 	.parent_map = gcc_parent_map_12,
-	.clkr.hw.init = &(struct clk_init_data){
-		.name = "pclk0_clk_src",
-		.parent_names = gcc_parent_names_12,
-		.num_parents = ARRAY_SIZE(gcc_parent_names_12),
-		.flags = CLK_SET_RATE_PARENT,
-		.ops = &clk_pixel_ops,
+	.clkr = {
+		.hw.init = &(struct clk_init_data){
+			.name = "pclk0_clk_src",
+			.parent_names = gcc_parent_names_12,
+			.num_parents = ARRAY_SIZE(gcc_parent_names_12),
+			.flags = CLK_SET_RATE_PARENT | CLK_GET_RATE_NOCACHE,
+			.ops = &clk_pixel_ops,
+		},
+		.vdd_data = {
+			.vdd_class = &vdd_cx,
+			.num_rate_max = VDD_NUM,
+			.rate_max = (unsigned long[VDD_NUM]) {
+				[VDD_LOW] = 166666667,
+				[VDD_NOMINAL] = 250000000},
+		},
 	},
 };
 
@@ -2989,6 +3021,7 @@ static struct clk_regmap *gcc_qcs404_clocks[] = {
 	[GCC_GPLL0_AO_OUT_MAIN] = &gpll0_ao_out_main.clkr,
 	[GCC_GPLL0_SLEEP_CLK_SRC] = &gpll0_sleep_clk_src.clkr,
 	[GCC_GPLL1_OUT_MAIN] = &gpll1_out_main.clkr,
+	[GCC_GPLL3] = &gpll3.clkr,
 	[GCC_GPLL3_OUT_MAIN] = &gpll3_out_main.clkr,
 	[GCC_GPLL4_OUT_MAIN] = &gpll4_out_main.clkr,
 	[GCC_GPLL6] = &gpll6.clkr,
@@ -3109,7 +3142,7 @@ static int gcc_qcs404_probe(struct platform_device *pdev)
 	if (IS_ERR(regmap))
 		return PTR_ERR(regmap);
 
-	clk_alpha_pll_configure(&gpll3_out_main, regmap, &gpll3_config);
+	clk_alpha_pll_configure(&gpll3, regmap, &gpll3_config);
 
 	ret = qcom_cc_really_probe(pdev, &gcc_qcs404_desc, regmap);
 	if (ret) {
