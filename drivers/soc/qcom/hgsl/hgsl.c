@@ -157,7 +157,7 @@ static uint32_t hgsl_dbq_get_state_info(uint32_t *va_base, uint32_t command,
 		break;
 	}
 
-	return *dest;
+	return ((dest != NULL) ? (*dest) : (0));
 }
 
 static void hgsl_dbq_set_state_info(uint32_t *va_base, uint32_t command,
