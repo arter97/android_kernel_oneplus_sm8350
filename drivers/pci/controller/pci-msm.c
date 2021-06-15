@@ -7114,7 +7114,7 @@ static int pcie_i2c_ctrl_probe(struct i2c_client *client,
 		client_id = data->client_id;
 	}
 
-	if (rc_index >= MAX_RC_NUM) {
+	if (rc_index >= MAX_RC_NUM || rc_index == -EINVAL) {
 		dev_err(&client->dev, "invalid RC index %d\n", rc_index);
 		return -EINVAL;
 	}
