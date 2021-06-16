@@ -305,10 +305,16 @@ enum msm_usb_irq {
 	PWR_EVNT_IRQ,
 	DP_HS_PHY_IRQ,
 	DM_HS_PHY_IRQ,
-	SS_PHY_IRQ,
 	DP_HS_PHY_IRQ_1,
 	DM_HS_PHY_IRQ_1,
+	DP_HS_PHY_IRQ_2,
+	DM_HS_PHY_IRQ_2,
+	DP_HS_PHY_IRQ_3,
+	DM_HS_PHY_IRQ_3,
+	SS_PHY_IRQ,
 	SS_PHY_IRQ_1,
+	SS_PHY_IRQ_2,
+	SS_PHY_IRQ_3,
 	USB_MAX_IRQ
 };
 
@@ -366,11 +372,6 @@ static const struct usb_irq_info usb_irq_info[USB_MAX_IRQ] = {
 	  IRQF_TRIGGER_RISING | IRQF_ONESHOT | IRQF_EARLY_RESUME,
 	  false,
 	},
-	{ "ss_phy_irq",
-	  IRQF_TRIGGER_HIGH | IRQF_ONESHOT | IRQ_TYPE_LEVEL_HIGH |
-		 IRQF_EARLY_RESUME,
-	  false,
-	},
 	{ "dp_hs_phy_irq1",
 	  IRQF_TRIGGER_RISING | IRQF_ONESHOT | IRQF_EARLY_RESUME,
 	  false,
@@ -379,7 +380,38 @@ static const struct usb_irq_info usb_irq_info[USB_MAX_IRQ] = {
 	  IRQF_TRIGGER_RISING | IRQF_ONESHOT | IRQF_EARLY_RESUME,
 	  false,
 	},
+	{ "dp_hs_phy_irq2",
+	  IRQF_TRIGGER_RISING | IRQF_ONESHOT | IRQF_EARLY_RESUME,
+	  false,
+	},
+	{ "dm_hs_phy_irq2",
+	  IRQF_TRIGGER_RISING | IRQF_ONESHOT | IRQF_EARLY_RESUME,
+	  false,
+	},
+	{ "dp_hs_phy_irq3",
+	  IRQF_TRIGGER_RISING | IRQF_ONESHOT | IRQF_EARLY_RESUME,
+	  false,
+	},
+	{ "dm_hs_phy_irq3",
+	  IRQF_TRIGGER_RISING | IRQF_ONESHOT | IRQF_EARLY_RESUME,
+	  false,
+	},
+	{ "ss_phy_irq",
+	  IRQF_TRIGGER_HIGH | IRQF_ONESHOT | IRQ_TYPE_LEVEL_HIGH |
+		 IRQF_EARLY_RESUME,
+	  false,
+	},
 	{ "ss_phy_irq1",
+	  IRQF_TRIGGER_HIGH | IRQF_ONESHOT | IRQ_TYPE_LEVEL_HIGH |
+		 IRQF_EARLY_RESUME,
+	  false,
+	},
+	{ "ss_phy_irq2",
+	  IRQF_TRIGGER_HIGH | IRQF_ONESHOT | IRQ_TYPE_LEVEL_HIGH |
+		 IRQF_EARLY_RESUME,
+	  false,
+	},
+	{ "ss_phy_irq3",
 	  IRQF_TRIGGER_HIGH | IRQF_ONESHOT | IRQ_TYPE_LEVEL_HIGH |
 		 IRQF_EARLY_RESUME,
 	  false,
@@ -3044,66 +3076,52 @@ static void configure_usb_wakeup_interrupt(struct dwc3_msm *mdwc,
 
 static void configure_usb_wakeup_interrupts(struct dwc3_msm *mdwc, bool enable)
 {
+	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
+	int i;
+
 	if (!enable)
 		goto disable_usb_irq;
 
-	if (mdwc->hs_phy[0]->flags & PHY_LS_MODE) {
-		configure_usb_wakeup_interrupt(mdwc,
-			&mdwc->wakeup_irq[DM_HS_PHY_IRQ],
-			IRQ_TYPE_EDGE_FALLING, enable);
-	} else if (mdwc->hs_phy[0]->flags & PHY_HSFS_MODE) {
-		configure_usb_wakeup_interrupt(mdwc,
-			&mdwc->wakeup_irq[DP_HS_PHY_IRQ],
-			IRQ_TYPE_EDGE_FALLING, enable);
-	} else {
-		configure_usb_wakeup_interrupt(mdwc,
-			&mdwc->wakeup_irq[DP_HS_PHY_IRQ],
-			IRQ_TYPE_EDGE_RISING, true);
-		configure_usb_wakeup_interrupt(mdwc,
-			&mdwc->wakeup_irq[DM_HS_PHY_IRQ],
-			IRQ_TYPE_EDGE_RISING, true);
-	}
-
-	if (mdwc->dual_port) {
-		if (mdwc->hs_phy[1]->flags & PHY_LS_MODE) {
+	for (i = 0; i < mdwc->num_hsphy; i++) {
+		if (mdwc->hs_phy[i]->flags & PHY_LS_MODE) {
 			configure_usb_wakeup_interrupt(mdwc,
-				&mdwc->wakeup_irq[DM_HS_PHY_IRQ_1],
+				&mdwc->wakeup_irq[DM_HS_PHY_IRQ + 2 * i],
 				IRQ_TYPE_EDGE_FALLING, enable);
-		} else if (mdwc->hs_phy[1]->flags & PHY_HSFS_MODE) {
+		} else if (mdwc->hs_phy[i]->flags & PHY_HSFS_MODE) {
 			configure_usb_wakeup_interrupt(mdwc,
-				&mdwc->wakeup_irq[DP_HS_PHY_IRQ_1],
+				&mdwc->wakeup_irq[DP_HS_PHY_IRQ + 2 * i],
 				IRQ_TYPE_EDGE_FALLING, enable);
 		} else {
 			configure_usb_wakeup_interrupt(mdwc,
-				&mdwc->wakeup_irq[DP_HS_PHY_IRQ_1],
+				&mdwc->wakeup_irq[DP_HS_PHY_IRQ + 2 * i],
 				IRQ_TYPE_EDGE_RISING, true);
 			configure_usb_wakeup_interrupt(mdwc,
-				&mdwc->wakeup_irq[DM_HS_PHY_IRQ_1],
+				&mdwc->wakeup_irq[DM_HS_PHY_IRQ + 2 * i],
 				IRQ_TYPE_EDGE_RISING, true);
 		}
 	}
 
-	configure_usb_wakeup_interrupt(mdwc,
-		&mdwc->wakeup_irq[SS_PHY_IRQ],
-		IRQF_TRIGGER_HIGH | IRQ_TYPE_LEVEL_HIGH, enable);
-	configure_usb_wakeup_interrupt(mdwc,
-		&mdwc->wakeup_irq[SS_PHY_IRQ_1],
-		IRQF_TRIGGER_HIGH | IRQ_TYPE_LEVEL_HIGH, enable);
+	if (dwc->maximum_speed >= USB_SPEED_SUPER)
+		for (i = 0; i < mdwc->num_ssphy; i++)
+			configure_usb_wakeup_interrupt(mdwc,
+				&mdwc->wakeup_irq[SS_PHY_IRQ + i],
+				IRQF_TRIGGER_HIGH | IRQ_TYPE_LEVEL_HIGH, enable);
+
 	return;
 
 disable_usb_irq:
-	configure_usb_wakeup_interrupt(mdwc,
-			&mdwc->wakeup_irq[DP_HS_PHY_IRQ_1], 0, enable);
-	configure_usb_wakeup_interrupt(mdwc,
-			&mdwc->wakeup_irq[DM_HS_PHY_IRQ_1], 0, enable);
-	configure_usb_wakeup_interrupt(mdwc,
-			&mdwc->wakeup_irq[SS_PHY_IRQ_1], 0, enable);
-	configure_usb_wakeup_interrupt(mdwc,
-			&mdwc->wakeup_irq[DP_HS_PHY_IRQ], 0, enable);
-	configure_usb_wakeup_interrupt(mdwc,
-			&mdwc->wakeup_irq[DM_HS_PHY_IRQ], 0, enable);
-	configure_usb_wakeup_interrupt(mdwc,
-			&mdwc->wakeup_irq[SS_PHY_IRQ], 0, enable);
+	for (i = 0; i < mdwc->num_hsphy; i++) {
+		configure_usb_wakeup_interrupt(mdwc,
+				&mdwc->wakeup_irq[DP_HS_PHY_IRQ + 2 * i], 0, enable);
+		configure_usb_wakeup_interrupt(mdwc,
+				&mdwc->wakeup_irq[DM_HS_PHY_IRQ + 2 * i], 0, enable);
+	}
+
+	if (dwc->maximum_speed >= USB_SPEED_SUPER)
+		for (i = 0; i < mdwc->num_ssphy; i++)
+			configure_usb_wakeup_interrupt(mdwc,
+					&mdwc->wakeup_irq[SS_PHY_IRQ + i], 0, enable);
+
 }
 
 static void configure_nonpdc_usb_interrupt(struct dwc3_msm *mdwc,
@@ -5173,18 +5191,18 @@ static int dwc3_msm_remove(struct platform_device *pdev)
 
 	if (mdwc->wakeup_irq[HS_PHY_IRQ].irq)
 		disable_irq(mdwc->wakeup_irq[HS_PHY_IRQ].irq);
-	if (mdwc->wakeup_irq[DP_HS_PHY_IRQ].irq)
-		disable_irq(mdwc->wakeup_irq[DP_HS_PHY_IRQ].irq);
-	if (mdwc->wakeup_irq[DM_HS_PHY_IRQ].irq)
-		disable_irq(mdwc->wakeup_irq[DM_HS_PHY_IRQ].irq);
-	if (mdwc->wakeup_irq[SS_PHY_IRQ].irq)
-		disable_irq(mdwc->wakeup_irq[SS_PHY_IRQ].irq);
-	if (mdwc->wakeup_irq[DP_HS_PHY_IRQ_1].irq)
-		disable_irq(mdwc->wakeup_irq[DP_HS_PHY_IRQ_1].irq);
-	if (mdwc->wakeup_irq[DM_HS_PHY_IRQ_1].irq)
-		disable_irq(mdwc->wakeup_irq[DM_HS_PHY_IRQ_1].irq);
-	if (mdwc->wakeup_irq[SS_PHY_IRQ_1].irq)
-		disable_irq(mdwc->wakeup_irq[SS_PHY_IRQ_1].irq);
+	for (i = 0; i < mdwc->num_hsphy; i++) {
+		if (mdwc->wakeup_irq[DP_HS_PHY_IRQ + 2 * i].irq)
+			disable_irq(mdwc->wakeup_irq[DP_HS_PHY_IRQ + 2 * i].irq);
+		if (mdwc->wakeup_irq[DM_HS_PHY_IRQ + 2 * i].irq)
+			disable_irq(mdwc->wakeup_irq[DM_HS_PHY_IRQ + 2 * i].irq);
+	}
+
+	if (dwc->maximum_speed >= USB_SPEED_SUPER)
+		for (i = 0; i < mdwc->num_ssphy; i++)
+			if (mdwc->wakeup_irq[SS_PHY_IRQ + i].irq)
+				disable_irq(mdwc->wakeup_irq[SS_PHY_IRQ + i].irq);
+
 	disable_irq(mdwc->wakeup_irq[PWR_EVNT_IRQ].irq);
 
 	clk_disable_unprepare(mdwc->utmi_clk);
