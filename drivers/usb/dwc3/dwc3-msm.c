@@ -2281,7 +2281,7 @@ static void dwc3_restart_usb_work(struct work_struct *w)
 
 	dev_dbg(mdwc->dev, "%s\n", __func__);
 
-	if (atomic_read(&dwc->in_lpm) || dwc->dr_mode != USB_DR_MODE_OTG) {
+	if (atomic_read(&dwc->in_lpm) || dwc->dr_mode <= USB_DR_MODE_HOST) {
 		dev_dbg(mdwc->dev, "%s failed!!!\n", __func__);
 		return;
 	}
@@ -3215,7 +3215,7 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool force_power_collapse,
 		}
 	}
 
-	if (!mdwc->vbus_active && dwc->dr_mode == USB_DR_MODE_OTG &&
+	if (!mdwc->vbus_active && dwc->dr_mode >= USB_DR_MODE_PERIPHERAL &&
 		mdwc->drd_state == DRD_STATE_PERIPHERAL) {
 		/*
 		 * In some cases, the pm_runtime_suspend may be called by
@@ -4066,7 +4066,7 @@ static int dwc3_msm_vbus_notifier(struct notifier_block *nb,
 	}
 
 	mdwc->ext_idx = enb->idx;
-	if (dwc->dr_mode == USB_DR_MODE_OTG && !mdwc->in_restart)
+	if (dwc->dr_mode >= USB_DR_MODE_PERIPHERAL && !mdwc->in_restart)
 		queue_work(mdwc->dwc3_wq, &mdwc->resume_work);
 
 	return NOTIFY_DONE;
