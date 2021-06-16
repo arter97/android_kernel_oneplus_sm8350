@@ -845,6 +845,9 @@ try_again:
 	 * Switch procedure. SPI mode doesn't support CMD11.
 	 */
 	if (!mmc_host_is_spi(host) && rocr &&
+#if defined(CONFIG_SDC_QTI)
+		(ocr & SD_OCR_S18R) &&
+#endif
 	   ((*rocr & 0x41000000) == 0x41000000)) {
 		err = mmc_set_uhs_voltage(host, pocr);
 		if (err == -EAGAIN) {
