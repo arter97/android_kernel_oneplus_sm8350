@@ -18,6 +18,7 @@
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 #include <soc/qcom/boot_stats.h>
+#include <linux/hashtable.h>
 
 #define MARKER_STRING_WIDTH 40
 #define TS_WHOLE_NUM_WIDTH 8
@@ -54,6 +55,7 @@ struct boot_marker {
 	char marker_name[MARKER_STRING_WIDTH];
 	unsigned long long timer_value;
 	struct list_head list;
+	struct hlist_node hash;
 	spinlock_t slock;
 };
 
@@ -61,6 +63,7 @@ static struct boot_marker boot_marker_list;
 static struct kobject *bootkpi_obj;
 static struct attribute_group *attr_grp;
 static int num_markers;
+static DECLARE_HASHTABLE(marker_htable, 5);
 
 unsigned long long msm_timer_get_sclk_ticks(void)
 {
@@ -109,6 +112,7 @@ static void _destroy_boot_marker(const char *name)
 			list) {
 		if (strnstr(marker->marker_name, name,
 			 strlen(marker->marker_name))) {
+			hash_del(&marker->hash);
 			list_del(&marker->list);
 			kfree(marker);
 		}
@@ -116,14 +120,52 @@ static void _destroy_boot_marker(const char *name)
 	spin_unlock(&boot_marker_list.slock);
 }
 
+/*
+ * Function to calculate the cumulative sum of all
+ * the characters in the string
+ */
+static unsigned int calculate_marker_charsum(const char *name)
+{
+	unsigned int sum = 0;
+	int len = strlen(name);
+
+	do {
+		sum += (unsigned int)name[--len];
+	} while (len);
+
+	return sum;
+}
+
+static struct boot_marker *find_entry(const char *name)
+{
+	struct boot_marker *marker;
+	unsigned int sum = calculate_marker_charsum(name);
+
+	hash_for_each_possible(marker_htable, marker, hash, sum) {
+		if (!strcmp(marker->marker_name, name))
+			return marker;
+	}
+
+	return NULL;
+}
+
 static void _create_boot_marker(const char *name,
 		unsigned long long timer_value)
 {
 	struct boot_marker *new_boot_marker;
+	struct boot_marker *marker;
+	unsigned int sum;
 
 	if (num_markers >= MAX_NUM_MARKERS) {
-		pr_err("boot_stats: Cannot create marker. Limit exceeded!\n");
-		BUG();
+		pr_err("boot_stats: Cannot create marker %s. Limit exceeded!\n",
+			name);
+		return;
+	}
+
+	marker = find_entry(name);
+	if (marker) {
+		marker->timer_value = timer_value;
+		return;
 	}
 
 	pr_debug("%-*s%*llu.%0*llu seconds\n",
@@ -139,9 +181,11 @@ static void _create_boot_marker(const char *name,
 	strlcpy(new_boot_marker->marker_name, name,
 			sizeof(new_boot_marker->marker_name));
 	new_boot_marker->timer_value = timer_value;
+	sum = calculate_marker_charsum(new_boot_marker->marker_name);
 
 	spin_lock(&boot_marker_list.slock);
 	list_add_tail(&(new_boot_marker->list), &(boot_marker_list.list));
+	hash_add(marker_htable, &new_boot_marker->hash, sum);
 	spin_unlock(&boot_marker_list.slock);
 	num_markers++;
 }
