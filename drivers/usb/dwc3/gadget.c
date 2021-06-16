@@ -4403,7 +4403,8 @@ int dwc3_gadget_init(struct dwc3 *dwc)
 	 * sure we're starting from a well known location.
 	 */
 
-	dwc->num_eps = DWC3_ENDPOINTS_NUM;
+	if (!dwc->num_eps)
+		dwc->num_eps = DWC3_ENDPOINTS_NUM;
 	ret = dwc3_gadget_init_endpoints(dwc, dwc->num_eps);
 	if (ret)
 		goto err3;
