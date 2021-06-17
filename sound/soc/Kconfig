@@ -53,6 +53,14 @@ config SND_CTL_HASHTABLE
 	  consumes much time during bootup. Enable this will use hash table instead of
 	  linked list to check new kcontrol and reduce much time for sound card registration.
 
+config DISABLE_SND_CTL_FIND_HOLE
+	bool "Disable find hole"
+	help
+	  This disables find hole before adding new kcontrol for sound card. The function
+	  snd_ctl_find_hole will consumes much time during bootup but it doesn't take effect
+	  in some platforms. Enable this will bypass snd_ctl_find_hole to speed up sound
+	  card registration.
+
 # All the supported SoCs
 source "sound/soc/adi/Kconfig"
 source "sound/soc/amd/Kconfig"
