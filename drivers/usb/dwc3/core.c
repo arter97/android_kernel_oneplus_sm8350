@@ -601,12 +601,17 @@ static int dwc3_core_ulpi_init(struct dwc3 *dwc)
  */
 static int dwc3_phy_setup(struct dwc3 *dwc)
 {
+	int i;
 	u32 reg;
 
+	if (dwc->maximum_speed <= USB_SPEED_HIGH)
+		goto hs_phy_setup;
+
 	reg = dwc3_readl(dwc->regs, DWC3_GUSB3PIPECTL(0));
-	if (dwc->dual_port) {
-		if (reg != dwc3_readl(dwc->regs, DWC3_GUSB3PIPECTL(1)))
-			dev_warn(dwc->dev, "Reset values of pipectl registers are different!\n");
+	for (i = 1; i < dwc->num_ssphy; i++) {
+		if (reg != dwc3_readl(dwc->regs, DWC3_GUSB3PIPECTL(i)))
+			dev_warn(dwc->dev,
+				"Reset values of pipectl registers 0 and  %d  are different!\n", i);
 	}
 
 	/*
@@ -658,14 +663,15 @@ static int dwc3_phy_setup(struct dwc3 *dwc)
 		reg |= (DWC3_GUSB3PIPECTL_UX_EXIT_PX |
 			DWC3_GUSB3PIPECTL_P3EXSIGP2);
 
-	dwc3_writel(dwc->regs, DWC3_GUSB3PIPECTL(0), reg);
-	if (dwc->dual_port)
-		dwc3_writel(dwc->regs, DWC3_GUSB3PIPECTL(1), reg);
+	for (i = 0; i < dwc->num_ssphy; i++)
+		dwc3_writel(dwc->regs, DWC3_GUSB3PIPECTL(i), reg);
 
+hs_phy_setup:
 	reg = dwc3_readl(dwc->regs, DWC3_GUSB2PHYCFG(0));
-	if (dwc->dual_port) {
-		if (reg != dwc3_readl(dwc->regs, DWC3_GUSB2PHYCFG(1)))
-			dev_warn(dwc->dev, "Reset values of usb2phycfg registers are different!\n");
+	for (i = 1; i < dwc->num_hsphy; i++) {
+		if (reg != dwc3_readl(dwc->regs, DWC3_GUSB2PHYCFG(i)))
+			dev_warn(dwc->dev,
+				"Reset values of usb2phycfg registers 0 and %d are different\n", i);
 	}
 
 	/* Select the HS PHY interface */
@@ -728,9 +734,8 @@ static int dwc3_phy_setup(struct dwc3 *dwc)
 	if (dwc->dis_u2_freeclk_exists_quirk)
 		reg &= ~DWC3_GUSB2PHYCFG_U2_FREECLK_EXISTS;
 
-	dwc3_writel(dwc->regs, DWC3_GUSB2PHYCFG(0), reg);
-	if (dwc->dual_port)
-		dwc3_writel(dwc->regs, DWC3_GUSB2PHYCFG(1), reg);
+	for (i = 0; i < dwc->num_hsphy; i++)
+		dwc3_writel(dwc->regs, DWC3_GUSB2PHYCFG(i), reg);
 
 	return 0;
 }
