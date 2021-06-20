@@ -6,9 +6,15 @@
 #ifndef __UAPI_CAM_TFE_H__
 #define __UAPI_CAM_TFE_H__
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+#include <media/cam_defs.h>
+#include <media/cam_isp_tfe.h>
+#include <media/cam_cpas.h>
+#else
 #include <camera/media/cam_defs.h>
 #include <camera/media/cam_isp_tfe.h>
 #include <camera/media/cam_cpas.h>
+#endif
 
 
 /* ISP TFE driver name */

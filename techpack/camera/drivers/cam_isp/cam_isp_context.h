@@ -270,6 +270,7 @@ struct cam_isp_context_event_record {
  * @custom_enabled:            Custom HW enabled for this ctx
  * @use_frame_header_ts:       Use frame header for qtimer ts
  * @support_consumed_addr:     Indicate whether HW has last consumed addr reg
+ * @is_anchor_instance:        Indicate whether this HW is used to process anchor frame
  * @apply_in_progress          Whether request apply is in progress
  * @init_timestamp:            Timestamp at which this context is initialized
  * @isp_device_type:           ISP device type
@@ -278,6 +279,7 @@ struct cam_isp_context_event_record {
  * @workq:                     Worker thread for offline ife
  * @trigger_id:                ID provided by CRM for each ctx on the link
  * @last_bufdone_error_apply_req_id:  last bufdone error apply request id
+ * @apply_fail_cnt_on_bubble:  Count of apply fails after bubble
  *
  */
 struct cam_isp_context {
@@ -318,6 +320,7 @@ struct cam_isp_context {
 	bool                                  custom_enabled;
 	bool                                  use_frame_header_ts;
 	bool                                  support_consumed_addr;
+    bool                                  is_anchor_instance;
 	atomic_t                              apply_in_progress;
 	unsigned int                          init_timestamp;
 	uint32_t                              isp_device_type;
@@ -325,6 +328,7 @@ struct cam_isp_context {
 	struct cam_req_mgr_core_workq        *workq;
 	int32_t                               trigger_id;
 	int64_t                               last_bufdone_error_apply_req_id;
+	uint32_t                              apply_fail_cnt_on_bubble;
 };
 
 /**

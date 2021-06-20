@@ -1896,7 +1896,8 @@ static int cam_smmu_map_buffer_validate(struct dma_buf *buf,
 		table = dma_buf_map_attachment(attach, dma_dir);
 		if (IS_ERR_OR_NULL(table)) {
 			rc = PTR_ERR(table);
-			CAM_ERR(CAM_SMMU, "Error: dma map attachment failed");
+			CAM_ERR(CAM_SMMU, "Error: dma map attachment failed, rc:%d, table:%p",
+				rc, table);
 			goto err_detach;
 		}
 

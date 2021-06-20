@@ -105,6 +105,7 @@ struct cam_ife_hw_mgr_debug {
  * @hw_enabled              Array to indicate active HW
  * @internal_cdm            Indicate whether context uses internal CDM
  * @pf_mid_found            in page fault, mid found for this ctx.
+ * @is_anchor_instance:     Indicate whether it is anchor instance
  */
 struct cam_ife_hw_mgr_ctx {
 	struct list_head                list;
@@ -160,6 +161,7 @@ struct cam_ife_hw_mgr_ctx {
 	bool                            dsp_enabled;
 	bool                            internal_cdm;
 	bool                            pf_mid_found;
+    bool                            is_anchor_instance;
 };
 
 /**

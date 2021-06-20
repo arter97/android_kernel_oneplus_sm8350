@@ -6,11 +6,19 @@
 #ifndef __UAPI_CAM_ISP_H__
 #define __UAPI_CAM_ISP_H__
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+#include <media/cam_defs.h>
+#include <media/cam_isp_vfe.h>
+#include <media/cam_isp_ife.h>
+#include <media/cam_isp_sfe.h>
+#include <media/cam_cpas.h>
+#else
 #include <camera/media/cam_defs.h>
 #include <camera/media/cam_isp_vfe.h>
 #include <camera/media/cam_isp_ife.h>
 #include <camera/media/cam_isp_sfe.h>
 #include <camera/media/cam_cpas.h>
+#endif
 
 /* ISP driver name */
 #define CAM_ISP_DEV_NAME                        "cam-isp"
@@ -121,6 +129,7 @@
 #define CAM_ISP_GENERIC_BLOB_TYPE_CSID_QCFA_CONFIG          12
 #define CAM_ISP_GENERIC_BLOB_TYPE_SENSOR_BLANKING_CONFIG    13
 #define CAM_ISP_GENERIC_BLOB_TYPE_TPG_CORE_CONFIG           14
+#define CAM_ISP_GENERIC_BLOB_TYPE_ANCHOR_CONFIG             15
 #define CAM_ISP_GENERIC_BLOB_TYPE_SFE_CLOCK_CONFIG          21
 #define CAM_ISP_GENERIC_BLOB_TYPE_SFE_CORE_CONFIG           22
 #define CAM_ISP_GENERIC_BLOB_TYPE_SFE_OUT_CONFIG            23
@@ -784,6 +793,11 @@ struct cam_isp_tpg_core_config {
 	__u32   qcfa_en;
 	__u32   pix_pattern;
 	__u32   tpg_params[6];
+} __attribute__((packed));
+
+struct cam_isp_anchor_config {
+    __u32   anchor_instance;
+    __u32   reserved;
 } __attribute__((packed));
 
 /**

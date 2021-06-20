@@ -45,7 +45,7 @@
 #define CAM_RPMH_BCM_MNOC_INDEX 4
 #define CAM_RPMH_BCM_INFO_MAX   5
 
-#define CAM_CPAS_MONITOR_MAX_ENTRIES   20
+#define CAM_CPAS_MONITOR_MAX_ENTRIES   100
 #define CAM_CPAS_INC_MONITOR_HEAD(head, ret) \
 	div_u64_rem(atomic64_add_return(1, head),\
 	CAM_CPAS_MONITOR_MAX_ENTRIES, (ret))
@@ -224,6 +224,7 @@ struct cam_cpas_monitor {
 	uint32_t                            be_ddr;
 	uint32_t                            fe_mnoc;
 	uint32_t                            be_mnoc;
+	uint32_t                            be_shub;
 };
 
 /**

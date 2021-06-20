@@ -123,11 +123,13 @@ struct cam_hw_done_event_data {
  */
 struct cam_hw_acquire_args {
 	void                        *context_data;
+	uint32_t                     ctx_id;
 	cam_hw_event_cb_func         event_cb;
 	uint32_t                     num_acq;
 	uint32_t                     acquire_info_size;
 	uintptr_t                    acquire_info;
 	void                        *ctxt_to_hw_map;
+	uint32_t                     hw_mgr_ctx_id;
 	bool                         custom_enabled;
 	bool                         use_frame_header_ts;
 	bool                         support_consumed_addr;
@@ -284,9 +286,9 @@ struct cam_hw_config_args {
 struct cam_hw_flush_args {
 	void                           *ctxt_to_hw_map;
 	uint32_t                        num_req_pending;
-	void                           *flush_req_pending[20];
+	void                           *flush_req_pending[40];
 	uint32_t                        num_req_active;
-	void                           *flush_req_active[20];
+	void                           *flush_req_active[40];
 	enum flush_type_t               flush_type;
 	uint32_t                        last_flush_req;
 };

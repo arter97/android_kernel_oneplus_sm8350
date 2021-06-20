@@ -1975,7 +1975,9 @@ static void cam_cpas_update_monitor_array(struct cam_hw_info *cpas_hw,
 		uint32_t be_mnoc_offset =
 			soc_private->rpmh_info[CAM_RPMH_BCM_BE_OFFSET] +
 			(0x4 * soc_private->rpmh_info[CAM_RPMH_BCM_MNOC_INDEX]);
-
+		uint32_t be_shub_offset =
+			soc_private->rpmh_info[CAM_RPMH_BCM_BE_OFFSET] +
+			(0x4 * 1);
 		/*
 		 * 0x4, 0x800 - DDR
 		 * 0x800, 0x810 - mmnoc
@@ -1984,6 +1986,7 @@ static void cam_cpas_update_monitor_array(struct cam_hw_info *cpas_hw,
 		entry->fe_mnoc = cam_io_r_mb(rpmh_base + fe_mnoc_offset);
 		entry->be_ddr = cam_io_r_mb(rpmh_base + be_ddr_offset);
 		entry->be_mnoc = cam_io_r_mb(rpmh_base + be_mnoc_offset);
+		entry->be_shub = cam_io_r_mb(rpmh_base + be_shub_offset);
 	}
 }
 
@@ -2043,9 +2046,9 @@ static void cam_cpas_dump_monitor_array(
 
 		if (cpas_core->regbase_index[CAM_CPAS_REG_RPMH] != -1) {
 			CAM_INFO(CAM_CPAS,
-				"fe_ddr=0x%x, fe_mnoc=0x%x, be_ddr=0x%x, be_mnoc=0x%x",
+				"fe_ddr=0x%x, fe_mnoc=0x%x, be_ddr=0x%x, be_mnoc=0x%x, be_shub=0x%x",
 				entry->fe_ddr, entry->fe_mnoc,
-				entry->be_ddr, entry->be_mnoc);
+				entry->be_ddr, entry->be_mnoc, entry->be_shub);
 		}
 
 		index = (index + 1) % CAM_CPAS_MONITOR_MAX_ENTRIES;

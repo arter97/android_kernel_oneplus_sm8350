@@ -212,6 +212,7 @@ irqreturn_t cam_jpeg_enc_irq(int irq_num, void *data)
 			} else {
 				CAM_ERR(CAM_JPEG, "unexpected done, no cb");
 			}
+			cam_cpas_notify_event("JPEG FrameDone", 0);
 		} else {
 			CAM_ERR(CAM_JPEG, "unexpected done irq");
 		}

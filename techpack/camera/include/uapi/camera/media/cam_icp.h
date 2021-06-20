@@ -6,8 +6,13 @@
 #ifndef __UAPI_CAM_ICP_H__
 #define __UAPI_CAM_ICP_H__
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+#include <media/cam_defs.h>
+#include <media/cam_cpas.h>
+#else
 #include <camera/media/cam_defs.h>
 #include <camera/media/cam_cpas.h>
+#endif
 
 /* icp, ipe, bps, cdm(ipe/bps) are used in querycap */
 #define CAM_ICP_DEV_TYPE_A5      1

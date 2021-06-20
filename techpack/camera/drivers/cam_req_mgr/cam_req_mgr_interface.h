@@ -122,6 +122,7 @@ enum cam_pipeline_delay {
  */
 #define CAM_TRIGGER_POINT_SOF     (1 << 0)
 #define CAM_TRIGGER_POINT_EOF     (1 << 1)
+#define CAM_TRIGGER_MAX_TYPES     2
 
 /**
  * enum cam_req_status

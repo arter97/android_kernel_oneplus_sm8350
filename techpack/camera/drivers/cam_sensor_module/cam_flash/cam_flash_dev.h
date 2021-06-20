@@ -214,6 +214,10 @@ struct cam_flash_ctrl {
 	struct camera_io_master             io_master_info;
 	struct i2c_data_settings            i2c_data;
 	uint32_t                            last_flush_req;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	const char *                        flash_name;
+	uint32_t                            flash_current;
+#endif
 };
 
 int cam_flash_pmic_pkt_parser(struct cam_flash_ctrl *fctrl, void *arg);

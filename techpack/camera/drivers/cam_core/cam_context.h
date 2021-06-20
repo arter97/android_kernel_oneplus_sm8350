@@ -229,6 +229,8 @@ struct cam_context {
 
 	void                        *ctx_priv;
 	void                        *ctxt_to_hw_map;
+	uint32_t                     hw_mgr_ctx_id;
+	char                         ctx_id_string[128];
 
 	struct kref                  refcount;
 	void                        *node;

@@ -288,7 +288,9 @@ int cam_eeprom_parse_dt(struct cam_eeprom_ctrl_t *e_ctrl)
 	struct cam_eeprom_soc_private  *soc_private =
 		(struct cam_eeprom_soc_private *)e_ctrl->soc_info.soc_private;
 	uint32_t                        temp;
-
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+        int                             id,ret;
+#endif
 	if (!soc_info->dev) {
 		CAM_ERR(CAM_EEPROM, "Dev is NULL");
 		return -EINVAL;
@@ -379,6 +381,33 @@ int cam_eeprom_parse_dt(struct cam_eeprom_ctrl_t *e_ctrl)
 			return rc;
 		}
 	}
-
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	ret = of_property_read_u32(of_node, "change_cci", &id);
+	if (ret) {
+	    e_ctrl->change_cci = 0x00;
+            CAM_ERR(CAM_EEPROM, "get change_cci failed rc:%d, default %d", ret, e_ctrl->change_cci);
+	} else {
+	    e_ctrl->change_cci = (uint8_t)id;
+            CAM_INFO(CAM_EEPROM, "read change_cci success, value:%d", e_ctrl->change_cci);
+	}
+	ret = of_property_read_u32(of_node, "cci-master-ois", &id);
+	if (ret) {
+	    e_ctrl->cci_i2c_master_ois = 0x00;
+            CAM_ERR(CAM_EEPROM, "get cci-master-ois failed rc:%d, default %d", ret, e_ctrl->cci_i2c_master_ois);
+	} else {
+	    e_ctrl->cci_i2c_master_ois = (uint8_t)id;
+            CAM_INFO(CAM_EEPROM, "read cci-master-ois success, value:%d", e_ctrl->cci_i2c_master_ois);
+            e_ctrl->io_master_info_ois.cci_client->cci_i2c_master = e_ctrl->cci_i2c_master_ois;
+	}
+	ret = of_property_read_u32(of_node, "cci-device-ois", &id);
+	if (ret) {
+	    e_ctrl->cci_num_ois = 0x00;
+            CAM_ERR(CAM_EEPROM, "get cci-device-ois failed rc:%d, default %d", ret, e_ctrl->cci_num_ois);
+	} else {
+	    e_ctrl->cci_num_ois = (uint8_t)id;
+            CAM_INFO(CAM_EEPROM, "read cci-device-ois success, value:%d", e_ctrl->cci_num_ois);
+            e_ctrl->io_master_info_ois.cci_client->cci_device = e_ctrl->cci_num_ois;
+	}
+#endif
 	return rc;
 }

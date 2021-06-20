@@ -208,6 +208,7 @@ struct cam_vfe_bus_ver3_priv {
 	int                                 error_irq_handle;
 	void                               *tasklet_info;
 	uint32_t                            max_out_res;
+	uint32_t                            index[CAM_VFE_BUS_VER3_VFE_OUT_MAX];
 };
 
 static const struct cam_vfe_bus_error_info vfe_error_list[] = {
@@ -1893,6 +1894,7 @@ static int cam_vfe_bus_ver3_acquire_vfe_out(void *bus_priv, void *acquire_args,
 	struct cam_isp_resource_node           *rsrc_node = NULL;
 	struct cam_vfe_bus_ver3_vfe_out_data   *rsrc_data = NULL;
 	uint32_t                                secure_caps = 0, mode;
+	uint32_t                                index = 0;
 	struct cam_vfe_bus_ver3_comp_grp_acquire_args comp_acq_args = {0};
 
 	if (!bus_priv || !acquire_args) {
@@ -1912,7 +1914,11 @@ static int cam_vfe_bus_ver3_acquire_vfe_out(void *bus_priv, void *acquire_args,
 	if (vfe_out_res_id == CAM_VFE_BUS_VER3_VFE_OUT_MAX)
 		return -ENODEV;
 
-	rsrc_node = &ver3_bus_priv->vfe_out[vfe_out_res_id];
+	index = ver3_bus_priv->index[vfe_out_res_id];
+	if (index >= ver3_bus_priv->num_out)
+		return -ENODEV;
+
+	rsrc_node = &ver3_bus_priv->vfe_out[index];
 	if (rsrc_node->res_state != CAM_ISP_RESOURCE_STATE_AVAILABLE) {
 		CAM_ERR(CAM_ISP,
 			"VFE:%d out_type:0x%X resource not available state:%d",
@@ -2309,6 +2315,7 @@ static uint32_t cam_vfe_bus_ver3_get_last_consumed_addr(
 	uint32_t res_type)
 {
 	uint32_t                                  val = 0;
+	uint32_t                                  index = 0;
 	struct cam_isp_resource_node             *rsrc_node = NULL;
 	struct cam_vfe_bus_ver3_vfe_out_data     *rsrc_data = NULL;
 	struct cam_vfe_bus_ver3_wm_resource_data *wm_rsrc_data = NULL;
@@ -2321,7 +2328,11 @@ static uint32_t cam_vfe_bus_ver3_get_last_consumed_addr(
 		return 0;
 	}
 
-	rsrc_node = &bus_priv->vfe_out[res_id];
+	index = bus_priv->index[res_id];
+	if (index >= bus_priv->num_out)
+		return -ENODEV;
+
+	rsrc_node = &bus_priv->vfe_out[index];
 	rsrc_data = rsrc_node->res_priv;
 	wm_rsrc_data = rsrc_data->wm_res[PLANE_Y].res_priv;
 
@@ -2400,13 +2411,14 @@ static int cam_vfe_bus_ver3_init_vfe_out_resource(uint32_t  index,
 		return -EINVAL;
 	}
 
-	vfe_out = &ver3_bus_priv->vfe_out[vfe_out_type];
+	vfe_out = &ver3_bus_priv->vfe_out[index];
 	if (vfe_out->res_state != CAM_ISP_RESOURCE_STATE_UNAVAILABLE ||
 		vfe_out->res_priv) {
 		CAM_ERR(CAM_ISP, "vfe_out_type %d has already been initialized",
 			vfe_out_type);
 		return -EFAULT;
 	}
+	ver3_bus_priv->index[vfe_out_type] = index;
 
 	rsrc_data = kzalloc(sizeof(struct cam_vfe_bus_ver3_vfe_out_data),
 		GFP_KERNEL);
@@ -2520,6 +2532,7 @@ static int cam_vfe_bus_ver3_print_dimensions(
 	struct cam_vfe_bus_ver3_wm_resource_data  *wm_data   = NULL;
 	struct cam_vfe_bus_ver3_common_data  *common_data = NULL;
 	int                                        i;
+	uint32_t                                   index = 0;
 	uint32_t addr_status0, addr_status1, addr_status2, addr_status3;
 
 	if (!bus_priv) {
@@ -2534,7 +2547,11 @@ static int cam_vfe_bus_ver3_print_dimensions(
 		return -EINVAL;
 	}
 
-	rsrc_node = &bus_priv->vfe_out[vfe_out_res_id];
+	index = bus_priv->index[vfe_out_res_id];
+	if (index >= bus_priv->num_out)
+		return -ENODEV;
+
+	rsrc_node = &bus_priv->vfe_out[index];
 	rsrc_data = rsrc_node->res_priv;
 	if (!rsrc_data) {
 		CAM_ERR(CAM_ISP, "VFE out data is null, res_id: %d",
@@ -3781,6 +3798,9 @@ int cam_vfe_bus_ver3_init(
 		}
 	}
 
+	for (i = 0; i < CAM_VFE_BUS_VER3_VFE_OUT_MAX; i++)
+		bus_priv->index[i] = CAM_VFE_BUS_VER3_VFE_OUT_MAX;
+
 	for (i = 0; i < bus_priv->num_out; i++) {
 		rc = cam_vfe_bus_ver3_init_vfe_out_resource(i, bus_priv,
 			bus_hw_info);
@@ -3886,6 +3906,7 @@ int cam_vfe_bus_ver3_deinit(
 			CAM_ERR(CAM_ISP,
 				"VFE:%d deinit out_type:0x%X failed rc:%d",
 				bus_priv->common_data.core_index, i, rc);
+        bus_priv->index[i] = CAM_VFE_BUS_VER3_VFE_OUT_MAX;
 	}
 
 	INIT_LIST_HEAD(&bus_priv->free_comp_grp);
