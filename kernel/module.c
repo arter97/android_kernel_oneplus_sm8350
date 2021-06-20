@@ -3269,6 +3269,7 @@ static int check_modinfo(struct module *mod, struct load_info *info, int flags)
 	if (flags & MODULE_INIT_IGNORE_VERMAGIC)
 		modmagic = NULL;
 
+#if 0
 	/* This is allowed: modprobe --force will invalidate it. */
 	if (!modmagic) {
 		err = try_to_force_load(mod, "bad vermagic");
@@ -3279,6 +3280,7 @@ static int check_modinfo(struct module *mod, struct load_info *info, int flags)
 		       info->name, modmagic, vermagic);
 		return -ENOEXEC;
 	}
+#endif
 
 	if (!get_modinfo(info, "intree")) {
 		if (!test_taint(TAINT_OOT_MODULE))
