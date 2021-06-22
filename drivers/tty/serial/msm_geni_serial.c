@@ -1299,9 +1299,23 @@ static void msm_geni_uart_gsi_tx_cb(void *ptr)
 	msm_port->tx_dma = (dma_addr_t)NULL;
 	msm_port->xmit_size = 0;
 	complete(&msm_port->tx_xfer);
-	queue_work(msm_port->tx_wq, &msm_port->tx_xfer_work);
+	if (!uart_circ_empty(xmit)) {
+		queue_work(msm_port->tx_wq, &msm_port->tx_xfer_work);
+		IPC_LOG_MSG(msm_port->ipc_log_misc, "%s: TX_xfer is Queued\n",
+				__func__);
+	} else {
+		/*
+		 * This will balance out the power vote put in during start_tx
+		 * allowing the device to suspend.
+		 */
+		if (!uart_console(uport)) {
+			IPC_LOG_MSG(msm_port->ipc_log_misc,
+				"%s.Tx sent out, Power off\n", __func__);
+			msm_geni_serial_power_off(uport);
+		}
+		uart_write_wakeup(uport);
+	}
 	IPC_LOG_MSG(msm_port->ipc_log_misc, "%s:End\n", __func__);
-
 }
 
 static void msm_geni_uart_rx_queue_dma_tre(int index, struct uart_port *uport)
