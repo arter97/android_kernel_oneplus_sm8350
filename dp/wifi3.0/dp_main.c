@@ -2624,6 +2624,7 @@ static void dp_soc_interrupt_detach(struct cdp_soc_t *txrx_soc)
 	if (soc->intr_mode == DP_INTR_POLL) {
 		qdf_timer_free(&soc->int_timer);
 	} else {
+		hif_deconfigure_ext_group_interrupts(soc->hif_handle);
 		hif_deregister_exec_group(soc->hif_handle, "dp_intr");
 	}
 
@@ -3367,13 +3368,15 @@ bool dp_reo_remap_config(struct dp_soc *soc, uint32_t *remap1, uint32_t *remap2)
  *
  * @tx_ring_num: Tx ring number
  * @tx_ipa_ring_sz: Return param only updated for IPA.
+ * @soc_cfg_ctx: dp soc cfg context
  *
  * Return: None
  */
-static void dp_ipa_get_tx_ring_size(int tx_ring_num, int *tx_ipa_ring_sz)
+static void dp_ipa_get_tx_ring_size(int tx_ring_num, int *tx_ipa_ring_sz,
+				    struct wlan_cfg_dp_soc_ctxt *soc_cfg_ctx)
 {
 	if (tx_ring_num == IPA_TCL_DATA_RING_IDX)
-		*tx_ipa_ring_sz = WLAN_CFG_IPA_TX_RING_SIZE;
+		*tx_ipa_ring_sz = wlan_cfg_ipa_tx_ring_size(soc_cfg_ctx);
 }
 
 /**
@@ -3381,14 +3384,17 @@ static void dp_ipa_get_tx_ring_size(int tx_ring_num, int *tx_ipa_ring_sz)
  *
  * @tx_comp_ring_num: Tx comp ring number
  * @tx_comp_ipa_ring_sz: Return param only updated for IPA.
+ * @soc_cfg_ctx: dp soc cfg context
  *
  * Return: None
  */
 static void dp_ipa_get_tx_comp_ring_size(int tx_comp_ring_num,
-					 int *tx_comp_ipa_ring_sz)
+					 int *tx_comp_ipa_ring_sz,
+				       struct wlan_cfg_dp_soc_ctxt *soc_cfg_ctx)
 {
 	if (tx_comp_ring_num == IPA_TCL_DATA_RING_IDX)
-		*tx_comp_ipa_ring_sz = WLAN_CFG_IPA_TX_COMP_RING_SIZE;
+		*tx_comp_ipa_ring_sz =
+				wlan_cfg_ipa_tx_comp_ring_size(soc_cfg_ctx);
 }
 #else
 static uint8_t dp_reo_ring_selection(uint32_t value, uint32_t *ring)
@@ -3522,12 +3528,14 @@ static bool dp_reo_remap_config(struct dp_soc *soc,
 	return true;
 }
 
-static void dp_ipa_get_tx_ring_size(int ring_num, int *tx_ipa_ring_sz)
+static void dp_ipa_get_tx_ring_size(int ring_num, int *tx_ipa_ring_sz,
+				    struct wlan_cfg_dp_soc_ctxt *soc_cfg_ctx)
 {
 }
 
 static void dp_ipa_get_tx_comp_ring_size(int tx_comp_ring_num,
-					 int *tx_comp_ipa_ring_sz)
+					 int *tx_comp_ipa_ring_sz,
+				       struct wlan_cfg_dp_soc_ctxt *soc_cfg_ctx)
 {
 }
 #endif /* IPA_OFFLOAD */
@@ -3660,7 +3668,7 @@ static QDF_STATUS dp_alloc_tx_ring_pair_by_index(struct dp_soc *soc,
 	int cached = 0;
 
 	tx_ring_size = wlan_cfg_tx_ring_size(soc_cfg_ctx);
-	dp_ipa_get_tx_ring_size(index, &tx_ring_size);
+	dp_ipa_get_tx_ring_size(index, &tx_ring_size, soc_cfg_ctx);
 
 	if (dp_srng_alloc(soc, &soc->tcl_data_ring[index], TCL_DATA,
 			  tx_ring_size, cached)) {
@@ -3669,7 +3677,7 @@ static QDF_STATUS dp_alloc_tx_ring_pair_by_index(struct dp_soc *soc,
 	}
 
 	tx_comp_ring_size = wlan_cfg_tx_comp_ring_size(soc_cfg_ctx);
-	dp_ipa_get_tx_comp_ring_size(index, &tx_comp_ring_size);
+	dp_ipa_get_tx_comp_ring_size(index, &tx_comp_ring_size, soc_cfg_ctx);
 	/* Enable cached TCL desc if NSS offload is disabled */
 	if (!wlan_cfg_get_dp_soc_nss_cfg(soc_cfg_ctx))
 		cached = WLAN_CFG_DST_RING_CACHED_DESC;
@@ -4169,7 +4177,7 @@ static void dp_soc_tx_hw_desc_history_attach(struct dp_soc *soc)
 {
 	soc->tx_hw_desc_history = dp_context_alloc_mem(
 			soc, DP_TX_HW_DESC_HIST_TYPE,
-			sizeof(struct dp_tx_hw_desc_evt));
+			sizeof(*soc->tx_hw_desc_history));
 	if (soc->tx_hw_desc_history)
 		soc->tx_hw_desc_history->index = 0;
 }
@@ -11467,47 +11475,6 @@ static struct cdp_mscs_ops dp_ops_mscs = {
 
 #ifdef FEATURE_RUNTIME_PM
 /**
- * dp_runtime_suspend() - ensure DP is ready to runtime suspend
- * @soc_hdl: Datapath soc handle
- * @pdev_id: id of data path pdev handle
- *
- * DP is ready to runtime suspend if there are no pending TX packets.
- *
- * Return: QDF_STATUS
- */
-static QDF_STATUS dp_runtime_suspend(struct cdp_soc_t *soc_hdl, uint8_t pdev_id)
-{
-	struct dp_soc *soc = cdp_soc_t_to_dp_soc(soc_hdl);
-	struct dp_pdev *pdev;
-
-	pdev = dp_get_pdev_from_soc_pdev_id_wifi3(soc, pdev_id);
-	if (!pdev) {
-		dp_err("pdev is NULL");
-		return QDF_STATUS_E_INVAL;
-	}
-
-	/* Abort if there are any pending TX packets */
-	if (dp_get_tx_pending(dp_pdev_to_cdp_pdev(pdev)) > 0) {
-		QDF_TRACE(QDF_MODULE_ID_DP, QDF_TRACE_LEVEL_INFO,
-			  FL("Abort suspend due to pending TX packets"));
-		return QDF_STATUS_E_AGAIN;
-	}
-
-	if (dp_runtime_get_refcount(soc)) {
-		dp_info("refcount: %d", dp_runtime_get_refcount(soc));
-
-		return QDF_STATUS_E_AGAIN;
-	}
-
-	if (soc->intr_mode == DP_INTR_POLL)
-		qdf_timer_stop(&soc->int_timer);
-
-	dp_rx_fst_update_pm_suspend_status(soc, true);
-
-	return QDF_STATUS_SUCCESS;
-}
-
-/**
  * dp_flush_ring_hptp() - Update ring shadow
  *			  register HP/TP address when runtime
  *                        resume
@@ -11528,6 +11495,56 @@ void dp_flush_ring_hptp(struct dp_soc *soc, hal_ring_handle_t hal_srng)
 		hal_srng_set_flush_last_ts(hal_srng);
 		dp_debug("flushed");
 	}
+}
+
+/**
+ * dp_runtime_suspend() - ensure DP is ready to runtime suspend
+ * @soc_hdl: Datapath soc handle
+ * @pdev_id: id of data path pdev handle
+ *
+ * DP is ready to runtime suspend if there are no pending TX packets.
+ *
+ * Return: QDF_STATUS
+ */
+static QDF_STATUS dp_runtime_suspend(struct cdp_soc_t *soc_hdl, uint8_t pdev_id)
+{
+	struct dp_soc *soc = cdp_soc_t_to_dp_soc(soc_hdl);
+	struct dp_pdev *pdev;
+	uint8_t i;
+
+	pdev = dp_get_pdev_from_soc_pdev_id_wifi3(soc, pdev_id);
+	if (!pdev) {
+		dp_err("pdev is NULL");
+		return QDF_STATUS_E_INVAL;
+	}
+
+	/* Abort if there are any pending TX packets */
+	if (dp_get_tx_pending(dp_pdev_to_cdp_pdev(pdev)) > 0) {
+		QDF_TRACE(QDF_MODULE_ID_DP, QDF_TRACE_LEVEL_INFO,
+			  FL("Abort suspend due to pending TX packets"));
+
+		/* perform a force flush if tx is pending */
+		for (i = 0; i < soc->num_tcl_data_rings; i++) {
+			hal_srng_set_event(soc->tcl_data_ring[i].hal_srng,
+					   HAL_SRNG_FLUSH_EVENT);
+			dp_flush_ring_hptp(soc, soc->tcl_data_ring[i].hal_srng);
+		}
+
+		return QDF_STATUS_E_AGAIN;
+	}
+
+	if (dp_runtime_get_refcount(soc)) {
+		dp_info("refcount: %d", dp_runtime_get_refcount(soc));
+
+		return QDF_STATUS_E_AGAIN;
+	}
+
+	if (soc->intr_mode == DP_INTR_POLL)
+		qdf_timer_stop(&soc->int_timer);
+
+	dp_rx_fst_update_pm_suspend_status(soc, true);
+
+	return QDF_STATUS_SUCCESS;
 }
 
 #define DP_FLUSH_WAIT_CNT 10

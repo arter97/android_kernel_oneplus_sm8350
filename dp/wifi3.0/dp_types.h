@@ -132,6 +132,12 @@
 #define FISA_FLOW_MAX_AGGR_COUNT        16 /* max flow aggregate count */
 #endif
 
+#ifdef WLAN_FEATURE_RX_PREALLOC_BUFFER_POOL
+#define DP_RX_REFILL_BUFF_POOL_SIZE  2048
+#define DP_RX_REFILL_BUFF_POOL_BURST 64
+#define DP_RX_REFILL_THRD_THRESHOLD  512
+#endif
+
 enum rx_pktlog_mode {
 	DP_RX_PKTLOG_DISABLED = 0,
 	DP_RX_PKTLOG_FULL,
@@ -1000,6 +1006,10 @@ struct dp_soc_stats {
 			uint32_t rx_2k_jump_to_stack;
 			/* RX 2k jump msdu dropped count */
 			uint32_t rx_2k_jump_drop;
+			/* REO ERR msdu buffer received */
+			uint32_t reo_err_msdu_buf_rcved;
+			/* REO ERR msdu buffer with invalid coookie received */
+			uint32_t reo_err_msdu_buf_invalid_cookie;
 			/* REO OOR msdu drop count */
 			uint32_t reo_err_oor_drop;
 			/* REO OOR msdu indicated to stack count */
@@ -1018,8 +1028,6 @@ struct dp_soc_stats {
 			uint32_t nbuf_sanity_fail;
 			/* Duplicate link desc refilled */
 			uint32_t dup_refill_link_desc;
-			/* REO OOR eapol drop count */
-			uint32_t reo_err_oor_eapol_drop;
 			/* count of start sequence (ssn) updates */
 			uint32_t ssn_update_count;
 			/* count of bar handling fail */
@@ -1146,13 +1154,12 @@ struct rx_buff_pool {
 };
 
 struct rx_refill_buff_pool {
-	qdf_nbuf_t buf_head;
-	qdf_nbuf_t buf_tail;
-	qdf_spinlock_t bufq_lock;
-	uint32_t bufq_len;
-	uint32_t max_bufq_len;
-	bool in_rx_refill_lock;
 	bool is_initialized;
+	uint16_t head;
+	uint16_t tail;
+	struct dp_pdev *dp_pdev;
+	uint16_t max_bufq_len;
+	qdf_nbuf_t buf_elem[2048];
 };
 
 #ifdef DP_TX_HW_DESC_HISTORY
@@ -1394,6 +1401,8 @@ struct dp_swlm_stats {
  *			      ending the coalescing.
  * @tcl.coalesce_end_time: End timestamp for current coalescing session
  * @tcl.bytes_coalesced: Num bytes coalesced in the current session
+ * @tcl.tx_pkt_thresh: Threshold for TX packet count, to begin TCL register
+ *		       write coalescing
  */
 struct dp_swlm_params {
 	struct {
@@ -1407,6 +1416,7 @@ struct dp_swlm_params {
 		uint32_t tx_thresh_multiplier;
 		uint64_t coalesce_end_time;
 		uint32_t bytes_coalesced;
+		uint32_t tx_pkt_thresh;
 	} tcl;
 };
 
@@ -1663,6 +1673,12 @@ struct dp_soc {
 	/* SoC level data path statistics */
 	struct dp_soc_stats stats;
 
+	/* timestamp to keep track of msdu buffers received on reo err ring */
+	uint64_t rx_route_err_start_pkt_ts;
+
+	/* Num RX Route err in a given window to keep track of rate of errors */
+	uint32_t rx_route_err_in_window;
+
 	/* Enable processing of Tx completion status words */
 	bool process_tx_status;
 	bool process_rx_status;
@@ -1753,6 +1769,9 @@ struct dp_soc {
 
 	qdf_atomic_t ipa_pipes_enabled;
 	bool ipa_first_tx_db_access;
+	qdf_spinlock_t ipa_rx_buf_map_lock;
+	bool ipa_rx_buf_map_lock_initialized;
+	uint8_t ipa_reo_ctx_lock_required[MAX_REO_DEST_RINGS];
 #endif
 
 #ifdef WLAN_FEATURE_STATS_EXT
