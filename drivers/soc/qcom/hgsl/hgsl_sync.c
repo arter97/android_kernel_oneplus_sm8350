@@ -361,6 +361,7 @@ static int hgsl_isync_timeline_destruct(struct hgsl_priv *priv,
 				struct hgsl_isync_timeline *timeline)
 {
 	struct hgsl_isync_fence *cur, *next;
+	LIST_HEAD(flist);
 
 	if (timeline == NULL)
 		return -EINVAL;
@@ -368,10 +369,15 @@ static int hgsl_isync_timeline_destruct(struct hgsl_priv *priv,
 	spin_lock(&timeline->lock);
 	list_for_each_entry_safe(cur, next, &timeline->fence_list,
 				 child_list) {
-		dma_fence_signal_locked(&cur->fence);
 		list_del_init(&cur->child_list);
+		list_add(&cur->free_list, &flist);
 	}
 	spin_unlock(&timeline->lock);
+
+	list_for_each_entry_safe(cur, next, &flist, free_list) {
+		list_del(&cur->free_list);
+		dma_fence_signal_locked(&cur->fence);
+	}
 
 	hgsl_isync_timeline_put(timeline);
 
@@ -425,18 +431,23 @@ static int _isync_timeline_signal(
 {
 	int ret = -EINVAL;
 	struct hgsl_isync_fence *cur, *next;
+	bool found = false;
 
 	spin_lock(&timeline->lock);
 	list_for_each_entry_safe(cur, next, &timeline->fence_list,
 						child_list) {
 		if (fence == &cur->fence) {
-			dma_fence_signal_locked(fence);
 			list_del_init(&cur->child_list);
-			ret = 0;
+			found = true;
 			break;
 		}
 	}
 	spin_unlock(&timeline->lock);
+
+	if (found) {
+		dma_fence_signal_locked(fence);
+		ret = 0;
+	}
 
 	return ret;
 }
@@ -475,6 +486,7 @@ int hgsl_isync_forward(struct hgsl_priv *priv, uint32_t timeline_id,
 {
 	struct hgsl_isync_timeline *timeline;
 	struct hgsl_isync_fence *cur, *next;
+	LIST_HEAD(flist);
 
 	timeline = hgsl_isync_timeline_get(priv, timeline_id);
 	if (timeline == NULL)
@@ -488,11 +500,17 @@ int hgsl_isync_forward(struct hgsl_priv *priv, uint32_t timeline_id,
 	list_for_each_entry_safe(cur, next, &timeline->fence_list,
 				 child_list) {
 		if (hgsl_ts_ge(ts, cur->ts)) {
-			dma_fence_signal_locked(&cur->fence);
 			list_del_init(&cur->child_list);
+			list_add(&cur->free_list, &flist);
 		}
 	}
 	spin_unlock(&timeline->lock);
+
+	list_for_each_entry_safe(cur, next, &flist, free_list) {
+		list_del(&cur->free_list);
+		dma_fence_signal_locked(&cur->fence);
+	}
+
 out:
 	if (timeline)
 		hgsl_isync_timeline_put(timeline);
