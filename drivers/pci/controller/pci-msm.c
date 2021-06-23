@@ -36,6 +36,7 @@
 #include <linux/types.h>
 #include <linux/uaccess.h>
 #include <soc/qcom/subsystem_notif.h>
+#include <linux/pinctrl/qcom-pinctrl.h>
 
 #include "../pci.h"
 
@@ -203,7 +204,7 @@
 #define MAX_RC_NAME_LEN (15)
 #define MSM_PCIE_MAX_VREG (5)
 #define MSM_PCIE_MAX_CLK (21)
-#define MSM_PCIE_MAX_PIPE_CLK (1)
+#define MSM_PCIE_MAX_PIPE_CLK (2)
 #define MAX_RC_NUM (5)
 #define MAX_DEVICE_NUM (20)
 #define PCIE_TLP_RD_SIZE (0x5)
@@ -764,6 +765,7 @@ struct msm_pcie_dev_t {
 	uint32_t gpio_n;
 	uint32_t parf_deemph;
 	uint32_t parf_swing;
+	uint32_t clkreq_gpio;
 
 	struct msm_pcie_vreg_info_t *cx_vreg;
 	struct msm_pcie_clk_info_t *rate_change_clk;
@@ -1032,7 +1034,7 @@ static struct msm_pcie_clk_info_t
 	{NULL, "pcie_pipe_clk_ext_src", 0, false, false},
 	{NULL, "pcie_aggre_noc_south_sf_axi_clk", 0, false, false},
 	{NULL, "pcie_aggre_noc_4_axi_clk", 0, false, false},
-	{NULL, "pcie_0_pipediv2_clk", 0, false, false}
+	{NULL, "pcie_cnoc_4_qx", 0, false, false}
 	},
 	{
 	{NULL, "pcie_1_ref_clk_src", 0, false, false},
@@ -1055,7 +1057,7 @@ static struct msm_pcie_clk_info_t
 	{NULL, "pcie_pipe_clk_ext_src", 0, false, false},
 	{NULL, "pcie_aggre_noc_south_sf_axi_clk", 0, false, false},
 	{NULL, "pcie_aggre_noc_4_axi_clk", 0, false, false},
-	{NULL, "pcie_1_pipediv2_clk", 0, false, false}
+	{NULL, "pcie_cnoc_4_qx", 0, false, false}
 	},
 	{
 	{NULL, "pcie_2_ref_clk_src", 0, false, false},
@@ -1078,7 +1080,7 @@ static struct msm_pcie_clk_info_t
 	{NULL, "pcie_pipe_clk_ext_src", 0, false, false},
 	{NULL, "pcie_aggre_noc_south_sf_axi_clk", 0, false, false},
 	{NULL, "pcie_aggre_noc_4_axi_clk", 0, false, false},
-	{NULL, "pcie_2_pipediv2_clk", 0, false, false}
+	{NULL, "pcie_cnoc_4_qx", 0, false, false}
 	},
 	{
 	{NULL, "pcie_3_ref_clk_src", 0, false, false},
@@ -1101,7 +1103,7 @@ static struct msm_pcie_clk_info_t
 	{NULL, "pcie_pipe_clk_ext_src", 0, false, false},
 	{NULL, "pcie_aggre_noc_south_sf_axi_clk", 0, false, false},
 	{NULL, "pcie_aggre_noc_4_axi_clk", 0, false, false},
-	{NULL, "pcie_3_pipediv2_clk", 0, false, false}
+	{NULL, "pcie_cnoc_4_qx", 0, false, false}
 	},
 	{
 	{NULL, "pcie_4_ref_clk_src", 0, false, false},
@@ -1124,7 +1126,7 @@ static struct msm_pcie_clk_info_t
 	{NULL, "pcie_pipe_clk_ext_src", 0, false, false},
 	{NULL, "pcie_aggre_noc_south_sf_axi_clk", 0, false, false},
 	{NULL, "pcie_aggre_noc_4_axi_clk", 0, false, false},
-	{NULL, "pcie_4_pipediv2_clk", 0, false, false}
+	{NULL, "pcie_cnoc_4_qx", 0, false, false}
 	}
 };
 
@@ -1133,18 +1135,23 @@ static struct msm_pcie_clk_info_t
 	msm_pcie_pipe_clk_info[MAX_RC_NUM][MSM_PCIE_MAX_PIPE_CLK] = {
 	{
 	{NULL, "pcie_0_pipe_clk", 125000000, true, false},
+	{NULL, "pcie_0_pipediv2_clk", 125000000, false, false}
 	},
 	{
 	{NULL, "pcie_1_pipe_clk", 125000000, true, false},
+	{NULL, "pcie_1_pipediv2_clk", 125000000, false, false}
 	},
 	{
 	{NULL, "pcie_2_pipe_clk", 125000000, true, false},
+	{NULL, "pcie_2_pipediv2_clk", 125000000, false, false}
 	},
 	{
 	{NULL, "pcie_3_pipe_clk", 125000000, true, false},
+	{NULL, "pcie_3_pipediv2_clk", 125000000, false, false}
 	},
 	{
 	{NULL, "pcie_4_pipe_clk", 125000000, true, false},
+	{NULL, "pcie_4_pipediv2_clk", 125000000, false, false}
 	}
 };
 
@@ -5125,8 +5132,9 @@ static void msm_pcie_notify_client(struct msm_pcie_dev_t *dev,
 	struct msm_pcie_register_event *reg_itr;
 	struct msm_pcie_notify *notify;
 	struct msm_pcie_notify client_notify;
+	unsigned long flags;
 
-	spin_lock(&dev->evt_reg_list_lock);
+	spin_lock_irqsave(&dev->evt_reg_list_lock, flags);
 	list_for_each_entry(reg_itr, &dev->event_reg_list, node) {
 		if ((reg_itr->events & event) && reg_itr->callback) {
 			notify = &reg_itr->notify;
@@ -5149,7 +5157,7 @@ static void msm_pcie_notify_client(struct msm_pcie_dev_t *dev,
 			break;
 		}
 	}
-	spin_unlock(&dev->evt_reg_list_lock);
+	spin_unlock_irqrestore(&dev->evt_reg_list_lock, flags);
 }
 
 static void handle_wake_func(struct work_struct *work)
@@ -6259,6 +6267,12 @@ static int msm_pcie_probe(struct platform_device *pdev)
 	else
 		PCIE_DBG(pcie_dev, "RC%d: aux clock frequency: %d.\n",
 			pcie_dev->rc_idx, pcie_dev->aux_clk_freq);
+
+	of_property_read_u32(of_node, "qcom,clkreq-gpio",
+			&pcie_dev->clkreq_gpio);
+
+	PCIE_DBG(pcie_dev, "RC%d: clkreq gpio no:%u\n",
+			pcie_dev->rc_idx, pcie_dev->clkreq_gpio);
 
 	pcie_dev->shadow_en = true;
 	pcie_dev->aer_enable = true;
@@ -7719,6 +7733,10 @@ static int msm_pcie_drv_resume(struct msm_pcie_dev_t *pcie_dev)
 	PCIE_DBG(pcie_dev, "PCIe RC%d: LTSSM_STATE: %s\n",
 		pcie_dev->rc_idx, TO_LTSSM_STR(val & 0x3f));
 
+	msm_gpio_mpm_wake_set(pcie_dev->clkreq_gpio, false);
+
+	PCIE_DBG(pcie_dev, "PCIe: RC%d: disable wake up cap for CLKREQ GPIO\n",
+		pcie_dev->rc_idx);
 	mutex_unlock(&pcie_dev->setup_lock);
 	mutex_unlock(&pcie_dev->recovery_lock);
 
@@ -7741,6 +7759,10 @@ static int msm_pcie_drv_suspend(struct msm_pcie_dev_t *pcie_dev,
 	}
 
 	mutex_lock(&pcie_dev->recovery_lock);
+	msm_gpio_mpm_wake_set(pcie_dev->clkreq_gpio, true);
+
+	PCIE_DBG(pcie_dev, "PCIe: RC%d:Enable wake up cap for CLKREQ GPIO\n",
+		pcie_dev->rc_idx);
 
 	/* disable global irq - no more linkdown/aer detection */
 	disable_irq(pcie_dev->irq[MSM_PCIE_INT_GLOBAL_INT].num);
@@ -8088,6 +8110,7 @@ int msm_pcie_register_event(struct msm_pcie_register_event *reg)
 	struct msm_pcie_dev_t *pcie_dev;
 	struct msm_pcie_register_event *reg_itr;
 	struct pci_dev *pcidev;
+	unsigned long flags;
 
 	if (!reg) {
 		pr_err("PCIe: Event registration is NULL\n");
@@ -8108,19 +8131,19 @@ int msm_pcie_register_event(struct msm_pcie_register_event *reg)
 
 	pcidev = (struct pci_dev *)reg->user;
 
-	spin_lock(&pcie_dev->evt_reg_list_lock);
+	spin_lock_irqsave(&pcie_dev->evt_reg_list_lock, flags);
 	list_for_each_entry(reg_itr, &pcie_dev->event_reg_list, node) {
 		if (reg_itr->user == reg->user) {
 			PCIE_ERR(pcie_dev,
 				 "PCIe: RC%d: EP BDF 0x%4x already registered\n",
 				 pcie_dev->rc_idx,
 				 PCI_DEVID(pcidev->bus->number, pcidev->devfn));
-			spin_unlock(&pcie_dev->evt_reg_list_lock);
+			spin_unlock_irqrestore(&pcie_dev->evt_reg_list_lock, flags);
 			return -EEXIST;
 		}
 	}
 	list_add_tail(&reg->node, &pcie_dev->event_reg_list);
-	spin_unlock(&pcie_dev->evt_reg_list_lock);
+	spin_unlock_irqrestore(&pcie_dev->evt_reg_list_lock, flags);
 
 	if (pcie_dev->drv_supported)
 		schedule_work(&pcie_drv.drv_connect);
@@ -8134,6 +8157,7 @@ int msm_pcie_deregister_event(struct msm_pcie_register_event *reg)
 	struct msm_pcie_dev_t *pcie_dev;
 	struct pci_dev *pcidev;
 	struct msm_pcie_register_event *reg_itr;
+	unsigned long flags;
 
 	if (!reg) {
 		pr_err("PCIe: Event deregistration is NULL\n");
@@ -8155,11 +8179,11 @@ int msm_pcie_deregister_event(struct msm_pcie_register_event *reg)
 
 	pcidev = (struct pci_dev *)reg->user;
 
-	spin_lock(&pcie_dev->evt_reg_list_lock);
+	spin_lock_irqsave(&pcie_dev->evt_reg_list_lock, flags);
 	list_for_each_entry(reg_itr, &pcie_dev->event_reg_list, node) {
 		if (reg_itr->user == reg->user) {
 			list_del(&reg->node);
-			spin_unlock(&pcie_dev->evt_reg_list_lock);
+			spin_unlock_irqrestore(&pcie_dev->evt_reg_list_lock, flags);
 			PCIE_DBG(pcie_dev,
 				 "PCIe: RC%d: Event deregistered for BDF 0x%04x\n",
 				 pcie_dev->rc_idx,
@@ -8167,7 +8191,7 @@ int msm_pcie_deregister_event(struct msm_pcie_register_event *reg)
 			return 0;
 		}
 	}
-	spin_unlock(&pcie_dev->evt_reg_list_lock);
+	spin_unlock_irqrestore(&pcie_dev->evt_reg_list_lock, flags);
 
 	PCIE_DBG(pcie_dev,
 		 "PCIe: RC%d: Failed to deregister event for BDF 0x%04x\n",
