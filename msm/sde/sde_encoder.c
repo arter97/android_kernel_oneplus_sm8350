@@ -783,6 +783,34 @@ bool sde_encoder_is_cwb_disabling(struct drm_encoder *drm_enc,
 	return false;
 }
 
+void sde_encoder_set_clone_mode(struct drm_encoder *drm_enc,
+	 struct drm_crtc_state *crtc_state)
+{
+	struct sde_encoder_virt *sde_enc;
+	struct sde_crtc_state *sde_crtc_state;
+	int i = 0;
+
+	if (!drm_enc || !crtc_state) {
+		SDE_DEBUG("invalid params\n");
+		return;
+	}
+	sde_enc = to_sde_encoder_virt(drm_enc);
+	sde_crtc_state = to_sde_crtc_state(crtc_state);
+
+	if ((sde_enc->disp_info.intf_type != DRM_MODE_CONNECTOR_VIRTUAL) ||
+		(!(sde_crtc_state->cwb_enc_mask & drm_encoder_mask(drm_enc))))
+		return;
+
+	for (i = 0; i < sde_enc->num_phys_encs; i++) {
+		struct sde_encoder_phys *phys = sde_enc->phys_encs[i];
+
+		if (phys) {
+			phys->in_clone_mode = true;
+			SDE_DEBUG("enc:%d phys state:%d\n", DRMID(drm_enc), phys->enable_state);
+		}
+	}
+}
+
 static int _sde_encoder_atomic_check_phys_enc(struct sde_encoder_virt *sde_enc,
 	struct drm_crtc_state *crtc_state,
 	struct drm_connector_state *conn_state)
@@ -1693,6 +1721,7 @@ static int _sde_encoder_rc_kickoff(struct drm_encoder *drm_enc,
 
 	if (is_vid_mode && sde_enc->rc_state == SDE_ENC_RC_STATE_IDLE) {
 		sde_encoder_irq_control(drm_enc, true);
+		_sde_encoder_pm_qos_add_request(drm_enc);
 	} else {
 		/* enable all the clks and resources */
 		ret = _sde_encoder_resource_control_helper(drm_enc,
@@ -1931,6 +1960,7 @@ static int _sde_encoder_rc_idle(struct drm_encoder *drm_enc,
 
 	if (is_vid_mode) {
 		sde_encoder_irq_control(drm_enc, false);
+		_sde_encoder_pm_qos_remove_request(drm_enc);
 	} else {
 		/* disable all the clks and resources */
 		_sde_encoder_update_rsc_client(drm_enc, false);
@@ -2244,9 +2274,9 @@ static int sde_encoder_virt_modeset_rc(struct drm_encoder *drm_enc,
 
 	if (pre_modeset) {
 		intf_mode = sde_encoder_get_intf_mode(drm_enc);
-		if (msm_is_mode_seamless_dms(adj_mode) ||
-				(msm_is_mode_seamless_dyn_clk(adj_mode) &&
-				 is_cmd_mode)) {
+		if ((msm_is_mode_seamless_dms(adj_mode) ||
+				msm_is_mode_seamless_dyn_clk(adj_mode)) &&
+				 is_cmd_mode) {
 			/* restore resource state before releasing them */
 			ret = sde_encoder_resource_control(drm_enc,
 					SDE_ENC_RC_EVENT_PRE_MODESET);
@@ -2270,9 +2300,9 @@ static int sde_encoder_virt_modeset_rc(struct drm_encoder *drm_enc,
 					adj_mode);
 		}
 	} else {
-		if (msm_is_mode_seamless_dms(adj_mode) ||
-				(msm_is_mode_seamless_dyn_clk(adj_mode) &&
-				is_cmd_mode))
+		if ((msm_is_mode_seamless_dms(adj_mode) ||
+				msm_is_mode_seamless_dyn_clk(adj_mode)) &&
+				is_cmd_mode)
 			sde_encoder_resource_control(&sde_enc->base,
 					SDE_ENC_RC_EVENT_POST_MODESET);
 		else if (msm_is_mode_seamless_poms(adj_mode))
