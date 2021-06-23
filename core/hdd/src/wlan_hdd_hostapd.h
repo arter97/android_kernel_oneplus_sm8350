@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2020 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2021 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -233,6 +233,17 @@ bool hdd_sap_destroy_ctx(struct hdd_adapter *adapter);
  */
 void hdd_sap_destroy_ctx_all(struct hdd_context *hdd_ctx, bool is_ssr);
 
+/**
+ * hdd_hostapd_stop_no_trans() - hdd stop function for hostapd interface
+ * @dev: pointer to net_device structure
+ *
+ * This is called in response to ifconfig down. Vdev sync transaction
+ * should be started before calling this API.
+ *
+ * Return - 0 for success non-zero for failure
+ */
+int hdd_hostapd_stop_no_trans(struct net_device *dev);
+
 int hdd_hostapd_stop(struct net_device *dev);
 int hdd_sap_context_init(struct hdd_context *hdd_ctx);
 void hdd_sap_context_destroy(struct hdd_context *hdd_ctx);
@@ -327,4 +338,11 @@ enum qca_wlan_802_11_mode hdd_convert_dot11mode_from_phymode(int phymode);
  */
 void hdd_stop_sap_due_to_invalid_channel(struct work_struct *work);
 
+/**
+ * hdd_is_any_sta_connecting() - check if any sta is connecting
+ * @hdd_ctx: hdd context
+ *
+ * Return: true if any sta is connecting
+ */
+bool hdd_is_any_sta_connecting(struct hdd_context *hdd_ctx);
 #endif /* end #if !defined(WLAN_HDD_HOSTAPD_H) */

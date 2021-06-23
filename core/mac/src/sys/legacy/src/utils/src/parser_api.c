@@ -550,7 +550,7 @@ populate_dot11f_country(struct mac_context *mac,
 	uint8_t code[REG_ALPHA2_LEN + 1];
 	uint8_t cur_triplet_num_chans = 0;
 	int chan_enum, chan_num, chan_spacing = 0;
-	struct regulatory_channel *cur_chan_list;
+	struct regulatory_channel *sec_cur_chan_list;
 	struct regulatory_channel *cur_chan, *start, *prev;
 	enum reg_wifi_band rf_band = REG_BAND_UNKNOWN;
 	uint8_t buffer_triplets[81][3];
@@ -558,8 +558,9 @@ populate_dot11f_country(struct mac_context *mac,
 	QDF_STATUS status = QDF_STATUS_SUCCESS;
 	bool six_gig_started = false;
 
-	cur_chan_list = qdf_mem_malloc(NUM_CHANNELS * sizeof(*cur_chan_list));
-	if (!cur_chan_list)
+	sec_cur_chan_list = qdf_mem_malloc(NUM_CHANNELS *
+					   sizeof(*sec_cur_chan_list));
+	if (!sec_cur_chan_list)
 		return QDF_STATUS_E_NOMEM;
 
 	lim_get_rf_band_new(mac, &rf_band, pe_session);
@@ -577,8 +578,9 @@ populate_dot11f_country(struct mac_context *mac,
 		goto out;
 	}
 
-	chan_num = wlan_reg_get_band_channel_list(mac->pdev, BIT(rf_band),
-						  cur_chan_list);
+	chan_num = wlan_reg_get_secondary_band_channel_list(mac->pdev,
+							    BIT(rf_band),
+							    sec_cur_chan_list);
 	if (!chan_num) {
 		pe_err("failed to get cur_chan list");
 		status = QDF_STATUS_E_FAILURE;
@@ -594,7 +596,7 @@ populate_dot11f_country(struct mac_context *mac,
 	start = NULL;
 	prev = NULL;
 	for (chan_enum = 0; chan_enum < chan_num; chan_enum++) {
-		cur_chan = &cur_chan_list[chan_enum];
+		cur_chan = &sec_cur_chan_list[chan_enum];
 
 		if (cur_chan->chan_flags & REGULATORY_CHAN_DISABLED)
 			continue;
@@ -679,7 +681,7 @@ populate_dot11f_country(struct mac_context *mac,
 	ctry_ie->present = 1;
 
 out:
-	qdf_mem_free(cur_chan_list);
+	qdf_mem_free(sec_cur_chan_list);
 	return status;
 } /* End populate_dot11f_country. */
 
@@ -6294,9 +6296,9 @@ populate_dot11f_timing_advert_frame(struct mac_context *mac_ctx,
 #ifdef WLAN_FEATURE_11AX
 #ifdef WLAN_SUPPORT_TWT
 static void
-populate_dot11f_broadcast_twt_he_cap(struct mac_context *mac,
-				     struct pe_session *session,
-				     tDot11fIEhe_cap *he_cap)
+populate_dot11f_twt_he_cap(struct mac_context *mac,
+			   struct pe_session *session,
+			   tDot11fIEhe_cap *he_cap)
 {
 	bool bcast_requestor =
 		mac->mlme_cfg->twt_cfg.is_bcast_requestor_enabled;
@@ -6304,6 +6306,17 @@ populate_dot11f_broadcast_twt_he_cap(struct mac_context *mac,
 		mac->mlme_cfg->twt_cfg.is_bcast_responder_enabled;
 
 	he_cap->broadcast_twt = 0;
+	if (session->opmode == QDF_STA_MODE &&
+	    !(mac->mlme_cfg->twt_cfg.req_flag)) {
+		/* Set twt_request as 0 if any SCC/MCC concurrency exist */
+		he_cap->twt_request = 0;
+		return;
+	} else if (session->opmode == QDF_SAP_MODE &&
+		   !(mac->mlme_cfg->twt_cfg.res_flag)) {
+		/** Set twt_responder as 0 if any SCC/MCC concurrency exist */
+		he_cap->twt_responder = 0;
+		return;
+	}
 
 	if (session->opmode == QDF_STA_MODE) {
 		he_cap->broadcast_twt = bcast_requestor;
@@ -6313,9 +6326,9 @@ populate_dot11f_broadcast_twt_he_cap(struct mac_context *mac,
 }
 #else
 static inline void
-populate_dot11f_broadcast_twt_he_cap(struct mac_context *mac_ctx,
-				     struct pe_session *session,
-				     tDot11fIEhe_cap *he_cap)
+populate_dot11f_twt_he_cap(struct mac_context *mac_ctx,
+			   struct pe_session *session,
+			   tDot11fIEhe_cap *he_cap)
 {
 	he_cap->broadcast_twt = 0;
 }
@@ -6363,7 +6376,7 @@ QDF_STATUS populate_dot11f_he_caps(struct mac_context *mac_ctx, struct pe_sessio
 	} else {
 		he_cap->ppet.ppe_threshold.num_ppe_th = 0;
 	}
-	populate_dot11f_broadcast_twt_he_cap(mac_ctx, session, he_cap);
+	populate_dot11f_twt_he_cap(mac_ctx, session, he_cap);
 
 	return QDF_STATUS_SUCCESS;
 }
@@ -6492,11 +6505,13 @@ QDF_STATUS populate_dot11f_twt_extended_caps(struct mac_context *mac_ctx,
 
 	if (pe_session->opmode == QDF_STA_MODE)
 		p_ext_cap->twt_requestor_support =
-			mac_ctx->mlme_cfg->he_caps.dot11_he_cap.twt_request;
+			mac_ctx->mlme_cfg->he_caps.dot11_he_cap.twt_request &&
+			mac_ctx->mlme_cfg->twt_cfg.req_flag;
 
 	if (pe_session->opmode == QDF_SAP_MODE)
 		p_ext_cap->twt_responder_support =
-			mac_ctx->mlme_cfg->he_caps.dot11_he_cap.twt_responder;
+			mac_ctx->mlme_cfg->he_caps.dot11_he_cap.twt_responder &&
+			mac_ctx->mlme_cfg->twt_cfg.res_flag;
 
 	dot11f->num_bytes = lim_compute_ext_cap_ie_length(dot11f);
 

@@ -3708,6 +3708,19 @@ QDF_STATUS sme_del_dialog_cmd(mac_handle_t mac_handle,
 			      struct wmi_twt_del_dialog_param *twt_params);
 
 /**
+ * sme_sap_del_dialog_cmd() - Register callback and send TWT del dialog
+ * command to firmware
+ * @mac_handle: MAC handle
+ * @twt_del_dialog_cb: Function callback to handle del_dialog event
+ * @twt_params: TWT del dialog parameters
+ *
+ * Return: QDF Status
+ */
+QDF_STATUS sme_sap_del_dialog_cmd(mac_handle_t mac_handle,
+				  twt_del_dialog_cb del_dialog_cb,
+				  struct wmi_twt_del_dialog_param *twt_params);
+
+/**
  * sme_pause_dialog_cmd() - Register callback and send TWT pause dialog
  * command to firmware
  * @mac_handle: MAC handle
@@ -3745,8 +3758,16 @@ sme_nudge_dialog_cmd(mac_handle_t mac_handle,
 QDF_STATUS
 sme_resume_dialog_cmd(mac_handle_t mac_handle,
 		      struct wmi_twt_resume_dialog_cmd_param *twt_params);
-#else
 
+/**
+ * sme_twt_update_beacon_template() - API to send beacon update to fw
+ * @mac: Global MAC pointer
+ *
+ * Return: None
+ */
+void sme_twt_update_beacon_template(mac_handle_t mac_handle);
+
+#else
 static inline
 QDF_STATUS sme_test_config_twt_setup(struct wmi_twt_add_dialog_param *params)
 {
@@ -3758,6 +3779,12 @@ sme_test_config_twt_terminate(struct wmi_twt_del_dialog_param *params)
 {
 	return QDF_STATUS_E_FAILURE;
 }
+
+static inline void
+sme_twt_update_beacon_template(mac_handle_t mac_handle)
+{
+}
+
 #endif
 
 /**
