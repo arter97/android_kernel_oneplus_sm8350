@@ -1709,6 +1709,8 @@ static int msm_nand_is_erased_page_ps(struct mtd_info *mtd, loff_t from,
 	uint32_t cwperpage = (mtd->writesize >> 9);
 	int err, submitted_num_desc = 0;
 	uint32_t n = 0, num_zero_bits = 0, total_ecc_byte_cnt;
+	uint32_t cw_desc_cnt = 1;
+	struct sps_command_element *curr_ce, *start_ce;
 	struct msm_nand_rw_reg_data data;
 	struct sps_iovec *iovec;
 	struct sps_iovec iovec_temp;
@@ -1768,8 +1770,6 @@ static int msm_nand_is_erased_page_ps(struct mtd_info *mtd, loff_t from,
 		dma_map_single(chip->dev, ecc, total_ecc_byte_cnt,
 				DMA_FROM_DEVICE);
 
-	uint32_t cw_desc_cnt = 1;
-	struct sps_command_element *curr_ce, *start_ce;
 	data.addr0 = (rw_params->page << 16) | rw_params->oob_col;
 	data.addr1 = (rw_params->page >> 16) & 0xff;
 	for (n = rw_params->start_sector; n < cwperpage; n++) {
@@ -2941,7 +2941,14 @@ static int msm_nand_read_partial_page(struct mtd_info *mtd,
 			no_copy = false;
 
 		ops->datbuf = no_copy ? actual_buf : bounce_buf;
-		if (info->nand_chip.caps & MSM_NAND_CAP_PAGE_SCOPE_READ)
+
+		/*
+		 * Do a Pagescope read only if PAGE_SCOPE_READ is enabled
+		 * and request length is greater than codeword size or
+		 * the page offset is not aligned to start of the page.
+		 */
+		if ((info->nand_chip.caps & MSM_NAND_CAP_PAGE_SCOPE_READ) &&
+				((len > ONE_CODEWORD_SIZE) || (offset != 0)))
 			err = msm_nand_read_pagescope(mtd, aligned_from, ops);
 		else {
 			if ((len <= ONE_CODEWORD_SIZE) && (offset == 0))
