@@ -17344,7 +17344,6 @@ error_detect:
 	if (cd->cpdata->setup_power)
 		cd->cpdata->setup_power(cd->cpdata, PT_MT_POWER_OFF, dev);
 	sysfs_remove_group(&dev->kobj, &early_attr_group);
-	kfree(cd);
 error_enable_regulator:
 	pt_del_core(dev);
 	dev_set_drvdata(dev, NULL);
@@ -17352,6 +17351,7 @@ error_enable_regulator:
 error_get_regulator:
 	pt_get_regulator(cd, false);
 error_alloc_data:
+	kfree(cd);
 error_no_pdata:
 	pr_err("%s failed.\n", __func__);
 	return rc;
