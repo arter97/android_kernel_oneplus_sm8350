@@ -45,6 +45,10 @@
 #define FW_V2_NUMBER                    2
 #define POWER_ON_RETRY_MAX_TIMES        3
 #define POWER_ON_RETRY_DELAY_MS         200
+#define CNSS_FS_NAME			"cnss"
+#define CNSS_FS_NAME_SIZE		15
+#define CNSS_DEVICE_NAME_SIZE		16
+#define QRTR_NODE_FW_ID_BASE		7
 
 #define CNSS_EVENT_SYNC   BIT(0)
 #define CNSS_EVENT_UNINTERRUPTIBLE BIT(1)
@@ -507,6 +511,11 @@ struct cnss_plat_data {
 	struct device_node *dev_node;
 	u64 feature_list;
 	bool adsp_pc_enabled;
+	char device_name[CNSS_DEVICE_NAME_SIZE];
+	u32 plat_idx;
+	bool enumerate_done;
+	int qrtr_node_id;
+	unsigned int wlfw_service_instance_id;
 };
 
 #ifdef CONFIG_ARCH_QCOM
@@ -532,6 +541,10 @@ static inline u64 cnss_get_host_timestamp(struct cnss_plat_data *plat_priv)
 struct cnss_plat_data *cnss_get_plat_priv(struct platform_device *plat_dev);
 void cnss_pm_stay_awake(struct cnss_plat_data *plat_priv);
 void cnss_pm_relax(struct cnss_plat_data *plat_priv);
+struct cnss_plat_data *cnss_get_plat_priv_by_rc_num(int rc_num);
+int cnss_get_plat_env_count(void);
+struct cnss_plat_data *cnss_get_plat_env(int index);
+bool cnss_is_dual_wlan_enabled(void);
 int cnss_driver_event_post(struct cnss_plat_data *plat_priv,
 			   enum cnss_driver_event_type type,
 			   u32 flags, void *data);
