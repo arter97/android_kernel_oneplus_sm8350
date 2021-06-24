@@ -578,19 +578,21 @@ void a6xx_start(struct adreno_device *adreno_dev)
 	unsigned int rgb565_predicator = 0;
 	static bool patch_reglist;
 
-	/* Enable 64 bit addressing */
-	kgsl_regwrite(device, A6XX_CP_ADDR_MODE_CNTL, 0x1);
-	kgsl_regwrite(device, A6XX_VSC_ADDR_MODE_CNTL, 0x1);
-	kgsl_regwrite(device, A6XX_GRAS_ADDR_MODE_CNTL, 0x1);
-	kgsl_regwrite(device, A6XX_RB_ADDR_MODE_CNTL, 0x1);
-	kgsl_regwrite(device, A6XX_PC_ADDR_MODE_CNTL, 0x1);
-	kgsl_regwrite(device, A6XX_HLSQ_ADDR_MODE_CNTL, 0x1);
-	kgsl_regwrite(device, A6XX_VFD_ADDR_MODE_CNTL, 0x1);
-	kgsl_regwrite(device, A6XX_VPC_ADDR_MODE_CNTL, 0x1);
-	kgsl_regwrite(device, A6XX_UCHE_ADDR_MODE_CNTL, 0x1);
-	kgsl_regwrite(device, A6XX_SP_ADDR_MODE_CNTL, 0x1);
-	kgsl_regwrite(device, A6XX_TPL1_ADDR_MODE_CNTL, 0x1);
-	kgsl_regwrite(device, A6XX_RBBM_SECVID_TSB_ADDR_MODE_CNTL, 0x1);
+	if (adreno_support_64bit(adreno_dev)) {
+		/* Enable 64 bit addressing */
+		kgsl_regwrite(device, A6XX_CP_ADDR_MODE_CNTL, 0x1);
+		kgsl_regwrite(device, A6XX_VSC_ADDR_MODE_CNTL, 0x1);
+		kgsl_regwrite(device, A6XX_GRAS_ADDR_MODE_CNTL, 0x1);
+		kgsl_regwrite(device, A6XX_RB_ADDR_MODE_CNTL, 0x1);
+		kgsl_regwrite(device, A6XX_PC_ADDR_MODE_CNTL, 0x1);
+		kgsl_regwrite(device, A6XX_HLSQ_ADDR_MODE_CNTL, 0x1);
+		kgsl_regwrite(device, A6XX_VFD_ADDR_MODE_CNTL, 0x1);
+		kgsl_regwrite(device, A6XX_VPC_ADDR_MODE_CNTL, 0x1);
+		kgsl_regwrite(device, A6XX_UCHE_ADDR_MODE_CNTL, 0x1);
+		kgsl_regwrite(device, A6XX_SP_ADDR_MODE_CNTL, 0x1);
+		kgsl_regwrite(device, A6XX_TPL1_ADDR_MODE_CNTL, 0x1);
+		kgsl_regwrite(device, A6XX_RBBM_SECVID_TSB_ADDR_MODE_CNTL, 0x1);
+	}
 
 	/* Set up VBIF registers from the GPU core definition */
 	adreno_reglist_write(adreno_dev, a6xx_core->vbif,
