@@ -146,8 +146,6 @@ struct s_TX_NORMAL_DESC {
 
 
 struct veth_emac_exp {
-	uint32_t tx_desc_exp_id;
-	uint32_t rx_desc_exp_id;
 	uint32_t tx_buff_exp_id;
 	uint32_t rx_buff_exp_id;
 	uint32_t rx_buf_pool_exp_id;
@@ -419,6 +417,8 @@ struct emac_ipa_iovas {
 	void   *rx_desc_mem_iova;
 	void   *rx_buf_mem_iova;
 	void   *rx_buf_pool_base_iova;
+	void   *tx_desc_phy_mem;
+	void   *rx_desc_phy_mem;
 };
 
 struct emac_hab_mm_message {
