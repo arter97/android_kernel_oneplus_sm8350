@@ -270,6 +270,8 @@ struct msm_geni_serial_port {
 	struct completion xfer;
 	struct completion tx_xfer;
 	unsigned int count;
+	atomic_t xfer_inprogress;
+	spinlock_t tx_lock;
 };
 
 static const struct uart_ops msm_geni_serial_pops;
@@ -1312,6 +1314,7 @@ static void msm_geni_uart_gsi_tx_cb(void *ptr)
 			IPC_LOG_MSG(msm_port->ipc_log_misc,
 				"%s.Tx sent out, Power off\n", __func__);
 			msm_geni_serial_power_off(uport);
+			atomic_set(&msm_port->xfer_inprogress, 0);
 		}
 		uart_write_wakeup(uport);
 	}
@@ -1710,6 +1713,17 @@ static void msm_geni_serial_start_tx(struct uart_port *uport)
 		return;
 	}
 
+	spin_lock(&msm_port->tx_lock);
+	if (msm_port->xfer_mode == GSI_DMA && (msm_port->tx_dma
+				|| atomic_read(&msm_port->xfer_inprogress))) {
+		IPC_LOG_MSG(msm_port->ipc_log_misc,
+				"%s: TX xfer is inprogress\n", __func__);
+		spin_unlock(&msm_port->tx_lock);
+		return;
+	}
+	atomic_set(&msm_port->xfer_inprogress, 1);
+	spin_unlock(&msm_port->tx_lock);
+
 	if (!uart_console(uport) && !pm_runtime_active(uport->dev)) {
 		IPC_LOG_MSG(msm_port->ipc_log_misc,
 				"%s.Putting in async RPM vote\n", __func__);
@@ -1777,6 +1791,12 @@ static void stop_tx_sequencer(struct uart_port *uport)
 	struct msm_geni_serial_port *port = GET_DEV_PORT(uport);
 
 	if (port->xfer_mode == GSI_DMA) {
+		if (port->tx_dma) {
+			geni_se_tx_dma_unprep(port->wrapper_dev,
+				port->tx_dma, port->xmit_size);
+			port->tx_dma = (dma_addr_t)NULL;
+			atomic_set(&port->xfer_inprogress, 0);
+		}
 		dmaengine_terminate_all(port->gsi->tx_c);
 		return;
 	}
@@ -3954,6 +3974,7 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 	init_completion(&dev_port->s_cmd_timeout);
 	init_completion(&dev_port->xfer);
 	init_completion(&dev_port->tx_xfer);
+	spin_lock_init(&dev_port->tx_lock);
 
 	uport->private_data = (void *)drv;
 	platform_set_drvdata(pdev, dev_port);
