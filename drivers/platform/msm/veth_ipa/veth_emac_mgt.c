@@ -41,6 +41,13 @@ int veth_alloc_emac_export_mem(
 	phys_addr_t  rx_buf_mem_paddr;
 	phys_addr_t  tx_buf_pool_paddr;
 	phys_addr_t  rx_buf_pool_paddr;
+	int ret = 0;
+
+	ret = dma_set_mask_and_coherent(&pdata->pdev->dev, DMA_BIT_MASK(64));
+	if (ret) {
+		VETH_IPA_DEBUG("%s: dma mask set failed\n", __func__);
+		return -ENOMEM;
+	}
 
 	//Allocate TX Buffers
 	veth_emac_mem->tx_buf_mem_va = dma_alloc_coherent(&pdata->pdev->dev,
