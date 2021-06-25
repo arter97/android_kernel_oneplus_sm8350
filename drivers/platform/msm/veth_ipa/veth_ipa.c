@@ -1593,6 +1593,8 @@ static int veth_ipa_init(struct platform_device *pdev)
 	dev->netdev_ops = &veth_ipa_netdev_ops;
 	VETH_IPA_DEBUG("internal data structures were initialized\n");
 
+	veth_ipa_pdata->outstanding_low = DEFAULT_OUTSTANDING_LOW;
+	veth_ipa_pdata->outstanding_high = DEFAULT_OUTSTANDING_HIGH;
 	veth_ipa_debugfs_init(veth_ipa_pdata);
 
 	/*Make this configurable.*/
