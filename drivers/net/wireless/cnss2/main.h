@@ -516,6 +516,7 @@ struct cnss_plat_data {
 	bool enumerate_done;
 	int qrtr_node_id;
 	unsigned int wlfw_service_instance_id;
+	const char *pld_bus_ops_name;
 };
 
 #ifdef CONFIG_ARCH_QCOM

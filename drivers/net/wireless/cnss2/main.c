@@ -187,6 +187,14 @@ static void cnss_get_rc_qrtr(struct cnss_plat_data *plat_priv)
 			    plat_priv->wlfw_service_instance_id);
 	}
 }
+
+static inline int
+cnss_get_pld_bus_ops_name(struct cnss_plat_data *plat_priv)
+{
+	return of_property_read_string(plat_priv->plat_dev->dev.of_node,
+				       "qcom,pld_bus_ops_name",
+				       &plat_priv->pld_bus_ops_name);
+}
 #else
 static void cnss_set_plat_priv(struct platform_device *plat_dev,
 			       struct cnss_plat_data *plat_priv)
@@ -223,6 +231,12 @@ struct cnss_plat_data *cnss_get_plat_priv_by_rc_num(int rc_num)
 
 static void cnss_get_rc_qrtr(struct cnss_plat_data *plat_priv)
 {
+}
+
+static int
+cnss_get_pld_bus_ops_name(struct cnss_plat_data *plat_priv)
+{
+	return 0;
 }
 #endif
 
@@ -3356,6 +3370,11 @@ static int cnss_probe(struct platform_device *plat_dev)
 
 	plat_priv->plat_dev = plat_dev;
 	plat_priv->device_id = device_id->driver_data;
+
+	ret = cnss_get_pld_bus_ops_name(plat_priv);
+	if (ret)
+		cnss_pr_err("Failed to find bus ops name, err = %d\n",
+			    ret);
 
 	cnss_get_rc_qrtr(plat_priv);
 
