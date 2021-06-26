@@ -478,6 +478,10 @@ static int __qseecom_scm_call2_locked(uint32_t smc_id, struct scm_desc *desc)
 	int retry_count = 0;
 
 	do {
+		if (!desc) {
+			pr_err("Invalid descriptor\n");
+			return -EINVAL;
+		}
 		ret = qcom_scm_qseecom_call_noretry(smc_id, desc);
 		if ((ret == -EBUSY) || (desc && (desc->ret[0] == -QSEE_RESULT_FAIL_APP_BUSY))) {
 			mutex_unlock(&app_access_lock);
