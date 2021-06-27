@@ -147,6 +147,12 @@ static struct bt_power bt_vreg_info_qca_auto = {
 	.num_vregs = 6,
 };
 
+// Regulator structure for QCC5100 BT SoC series
+static struct bt_power_vreg_data bt_vreg_info_qcc5xxx[] = {
+	{NULL, "qcom,bt-vdd-pa", 1700000, 1900000, 0, false, false,
+			{BT_VDD_PA_LDO, BT_VDD_PA_LDO_CURRENT}},
+};
+
 static struct bt_power bt_vreg_info_qca6174 = {
 	.compatible = "qcom,qca6174",
 	.vregs = bt_vregs_info_qca61x4_937x,
@@ -171,6 +177,12 @@ static struct bt_power bt_vreg_info_wcn6750 = {
 	.num_vregs = ARRAY_SIZE(bt_vregs_info_qca6xx0),
 };
 
+static struct bt_power bt_vreg_info_qcc5100 = {
+	.compatible = "qcom,qcc5100",
+	.vregs = bt_vreg_info_qcc5xxx,
+	.num_vregs = ARRAY_SIZE(bt_vreg_info_qcc5xxx),
+};
+
 static const struct of_device_id bt_power_match_table[] = {
 	{	.compatible = "qcom,qca6174", .data = &bt_vreg_info_qca6174},
 	{	.compatible = "qcom,wcn3990", .data = &bt_vreg_info_wcn399x},
@@ -178,6 +190,7 @@ static const struct of_device_id bt_power_match_table[] = {
 	{	.compatible = "qcom,qca6490", .data = &bt_vreg_info_qca6490},
 	{	.compatible = "qcom,wcn6750-bt", .data = &bt_vreg_info_wcn6750},
 	{	.compatible = "qcom,qca-auto-converged", .data = &bt_vreg_info_qca_auto},
+	{	.compatible = "qcom,qcc5100", .data = &bt_vreg_info_qcc5100},
 	{},
 };
 
