@@ -1805,6 +1805,9 @@ static int cnss_wlan_adsp_pc_enable(struct cnss_pci_data *pci_priv,
 	u32 pm_options = PM_OPTIONS_DEFAULT;
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 
+	if (!pci_priv->drv_supported)
+		return 0;
+
 	if (plat_priv->adsp_pc_enabled == control) {
 		cnss_pr_dbg("ADSP power collapse already %s\n",
 			    control ? "Enabled" : "Disabled");
