@@ -328,34 +328,9 @@ int veth_set_ul_dl_smmu_ipa_params(struct veth_ipa_dev *pdata,
 		VETH_IPA_ERROR("Null UL DL params %s\n", __func__);
 		return -EINVAL;
 	}
-
-	/*Configure SGT for UL ring base*/
-	ul->ring_base_sgt = kzalloc(sizeof(struct sg_table), GFP_KERNEL);
-	if (!ul->ring_base_sgt)
-		return -ENOMEM;
-
-	ret = dma_get_sgtable(&pdata->pdev->dev,
-		ul->ring_base_sgt,
-		veth_emac_mem->rx_desc_mem_va,
-		veth_emac_mem->rx_desc_mem_paddr,
-		(sizeof(struct s_RX_NORMAL_DESC) *
-			VETH_RX_DESC_CNT));
-	if (ret) {
-		VETH_IPA_ERROR("Failed to get IPA UL ring sgtable.\n");
-		kfree(ul->ring_base_sgt);
-		ul->ring_base_sgt = NULL;
-		return -EAGAIN;
-	}
-
-	/*get pa*/
-	ul->ring_base_pa = sg_phys(ul->ring_base_sgt->sgl);
-
-	VETH_IPA_INFO(
-		"%s:\n ul->ring_base_sgt = 0x%p , ul->ring_base_pa =0x%lx\n",
-		__func__,
-		ul->ring_base_sgt,
-		ul->ring_base_pa);
-
+	/*As memory is contiguous SG table is not required for descriptors*/
+	ul->ring_base_sgt = NULL;
+	/*ToDo : Check with IPA team on why sg table is required for buffpool*/
 	/*configure SGT for UL buff pool base*/
 	ul->buff_pool_base_sgt = kzalloc(
 		sizeof(struct sg_table), GFP_KERNEL);
@@ -385,38 +360,18 @@ int veth_set_ul_dl_smmu_ipa_params(struct veth_ipa_dev *pdata,
 	veth_emac_mem->rx_buff_pool_base_pa = ul->buff_pool_base_pa;
 
 	VETH_IPA_INFO(
-		"%s:\n ul->buff_pool_base_sgt = 0x%p,ul->buff_pool_base_pa =0x%lx\n",
+		"%s:\n ul->buff_pool_base_sgt = 0x%p",
 		__func__,
-		ul->buff_pool_base_sgt,
+		ul->buff_pool_base_sgt);
+
+	VETH_IPA_INFO(
+		"%s:\n ul->buff_pool_base_sgt = 0x%p",
+		__func__,
 		ul->buff_pool_base_pa);
 
-	/*Configure SGT for DL ring base*/
-	dl->ring_base_sgt = kzalloc(sizeof(struct sg_table), GFP_KERNEL);
-	if (!dl->ring_base_sgt)
-		return -ENOMEM;
 
-	ret = dma_get_sgtable(&pdata->pdev->dev,
-		dl->ring_base_sgt,
-		veth_emac_mem->tx_desc_mem_va,
-		veth_emac_mem->tx_desc_mem_paddr,
-		(sizeof(struct s_TX_NORMAL_DESC) *
-			VETH_TX_DESC_CNT));
-	if (ret) {
-		VETH_IPA_ERROR("Failed to get IPA DL ring sgtable.\n");
-		kfree(ul->ring_base_sgt);
-		kfree(ul->buff_pool_base_sgt);
-		kfree(dl->ring_base_sgt);
-		dl->ring_base_sgt = NULL;
-		return -EAGAIN;
-	}
-
-	dl->ring_base_pa = sg_phys(dl->ring_base_sgt->sgl);
-	VETH_IPA_INFO(
-		"%s:\n dl->ring_base_sgt = 0x%p , dl->ring_base_pa =0x%lx\n",
-		__func__,
-		dl->ring_base_sgt,
-		dl->ring_base_pa);
-
+	/*As memory is contiguous SG table is not required for descriptors*/
+	dl->ring_base_sgt = NULL;
 	/*configure SGT for DL buff pool base*/
 	dl->buff_pool_base_sgt = kzalloc(
 		sizeof(struct sg_table), GFP_KERNEL);
@@ -469,11 +424,7 @@ static int veth_map_rx_tx_setup_info_params(
 		rx_setup_info->smmu_enabled = true;
 	else
 		rx_setup_info->smmu_enabled = false;
-
-	/* RX Descriptor Base Physical Address*/
-	if (!rx_setup_info->smmu_enabled)
-		rx_setup_info->ring_base_pa = veth_emac_mem->rx_desc_mem_paddr;
-
+	rx_setup_info->ring_base_pa = veth_emac_mem->rx_desc_mem_paddr;
 	/* RX Descriptor Base Virtual Address*/
 	if (rx_setup_info->smmu_enabled)
 		rx_setup_info->ring_base_iova = veth_emac_mem->rx_desc_mem_iova;
@@ -522,9 +473,7 @@ static int veth_map_rx_tx_setup_info_params(
 	else
 		tx_setup_info->smmu_enabled = false;
 
-	if (!tx_setup_info->smmu_enabled)
-		tx_setup_info->ring_base_pa =
-			veth_emac_mem->tx_desc_mem_paddr;
+	tx_setup_info->ring_base_pa = veth_emac_mem->tx_desc_mem_paddr;
 
 	/* TX Descriptor Base Virtual Address*/
 	if (tx_setup_info->smmu_enabled)
@@ -1466,6 +1415,7 @@ static int veth_ipa_emac_evt_mgmt(void *arg)
 	/*Wait on HAV receive here*/
 	int ret = 0;
 	int timeout_ms = 100;
+	int i = 0;
 	struct emac_hab_mm_message pdata_recv;
 	//veth_emac_import_iova msg;
 	int pdata_size = sizeof(pdata_recv);
@@ -1515,7 +1465,29 @@ static int veth_ipa_emac_evt_mgmt(void *arg)
 					pdata->veth_emac_mem.rx_buff_pool_base_iova =
 						(dma_addr_t)
 					pdata_recv.msg_type.iova.rx_buf_pool_base_iova;
+					pdata->veth_emac_mem.tx_desc_mem_paddr =
+					(dma_addr_t)
+					pdata_recv.msg_type.iova.tx_desc_phy_mem;
+					pdata->veth_emac_mem.rx_desc_mem_paddr =
+					(dma_addr_t)
+					pdata_recv.msg_type.iova.rx_desc_phy_mem;
+					VETH_IPA_INFO("TX descriptor physical memory: %x",
+					pdata->veth_emac_mem.tx_desc_mem_paddr
+					);
+					VETH_IPA_INFO("RX descriptor physical memory: %x",
+					pdata->veth_emac_mem.rx_desc_mem_paddr
+					);
+					for (i = 0; i < VETH_TX_DESC_CNT; i++) {
+						pdata->veth_emac_mem.tx_desc_ring_base[i] =
+						pdata->veth_emac_mem.tx_desc_mem_paddr +
+						(i * sizeof(struct s_TX_NORMAL_DESC));
 					}
+					for (i = 0; i < VETH_RX_DESC_CNT; i++) {
+						pdata->veth_emac_mem.rx_desc_ring_base[i] =
+						pdata->veth_emac_mem.rx_desc_mem_paddr +
+						(i * sizeof(struct s_RX_NORMAL_DESC));
+					}
+				}
 				VETH_IPA_INFO("EMAC_SETUP event received\n");
 				VETH_IPA_INFO("union received: %x",
 				pdata->veth_emac_mem.tx_buff_pool_base_iova);
@@ -1621,6 +1593,8 @@ static int veth_ipa_init(struct platform_device *pdev)
 	dev->netdev_ops = &veth_ipa_netdev_ops;
 	VETH_IPA_DEBUG("internal data structures were initialized\n");
 
+	veth_ipa_pdata->outstanding_low = DEFAULT_OUTSTANDING_LOW;
+	veth_ipa_pdata->outstanding_high = DEFAULT_OUTSTANDING_HIGH;
 	veth_ipa_debugfs_init(veth_ipa_pdata);
 
 	/*Make this configurable.*/
