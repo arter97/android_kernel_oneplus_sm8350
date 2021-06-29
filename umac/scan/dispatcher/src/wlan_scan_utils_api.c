@@ -969,16 +969,17 @@ util_scan_populate_bcn_ie_list(struct wlan_objmgr_pdev *pdev,
 			if (ie->ie_len != WLAN_DS_PARAM_IE_MAX_LEN)
 				return QDF_STATUS_E_INVAL;
 			scan_params->ie_list.ds_param = (uint8_t *)ie;
-			chan_idx =
-				((struct ds_ie *)ie)->cur_chan;
+			chan_idx = ((struct ds_ie *)ie)->cur_chan;
 			*chan_freq = wlan_reg_chan_band_to_freq(pdev, chan_idx,
 								band_mask);
 			/* Drop if invalid freq */
 			if (scan_obj->drop_bcn_on_invalid_freq &&
-			    wlan_reg_is_disable_for_freq(pdev, *chan_freq)) {
-				scm_debug_rl(QDF_MAC_ADDR_FMT": Drop as invalid channel %d freq %d in DS IE",
-					     QDF_MAC_ADDR_REF(scan_params->bssid.bytes),
-					     chan_idx, *chan_freq);
+			    !wlan_reg_is_freq_present_in_cur_chan_list(pdev,
+								*chan_freq)) {
+				scm_debug(QDF_MAC_ADDR_FMT": Drop as invalid chan %d in DS IE, freq %d, band_mask %d",
+					  QDF_MAC_ADDR_REF(
+						  scan_params->bssid.bytes),
+					  chan_idx, *chan_freq, band_mask);
 				return QDF_STATUS_E_INVAL;
 			}
 			break;
@@ -1029,10 +1030,10 @@ util_scan_populate_bcn_ie_list(struct wlan_objmgr_pdev *pdev,
 			scan_params->erp = ((struct erp_ie *)ie)->value;
 			break;
 		case WLAN_ELEMID_HTCAP_ANA:
-			if (ie->ie_len != sizeof(struct htcap_cmn_ie))
-				goto err;
-			scan_params->ie_list.htcap =
+			if (ie->ie_len == sizeof(struct htcap_cmn_ie)) {
+				scan_params->ie_list.htcap =
 				(uint8_t *)&(((struct htcap_ie *)ie)->ie);
+			}
 			break;
 		case WLAN_ELEMID_RSN:
 			/*
