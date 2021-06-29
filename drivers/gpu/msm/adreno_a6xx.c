@@ -92,7 +92,7 @@ static u32 a6xx_ifpc_pwrup_reglist[] = {
 	A6XX_CP_AHB_CNTL,
 };
 
-/* Applicable to a620, a642l, a650 and a660 */
+/* Applicable to a620, a642, a642l, a650 and a660 */
 static u32 a650_pwrup_reglist[] = {
 	A6XX_CP_PROTECT_REG + 47,          /* Programmed for infinite span */
 	A6XX_TPL1_BICUBIC_WEIGHTS_TABLE_0,
@@ -101,6 +101,7 @@ static u32 a650_pwrup_reglist[] = {
 	A6XX_TPL1_BICUBIC_WEIGHTS_TABLE_3,
 	A6XX_TPL1_BICUBIC_WEIGHTS_TABLE_4,
 	A6XX_UCHE_CMDQ_CONFIG,
+	A6XX_SP_DBG_ECO_CNTL,
 };
 
 static u32 a615_pwrup_reglist[] = {
@@ -665,6 +666,10 @@ void a6xx_start(struct adreno_device *adreno_dev)
 	/* Setting the primFifo thresholds values */
 	kgsl_regwrite(device, A6XX_PC_DBG_ECO_CNTL,
 		a6xx_core->prim_fifo_threshold);
+
+	if (adreno_is_a642(adreno_dev) || adreno_is_a642l(adreno_dev) ||
+		adreno_is_a660v2(adreno_dev))
+		kgsl_regrmw(device, A6XX_SP_DBG_ECO_CNTL, 0x6, (0x3 << 1));
 
 	/* Set the AHB default slave response to "ERROR" */
 	kgsl_regwrite(device, A6XX_CP_AHB_CNTL, 0x1);
