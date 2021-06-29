@@ -604,6 +604,8 @@ struct mmc_host {
 #if defined(CONFIG_SDC_QTI)
 	bool			crash_on_err;
 #endif
+	bool			deepsleep;
+
 	unsigned long		private[0] ____cacheline_aligned;
 };
 
