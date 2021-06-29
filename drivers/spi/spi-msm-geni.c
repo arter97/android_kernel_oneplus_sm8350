@@ -1106,7 +1106,8 @@ static int spi_geni_unprepare_message(struct spi_master *spi_mas,
 				GENI_SE_ERR(mas->ipc, false, NULL,
 					"suspend usage count mismatch:%d",
 								count);
-		} else if (!pm_runtime_suspended(mas->dev)) {
+		} else if (!pm_runtime_status_suspended(mas->dev) &&
+				pm_runtime_enabled(mas->dev)) {
 			pm_runtime_mark_last_busy(mas->dev);
 			pm_runtime_put_autosuspend(mas->dev);
 		}
@@ -1349,9 +1350,14 @@ static int spi_geni_prepare_transfer_hardware(struct spi_master *spi)
 		struct se_geni_rsc *rsc;
 		int ret = 0;
 
-		rsc = &mas->spi_rsc;
-		ret = pinctrl_select_state(rsc->geni_pinctrl,
-					rsc->geni_gpio_active);
+		if (!mas->is_la_vm) {
+			/* Do this only for non TVM LA usecase */
+			/* May not be needed here, but maintain parity */
+			rsc = &mas->spi_rsc;
+			ret = pinctrl_select_state(rsc->geni_pinctrl,
+						rsc->geni_gpio_active);
+		}
+
 		if (ret)
 			GENI_SE_ERR(mas->ipc, false, NULL,
 			"%s: Error %d pinctrl_select_state\n", __func__, ret);
@@ -1399,17 +1405,17 @@ static int spi_geni_unprepare_transfer_hardware(struct spi_master *spi)
 	if (mas->shared_ee || mas->is_le_vm)
 		return 0;
 
-	if (mas->is_la_vm)
-		/* Client on LA VM to controls resources, hence return */
-		return 0;
-
 	if (mas->gsi_mode) {
 		struct se_geni_rsc *rsc;
 		int ret = 0;
 
-		rsc = &mas->spi_rsc;
-		ret = pinctrl_select_state(rsc->geni_pinctrl,
+		if (!mas->is_la_vm) {
+			/* Do this only for non TVM LA usecase */
+			rsc = &mas->spi_rsc;
+			ret = pinctrl_select_state(rsc->geni_pinctrl,
 						rsc->geni_gpio_sleep);
+		}
+
 		if (ret)
 			GENI_SE_ERR(mas->ipc, false, NULL,
 			"%s: Error %d pinctrl_select_state\n", __func__, ret);
@@ -1421,7 +1427,8 @@ static int spi_geni_unprepare_transfer_hardware(struct spi_master *spi)
 		if (count < 0)
 			GENI_SE_ERR(mas->ipc, false, NULL,
 				"suspend usage count mismatch:%d", count);
-	} else {
+	} else if (!pm_runtime_status_suspended(mas->dev) &&
+			pm_runtime_enabled(mas->dev)) {
 		pm_runtime_mark_last_busy(mas->dev);
 		pm_runtime_put_autosuspend(mas->dev);
 	}
