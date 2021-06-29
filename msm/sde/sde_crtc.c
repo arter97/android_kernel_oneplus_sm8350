@@ -1668,6 +1668,11 @@ static void _sde_crtc_blend_setup(struct drm_crtc *crtc,
 		return;
 	}
 
+	if (test_bit(SDE_CRTC_DIRTY_DIM_LAYERS, &sde_crtc->revalidate_mask)) {
+		set_bit(SDE_CRTC_DIRTY_DIM_LAYERS, sde_crtc_state->dirty);
+		clear_bit(SDE_CRTC_DIRTY_DIM_LAYERS, &sde_crtc->revalidate_mask);
+	}
+
 	for (i = 0; i < sde_crtc->num_mixers; i++) {
 		if (!mixer[i].hw_lm) {
 			SDE_ERROR("invalid lm or ctl assigned to mixer\n");
@@ -2574,16 +2579,15 @@ static void _sde_crtc_set_input_fence_timeout(struct sde_crtc_state *cstate)
 	cstate->input_fence_timeout_ns *= NSEC_PER_MSEC;
 }
 
-/**
- * _sde_crtc_clear_dim_layers_v1 - clear all dim layer settings
- * @cstate:      Pointer to sde crtc state
- */
-static void _sde_crtc_clear_dim_layers_v1(struct sde_crtc_state *cstate)
+void _sde_crtc_clear_dim_layers_v1(struct drm_crtc_state *state)
 {
 	u32 i;
+	struct sde_crtc_state *cstate;
 
-	if (!cstate)
+	if (!state)
 		return;
+
+	cstate = to_sde_crtc_state(state);
 
 	for (i = 0; i < cstate->num_dim_layers; i++)
 		memset(&cstate->dim_layer[i], 0, sizeof(cstate->dim_layer[i]));
@@ -2613,7 +2617,7 @@ static void _sde_crtc_set_dim_layer_v1(struct drm_crtc *crtc,
 
 	if (!usr_ptr) {
 		/* usr_ptr is null when setting the default property value */
-		_sde_crtc_clear_dim_layers_v1(cstate);
+		_sde_crtc_clear_dim_layers_v1(&cstate->base);
 		SDE_DEBUG("dim_layer data removed\n");
 		goto clear;
 	}
@@ -3978,6 +3982,7 @@ void sde_crtc_reset_sw_state(struct drm_crtc *crtc)
 {
 	struct sde_crtc_state *cstate = to_sde_crtc_state(crtc->state);
 	struct drm_plane *plane;
+	struct sde_crtc *sde_crtc = to_sde_crtc(crtc);
 
 	/* mark planes, mixers, and other blocks dirty for next update */
 	drm_atomic_crtc_for_each_plane(plane, crtc)
@@ -3987,7 +3992,7 @@ void sde_crtc_reset_sw_state(struct drm_crtc *crtc)
 	sde_crtc_clear_cached_mixer_cfg(crtc);
 
 	/* mark other properties which need to be dirty for next update */
-	set_bit(SDE_CRTC_DIRTY_DIM_LAYERS, cstate->dirty);
+	set_bit(SDE_CRTC_DIRTY_DIM_LAYERS, &sde_crtc->revalidate_mask);
 	if (cstate->num_ds_enabled)
 		set_bit(SDE_CRTC_DIRTY_DEST_SCALER, cstate->dirty);
 }
