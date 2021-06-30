@@ -2844,7 +2844,8 @@ static int stmmac_open(struct net_device *dev)
 	else
 		priv->rx_coal_frames = STMMAC_RX_FRAMES;
 
-	phylink_start(priv->phylink);
+	if (!priv->plat->mac2mac_en)
+		phylink_start(priv->phylink);
 
 	/* Request the IRQ lines */
 	ret = request_irq(dev->irq, stmmac_interrupt,
@@ -2898,7 +2899,8 @@ lpiirq_error:
 wolirq_error:
 	free_irq(dev->irq, dev);
 irq_error:
-	phylink_stop(priv->phylink);
+	if (!priv->plat->mac2mac_en)
+		phylink_stop(priv->phylink);
 	if (!priv->tx_coal_timer_disable) {
 		for (chan = 0; chan < priv->plat->tx_queues_to_use; chan++)
 			del_timer_sync(&priv->tx_queue[chan].txtimer);
@@ -2907,7 +2909,8 @@ irq_error:
 init_error:
 	free_dma_desc_resources(priv);
 dma_desc_error:
-	phylink_disconnect_phy(priv->phylink);
+	if (!priv->plat->mac2mac_en)
+		phylink_disconnect_phy(priv->phylink);
 	return ret;
 }
 
@@ -2923,8 +2926,10 @@ static int stmmac_release(struct net_device *dev)
 	u32 chan;
 
 	/* Stop and disconnect the PHY */
-	phylink_stop(priv->phylink);
-	phylink_disconnect_phy(priv->phylink);
+	if (!priv->plat->mac2mac_en) {
+		phylink_stop(priv->phylink);
+		phylink_disconnect_phy(priv->phylink);
+	}
 
 	stmmac_disable_all_queues(priv);
 
@@ -4124,7 +4129,8 @@ static int stmmac_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 	case SIOCGMIIPHY:
 	case SIOCGMIIREG:
 	case SIOCSMIIREG:
-		ret = phylink_mii_ioctl(priv->phylink, rq, cmd);
+		if (!priv->plat->mac2mac_en)
+			ret = phylink_mii_ioctl(priv->phylink, rq, cmd);
 		break;
 	case SIOCSHWTSTAMP:
 		ret = stmmac_hwtstamp_set(dev, rq);
@@ -4840,7 +4846,8 @@ int stmmac_dvr_probe(struct device *device,
 
 	stmmac_check_pcs_mode(priv);
 
-	if (priv->hw->pcs != STMMAC_PCS_RGMII  &&
+	if (!priv->plat->mac2mac_en &&
+	    priv->hw->pcs != STMMAC_PCS_RGMII  &&
 	    priv->hw->pcs != STMMAC_PCS_TBI &&
 	    priv->hw->pcs != STMMAC_PCS_RTBI) {
 		/* MDIO bus Registration */
@@ -4852,8 +4859,9 @@ int stmmac_dvr_probe(struct device *device,
 			goto error_mdio_register;
 		}
 	}
+	if (!priv->plat->mac2mac_en)
+		ret = stmmac_phy_setup(priv);
 
-	ret = stmmac_phy_setup(priv);
 	if (ret) {
 		netdev_err(ndev, "failed to setup phy (%d)\n", ret);
 		goto error_phy_setup;
@@ -4877,7 +4885,8 @@ int stmmac_dvr_probe(struct device *device,
 	return ret;
 
 error_netdev_register:
-	phylink_destroy(priv->phylink);
+	if (!priv->plat->mac2mac_en)
+		phylink_destroy(priv->phylink);
 error_phy_setup:
 	if (priv->hw->pcs != STMMAC_PCS_RGMII &&
 	    priv->hw->pcs != STMMAC_PCS_TBI &&
@@ -4920,7 +4929,8 @@ int stmmac_dvr_remove(struct device *dev)
 #ifdef CONFIG_DEBUG_FS
 	stmmac_exit_fs(ndev);
 #endif
-	phylink_destroy(priv->phylink);
+	if (!priv->plat->mac2mac_en)
+		phylink_destroy(priv->phylink);
 	if (priv->plat->stmmac_rst)
 		reset_control_assert(priv->plat->stmmac_rst);
 	clk_disable_unprepare(priv->plat->pclk);
@@ -4952,11 +4962,13 @@ int stmmac_suspend(struct device *dev)
 	if (!ndev || !netif_running(ndev))
 		return 0;
 
-	phylink_mac_change(priv->phylink, false);
+	if (!priv->plat->mac2mac_en)
+		phylink_mac_change(priv->phylink, false);
 
 #ifdef CONFIG_DWMAC_QCOM_ETHQOS
 	rtnl_lock();
-	phylink_stop(priv->phylink);
+	if (!priv->plat->mac2mac_en)
+		phylink_stop(priv->phylink);
 	rtnl_unlock();
 #endif
 	mutex_lock(&priv->lock);
@@ -4984,7 +4996,8 @@ int stmmac_suspend(struct device *dev)
 		mutex_unlock(&priv->lock);
 #ifndef CONFIG_DWMAC_QCOM_ETHQOS
 		rtnl_lock();
-		phylink_stop(priv->phylink);
+		if (!priv->plat->mac2mac_en)
+			phylink_stop(priv->phylink);
 		rtnl_unlock();
 #endif
 		mutex_lock(&priv->lock);
@@ -5091,16 +5104,19 @@ int stmmac_resume(struct device *dev)
 #ifndef CONFIG_DWMAC_QCOM_ETHQOS
 	if (!device_may_wakeup(priv->device)) {
 		rtnl_lock();
-		phylink_start(priv->phylink);
+		if (!priv->plat->mac2mac_en)
+			phylink_start(priv->phylink);
 		rtnl_unlock();
 	}
 #endif
 #ifdef CONFIG_DWMAC_QCOM_ETHQOS
 		rtnl_lock();
-		phylink_start(priv->phylink);
+		if (!priv->plat->mac2mac_en)
+			phylink_start(priv->phylink);
 		rtnl_unlock();
 #endif
-	phylink_mac_change(priv->phylink, true);
+	if (!priv->plat->mac2mac_en)
+		phylink_mac_change(priv->phylink, true);
 
 	return 0;
 }

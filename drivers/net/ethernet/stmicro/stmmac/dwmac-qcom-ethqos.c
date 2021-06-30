@@ -984,10 +984,12 @@ static void ethqos_handle_phy_interrupt(struct qcom_ethqos *ethqos)
 		 ethqos_mdio_read(priv, priv->plat->phy_addr,
 				  DWC_ETH_QOS_PHY_INTR_STATUS);
 
-		if (phy_intr_status & LINK_UP_STATE)
-			phylink_mac_change(priv->phylink, LINK_UP);
-		else if (phy_intr_status & LINK_DOWN_STATE)
-			phylink_mac_change(priv->phylink, LINK_DOWN);
+		if (!priv->plat->mac2mac_en) {
+			if (phy_intr_status & LINK_UP_STATE)
+				phylink_mac_change(priv->phylink, LINK_UP);
+			else if (phy_intr_status & LINK_DOWN_STATE)
+				phylink_mac_change(priv->phylink, LINK_DOWN);
+		}
 	}
 }
 
@@ -1700,10 +1702,19 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	ret = stmmac_dvr_probe(&pdev->dev, plat_dat, &stmmac_res);
 	if (ret)
 		goto err_clk;
-	if (!ethqos_phy_intr_config(ethqos))
-		ethqos_phy_intr_enable(ethqos);
-	else
-		ETHQOSERR("Phy interrupt configuration failed");
+
+	pethqos = ethqos;
+	ethqos_create_debugfs(ethqos);
+
+	ndev = dev_get_drvdata(&ethqos->pdev->dev);
+	priv = netdev_priv(ndev);
+
+	if (!priv->plat->mac2mac_en) {
+		if (!ethqos_phy_intr_config(ethqos))
+			ethqos_phy_intr_enable(ethqos);
+		else
+			ETHQOSERR("Phy interrupt configuration failed");
+	}
 	rgmii_dump(ethqos);
 
 	if (ethqos->emac_ver == EMAC_HW_v2_3_2_RG) {
@@ -1718,12 +1729,6 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 						 &ethqos->avb_class_b_class,
 						 AVB_CLASS_B_POLL_DEV_NODE);
 	}
-
-	pethqos = ethqos;
-	ethqos_create_debugfs(ethqos);
-
-	ndev = dev_get_drvdata(&ethqos->pdev->dev);
-	priv = netdev_priv(ndev);
 
 	if (ethqos->early_eth_enabled) {
 		/* Initialize work*/
