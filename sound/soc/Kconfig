@@ -44,6 +44,15 @@ config AUDIO_QGKI
 	bool "Audio QGKI support"
 	depends on QGKI
 
+config SND_CTL_HASHTABLE
+	bool "Add SND CTL hashtable"
+	help
+	  This enables hash table in sound card for kcontrols. The traditional way is
+	  traversing the linked list of controls and compare each exsiting control with
+	  the new kcontrol to find out whether there are duplicate kcontrols, which will
+	  consumes much time during bootup. Enable this will use hash table instead of
+	  linked list to check new kcontrol and reduce much time for sound card registration.
+
 # All the supported SoCs
 source "sound/soc/adi/Kconfig"
 source "sound/soc/amd/Kconfig"

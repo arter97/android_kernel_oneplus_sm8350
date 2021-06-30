@@ -14,7 +14,9 @@
 #include <linux/pm.h>			/* pm_message_t */
 #include <linux/stringify.h>
 #include <linux/printk.h>
-
+#ifdef CONFIG_SND_CTL_HASHTABLE
+#include <linux/hashtable.h>
+#endif
 /* number of supported soundcards */
 #ifdef CONFIG_SND_DYNAMIC_MINORS
 #define SNDRV_CARDS CONFIG_SND_MAX_CARDS
@@ -23,6 +25,10 @@
 #endif
 
 #define CONFIG_SND_MAJOR	116	/* standard configuration */
+
+#ifdef CONFIG_SND_CTL_HASHTABLE
+#define SND_CTL_HASH_TABLE_BITS 14	/* buckets numbers: 1 << 14 */
+#endif
 
 /* forward declarations */
 struct pci_dev;
@@ -103,7 +109,9 @@ struct snd_card {
 	int user_ctl_count;		/* count of all user controls */
 	struct list_head controls;	/* all controls for this card */
 	struct list_head ctl_files;	/* active control files */
-
+#ifdef CONFIG_SND_CTL_HASHTABLE
+	DECLARE_HASHTABLE(ctl_htable, SND_CTL_HASH_TABLE_BITS);
+#endif
 	struct snd_info_entry *proc_root;	/* root for soundcard specific files */
 	struct proc_dir_entry *proc_root_link;	/* number link to real id */
 
