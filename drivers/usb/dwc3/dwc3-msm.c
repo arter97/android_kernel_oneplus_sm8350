@@ -362,8 +362,7 @@ struct usb_irq_info {
 
 static const struct usb_irq_info usb_irq_info[USB_MAX_IRQ] = {
 	{ "hs_phy_irq",
-	  IRQF_TRIGGER_HIGH | IRQF_ONESHOT | IRQ_TYPE_LEVEL_HIGH |
-		 IRQF_EARLY_RESUME,
+	  IRQF_TRIGGER_RISING | IRQF_ONESHOT | IRQF_EARLY_RESUME,
 	  false,
 	},
 	{ "pwr_event_irq",
