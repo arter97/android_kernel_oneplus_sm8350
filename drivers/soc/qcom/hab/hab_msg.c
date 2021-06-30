@@ -402,6 +402,13 @@ int hab_msg_recv(struct physical_channel *pchan,
 
 	case HAB_PAYLOAD_TYPE_PROFILE:
 		ktime_get_ts64(&ts);
+
+		if (sizebytes < sizeof(struct habmm_xing_vm_stat)) {
+			pr_err("%s expected size greater than %zd at least %zd\n",
+				pchan->name, sizebytes, sizeof(struct habmm_xing_vm_stat));
+			break;
+		}
+
 		/* pull down the incoming data */
 		message = hab_msg_alloc(pchan, sizebytes);
 		if (!message)
@@ -418,6 +425,12 @@ int hab_msg_recv(struct physical_channel *pchan,
 
 	case HAB_PAYLOAD_TYPE_SCHE_MSG:
 	case HAB_PAYLOAD_TYPE_SCHE_MSG_ACK:
+		if (sizebytes < sizeof(unsigned long long)) {
+			pr_err("%s expected size greater than %zd at least %zd\n",
+				pchan->name, sizebytes, sizeof(unsigned long long));
+			break;
+		}
+
 		rx_mpm_tv = msm_timer_get_sclk_ticks();
 		/* pull down the incoming data */
 		message = hab_msg_alloc(pchan, sizebytes);
