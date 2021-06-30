@@ -969,30 +969,12 @@ static int hgsl_init_global_db(struct qcom_hgsl *hgsl,
 		goto fail;
 	}
 
-	tcsr = hgsl_tcsr_request(tcsr_pdev, role, dev,
-			is_sender ? NULL : hgsl_tcsr_isr);
-	if (IS_ERR_OR_NULL(tcsr)) {
-		dev_err(dev,
-			"failed to request %s tcsr, ret %lx\n",
-			is_sender ? "sender" : "receiver", PTR_ERR(tcsr));
-		ret = tcsr ? PTR_ERR(tcsr) : -ENODEV;
-		goto fail;
-	}
-
-	ret = hgsl_tcsr_enable(tcsr);
-	if (ret) {
-		dev_err(dev,
-			"failed to enable %s tcsr, ret %d\n",
-			is_sender ? "sender" : "receiver", ret);
-		goto free_tcsr;
-	}
-
 	if (!is_sender) {
 		hgsl->contexts = kzalloc(sizeof(struct hgsl_context *) *
 					HGSL_CONTEXT_NUM, GFP_KERNEL);
 		if (!hgsl->contexts) {
 			ret = -ENOMEM;
-			goto disable_tcsr;
+			goto fail;
 		}
 
 		hgsl->wq = create_workqueue("hgsl-wq");
@@ -1006,21 +988,41 @@ static int hgsl_init_global_db(struct qcom_hgsl *hgsl,
 		INIT_LIST_HEAD(&hgsl->active_wait_list);
 		spin_lock_init(&hgsl->active_wait_lock);
 		rwlock_init(&hgsl->ctxt_lock);
+	}
 
+	tcsr = hgsl_tcsr_request(tcsr_pdev, role, dev,
+			is_sender ? NULL : hgsl_tcsr_isr);
+	if (IS_ERR_OR_NULL(tcsr)) {
+		dev_err(dev,
+			"failed to request %s tcsr, ret %lx\n",
+			is_sender ? "sender" : "receiver", PTR_ERR(tcsr));
+		ret = tcsr ? PTR_ERR(tcsr) : -ENODEV;
+		goto destroy_wq;
+	}
+
+	ret = hgsl_tcsr_enable(tcsr);
+	if (ret) {
+		dev_err(dev,
+			"failed to enable %s tcsr, ret %d\n",
+			is_sender ? "sender" : "receiver", ret);
+		goto free_tcsr;
+	}
+
+	if (!is_sender)
 		hgsl_tcsr_irq_enable(tcsr, GLB_DB_DEST_TS_RETIRE_IRQ_MASK,
 					true);
-	}
 
 	hgsl->tcsr[idx][role] = tcsr;
 	return 0;
 
+free_tcsr:
+	hgsl_tcsr_free(tcsr);
+destroy_wq:
+	if (hgsl->wq)
+		destroy_workqueue(hgsl->wq);
 free_contexts:
 	kfree(hgsl->contexts);
 	hgsl->contexts = NULL;
-disable_tcsr:
-	hgsl_tcsr_disable(tcsr);
-free_tcsr:
-	hgsl_tcsr_free(tcsr);
 fail:
 	return ret;
 }
