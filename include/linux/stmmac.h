@@ -198,6 +198,9 @@ struct plat_stmmacenet_data {
 		 struct net_device *sb_dev);
 	unsigned int (*get_plat_tx_coal_frames)
 		(struct sk_buff *skb);
+	int mac2mac_rgmii_speed;
+	bool mac2mac_en;
+	int mac2mac_link;
 	bool early_eth;
 	struct emac_emb_smmu_cb_ctx stmmac_emb_smmu_ctx;
 	bool phy_intr_en_extn_stm;
