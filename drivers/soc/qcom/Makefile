@@ -125,3 +125,4 @@ obj-$(CONFIG_DUMP_XBL_LOG) += dump_boot_log.o
 obj-$(CONFIG_GNSS_SIRF)		+= gnsssirf/
 obj-$(CONFIG_MSM_SEB) += slate_events_bridge.o
 obj-$(CONFIG_MSM_SEB_RPMSG) += slate_events_bridge_rpmsg.o
+obj-$(CONFIG_POWER_STATE) += power_state.o

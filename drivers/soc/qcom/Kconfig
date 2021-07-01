@@ -1337,6 +1337,24 @@ config MSM_SEB_RPMSG
 	  and is probed when Slate opens channel and removed when the
 	  channel is closed by remote processor.
 
+config DEEPSLEEP
+	bool "Deep Sleep or Suspend-to-RAM sleep state"
+	help
+		Set this option to enable Deep Sleep. Deep Sleep is Suspend-to-RAM
+		sleep state, in which entire system is put in a low-power state,
+		except for memory, so that exit from this state can happen in shorter
+		duration.
+
+config POWER_STATE
+	depends on DEEPSLEEP || HIBERNATION
+	bool "Power State driver support for Deep Sleep and Hibernate"
+	help
+		This option enables Power State Driver which is the kernel component
+		for supporting deep sleep and hibernate. Create a power_state device
+		node for user space communication. User space client can open device
+		node for communication required for handling deep sleep and hibernate
+		modes.
+
 source "drivers/soc/qcom/icnss2/Kconfig"
 
 source "drivers/soc/qcom/gnsssirf/Kconfig"
