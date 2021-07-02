@@ -3,6 +3,7 @@
 #define _LINUX_BITOPS_H
 #include <asm/types.h>
 #include <linux/bits.h>
+#include <linux/typecheck.h>
 
 /* Set bits in the first 'n' bytes when loaded from memory */
 #ifdef __LITTLE_ENDIAN
@@ -249,6 +250,55 @@ static __always_inline void __assign_bit(long nr, volatile unsigned long *addr,
 	else
 		__clear_bit(nr, addr);
 }
+
+/**
+ * __ptr_set_bit - Set bit in a pointer's value
+ * @nr: the bit to set
+ * @addr: the address of the pointer variable
+ *
+ * Example:
+ *	void *p = foo();
+ *	__ptr_set_bit(bit, &p);
+ */
+#define __ptr_set_bit(nr, addr)                         \
+	({                                              \
+		typecheck_pointer(*(addr));             \
+		__set_bit(nr, (unsigned long *)(addr)); \
+	})
+
+/**
+ * __ptr_clear_bit - Clear bit in a pointer's value
+ * @nr: the bit to clear
+ * @addr: the address of the pointer variable
+ *
+ * Example:
+ *	void *p = foo();
+ *	__ptr_clear_bit(bit, &p);
+ */
+#define __ptr_clear_bit(nr, addr)                         \
+	({                                                \
+		typecheck_pointer(*(addr));               \
+		__clear_bit(nr, (unsigned long *)(addr)); \
+	})
+
+/**
+ * __ptr_test_bit - Test bit in a pointer's value
+ * @nr: the bit to test
+ * @addr: the address of the pointer variable
+ *
+ * Example:
+ *	void *p = foo();
+ *	if (__ptr_test_bit(bit, &p)) {
+ *	        ...
+ *	} else {
+ *		...
+ *	}
+ */
+#define __ptr_test_bit(nr, addr)                       \
+	({                                             \
+		typecheck_pointer(*(addr));            \
+		test_bit(nr, (unsigned long *)(addr)); \
+	})
 
 #ifdef __KERNEL__
 
