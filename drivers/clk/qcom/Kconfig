@@ -883,6 +883,15 @@ config SA_DISPCC_DIREWOLF
 	  Say Y if you want to support display devices and functionality such as
 	  splash screen.
 
+config SA_VIDEOCC_DIREWOLF
+	tristate "DIREWOLF Video Clock Controller"
+	select SA_GCC_DIREWOLF
+	help
+	  Support for the video clock controller on Qualcomm Technologies, Inc.
+	  DIREWOLF devices.
+	  Say Y if you want to support video devices and functionality such as
+	  video encode/decode.
+
 endif
 
 config VIRTIO_CLK

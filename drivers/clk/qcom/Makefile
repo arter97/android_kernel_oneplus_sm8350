@@ -62,6 +62,7 @@ obj-$(CONFIG_SA_CAMCC_DIREWOLF) += camcc-direwolf.o
 obj-$(CONFIG_SA_DEBUGCC_DIREWOLF) += debugcc-direwolf.o
 obj-$(CONFIG_SA_DISPCC_DIREWOLF) += dispcc0-direwolf.o dispcc1-direwolf.o
 obj-$(CONFIG_SA_GCC_DIREWOLF) += gcc-direwolf.o
+obj-$(CONFIG_SA_VIDEOCC_DIREWOLF) += videocc-direwolf.o
 obj-$(CONFIG_SC_CAMCC_SHRIKE) += camcc-scshrike.o
 obj-$(CONFIG_SC_DISPCC_SHRIKE) += dispcc-scshrike.o
 obj-$(CONFIG_SC_DEBUGCC_SHRIKE) += debugcc-scshrike.o
