@@ -678,8 +678,6 @@ static void kgsl_device_snapshot_atomic(struct kgsl_device *device)
 	struct kgsl_snapshot *snapshot;
 	phys_addr_t pa;
 
-	device->snapshot_atomic = true;
-
 	if (device->snapshot && device->force_panic)
 		return;
 
@@ -689,13 +687,18 @@ static void kgsl_device_snapshot_atomic(struct kgsl_device *device)
 	}
 
 	device->snapshot_memory_atomic.size = device->snapshot_memory.size;
-	device->snapshot_memory_atomic.ptr = devm_kzalloc(&device->pdev->dev,
-			device->snapshot_memory_atomic.size, GFP_ATOMIC);
+	if (!device->snapshot_faultcount) {
+		/* Use non-atomic snapshot memory if it is unused */
+		device->snapshot_memory_atomic.ptr = device->snapshot_memory.ptr;
+	} else {
+		device->snapshot_memory_atomic.ptr = devm_kzalloc(&device->pdev->dev,
+				device->snapshot_memory_atomic.size, GFP_ATOMIC);
 
-	if (!device->snapshot_memory_atomic.ptr) {
-		dev_err(device->dev,
-			"KGSL failed to allocate memory for atomic snapshot\n");
-		return;
+		if (!device->snapshot_memory_atomic.ptr) {
+			dev_err(device->dev,
+				"KGSL failed to allocate memory for atomic snapshot\n");
+			return;
+		}
 	}
 
 	/* Allocate memory for the snapshot instance */
@@ -703,6 +706,7 @@ static void kgsl_device_snapshot_atomic(struct kgsl_device *device)
 	if (snapshot == NULL)
 		return;
 
+	device->snapshot_atomic = true;
 	INIT_LIST_HEAD(&snapshot->obj_list);
 	INIT_LIST_HEAD(&snapshot->cp_list);
 

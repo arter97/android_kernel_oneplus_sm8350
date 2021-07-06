@@ -2210,6 +2210,7 @@ int __qcom_scm_tsens_reinit(struct device *dev, int *tsens_ret)
 	struct qcom_scm_desc desc = {
 		.svc = QCOM_SCM_SVC_TSENS,
 		.cmd = QCOM_SCM_TSENS_INIT_ID,
+		.owner = ARM_SMCCC_OWNER_SIP
 	};
 
 	ret = qcom_scm_call(dev, &desc);
@@ -2444,6 +2445,74 @@ int __qcom_scm_qseecom_do(struct device *dev, u32 cmd_id, struct scm_desc *desc,
 	memcpy(desc->ret, &_desc.res, sizeof(_desc.res));
 
 	return _ret;
+}
+
+int __qcom_scm_paravirt_smmu_attach(struct device *dev, u64 sid,
+				    u64 asid, u64 ste_pa, u64 ste_size,
+				    u64 cd_pa, u64 cd_size)
+{
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_SMMU_PROGRAM,
+		.cmd = ARM_SMMU_PARAVIRT_CMD,
+		.owner = ARM_SMCCC_OWNER_SIP,
+	};
+	int ret;
+
+	desc.args[0] = SMMU_PARAVIRT_OP_ATTACH;
+	desc.args[1] = sid;
+	desc.args[2] = asid;
+	desc.args[3] = 0;
+	desc.args[4] = ste_pa;
+	desc.args[5] = ste_size;
+	desc.args[6] = cd_pa;
+	desc.args[7] = cd_size;
+	desc.arginfo = ARM_SMMU_PARAVIRT_DESCARG;
+	ret = qcom_scm_call(dev, &desc);
+	return ret ? : desc.res[0];
+}
+
+int __qcom_scm_paravirt_tlb_inv(struct device *dev, u64 asid)
+{
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_SMMU_PROGRAM,
+		.cmd = ARM_SMMU_PARAVIRT_CMD,
+		.owner = ARM_SMCCC_OWNER_SIP,
+	};
+	int ret;
+
+	desc.args[0] = SMMU_PARAVIRT_OP_INVAL_ASID;
+	desc.args[1] = 0;
+	desc.args[2] = asid;
+	desc.args[3] = 0;
+	desc.args[4] = 0;
+	desc.args[5] = 0;
+	desc.args[6] = 0;
+	desc.args[7] = 0;
+	desc.arginfo = ARM_SMMU_PARAVIRT_DESCARG;
+	ret = qcom_scm_call_atomic(dev, &desc);
+	return ret ? : desc.res[0];
+}
+
+int __qcom_scm_paravirt_smmu_detach(struct device *dev, u64 sid)
+{
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_SMMU_PROGRAM,
+		.cmd = ARM_SMMU_PARAVIRT_CMD,
+		.owner = ARM_SMCCC_OWNER_SIP,
+	};
+	int ret;
+
+	desc.args[0] = SMMU_PARAVIRT_OP_DETACH;
+	desc.args[1] = sid;
+	desc.args[2] = 0;
+	desc.args[3] = 0;
+	desc.args[4] = 0;
+	desc.args[5] = 0;
+	desc.args[6] = 0;
+	desc.args[7] = 0;
+	desc.arginfo = ARM_SMMU_PARAVIRT_DESCARG;
+	ret = qcom_scm_call(dev, &desc);
+	return ret ? : desc.res[0];
 }
 
 #ifdef CONFIG_QCOM_RTIC

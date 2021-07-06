@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2014-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2021, The Linux Foundation. All rights reserved.
  *
  */
 
@@ -175,6 +175,20 @@
 #define TZ_DBG_ETM_VER		(0x400000)
 #define HW_SOC_ID_M8953		(293)
 #define GET_FEAT_VERSION_CMD	3
+
+#ifdef CONFIG_ARM
+#define readq_relaxed(a) ({			\
+	u64 val = readl_relaxed((a) + 4);	\
+	val <<= 32;				\
+	val |=  readl_relaxed((a));		\
+	val;					\
+})
+
+#define writeq_relaxed(v, a) ({			\
+	writel_relaxed((v) & 0xffffffff, a);	\
+	writel_relaxed((v) >> 32, (a) + 4);		\
+})
+#endif
 
 /* spread out etm register write */
 #define etm_writel(etm, val, off)	\

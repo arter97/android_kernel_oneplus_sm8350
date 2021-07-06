@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/cache.h>
@@ -263,10 +263,10 @@ void dump_stack_minidump(u64 sp)
 		return;
 
 	is_vmap_stack = IS_ENABLED(CONFIG_VMAP_STACK);
-
+#ifdef CONFIG_ARM64
 	if (sp < KIMAGE_VADDR || sp > -256UL)
 		sp = current_stack_pointer;
-
+#endif
 	/*
 	 * Since stacks are now allocated with vmalloc, the translation to
 	 * physical address is not a simple linear transformation like it is

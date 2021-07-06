@@ -676,7 +676,7 @@ static int st_asm330lhh_write_raw(struct iio_dev *iio_dev,
 				switch (sensor->id) {
 				case ST_ASM330LHH_ID_GYRO:
 				case ST_ASM330LHH_ID_ACC:
-					err = st_asm330lhh_set_odr(sensor, sensor->odr, sensor->uodr);
+			err = st_asm330lhh_set_odr(sensor, sensor->odr, sensor->uodr);
 					if (err < 0)
 						break;
 
@@ -1093,7 +1093,7 @@ int st_asm330lhh_probe(struct device *dev, int irq,
 		     const struct st_asm330lhh_transfer_function *tf_ops)
 {
 	struct st_asm330lhh_hw *hw;
-        struct device_node *np;
+	struct device_node *np;
 	int i = 0, err = 0;
 
 	hw = devm_kzalloc(dev, sizeof(*hw), GFP_KERNEL);
@@ -1110,7 +1110,7 @@ int st_asm330lhh_probe(struct device *dev, int irq,
 	hw->irq = irq;
 	hw->tf = tf_ops;
 	hw->odr_table_entry = st_asm330lhh_odr_table;
-        np = hw->dev->of_node;
+	np = hw->dev->of_node;
 
 	dev_info(hw->dev, "Ver: %s\n", ST_ASM330LHH_VERSION);
 
@@ -1162,7 +1162,7 @@ int st_asm330lhh_probe(struct device *dev, int irq,
 		if (!hw->iio_devs[i]) {
 			err = -ENOMEM;
 			goto regulator_shutdown;
-                }
+		}
 	}
 
 	if (hw->irq > 0) {

@@ -660,6 +660,7 @@ static const struct soc_id soc_id[] = {
 	{ 310, "MSM8996AU" },
 	{ 311, "APQ8096AU" },
 	{ 312, "APQ8096SG" },
+	{ 352, "QCS405" },
 	{ 356, "KONA" },
 	{ 362, "SA8155" },
 	{ 367, "SA8155P" },
@@ -669,6 +670,8 @@ static const struct soc_id soc_id[] = {
 	{ 415, "LAHAINA" },
 	{ 439, "LAHAINAP" },
 	{ 449, "SC_DIREWOLF"},
+	{ 451, "SA2145P"},
+	{ 452, "SA2150P"},
 	{ 456, "LAHAINA-ATP" },
 	{ 460, "SA_DIREWOLF_IVI"},
 	{ 461, "SA_DIREWOLF_ADAS"},
@@ -678,6 +681,7 @@ static const struct soc_id soc_id[] = {
 	{ 454, "HOLI" },
 	{ 507, "BLAIR" },
 	{ 486, "MONACO" },
+	{ 517, "MONACOP" },
 	{ 458, "SDXLEMUR" },
 	{ 483, "SDXLEMUR-SD"},
 	{ 509, "SDXLEMUR-LITE"},
@@ -688,6 +692,8 @@ static const struct soc_id soc_id[] = {
 	{ 498, "YUPIKP-IOT" },
 	{ 499, "YUPIKP" },
 	{ 515, "YUPIK-LTE" },
+	{ 417, "BENGAL" },
+	{ 444, "BENGAL" },
 };
 
 static struct qcom_socinfo *qsocinfo;

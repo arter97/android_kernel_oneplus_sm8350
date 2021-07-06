@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015, Sony Mobile Communications Inc.
- * Copyright (c) 2013, 2018-2019 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013, 2018-2019, 2021, The Linux Foundation. All rights reserved.
  */
 #include <linux/kthread.h>
 #include <linux/module.h>
@@ -40,6 +40,11 @@
 
 #define AID_VENDOR_QRTR	KGIDT_INIT(2906)
 
+#if defined(CONFIG_RPMSG_QCOM_GLINK_NATIVE)
+extern bool glink_resume_pkt;
+#endif
+extern unsigned int qrtr_get_service_id(unsigned int node_id,
+					unsigned int port_id);
 /**
  * struct qrtr_hdr_v1 - (I|R)PCrouter packet header version 1
  * @version: protocol version
@@ -269,6 +274,23 @@ static void qrtr_log_tx_msg(struct qrtr_node *node, struct qrtr_hdr_v1 *hdr,
 	}
 }
 
+#if defined(CONFIG_RPMSG_QCOM_GLINK_NATIVE)
+static void qrtr_log_resume_pkt(struct qrtr_cb *cb, u64 pl_buf)
+{
+	unsigned int service_id;
+
+	if (glink_resume_pkt) {
+		glink_resume_pkt = false;
+		service_id = qrtr_get_service_id(cb->src_node, cb->src_port);
+		pr_info("[QRTR RESUME PKT]:src[0x%x:0x%x] dst[0x%x:0x%x] [%08x %08x]: service[0x%x]\n",
+			cb->src_node, cb->src_port,
+			cb->dst_node, cb->dst_port,
+			(unsigned int)pl_buf, (unsigned int)(pl_buf >> 32),
+			service_id);
+	}
+}
+#endif
+
 static void qrtr_log_rx_msg(struct qrtr_node *node, struct sk_buff *skb)
 {
 	struct qrtr_ctrl_pkt pkt = {0,};
@@ -287,6 +309,9 @@ static void qrtr_log_rx_msg(struct qrtr_node *node, struct sk_buff *skb)
 			  skb->len, cb->confirm_rx, cb->src_node, cb->src_port,
 			  cb->dst_node, cb->dst_port,
 			  (unsigned int)pl_buf, (unsigned int)(pl_buf >> 32));
+#if defined(CONFIG_RPMSG_QCOM_GLINK_NATIVE)
+		qrtr_log_resume_pkt(cb, pl_buf);
+#endif
 	} else {
 		skb_copy_bits(skb, 0, &pkt, sizeof(pkt));
 		if (cb->type == QRTR_TYPE_NEW_SERVER ||
@@ -1381,27 +1406,25 @@ static void qrtr_port_remove(struct qrtr_sock *ipc)
  */
 static int qrtr_port_assign(struct qrtr_sock *ipc, int *port)
 {
-	u32 min_port;
 	int rc;
 
 	if (!*port) {
-		min_port = QRTR_MIN_EPH_SOCKET;
-		rc = idr_alloc_u32(&qrtr_ports, ipc, &min_port, QRTR_MAX_EPH_SOCKET, GFP_ATOMIC);
-		if (!rc)
-			*port = min_port;
+		rc = idr_alloc_cyclic(&qrtr_ports, ipc, QRTR_MIN_EPH_SOCKET,
+				      QRTR_MAX_EPH_SOCKET + 1, GFP_ATOMIC);
+		if (rc >= 0)
+			*port = rc;
 	} else if (*port < QRTR_MIN_EPH_SOCKET &&
-		   !(capable(CAP_NET_ADMIN) ||
-		   in_egroup_p(AID_VENDOR_QRTR) ||
-		   in_egroup_p(GLOBAL_ROOT_GID))) {
+			!(capable(CAP_NET_ADMIN) ||
+			in_egroup_p(AID_VENDOR_QRTR) ||
+			in_egroup_p(GLOBAL_ROOT_GID))) {
 		rc = -EACCES;
 	} else if (*port == QRTR_PORT_CTRL) {
-		min_port = 0;
-		rc = idr_alloc_u32(&qrtr_ports, ipc, &min_port, 0, GFP_ATOMIC);
+		rc = idr_alloc(&qrtr_ports, ipc, 0, 1, GFP_ATOMIC);
 	} else {
-		min_port = *port;
-		rc = idr_alloc_u32(&qrtr_ports, ipc, &min_port, *port, GFP_ATOMIC);
-		if (!rc)
-			*port = min_port;
+		rc = idr_alloc_cyclic(&qrtr_ports, ipc, *port, *port + 1,
+				      GFP_ATOMIC);
+		if (rc >= 0)
+			*port = rc;
 	}
 
 	if (rc == -ENOSPC)

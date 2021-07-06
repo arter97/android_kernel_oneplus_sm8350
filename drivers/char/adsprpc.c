@@ -64,7 +64,6 @@
 
 #define FASTRPC_ENOSUCH 39
 #define DEBUGFS_SIZE 3072
-#define UL_SIZE 25
 #define PID_SIZE 10
 
 #define AUDIO_PDR_ADSP_DTSI_PROPERTY_NAME        "qcom,fastrpc-adsp-audio-pdr"
@@ -568,9 +567,10 @@ struct fastrpc_mmap {
 	uintptr_t raddr;
 	int uncached;
 	int secure;
-	/* Minidump unique index */
-	int frpc_md_index;
+	bool is_persistent;		/* Indicates whether map is persistent */
+	int frpc_md_index;		/* Minidump unique index */
 	uintptr_t attr;
+	bool in_use;			/* Indicates if persistent map is in use*/
 	struct timespec64 map_start_time;
 	struct timespec64 map_end_time;
 };
@@ -641,6 +641,10 @@ struct fastrpc_file {
 	spinlock_t aqlock;
 	uint32_t ws_timeout;
 	bool untrusted_process;
+	/* Process kill will wait on work when ram dump collection in progress */
+	struct completion work;
+	/* Flag to indicate ram dump collection status*/
+	bool is_ramdump_pend;
 };
 
 static struct fastrpc_apps gfa;
@@ -904,8 +908,7 @@ static int fastrpc_elf_ramdump(void *rh_dump_dev, struct ramdump_segment *ramdum
 {
 	int err = 0;
 
-	err = do_elf_ramdump(
-		rh_dump_dev,
+	err = do_minidump(rh_dump_dev,
 			ramdump_seg, 1);
 
 	return err;
@@ -973,7 +976,7 @@ static int fastrpc_minidump_remove_region(struct fastrpc_mmap *map)
 			map->frpc_md_index = -1;
 		}
 	} else {
-		ADSPRPC_ERR("mini-dump enabled with invalid unique id: %d\n", map->frpc_md_index);
+		ADSPRPC_WARN("mini-dump enabled with invalid unique id: %d\n", map->frpc_md_index);
 	}
 	return err;
 }
@@ -1196,7 +1199,7 @@ static int fastrpc_mmap_remove(struct fastrpc_file *fl, int fd, uintptr_t va,
 	hlist_for_each_entry_safe(map, n, &me->maps, hn) {
 		if ((fd < 0 || map->fd == fd) && map->raddr == va &&
 			map->raddr + map->len == va + len &&
-			map->refs == 1) {
+			map->refs == 1 && !map->is_persistent) {
 			match = map;
 			hlist_del_init(&map->hn);
 			break;
@@ -1248,7 +1251,7 @@ static void fastrpc_mmap_free(struct fastrpc_mmap *map, uint32_t flags)
 				map->flags == ADSP_MMAP_REMOTE_HEAP_ADDR) {
 		spin_lock(&me->hlock);
 		map->refs--;
-		if (!map->refs)
+		if (!map->refs && !map->is_persistent)
 			hlist_del_init(&map->hn);
 		spin_unlock(&me->hlock);
 		if (map->refs > 0) {
@@ -1256,6 +1259,11 @@ static void fastrpc_mmap_free(struct fastrpc_mmap *map, uint32_t flags)
 				"multiple references for remote heap size %zu va 0x%lx ref count is %d\n",
 				map->size, map->va, map->refs);
 			return;
+		}
+		if (map->is_persistent && map->in_use) {
+			spin_lock(&me->hlock);
+			map->in_use = false;
+			spin_unlock(&me->hlock);
 		}
 	} else {
 		map->refs--;
@@ -1273,15 +1281,15 @@ static void fastrpc_mmap_free(struct fastrpc_mmap *map, uint32_t flags)
 			return;
 		}
 
-		if (msm_minidump_enabled()) {
+		if (msm_minidump_enabled() && !map->is_persistent)
 			err = fastrpc_minidump_remove_region(map);
-		}
-		trace_fastrpc_dma_free(-1, map->phys, map->size);
-		if (map->phys) {
+
+		if (map->phys && !map->is_persistent) {
+			trace_fastrpc_dma_free(-1, map->phys, map->size);
 			dma_free_attrs(me->dev, map->size, (void *)map->va,
 			(dma_addr_t)map->phys, (unsigned long)map->attr);
 		}
-	} else if (map->flags == FASTRPC_DMAHANDLE_NOMAP) {
+	} else if (fl && map->flags == FASTRPC_DMAHANDLE_NOMAP) {
 		trace_fastrpc_dma_unmap(fl->cid, map->phys, map->size);
 		if (!IS_ERR_OR_NULL(map->table))
 			dma_buf_unmap_attachment(map->attach, map->table,
@@ -1290,7 +1298,7 @@ static void fastrpc_mmap_free(struct fastrpc_mmap *map, uint32_t flags)
 			dma_buf_detach(map->buf, map->attach);
 		if (!IS_ERR_OR_NULL(map->buf))
 			dma_buf_put(map->buf);
-	} else {
+	} else if (fl) {
 		int destVM[1] = {VMID_HLOS};
 		int destVMperm[1] = {PERM_READ | PERM_WRITE | PERM_EXEC};
 
@@ -1322,11 +1330,34 @@ static void fastrpc_mmap_free(struct fastrpc_mmap *map, uint32_t flags)
 		if (!IS_ERR_OR_NULL(map->buf))
 			dma_buf_put(map->buf);
 	}
-	kfree(map);
+	if (!map->is_persistent) {
+		kfree(map);
+	}
 }
 
 static int fastrpc_session_alloc(struct fastrpc_channel_ctx *chan, int secure,
 					struct fastrpc_session_ctx **session);
+
+static inline bool fastrpc_get_persistent_map(size_t len, struct fastrpc_mmap **pers_map)
+{
+	struct fastrpc_apps *me = &gfa;
+	struct fastrpc_mmap *map = NULL;
+	struct hlist_node *n = NULL;
+	bool found = false;
+
+	spin_lock(&me->hlock);
+	hlist_for_each_entry_safe(map, n, &me->maps, hn) {
+		if (len == map->len &&
+			map->is_persistent && !map->in_use) {
+			*pers_map = map;
+			map->in_use = true;
+			found = true;
+			break;
+		}
+	}
+	spin_unlock(&me->hlock);
+	return found;
+}
 
 static int fastrpc_mmap_create(struct fastrpc_file *fl, int fd,
 	unsigned int attr, uintptr_t va, size_t len, int mflags,
@@ -2244,25 +2275,27 @@ static void fastrpc_ramdump_collection(int cid)
 	struct fastrpc_channel_ctx *chan = &me->channel[cid];
 	struct ramdump_segment ramdump_entry;
 	struct fastrpc_buf *buf = NULL;
-	int ret;
+	int ret = 0;
 	char ramdump_name[RAMDUMP_NAME_MAX_LENGTH];
 
 	spin_lock(&me->hlock);
 	hlist_for_each_entry_safe(fl, n, &me->drivers, hn) {
-		if (fl->cid == cid && fl->init_mem) {
-			/* process exit state condition should */
-			/* checked in spin lock to avoid race conditions */
-			spin_lock(&fl->hlock);
-				if (fl->file_close == FASTRPC_PROCESS_DEFAULT_STATE)
-					hlist_add_head(&fl->init_mem->hn_init,
-						&chan->initmems);
-			spin_unlock(&fl->hlock);
+	/*
+	 * On SSR call back, dumps collected only when process is initialized,
+	 * And, process is not cleaned on DSP to avoid UAF for init_mem.
+	 */
+		if (fl->cid == cid && fl->init_mem &&
+			fl->file_close < FASTRPC_PROCESS_DSP_EXIT_COMPLETE &&
+			fl->dsp_proc_init) {
+			hlist_add_head(&fl->init_mem->hn_init, &chan->initmems);
+			fl->is_ramdump_pend = true;
 		}
 	}
 	spin_unlock(&me->hlock);
 
 	if (chan->rh_dump_dev) {
 		hlist_for_each_entry_safe(buf, n, &chan->initmems, hn_init) {
+			memset(&ramdump_entry, 0, sizeof(ramdump_entry));
 			ramdump_entry.address = buf->phys;
 			ramdump_entry.v_address = (void __iomem *)buf->virt;
 			ramdump_entry.size = buf->size;
@@ -2273,8 +2306,10 @@ static void fastrpc_ramdump_collection(int cid)
 			}
 			ret = fastrpc_elf_ramdump(chan->rh_dump_dev, &ramdump_entry);
 			if (ret < 0)
-				pr_err("adsprpc: %s: unable to dump PD memory (err %d)\n",
+				ADSPRPC_ERR("adsprpc: %s: unable to dump PD memory (err %d)\n",
 					__func__, ret);
+			if (buf->fl)
+				complete(&buf->fl->work);
 			hlist_del_init(&buf->hn_init);
 		}
 	}
@@ -3279,7 +3314,7 @@ static int fastrpc_wait_on_async_queue(
 read_async_job:
 	interrupted = wait_event_interruptible(fl->async_wait_queue,
 				atomic_read(&fl->async_queue_job_count));
-	if (!fl || fl->file_close == FASTRPC_PROCESS_EXIT_START) {
+	if (!fl || fl->file_close >= FASTRPC_PROCESS_EXIT_START) {
 		err = -EBADF;
 		goto bail;
 	}
@@ -3851,19 +3886,24 @@ static int fastrpc_init_create_static_process(struct fastrpc_file *fl,
 
 	if (!me->staticpd_flags && !me->legacy_remote_heap) {
 		inbuf.pageslen = 1;
-		mutex_lock(&fl->map_mutex);
-		err = fastrpc_mmap_create(fl, -1, 0, init->mem,
-			 init->memlen, ADSP_MMAP_REMOTE_HEAP_ADDR, &mem);
-		mutex_unlock(&fl->map_mutex);
-		if (err)
-			goto bail;
+		if (!fastrpc_get_persistent_map(init->memlen, &mem)) {
+			mutex_lock(&fl->map_mutex);
+			err = fastrpc_mmap_create(fl, -1, 0, init->mem,
+				 init->memlen, ADSP_MMAP_REMOTE_HEAP_ADDR, &mem);
+			mutex_unlock(&fl->map_mutex);
+			if (err || !mem)
+				goto bail;
+			spin_lock(&me->hlock);
+			mem->in_use = true;
+			spin_unlock(&me->hlock);
+		}
 		phys = mem->phys;
 		size = mem->size;
 		/*
 		 * If remote-heap VMIDs are defined in DTSI, then do
 		 * hyp_assign from HLOS to those VMs (LPASS, ADSP).
 		 */
-		if (rhvm->vmid) {
+		if (rhvm->vmid && !mem->is_persistent) {
 			err = hyp_assign_phys(phys, (uint64_t)size,
 				hlosvm, 1,
 				rhvm->vmid, rhvm->vmperm, rhvm->vmcount);
@@ -3877,6 +3917,7 @@ static int fastrpc_init_create_static_process(struct fastrpc_file *fl,
 			rh_hyp_done = 1;
 		}
 		me->staticpd_flags = 1;
+		mem->is_persistent = true;
 	}
 
 	/*
@@ -3926,9 +3967,9 @@ bail:
 					"rh hyp unassign failed with %d for phys 0x%llx of size %zu\n",
 					hyp_err, phys, size);
 		}
-	mutex_lock(&fl->map_mutex);
-	fastrpc_mmap_free(mem, 0);
-	mutex_unlock(&fl->map_mutex);
+		mutex_lock(&fl->map_mutex);
+		fastrpc_mmap_free(mem, 0);
+		mutex_unlock(&fl->map_mutex);
 	}
 	return err;
 }
@@ -4178,9 +4219,9 @@ static int fastrpc_release_current_dsp_process(struct fastrpc_file *fl)
 	ioctl.perf_kernel = NULL;
 	ioctl.perf_dsp = NULL;
 	ioctl.job = NULL;
-	spin_lock(&fl->hlock);
+	spin_lock(&fl->apps->hlock);
 	fl->file_close = FASTRPC_PROCESS_DSP_EXIT_INIT;
-	spin_unlock(&fl->hlock);
+	spin_unlock(&fl->apps->hlock);
 	/*
 	 * Pass 2 for "kernel" arg to send kernel msg to DSP
 	 * with non-zero msg PID for the DSP to directly use
@@ -4188,9 +4229,9 @@ static int fastrpc_release_current_dsp_process(struct fastrpc_file *fl)
 	 */
 	VERIFY(err, 0 == (err = fastrpc_internal_invoke(fl,
 		FASTRPC_MODE_PARALLEL, KERNEL_MSG_WITH_NONZERO_PID, &ioctl)));
-	spin_lock(&fl->hlock);
+	spin_lock(&fl->apps->hlock);
 	fl->file_close = FASTRPC_PROCESS_DSP_EXIT_COMPLETE;
-	spin_unlock(&fl->hlock);
+	spin_unlock(&fl->apps->hlock);
 	if (err && fl->dsp_proc_init)
 		ADSPRPC_ERR(
 			"releasing DSP process failed with %d (0x%x) for %s\n",
@@ -4516,6 +4557,11 @@ static int fastrpc_mmap_remove_ssr(struct fastrpc_file *fl)
 		spin_lock(&me->hlock);
 		hlist_for_each_entry_safe(map, n, &me->maps, hn) {
 			match = map;
+			if (map->is_persistent) {
+				map->in_use = false;
+				match = NULL;
+				continue;
+			}
 			hlist_del_init(&map->hn);
 			break;
 		}
@@ -4655,8 +4701,11 @@ static int fastrpc_internal_munmap(struct fastrpc_file *fl,
 		err = -EINVAL;
 		goto bail;
 	}
-	VERIFY(err, !(err = fastrpc_munmap_on_dsp(fl, map->raddr,
-			map->phys, map->size, map->flags)));
+	if (!map->is_persistent) {
+		VERIFY(err, !(err = fastrpc_munmap_on_dsp(fl, map->raddr,
+					map->phys, map->size, map->flags)));
+	}
+
 	if (err)
 		goto bail;
 	mutex_lock(&fl->map_mutex);
@@ -5121,18 +5170,26 @@ static int fastrpc_file_free(struct fastrpc_file *fl)
 	if (!fl)
 		return 0;
 	cid = fl->cid;
-	spin_lock(&fl->hlock);
+	spin_lock(&fl->apps->hlock);
 	fl->file_close = FASTRPC_PROCESS_EXIT_START;
-	spin_unlock(&fl->hlock);
+	spin_unlock(&fl->apps->hlock);
 
 	(void)fastrpc_release_current_dsp_process(fl);
+	spin_lock(&fl->apps->hlock);
+	if (!fl->is_ramdump_pend) {
+		spin_unlock(&fl->apps->hlock);
+		goto skip_dump_wait;
+	}
+	spin_unlock(&fl->apps->hlock);
+	wait_for_completion(&fl->work);
 
+skip_dump_wait:
 	spin_lock(&fl->apps->hlock);
 	hlist_del_init(&fl->hn);
+	fl->is_ramdump_pend = false;
 	spin_unlock(&fl->apps->hlock);
 	kfree(fl->debug_buf);
 	kfree(fl->gidlist.gids);
-
 	if (!fl->sctx) {
 		kfree(fl->dev_pm_qos_req);
 		kfree(fl);
@@ -5216,8 +5273,8 @@ static ssize_t fastrpc_debugfs_read(struct file *filp, char __user *buffer,
 	unsigned int len = 0;
 	int i, j, sess_used = 0, ret = 0;
 	char *fileinfo = NULL;
-	char single_line[UL_SIZE] = "----------------";
-	char title[UL_SIZE] = "=========================";
+	char single_line[] = "----------------";
+	char title[] = "=========================";
 
 	fileinfo = kzalloc(DEBUGFS_SIZE, GFP_KERNEL);
 	if (!fileinfo) {
@@ -5536,6 +5593,8 @@ static int fastrpc_device_open(struct inode *inode, struct file *filp)
 	fl->init_mem = NULL;
 	fl->qos_request = 0;
 	fl->dsp_proc_init = 0;
+	fl->is_ramdump_pend = false;
+	init_completion(&fl->work);
 	fl->file_close = FASTRPC_PROCESS_DEFAULT_STATE;
 	filp->private_data = fl;
 	mutex_init(&fl->internal_map_mutex);
@@ -6041,7 +6100,7 @@ static long fastrpc_device_ioctl(struct file *file, unsigned int ioctl_num,
 		goto bail;
 
 	spin_lock(&fl->hlock);
-	if (fl->file_close == FASTRPC_PROCESS_EXIT_START) {
+	if (fl->file_close >= FASTRPC_PROCESS_EXIT_START) {
 		err = -ESHUTDOWN;
 		pr_warn("adsprpc: fastrpc_device_release is happening, So not sending any new requests to DSP\n");
 		spin_unlock(&fl->hlock);

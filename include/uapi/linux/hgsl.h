@@ -173,6 +173,9 @@ struct hgsl_hsync_fence_create {
 #define HGSL_IOCTL_ISYNC_TIMELINE_DESTROY \
 				HGSL_IOW(0x15, __u32)
 
+/* Use padding field to tell if ts is valid when create isync fence */
+#define HGSL_ISYNC_FENCE_CREATE_USE_TS	1
+
 /**
  * struct hgsl_isync_create_fence - wait an i-sync fence
  * @timeline_id: The timestamp for the new fence

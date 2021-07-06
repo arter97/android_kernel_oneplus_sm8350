@@ -108,6 +108,7 @@ static const char * const direwolf_gcc_virtio_clocks[] = {
 static const char * const direwolf_gcc_virtio_resets[] = {
 	[GCC_QUSB2PHY_PRIM_BCR] = "gcc_qusb2phy_prim_bcr",
 	[GCC_QUSB2PHY_SEC_BCR] = "gcc_qusb2phy_sec_bcr",
+	[GCC_USB2_PHY_SEC_BCR] = "gcc_usb2_phy_sec_bcr",
 	[GCC_USB30_PRIM_BCR] = "gcc_usb30_prim_master_clk",
 	[GCC_USB30_SEC_BCR] = "gcc_usb30_sec_master_clk",
 	[GCC_PCIE_2A_BCR] = "gcc_pcie_2a_mstr_axi_clk",

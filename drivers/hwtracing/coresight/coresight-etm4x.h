@@ -10,6 +10,13 @@
 #include <linux/spinlock.h>
 #include "coresight-priv.h"
 
+#ifdef CONFIG_ARM
+#define writeq_relaxed(v, a) ({			\
+	writel_relaxed((v) & 0xffffffff, a);	\
+	writel_relaxed((v) >> 32, (a) + 4);		\
+})
+#endif
+
 /*
  * Device registers:
  * 0x000 - 0x2FC: Trace		registers

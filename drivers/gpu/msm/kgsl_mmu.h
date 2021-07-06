@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2002,2007-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2002,2007-2021, The Linux Foundation. All rights reserved.
  */
 #ifndef __KGSL_MMU_H
 #define __KGSL_MMU_H
@@ -149,6 +149,8 @@ struct kgsl_mmu {
 	const struct kgsl_mmu_ops *mmu_ops;
 	bool secured;
 	unsigned long features;
+	unsigned int secure_base;
+	unsigned int secure_size;
 	union {
 		struct kgsl_iommu iommu;
 	} priv;

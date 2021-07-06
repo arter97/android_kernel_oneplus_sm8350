@@ -37,7 +37,7 @@ static int asm330_use_qtimer;
 
 static inline void get_monotonic_boottime(struct timespec *ts)
 {
-       *ts = ktime_to_timespec(ktime_get_boottime());
+	*ts = ktime_to_timespec(ktime_get_boottime());
 }
 
 static inline s64 st_asm330lhh_get_time_ns(void)
@@ -329,7 +329,7 @@ ssize_t st_asm330lhh_get_max_watermark(struct device *dev,
 {
 	struct st_asm330lhh_sensor *sensor = iio_priv(dev_get_drvdata(dev));
 
-	return snprintf(buf, PAGE_SIZE, "%d\n", sensor->max_watermark);
+	return scnprintf(buf, PAGE_SIZE, "%d\n", sensor->max_watermark);
 }
 
 ssize_t st_asm330lhh_get_watermark(struct device *dev,
@@ -529,7 +529,7 @@ static irqreturn_t st_asm330lhh_handler_thread(int irq, void *private)
 
 static int st_asm330lhh_fifo_preenable(struct iio_dev *iio_dev)
 {
- 		return st_asm330lhh_update_fifo(iio_dev, true);
+		return st_asm330lhh_update_fifo(iio_dev, true);
 }
 
 static int st_asm330lhh_fifo_postdisable(struct iio_dev *iio_dev)
@@ -634,9 +634,8 @@ int st_asm330lhh_deallocate_fifo(struct st_asm330lhh_hw *hw)
 {
 	int i;
 
-	for (i = 0; i < ST_ASM330LHH_ID_MAX; i++) {
+	for (i = 0; i < ST_ASM330LHH_ID_MAX; i++)
 		devm_iio_kfifo_free(hw->dev, hw->iio_devs[i]->buffer);
-	}
 
 	return 0;
 }

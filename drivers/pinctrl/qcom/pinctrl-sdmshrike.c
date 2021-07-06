@@ -47,6 +47,9 @@
 		.intr_cfg_reg = base + 0x8 + REG_SIZE * id,	\
 		.intr_status_reg = base + 0xc + REG_SIZE * id,	\
 		.intr_target_reg = base + 0x8 + REG_SIZE * id,	\
+		.dir_conn_reg = (base == EAST) ? base + 0xcc000 : \
+			((base == WEST) ? base + 0xcc000 : \
+			((base == NORTH) ? EAST + 0xcc000 : base + 0xcd000)), \
 		.mux_bit = 2,			\
 		.pull_bit = 0,			\
 		.drv_bit = 6,			\
@@ -63,6 +66,7 @@
 		.intr_polarity_bit = 1,		\
 		.intr_detection_bit = 2,	\
 		.intr_detection_width = 2,	\
+		.dir_conn_en_bit = 8,		\
 	}
 
 #define SDC_QDSD_PINGROUP(pg_name, ctl, pull, drv)	\
@@ -2239,17 +2243,21 @@ static const struct msm_pingroup sdmshrike_groups[] = {
 
 static const struct msm_gpio_wakeirq_map sdmshrike_pdc_map[] = {
 	{ 3, 31 }, { 5, 32 }, { 8, 33 }, { 9, 34 }, { 10, 100 },
-	{ 24, 37 }, { 26, 38 }, { 27, 41 }, { 28, 42 }, { 30, 39 },
-	{ 37, 44 }, { 38, 30 }, { 39, 118 }, { 41, 47 }, { 42, 48 },
-	{ 47, 49 }, { 48, 51 }, { 49, 53 }, { 50, 52 }, { 51, 116 },
-	{ 54, 55 }, { 55, 56 }, { 56, 57 }, { 58, 58 }, { 60, 60 },
-	{ 68, 62 }, { 70, 63 }, { 76, 71 }, { 77, 66 }, { 81, 64 },
-	{ 86, 67 }, { 87, 84 }, { 88, 117 }, { 90, 69 }, { 91, 70 },
-	{ 95, 72 }, { 96, 73 }, { 97, 74 }, { 101, 40 }, { 103, 77 },
-	{ 108, 79 }, { 112, 80 }, { 113, 81 }, { 114, 82 }, { 117, 85 },
-	{ 119, 87 }, { 120, 88 }, { 121, 89 }, { 122, 90 }, { 123, 91 },
-	{ 125, 93 }, { 129, 94 }, { 132, 105 }, { 133, 83 }, { 134, 36 },
-	{ 142, 103 }, { 144, 115 }, { 147, 102 }, { 150, 107 }, { 152, 108 },
+	{ 12, 104 }, { 24, 37 }, { 26, 38 }, { 27, 41 }, { 28, 42 },
+	{ 30, 39 }, { 36, 43 }, { 37, 44 }, { 38, 45 }, { 39, 118 },
+	{ 41, 47 }, { 42, 48 }, { 46, 50 }, { 47, 49 }, { 48, 51 },
+	{ 49, 53 }, { 50, 52 }, { 51, 116 }, { 53, 54 }, { 54, 55 },
+	{ 55, 56 }, { 56, 57 }, { 58, 58 }, { 60, 60 }, { 61, 61 },
+	{ 68, 62 }, { 70, 63 }, { 76, 86 }, { 77, 66 }, { 81, 64 },
+	{ 83, 65 }, { 86, 67 }, { 87, 84 }, { 88, 117 }, { 90, 69 },
+	{ 91, 70 }, {93, 75 }, { 95, 72 }, { 96, 73 }, { 97, 74 },
+	{ 101, 76 }, { 103, 77 }, { 104, 78 }, { 108, 79 }, { 112, 80 },
+	{ 113, 81 }, { 114, 82 }, { 117, 85 }, { 118, 101 }, { 119, 87 },
+	{ 120, 88 }, { 121, 89 }, { 122, 90 }, { 123, 91 }, { 124, 92 },
+	{ 125, 93 }, { 129, 94 }, { 132, 105 }, { 133, 35 }, { 134, 36 },
+	{ 136, 97 }, { 142, 103 }, { 144, 115 }, { 147, 106 }, { 150, 107 },
+	{ 152, 108 }, { 153, 109 }, { 177, 111 }, { 180, 112 }, { 184, 113 },
+	{ 189, 114 },
 };
 
 static struct msm_dir_conn sdmshrike_dir_conn[] = {
@@ -2306,6 +2314,37 @@ static int sdmshrike_pinctrl_gpio_irq_map_probe(struct platform_device *pdev)
 	return 0;
 }
 
+static int sdmshrike_pinctrl_dirconn_list_probe(struct platform_device *pdev)
+{
+	int ret, n, dirconn_list_count, m;
+	struct device_node *np = pdev->dev.of_node;
+
+	n = of_property_count_elems_of_size(np, "qcom,dirconn-list",
+					sizeof(u32));
+	if (n <= 0 || n % 2)
+		return -EINVAL;
+
+	m = ARRAY_SIZE(sdmshrike_dir_conn) - 1;
+
+	dirconn_list_count = n / 2;
+
+	for (n = 0; n < dirconn_list_count; n++) {
+		ret = of_property_read_u32_index(np, "qcom,dirconn-list",
+						n * 2 + 0,
+						&sdmshrike_dir_conn[m].gpio);
+		if (ret)
+			return ret;
+		ret = of_property_read_u32_index(np, "qcom,dirconn-list",
+						n * 2 + 1,
+						&sdmshrike_dir_conn[m].irq);
+		if (ret)
+			return ret;
+		m--;
+	}
+
+	return 0;
+}
+
 static int sdmshrike_pinctrl_probe(struct platform_device *pdev)
 {
 	int len, ret;
@@ -2315,6 +2354,15 @@ static int sdmshrike_pinctrl_probe(struct platform_device *pdev)
 		if (ret) {
 			dev_err(&pdev->dev,
 				"Unable to parse GPIO IRQ map\n");
+			return ret;
+		}
+	}
+
+	if (of_find_property(pdev->dev.of_node, "qcom,dirconn-list", &len)) {
+		ret = sdmshrike_pinctrl_dirconn_list_probe(pdev);
+		if (ret) {
+			dev_err(&pdev->dev,
+				"Unable to parse Direct Connect List\n");
 			return ret;
 		}
 	}

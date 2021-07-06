@@ -1215,10 +1215,6 @@ static const struct adreno_reglist a680_hwcg_regs[] = {
 	{A6XX_RBBM_CLOCK_CNTL_GMU_GX, 0x00000222},
 	{A6XX_RBBM_CLOCK_DELAY_GMU_GX, 0x00000111},
 	{A6XX_RBBM_CLOCK_HYST_GMU_GX, 0x00000555},
-	{A6XX_GMUAO_GMU_CGC_MODE_CNTL, 0x00020202},
-	{A6XX_GMUAO_GMU_CGC_DELAY_CNTL, 0x00010111},
-	{A6XX_GMUAO_GMU_CGC_HYST_CNTL, 0x00005555},
-	{A6XX_GMUCX_GMU_WFI_CONFIG, 0x00000002},
 	{A6XX_GMUGX_GMU_SP_RF_CONTROL_0, 0x00000001},
 	{A6XX_GMUGX_GMU_SP_RF_CONTROL_1, 0x00000001},
 };
@@ -1681,10 +1677,10 @@ static const struct adreno_a6xx_core adreno_gpu_core_a660v2 = {
 	.ctxt_record_size = 2496 * 1024,
 };
 
-static const struct adreno_a6xx_core adreno_gpu_core_a660_shima = {
+static const struct adreno_a6xx_core adreno_gpu_core_a642 = {
 	.base = {
-		DEFINE_ADRENO_REV(ADRENO_REV_A660, 6, 6, 0, ANY_ID),
-		.compatible = "qcom,adreno-gpu-a660-shima",
+		DEFINE_ADRENO_REV(ADRENO_REV_A642, ANY_ID, ANY_ID, ANY_ID, ANY_ID),
+		.compatible = "qcom,adreno-gpu-a642",
 		.features = ADRENO_RPMH | ADRENO_GPMU | ADRENO_APRIV |
 				ADRENO_IOCOHERENT | ADRENO_CONTENT_PROTECTION |
 				ADRENO_IFPC | ADRENO_PREEMPTION | ADRENO_ACD |
@@ -1714,12 +1710,14 @@ static const struct adreno_a6xx_core adreno_gpu_core_a660_shima = {
 	.ctxt_record_size = 2496 * 1024,
 };
 
-static const struct adreno_a6xx_core adreno_gpu_core_a635 = {
+static const struct adreno_a6xx_core adreno_gpu_core_a642l = {
 	.base = {
-		DEFINE_ADRENO_REV(ADRENO_REV_A635, 6, 3, 5, ANY_ID),
+		DEFINE_ADRENO_REV(ADRENO_REV_A642, ANY_ID, ANY_ID, ANY_ID, ANY_ID),
+		.compatible = "qcom,adreno-gpu-a642l",
 		.features = ADRENO_RPMH | ADRENO_GPMU | ADRENO_APRIV |
 				ADRENO_IOCOHERENT | ADRENO_CONTENT_PROTECTION |
-				ADRENO_PREEMPTION | ADRENO_IFPC | ADRENO_BCL,
+				ADRENO_PREEMPTION | ADRENO_IFPC | ADRENO_BCL |
+				ADRENO_ACD,
 		.gpudev = &adreno_a6xx_gmu_gpudev,
 		.perfcounters = &adreno_a6xx_perfcounters,
 		.gmem_size = SZ_512K,
@@ -1851,7 +1849,6 @@ static const struct adreno_gpu_core *adreno_gpulist[] = {
 	&adreno_gpu_core_a619.base,
 	&adreno_gpu_core_a619_variant.base,
 	&adreno_gpu_core_a620.base,
-	&adreno_gpu_core_a635.base,
 	&adreno_gpu_core_a640.base,
 	&adreno_gpu_core_a650.base,
 	&adreno_gpu_core_a650v2.base,
@@ -1861,6 +1858,7 @@ static const struct adreno_gpu_core *adreno_gpulist[] = {
 	&adreno_gpu_core_a612.base,
 	&adreno_gpu_core_a616.base,
 	&adreno_gpu_core_a610.base,
-	&adreno_gpu_core_a660_shima.base,
+	&adreno_gpu_core_a642.base,
+	&adreno_gpu_core_a642l.base,
 	&adreno_gpu_core_a702.base,
 };

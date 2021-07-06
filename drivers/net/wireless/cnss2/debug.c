@@ -182,7 +182,7 @@ static ssize_t cnss_dev_boot_debug_write(struct file *fp,
 	cnss_pr_dbg("Received dev_boot debug command: %s\n", cmd);
 
 	if (sysfs_streq(cmd, "on")) {
-		ret = cnss_power_on_device(plat_priv);
+		ret = cnss_power_on_device(plat_priv, false);
 	} else if (sysfs_streq(cmd, "off")) {
 		cnss_power_off_device(plat_priv);
 	} else if (sysfs_streq(cmd, "enumerate")) {
@@ -838,8 +838,15 @@ int cnss_debugfs_create(struct cnss_plat_data *plat_priv)
 {
 	int ret = 0;
 	struct dentry *root_dentry;
+	char name[CNSS_FS_NAME_SIZE];
 
-	root_dentry = debugfs_create_dir("cnss", 0);
+	if (cnss_is_dual_wlan_enabled())
+		snprintf(name, CNSS_FS_NAME_SIZE, CNSS_FS_NAME "_%d",
+			 plat_priv->plat_idx);
+	else
+		snprintf(name, CNSS_FS_NAME_SIZE, CNSS_FS_NAME);
+
+	root_dentry = debugfs_create_dir(name, NULL);
 	if (IS_ERR(root_dentry)) {
 		ret = PTR_ERR(root_dentry);
 		cnss_pr_err("Unable to create debugfs %d\n", ret);

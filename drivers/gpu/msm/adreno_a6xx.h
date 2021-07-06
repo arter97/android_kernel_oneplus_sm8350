@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  */
 
 #ifndef _ADRENO_A6XX_H_
@@ -283,10 +283,8 @@ static inline bool a6xx_is_smmu_stalled(struct kgsl_device *device)
  *
  * Disable the regulator and wait @timeout milliseconds for it to enter the
  * disabled state.
- *
- * Return: True if the regulator was disabled or false if it timed out
  */
-bool a6xx_cx_regulator_disable_wait(struct regulator *reg,
+void a6xx_cx_regulator_disable_wait(struct regulator *reg,
 				struct kgsl_device *device, u32 timeout);
 
 /* Preemption functions */
@@ -315,7 +313,12 @@ void a6xx_snapshot(struct adreno_device *adreno_dev,
 void a6xx_crashdump_init(struct adreno_device *adreno_dev);
 int a6xx_gmu_sptprac_enable(struct adreno_device *adreno_dev);
 void a6xx_gmu_sptprac_disable(struct adreno_device *adreno_dev);
+int a6xx_holi_gmu_sptprac_enable(struct adreno_device *adreno_dev);
+void a6xx_holi_gmu_sptprac_disable(struct adreno_device *adreno_dev);
+
 bool a6xx_gmu_sptprac_is_on(struct adreno_device *adreno_dev);
+bool a6xx_holi_gmu_sptprac_is_on(struct adreno_device *adreno_dev);
+
 
 /**
  * a6xx_read_alwayson - Read the current always on clock value

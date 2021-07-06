@@ -1,15 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 and
- * only version 2 as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 
 #include <linux/debugfs.h>
@@ -134,6 +125,8 @@ static const char * const IPA_OFFLOAD_EVENT_string[] = {
 	"EV_PHY_LINK_UP",
 	"EV_EMAC_DEINIT"
 };
+
+static bool veth_ipa_init_flag;
 
 
 /**
@@ -335,34 +328,9 @@ int veth_set_ul_dl_smmu_ipa_params(struct veth_ipa_dev *pdata,
 		VETH_IPA_ERROR("Null UL DL params %s\n", __func__);
 		return -EINVAL;
 	}
-
-	/*Configure SGT for UL ring base*/
-	ul->ring_base_sgt = kzalloc(sizeof(struct sg_table), GFP_KERNEL);
-	if (!ul->ring_base_sgt)
-		return -ENOMEM;
-
-	ret = dma_get_sgtable(&pdata->pdev->dev,
-		ul->ring_base_sgt,
-		veth_emac_mem->rx_desc_mem_va,
-		veth_emac_mem->rx_desc_mem_paddr,
-		(sizeof(struct s_RX_NORMAL_DESC) *
-			VETH_RX_DESC_CNT));
-	if (ret) {
-		VETH_IPA_ERROR("Failed to get IPA UL ring sgtable.\n");
-		kfree(ul->ring_base_sgt);
-		ul->ring_base_sgt = NULL;
-		return -EAGAIN;
-	}
-
-	/*get pa*/
-	ul->ring_base_pa = sg_phys(ul->ring_base_sgt->sgl);
-
-	VETH_IPA_INFO(
-		"%s:\n ul->ring_base_sgt = 0x%p , ul->ring_base_pa =0x%lx\n",
-		__func__,
-		ul->ring_base_sgt,
-		ul->ring_base_pa);
-
+	/*As memory is contiguous SG table is not required for descriptors*/
+	ul->ring_base_sgt = NULL;
+	/*ToDo : Check with IPA team on why sg table is required for buffpool*/
 	/*configure SGT for UL buff pool base*/
 	ul->buff_pool_base_sgt = kzalloc(
 		sizeof(struct sg_table), GFP_KERNEL);
@@ -392,38 +360,18 @@ int veth_set_ul_dl_smmu_ipa_params(struct veth_ipa_dev *pdata,
 	veth_emac_mem->rx_buff_pool_base_pa = ul->buff_pool_base_pa;
 
 	VETH_IPA_INFO(
-		"%s:\n ul->buff_pool_base_sgt = 0x%p,ul->buff_pool_base_pa =0x%lx\n",
+		"%s:\n ul->buff_pool_base_sgt = 0x%p",
 		__func__,
-		ul->buff_pool_base_sgt,
+		ul->buff_pool_base_sgt);
+
+	VETH_IPA_INFO(
+		"%s:\n ul->buff_pool_base_sgt = 0x%p",
+		__func__,
 		ul->buff_pool_base_pa);
 
-	/*Configure SGT for DL ring base*/
-	dl->ring_base_sgt = kzalloc(sizeof(struct sg_table), GFP_KERNEL);
-	if (!dl->ring_base_sgt)
-		return -ENOMEM;
 
-	ret = dma_get_sgtable(&pdata->pdev->dev,
-		dl->ring_base_sgt,
-		veth_emac_mem->tx_desc_mem_va,
-		veth_emac_mem->tx_desc_mem_paddr,
-		(sizeof(struct s_TX_NORMAL_DESC) *
-			VETH_TX_DESC_CNT));
-	if (ret) {
-		VETH_IPA_ERROR("Failed to get IPA DL ring sgtable.\n");
-		kfree(ul->ring_base_sgt);
-		kfree(ul->buff_pool_base_sgt);
-		kfree(dl->ring_base_sgt);
-		dl->ring_base_sgt = NULL;
-		return -EAGAIN;
-	}
-
-	dl->ring_base_pa = sg_phys(dl->ring_base_sgt->sgl);
-	VETH_IPA_INFO(
-		"%s:\n dl->ring_base_sgt = 0x%p , dl->ring_base_pa =0x%lx\n",
-		__func__,
-		dl->ring_base_sgt,
-		dl->ring_base_pa);
-
+	/*As memory is contiguous SG table is not required for descriptors*/
+	dl->ring_base_sgt = NULL;
 	/*configure SGT for DL buff pool base*/
 	dl->buff_pool_base_sgt = kzalloc(
 		sizeof(struct sg_table), GFP_KERNEL);
@@ -476,11 +424,7 @@ static int veth_map_rx_tx_setup_info_params(
 		rx_setup_info->smmu_enabled = true;
 	else
 		rx_setup_info->smmu_enabled = false;
-
-	/* RX Descriptor Base Physical Address*/
-	if (!rx_setup_info->smmu_enabled)
-		rx_setup_info->ring_base_pa = veth_emac_mem->rx_desc_mem_paddr;
-
+	rx_setup_info->ring_base_pa = veth_emac_mem->rx_desc_mem_paddr;
 	/* RX Descriptor Base Virtual Address*/
 	if (rx_setup_info->smmu_enabled)
 		rx_setup_info->ring_base_iova = veth_emac_mem->rx_desc_mem_iova;
@@ -529,9 +473,7 @@ static int veth_map_rx_tx_setup_info_params(
 	else
 		tx_setup_info->smmu_enabled = false;
 
-	if (!tx_setup_info->smmu_enabled)
-		tx_setup_info->ring_base_pa =
-			veth_emac_mem->tx_desc_mem_paddr;
+	tx_setup_info->ring_base_pa = veth_emac_mem->tx_desc_mem_paddr;
 
 	/* TX Descriptor Base Virtual Address*/
 	if (tx_setup_info->smmu_enabled)
@@ -660,6 +602,8 @@ int veth_ipa_offload_connect(struct veth_ipa_dev *pdata)
 
 	int ret = 0;
 
+	/* reset the outstanding pkt count*/
+	atomic_set(&pdata->outstanding_pkts, 0);
 	/* Hard code SMMU Enable for PHASE 1*/
 	emac_emb_smmu_ctx.valid = true;
 	VETH_IPA_DEBUG("%s - begin smmu_s2_enb=%d\n", __func__,
@@ -1009,8 +953,15 @@ static void veth_ipa_offload_event_handler(
 						   __func__,
 						   __LINE__);
 
-			if (!pdata->veth_emac_dev_ready)
-				break;
+			VETH_IPA_INFO("Export buffers", __func__, __LINE__);
+			ret = veth_emac_open_notify(
+					&(pdata->veth_emac_mem),
+					pdata);
+			if (ret < 0) {
+				pr_err("%s: veth_emac_open_notify failed error %d\n",
+					__func__,
+					ret);
+			}
 		}
 		break;
 	case EV_IPA_EMAC_INIT:{
@@ -1151,7 +1102,7 @@ static void  veth_ipa_emac_deinit_wq(struct work_struct *work)
 {
 	struct veth_ipa_client_data *ntn_ipa = container_of(work,
 						   struct veth_ipa_client_data,
-						   ntn_ipa_rdy_work);
+						   ntn_emac_de_init_rdy_work);
 	struct veth_ipa_dev *pdata = container_of(ntn_ipa,
 					 struct veth_ipa_dev,
 					 prv_ipa);
@@ -1168,16 +1119,16 @@ static void veth_ipa_emac_deinit_cb(void *user_data)
 		VETH_IPA_ERROR("%s Null Param pdata\n", __func__);
 		return;
 	}
-	INIT_WORK(&ntn_ipa->ntn_ipa_rdy_work, veth_ipa_emac_deinit_wq);
-	queue_work(system_unbound_wq, &ntn_ipa->ntn_ipa_rdy_work);
+	INIT_WORK(&ntn_ipa->ntn_emac_de_init_rdy_work, veth_ipa_emac_deinit_wq);
+	queue_work(system_unbound_wq, &ntn_ipa->ntn_emac_de_init_rdy_work);
 }
 
 
 static void  veth_ipa_emac_start_offload_wq(struct work_struct *work)
 {
 	struct veth_ipa_client_data *ntn_ipa = container_of(work,
-						   struct veth_ipa_client_data,
-						   ntn_ipa_rdy_work);
+					struct veth_ipa_client_data,
+					ntn_emac_start_offload_rdy_work);
 	struct veth_ipa_dev *pdata = container_of(ntn_ipa,
 					 struct veth_ipa_dev,
 					 prv_ipa);
@@ -1195,8 +1146,10 @@ static void veth_ipa_emac_start_offload_cb(void *user_data)
 		return;
 	}
 
-	INIT_WORK(&ntn_ipa->ntn_ipa_rdy_work, veth_ipa_emac_start_offload_wq);
-	queue_work(system_unbound_wq, &ntn_ipa->ntn_ipa_rdy_work);
+	INIT_WORK(&ntn_ipa->ntn_emac_start_offload_rdy_work,
+			veth_ipa_emac_start_offload_wq);
+	queue_work(system_unbound_wq,
+			&ntn_ipa->ntn_emac_start_offload_rdy_work);
 }
 
 
@@ -1206,7 +1159,7 @@ static void  veth_ipa_emac_link_up_wq(struct work_struct *work)
 
 	struct veth_ipa_client_data *ntn_ipa = container_of(work,
 						   struct veth_ipa_client_data,
-						   ntn_ipa_rdy_work);
+						   ntn_emac_link_up_rdy_work);
 	struct veth_ipa_dev *pdata = container_of(ntn_ipa,
 					 struct veth_ipa_dev,
 					 prv_ipa);
@@ -1224,8 +1177,9 @@ static void veth_ipa_emac_link_up_cb(void *user_data)
 		return;
 	}
 
-	INIT_WORK(&ntn_ipa->ntn_ipa_rdy_work, veth_ipa_emac_link_up_wq);
-	queue_work(system_unbound_wq, &ntn_ipa->ntn_ipa_rdy_work);
+	INIT_WORK(&ntn_ipa->ntn_emac_link_up_rdy_work,
+			veth_ipa_emac_link_up_wq);
+	queue_work(system_unbound_wq, &ntn_ipa->ntn_emac_link_up_rdy_work);
 }
 
 
@@ -1233,7 +1187,7 @@ static void  veth_ipa_emac_setup_done_wq(struct work_struct *work)
 {
 	struct veth_ipa_client_data *ntn_ipa = container_of(work,
 						   struct veth_ipa_client_data,
-						   ntn_ipa_rdy_work);
+						   ntn_emac_setup_rdy_work);
 	struct veth_ipa_dev *pdata = container_of(ntn_ipa,
 					 struct veth_ipa_dev,
 					 prv_ipa);
@@ -1253,15 +1207,16 @@ static void veth_ipa_emac_setup_done_cb(void *user_data)
 		return;
 	}
 
-	INIT_WORK(&ntn_ipa->ntn_ipa_rdy_work, veth_ipa_emac_setup_done_wq);
-	queue_work(system_unbound_wq, &ntn_ipa->ntn_ipa_rdy_work);
+	INIT_WORK(&ntn_ipa->ntn_emac_setup_rdy_work,
+			veth_ipa_emac_setup_done_wq);
+	queue_work(system_unbound_wq, &ntn_ipa->ntn_emac_setup_rdy_work);
 }
 
 static void  veth_ipa_open_wq(struct work_struct *work)
 {
 	struct veth_ipa_client_data *ntn_ipa = container_of(work,
 						   struct veth_ipa_client_data,
-						   ntn_ipa_rdy_work);
+						   ntn_emac_open_rdy_work);
 	struct veth_ipa_dev *pdata = container_of(ntn_ipa,
 					 struct veth_ipa_dev,
 					 prv_ipa);
@@ -1279,8 +1234,8 @@ static void veth_ipa_open_cb(void *user_data)
 		return;
 	}
 
-	INIT_WORK(&ntn_ipa->ntn_ipa_rdy_work, veth_ipa_open_wq);
-	queue_work(system_unbound_wq, &ntn_ipa->ntn_ipa_rdy_work);
+	INIT_WORK(&ntn_ipa->ntn_emac_open_rdy_work, veth_ipa_open_wq);
+	queue_work(system_unbound_wq, &ntn_ipa->ntn_emac_open_rdy_work);
 }
 
 
@@ -1288,7 +1243,7 @@ static void  veth_ipa_emac_init_done_wq(struct work_struct *work)
 {
 	struct veth_ipa_client_data *ntn_ipa = container_of(work,
 						   struct veth_ipa_client_data,
-						   ntn_ipa_rdy_work);
+						   ntn_emac_init_rdy_work);
 	struct veth_ipa_dev *pdata = container_of(ntn_ipa,
 					 struct veth_ipa_dev,
 					 prv_ipa);
@@ -1305,8 +1260,9 @@ static void veth_ipa_emac_init_done_cb(void *user_data)
 		VETH_IPA_ERROR("%s Null Param pdata\n", __func__);
 		return;
 	}
-	INIT_WORK(&ntn_ipa->ntn_ipa_rdy_work, veth_ipa_emac_init_done_wq);
-	queue_work(system_unbound_wq, &ntn_ipa->ntn_ipa_rdy_work);
+	VETH_IPA_INFO("%s IPA ready wq callback\n", __func__);
+	INIT_WORK(&ntn_ipa->ntn_emac_init_rdy_work, veth_ipa_emac_init_done_wq);
+	queue_work(system_unbound_wq, &ntn_ipa->ntn_emac_init_rdy_work);
 }
 
 
@@ -1320,6 +1276,7 @@ static void veth_ipa_ready_wq(struct work_struct *work)
 					 prv_ipa);
 
 	VETH_IPA_DEBUG("%s:%d\n", __func__, __LINE__);
+	VETH_IPA_INFO("%s IPA ready wq callback\n", __func__);
 	veth_ipa_offload_event_handler(pdata, EV_IPA_READY);
 }
 
@@ -1327,12 +1284,13 @@ static void veth_ipa_uc_ready_wq(struct work_struct *work)
 {
 	struct veth_ipa_client_data *ntn_ipa = container_of(work,
 					   struct veth_ipa_client_data,
-					   ntn_ipa_rdy_work);
+					   ntn_ipa_uc_rdy_work);
 	struct veth_ipa_dev *pdata = container_of(ntn_ipa,
 					 struct veth_ipa_dev,
 					 prv_ipa);
 
 	VETH_IPA_DEBUG("%s:%d veth_ipa_ready_wq\n", __func__, __LINE__);
+	VETH_IPA_INFO("%s IPA UC ready wq callback\n", __func__);
 	veth_ipa_offload_event_handler(pdata, EV_IPA_UC_READY);
 }
 
@@ -1351,7 +1309,7 @@ static void veth_ipa_ready_cb(void *user_data)
 		return;
 	}
 
-	VETH_IPA_DEBUG("%s Received IPA ready callback\n", __func__);
+	VETH_IPA_INFO("%s Received IPA ready callback\n", __func__);
 
 	INIT_WORK(&ntn_ipa->ntn_ipa_rdy_work, veth_ipa_ready_wq);
 	queue_work(system_unbound_wq, &ntn_ipa->ntn_ipa_rdy_work);
@@ -1374,9 +1332,9 @@ static void veth_ipa_uc_ready_cb(void *user_data)
 		return;
 	}
 
-	VETH_IPA_DEBUG("%s Received IPA UC ready callback\n", __func__);
-	INIT_WORK(&ntn_ipa->ntn_ipa_rdy_work, veth_ipa_uc_ready_wq);
-	queue_work(system_unbound_wq, &ntn_ipa->ntn_ipa_rdy_work);
+	VETH_IPA_INFO("%s Received IPA UC ready callback\n", __func__);
+	INIT_WORK(&ntn_ipa->ntn_ipa_uc_rdy_work, veth_ipa_uc_ready_wq);
+	queue_work(system_unbound_wq, &ntn_ipa->ntn_ipa_uc_rdy_work);
 
 	return;
 
@@ -1392,7 +1350,7 @@ static int veth_ipa_ready(struct veth_ipa_dev *pdata)
 	veth_ipa_ready_cb(pdata);
 	ret = 1;
 #else
-	ret = ipa_register_ipa_ready_cb(veth_ipa_ready_cb, (void *)&pdata);
+	ret = ipa_register_ipa_ready_cb(veth_ipa_ready_cb, (void *)pdata);
 #endif
 
 	if (ret == -ENXIO) {
@@ -1457,6 +1415,7 @@ static int veth_ipa_emac_evt_mgmt(void *arg)
 	/*Wait on HAV receive here*/
 	int ret = 0;
 	int timeout_ms = 100;
+	int i = 0;
 	struct emac_hab_mm_message pdata_recv;
 	//veth_emac_import_iova msg;
 	int pdata_size = sizeof(pdata_recv);
@@ -1506,7 +1465,29 @@ static int veth_ipa_emac_evt_mgmt(void *arg)
 					pdata->veth_emac_mem.rx_buff_pool_base_iova =
 						(dma_addr_t)
 					pdata_recv.msg_type.iova.rx_buf_pool_base_iova;
+					pdata->veth_emac_mem.tx_desc_mem_paddr =
+					(dma_addr_t)
+					pdata_recv.msg_type.iova.tx_desc_phy_mem;
+					pdata->veth_emac_mem.rx_desc_mem_paddr =
+					(dma_addr_t)
+					pdata_recv.msg_type.iova.rx_desc_phy_mem;
+					VETH_IPA_INFO("TX descriptor physical memory: %x",
+					pdata->veth_emac_mem.tx_desc_mem_paddr
+					);
+					VETH_IPA_INFO("RX descriptor physical memory: %x",
+					pdata->veth_emac_mem.rx_desc_mem_paddr
+					);
+					for (i = 0; i < VETH_TX_DESC_CNT; i++) {
+						pdata->veth_emac_mem.tx_desc_ring_base[i] =
+						pdata->veth_emac_mem.tx_desc_mem_paddr +
+						(i * sizeof(struct s_TX_NORMAL_DESC));
 					}
+					for (i = 0; i < VETH_RX_DESC_CNT; i++) {
+						pdata->veth_emac_mem.rx_desc_ring_base[i] =
+						pdata->veth_emac_mem.rx_desc_mem_paddr +
+						(i * sizeof(struct s_RX_NORMAL_DESC));
+					}
+				}
 				VETH_IPA_INFO("EMAC_SETUP event received\n");
 				VETH_IPA_INFO("union received: %x",
 				pdata->veth_emac_mem.tx_buff_pool_base_iova);
@@ -1595,7 +1576,6 @@ static int veth_ipa_init(struct platform_device *pdev)
 		goto fail_netdev_priv;
 	}
 
-	veth_pdata_p = veth_ipa_pdata;
 
 	memset(veth_ipa_pdata, 0, sizeof(*veth_ipa_pdata));
 	VETH_IPA_DEBUG("veth_ipa_pdata; (private) = %pK\n", veth_ipa_pdata);
@@ -1613,6 +1593,8 @@ static int veth_ipa_init(struct platform_device *pdev)
 	dev->netdev_ops = &veth_ipa_netdev_ops;
 	VETH_IPA_DEBUG("internal data structures were initialized\n");
 
+	veth_ipa_pdata->outstanding_low = DEFAULT_OUTSTANDING_LOW;
+	veth_ipa_pdata->outstanding_high = DEFAULT_OUTSTANDING_HIGH;
 	veth_ipa_debugfs_init(veth_ipa_pdata);
 
 	/*Make this configurable.*/
@@ -1647,8 +1629,10 @@ static int veth_ipa_init(struct platform_device *pdev)
 	mutex_init(&veth_ipa_pdata->prv_ipa.ipa_lock);
 	veth_ipa_pdata->prv_ipa.emac_init = false;
 	veth_ipa_pdata->veth_emac_mem.init_complete = false;
+	pr_info("VETH_IPA init flag set to false\n");
+	veth_ipa_init_flag = false;
 	VETH_IPA_STATE_DEBUG(veth_ipa_pdata);
-
+	veth_pdata_p = veth_ipa_pdata;
 	VETH_IPA_INFO("VETH_IPA was initialized successfully\n");
 
 
@@ -1727,6 +1711,8 @@ static int veth_ipa_open(struct net_device *net)
 		VETH_IPA_INFO("%s: Starting EMAC kthread\n", __func__);
 		veth_ipa_ctx->veth_emac_mem.init_complete = true;
 	}
+	veth_ipa_init_flag = true;
+	pr_info("VETH_IPA init flag set to true\n");
 	veth_ipa_offload_event_handler(veth_ipa_ctx, EV_DEV_OPEN);
 
 
@@ -1926,7 +1912,8 @@ static int veth_ipa_stop(struct net_device *net)
 
 	if (pdata->state == VETH_IPA_DOWN) {
 		VETH_IPA_ERROR("can't do network interface down without up\n");
-		return -EPERM;
+		VETH_IPA_UNLOCK();
+		return 0;
 	}
 
 	pdata->state = VETH_IPA_DOWN;
@@ -2262,7 +2249,7 @@ static int veth_ipa_remove(struct platform_device *pdev)
 		pr_err("%s: failed\n");
 		return ret;
 	}
-
+	habmm_socket_close(pdata->veth_emac_mem.vc_id);
 	veth_ipa_cleanup(pdata);
 	return 0;
 }
@@ -2273,6 +2260,9 @@ static int veth_ipa_ap_suspend(struct device *dev)
 	int    ret = 0;
 	struct veth_ipa_dev *pdata = veth_pdata_p;
 
+	pr_info("VETH_IPA suspend init flag check\n");
+	if (!veth_ipa_init_flag)
+		return 0;
 
 	pr_info("%s: veth_global_pdata->state = %d\n",
 			__func__,
@@ -2289,7 +2279,11 @@ static int veth_ipa_ap_resume(struct device *dev)
 {
 	struct veth_ipa_dev *pdata = veth_pdata_p;
 
-	pr_info("%s\n", __func__);
+	pr_info("%s :\n", __func__);
+	pr_info("VETH_IPA resume init flag check\n");
+
+	if (!veth_ipa_init_flag)
+		return 0;
 	pr_info("%s: veth_global_pdata->state = %d\n",
 			__func__,
 			veth_pdata_p->state);

@@ -1,14 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 and
- * only version 2 as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 
 /* This file contain content copied from Synopsis driver,
@@ -155,8 +146,6 @@ struct s_TX_NORMAL_DESC {
 
 
 struct veth_emac_exp {
-	uint32_t tx_desc_exp_id;
-	uint32_t rx_desc_exp_id;
 	uint32_t tx_buff_exp_id;
 	uint32_t rx_buff_exp_id;
 	uint32_t rx_buf_pool_exp_id;
@@ -303,6 +292,14 @@ struct veth_ipa_client_data {
 
 	/*Dev state*/
 	struct work_struct ntn_ipa_rdy_work;
+	struct work_struct ntn_ipa_uc_rdy_work;
+	struct work_struct ntn_emac_init_rdy_work;
+	struct work_struct ntn_emac_open_rdy_work;
+	struct work_struct ntn_emac_setup_rdy_work;
+	struct work_struct ntn_emac_link_up_rdy_work;
+	struct work_struct ntn_emac_start_offload_rdy_work;
+	struct work_struct ntn_emac_de_init_rdy_work;
+
 	struct mutex ipa_lock;
 	bool vlan_enable;
 	unsigned short vlan_id;
@@ -420,6 +417,8 @@ struct emac_ipa_iovas {
 	void   *rx_desc_mem_iova;
 	void   *rx_buf_mem_iova;
 	void   *rx_buf_pool_base_iova;
+	void   *tx_desc_phy_mem;
+	void   *rx_desc_phy_mem;
 };
 
 struct emac_hab_mm_message {

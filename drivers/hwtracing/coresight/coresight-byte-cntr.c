@@ -630,6 +630,11 @@ void usb_bypass_notifier(void *priv, unsigned int event,
 
 	switch (event) {
 	case USB_QDSS_CONNECT:
+		if (tmcdrvdata->mode == CS_MODE_DISABLED) {
+			dev_err_ratelimited(&tmcdrvdata->csdev->dev,
+			 "%s: ETR is disabled.\n", __func__);
+			return;
+		}
 		ret = usb_bypass_start(drvdata);
 		if (ret < 0)
 			return;
@@ -669,7 +674,8 @@ static void etr_pcie_client_cb(struct mhi_dev_client_cb_data *cb_data)
 	byte_cntr_data = cb_data->user_data;
 	if (!byte_cntr_data)
 		return;
-
+	if (tmcdrvdata->pcie_path != TMC_ETR_PCIE_SW_PATH)
+		return;
 	switch (cb_data->ctrl_info) {
 	case  MHI_STATE_CONNECTED:
 		if (cb_data->channel == byte_cntr_data->pcie_out_chan) {

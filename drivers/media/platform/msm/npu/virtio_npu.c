@@ -21,6 +21,7 @@
 #include <linux/virtio.h>
 #include <linux/virtio_config.h>
 #include <linux/uaccess.h>
+#include <linux/bitmap.h>
 #include <linux/msm_npu.h>
 
 #define NPU_ERR(fmt, args...)                            \
@@ -34,6 +35,9 @@
 
 #define CLASS_NAME              "npu"
 #define DRIVER_NAME             "msm_npu"
+
+/* indicates multi-buffer per command is supported */
+#define VIRTIO_NPU_F_MULTI_BUF	1
 
 #define VIRTIO_ID_NPU           35
 
@@ -62,6 +66,9 @@
 #define VIRTIO_NPU_CMD_DEBUGFS                  13
 #define VIRTIO_NPU_CMD_BIST                     14
 
+#define VIRTIO_NPU_VERSION_MAJOR	1
+#define VIRTIO_NPU_VERSION_MINOR	1
+
 /* debugfs sub command */
 enum npu_debugfs_subcmd {
 	DEBUGFS_SUBCMD_CTRL_ON = 0x100,
@@ -77,20 +84,24 @@ enum npu_bist_subcmd {
 };
 
 struct virt_msg_hdr {
+	u16 major_version;
+	u16 minor_version;
 	u32 pid;	/* GVM pid */
 	u32 tid;	/* GVM tid */
 	s32 cid;	/* channel id connected to DSP */
 	u32 cmd;	/* command type */
-	u16 len;	/* command length */
-	u16 msgid;	/* unique message id */
+	u32 len;	/* command length */
+	u32 msgid;	/* unique message id */
 	u32 result;	/* message return value */
 } __packed;
 
 struct virt_npu_msg {
 	struct completion work;
-	u16 msgid;
+	u32 msgid;
 	void *txbuf;
+	u32 tx_buf_num;
 	void *rxbuf;
+	u32 rx_buf_num;
 };
 
 struct virt_npu_buf {
@@ -266,18 +277,29 @@ struct npu_pwrctrl {
 	uint32_t dcvs_mode;
 };
 
+struct npu_buf_mgr {
+	void *bufs;
+	unsigned int buf_size;
+	unsigned int total_buf_num;
+	unsigned int free_buf_num;
+	unsigned long *bitmap;
+};
+
 struct npu_device {
 	struct virtio_device *vdev;
 	struct virtqueue *rvq;
 	struct virtqueue *svq;
-	void *rbufs;
-	void *sbufs;
+	void *bufs;
 	unsigned int order;
+	unsigned int num_descs;
 	unsigned int num_bufs;
 	unsigned int buf_size;
-	int last_sbuf;
+	struct npu_buf_mgr rbufs;
+	struct npu_buf_mgr sbufs;
 
 	struct mutex lock;
+	spinlock_t vq_lock;
+
 	struct device *device;
 	struct cdev cdev;
 	struct class *class;
@@ -378,43 +400,76 @@ static bool npu_validate_network(struct npu_client *client,
 	return rc;
 }
 
-static void *get_a_tx_buf(struct npu_device *npu_dev)
+static void *get_tx_buf(struct npu_device *npu_dev, uint32_t *buf_num)
 {
-	unsigned int len;
-	void *ret;
+	struct npu_buf_mgr *buf_mgr = &npu_dev->sbufs;
+	void *ret = NULL;
+	int order, idx;
 
 	/* support multiple concurrent senders */
 	mutex_lock(&npu_dev->lock);
-	/*
-	 * either pick the next unused tx buffer
-	 * (half of our buffers are used for sending messages)
-	 */
-	if (npu_dev->last_sbuf < npu_dev->num_bufs / 2)
-		ret = npu_dev->sbufs + npu_dev->buf_size * npu_dev->last_sbuf++;
-	/* or recycle a used one */
-	else
-		ret = virtqueue_get_buf(npu_dev->svq, &len);
+	if (buf_mgr->free_buf_num < *buf_num) {
+		NPU_ERR("No enough free tx buffer\n");
+		goto exit;
+	}
+
+	order = get_order(*buf_num);
+	idx = bitmap_find_free_region(buf_mgr->bitmap,
+		buf_mgr->total_buf_num, order);
+	if (idx < 0) {
+		NPU_ERR("can't find free region in bitmap order %d\n",
+			order);
+		goto exit;
+	}
+	ret = buf_mgr->bufs + npu_dev->buf_size * idx;
+	buf_mgr->free_buf_num -= (1 << order);
+	*buf_num = 1 << order;
+	NPU_DBG("Get tx buffer %d:%d, total free num %d\n", idx, *buf_num,
+		buf_mgr->free_buf_num);
+exit:
 	mutex_unlock(&npu_dev->lock);
 	return ret;
 }
 
-static struct virt_npu_msg *virt_alloc_msg(struct npu_device *npu_dev, int size)
+static void put_tx_buf(struct npu_device *npu_dev, void *buf, uint32_t buf_num)
+{
+	struct npu_buf_mgr *buf_mgr = &npu_dev->sbufs;
+	int order, idx;
+
+	order = get_order(buf_num);
+	idx = (buf - buf_mgr->bufs) / npu_dev->buf_size;
+
+	mutex_lock(&npu_dev->lock);
+
+	bitmap_release_region(buf_mgr->bitmap, idx, order);
+	buf_mgr->free_buf_num += (1 << order);
+
+	NPU_DBG("tx buffer freed %d:%d, total free num %d\n", idx,
+		buf_num, buf_mgr->free_buf_num);
+	mutex_unlock(&npu_dev->lock);
+}
+
+static struct virt_npu_msg *virt_alloc_msg(struct npu_device *npu_dev,
+	uint32_t size)
 {
 	struct virt_npu_msg *msg;
+	struct virt_msg_hdr *hdr;
 	void *buf;
 	unsigned long flags;
+	uint32_t buf_num = 1;
 	int i;
 
 	if (size > npu_dev->buf_size) {
-		NPU_ERR("message is too big (%d)\n", size);
-		return NULL;
+		buf_num = (size + npu_dev->buf_size - 1) / npu_dev->buf_size;
+		NPU_WARN("message is %d, %d buffers required\n",
+			size, buf_num);
 	}
 
 	msg = kzalloc(sizeof(*msg), GFP_KERNEL);
 	if (!msg)
 		return NULL;
 
-	buf = get_a_tx_buf(npu_dev);
+	buf = get_tx_buf(npu_dev, &buf_num);
 	if (!buf) {
 		NPU_ERR("can't get tx buffer\n");
 		kfree(msg);
@@ -422,6 +477,7 @@ static struct virt_npu_msg *virt_alloc_msg(struct npu_device *npu_dev, int size)
 	}
 
 	msg->txbuf = buf;
+	msg->tx_buf_num = buf_num;
 	init_completion(&msg->work);
 	spin_lock_irqsave(&npu_dev->msglock, flags);
 	for (i = 0; i < NPU_MSG_MAX; i++) {
@@ -435,9 +491,15 @@ static struct virt_npu_msg *virt_alloc_msg(struct npu_device *npu_dev, int size)
 
 	if (i == NPU_MSG_MAX) {
 		NPU_ERR("message queue is full\n");
+		put_tx_buf(npu_dev, buf, buf_num);
 		kfree(msg);
 		return NULL;
 	}
+
+	hdr = (struct virt_msg_hdr *)buf;
+	hdr->major_version = VIRTIO_NPU_VERSION_MAJOR;
+	hdr->minor_version = VIRTIO_NPU_VERSION_MINOR;
+
 	return msg;
 }
 
@@ -446,12 +508,16 @@ static void virt_free_msg(struct npu_device *npu_dev, struct virt_npu_msg *msg)
 	unsigned long flags;
 
 	spin_lock_irqsave(&npu_dev->msglock, flags);
-	if (npu_dev->msgtable[msg->msgid] == msg)
+	if (npu_dev->msgtable[msg->msgid] == msg) {
 		npu_dev->msgtable[msg->msgid] = NULL;
-	else
+	} else {
 		NPU_ERR("can't find msg %d in table\n", msg->msgid);
+		spin_unlock_irqrestore(&npu_dev->msglock, flags);
+		return;
+	}
 	spin_unlock_irqrestore(&npu_dev->msglock, flags);
 
+	put_tx_buf(npu_dev, msg->txbuf, msg->tx_buf_num);
 	kfree(msg);
 }
 
@@ -462,6 +528,7 @@ static int32_t virt_npu_get_info(struct npu_client *client,
 	struct virt_get_info_msg *vmsg, *rsp = NULL;
 	struct virt_npu_msg *msg;
 	struct scatterlist sg[1];
+	unsigned long flags;
 	int rc;
 
 	msg = virt_alloc_msg(npu_dev, sizeof(*vmsg));
@@ -471,23 +538,23 @@ static int32_t virt_npu_get_info(struct npu_client *client,
 	vmsg = (struct virt_get_info_msg *)msg->txbuf;
 	vmsg->hdr.pid = client->tgid;
 	vmsg->hdr.tid = current->pid;
-	vmsg->hdr.cid = -1;
+	vmsg->hdr.cid = client->cid;
 	vmsg->hdr.cmd = VIRTIO_NPU_CMD_GET_INFO;
 	vmsg->hdr.len = sizeof(*vmsg);
 	vmsg->hdr.msgid = msg->msgid;
 	vmsg->hdr.result = 0xffffffff;
 	sg_init_one(sg, vmsg, sizeof(*vmsg));
 
-	mutex_lock(&npu_dev->lock);
+	spin_lock_irqsave(&npu_dev->vq_lock, flags);
 	rc = virtqueue_add_outbuf(npu_dev->svq, sg, 1, vmsg, GFP_KERNEL);
 	if (rc) {
-		mutex_unlock(&npu_dev->lock);
+		spin_unlock_irqrestore(&npu_dev->vq_lock, flags);
 		NPU_ERR("fail to add output buffer\n");
 		goto fail;
 	}
 
 	virtqueue_kick(npu_dev->svq);
-	mutex_unlock(&npu_dev->lock);
+	spin_unlock_irqrestore(&npu_dev->vq_lock, flags);
 	wait_for_completion(&msg->work);
 
 	rsp = msg->rxbuf;
@@ -503,10 +570,14 @@ fail:
 		sg_init_one(sg, rsp, npu_dev->buf_size);
 
 		/* add the buffer back to the remote processor's virtqueue */
+		spin_lock_irqsave(&npu_dev->vq_lock, flags);
+
 		if (virtqueue_add_inbuf(npu_dev->rvq, sg, 1, rsp, GFP_KERNEL))
 			NPU_ERR("fail to add input buffer\n");
 		else
 			virtqueue_kick(npu_dev->rvq);
+
+		spin_unlock_irqrestore(&npu_dev->vq_lock, flags);
 	}
 	virt_free_msg(npu_dev, msg);
 
@@ -618,6 +689,7 @@ static int virt_npu_munmap(struct npu_client *client, uint64_t iova,
 	struct virt_npu_msg *msg;
 	struct scatterlist sg[1];
 	int rc;
+	unsigned long flags;
 
 	msg = virt_alloc_msg(npu_dev, sizeof(*vmsg));
 	if (!msg)
@@ -636,16 +708,17 @@ static int virt_npu_munmap(struct npu_client *client, uint64_t iova,
 	vmsg->size = size;
 	sg_init_one(sg, vmsg, sizeof(*vmsg));
 
-	mutex_lock(&npu_dev->lock);
+	spin_lock_irqsave(&npu_dev->vq_lock, flags);
 	rc = virtqueue_add_outbuf(npu_dev->svq, sg, 1, vmsg, GFP_KERNEL);
 	if (rc) {
-		mutex_unlock(&npu_dev->lock);
+		spin_unlock_irqrestore(&npu_dev->vq_lock, flags);
 		NPU_ERR("fail to add output buffer\n");
 		goto fail;
 	}
 
 	virtqueue_kick(npu_dev->svq);
-	mutex_unlock(&npu_dev->lock);
+	spin_unlock_irqrestore(&npu_dev->vq_lock, flags);
+
 	wait_for_completion(&msg->work);
 
 	rsp = msg->rxbuf;
@@ -655,10 +728,15 @@ fail:
 		sg_init_one(sg, rsp, npu_dev->buf_size);
 
 		/* add the buffer back to the remote processor's virtqueue */
+		spin_lock_irqsave(&npu_dev->vq_lock, flags);
+
 		if (virtqueue_add_inbuf(npu_dev->rvq, sg, 1, rsp, GFP_KERNEL))
 			NPU_ERR("fail to add input buffer\n");
 		else
 			virtqueue_kick(npu_dev->rvq);
+
+		spin_unlock_irqrestore(&npu_dev->vq_lock, flags);
+
 	}
 	virt_free_msg(npu_dev, msg);
 
@@ -736,6 +814,7 @@ static int virt_npu_mmap(struct npu_client *client,  uint32_t flags,
 	struct scatterlist sg[1], *sgl;
 	int rc, sgbuf_size, total_size;
 	int i = 0;
+	unsigned long irq_flags;
 
 	sgbuf_size = nents * sizeof(*sgbuf);
 	total_size = sizeof(*vmsg) + sgbuf_size;
@@ -773,16 +852,17 @@ static int virt_npu_mmap(struct npu_client *client,  uint32_t flags,
 
 	sg_init_one(sg, vmsg, total_size);
 
-	mutex_lock(&npu_dev->lock);
+	spin_lock_irqsave(&npu_dev->vq_lock, irq_flags);
 	rc = virtqueue_add_outbuf(npu_dev->svq, sg, 1, vmsg, GFP_KERNEL);
 	if (rc) {
-		mutex_unlock(&npu_dev->lock);
+		spin_unlock_irqrestore(&npu_dev->vq_lock, irq_flags);
 		NPU_ERR("fail to add output buffer\n");
 		goto fail;
 	}
 
 	virtqueue_kick(npu_dev->svq);
-	mutex_unlock(&npu_dev->lock);
+	spin_unlock_irqrestore(&npu_dev->vq_lock, irq_flags);
+
 	wait_for_completion(&msg->work);
 
 	rsp = msg->rxbuf;
@@ -797,10 +877,14 @@ fail:
 		sg_init_one(sg, rsp, npu_dev->buf_size);
 
 		/* add the buffer back to the remote processor's virtqueue */
+		spin_lock_irqsave(&npu_dev->vq_lock, irq_flags);
+
 		if (virtqueue_add_inbuf(npu_dev->rvq, sg, 1, rsp, GFP_KERNEL))
 			NPU_ERR("fail to add input buffer\n");
 		else
 			virtqueue_kick(npu_dev->rvq);
+
+		spin_unlock_irqrestore(&npu_dev->vq_lock, irq_flags);
 	}
 	virt_free_msg(npu_dev, msg);
 
@@ -899,6 +983,7 @@ static int32_t npu_virt_unload_network(struct npu_client *client,
 	struct virt_npu_msg *msg;
 	struct scatterlist sg[1];
 	int rc, total_size;
+	unsigned long flags;
 
 	if (!npu_validate_network(client, unload->network_hdl)) {
 		NPU_ERR("Invalid network handle %x\n", unload->network_hdl);
@@ -923,16 +1008,18 @@ static int32_t npu_virt_unload_network(struct npu_client *client,
 
 	sg_init_one(sg, vmsg, total_size);
 
-	mutex_lock(&npu_dev->lock);
+	spin_lock_irqsave(&npu_dev->vq_lock, flags);
 	rc = virtqueue_add_outbuf(npu_dev->svq, sg, 1, vmsg, GFP_KERNEL);
 	if (rc) {
-		mutex_unlock(&npu_dev->lock);
+		spin_unlock_irqrestore(&npu_dev->vq_lock, flags);
+
 		NPU_ERR("fail to add output buffer\n");
 		goto fail;
 	}
 
 	virtqueue_kick(npu_dev->svq);
-	mutex_unlock(&npu_dev->lock);
+	spin_unlock_irqrestore(&npu_dev->vq_lock, flags);
+
 	wait_for_completion(&msg->work);
 
 	rsp = msg->rxbuf;
@@ -948,10 +1035,14 @@ fail:
 		sg_init_one(sg, rsp, npu_dev->buf_size);
 
 		/* add the buffer back to the remote processor's virtqueue */
+		spin_lock_irqsave(&npu_dev->vq_lock, flags);
+
 		if (virtqueue_add_inbuf(npu_dev->rvq, sg, 1, rsp, GFP_KERNEL))
 			NPU_ERR("fail to add input buffer\n");
 		else
 			virtqueue_kick(npu_dev->rvq);
+
+		spin_unlock_irqrestore(&npu_dev->vq_lock, flags);
 	}
 	virt_free_msg(npu_dev, msg);
 
@@ -996,6 +1087,7 @@ static int32_t npu_virt_load_network_v2(struct npu_client *client,
 	struct scatterlist sg[1];
 	struct virt_patch_info_v2 *virt_patch_info;
 	int rc, i, patch_info_size, total_size;
+	unsigned long flags;
 
 	patch_info_size = load_ioctl->patch_info_num *
 		sizeof(struct virt_patch_info_v2);
@@ -1041,15 +1133,17 @@ static int32_t npu_virt_load_network_v2(struct npu_client *client,
 
 	sg_init_one(sg, vmsg, total_size);
 
-	mutex_lock(&npu_dev->lock);
+	spin_lock_irqsave(&npu_dev->vq_lock, flags);
 	rc = virtqueue_add_outbuf(npu_dev->svq, sg, 1, vmsg, GFP_KERNEL);
 	if (rc) {
 		NPU_ERR("fail to add output buffer\n");
+		spin_unlock_irqrestore(&npu_dev->vq_lock, flags);
 		goto fail;
 	}
 
 	virtqueue_kick(npu_dev->svq);
-	mutex_unlock(&npu_dev->lock);
+	spin_unlock_irqrestore(&npu_dev->vq_lock, flags);
+
 	wait_for_completion(&msg->work);
 
 	rsp = msg->rxbuf;
@@ -1072,10 +1166,14 @@ fail:
 		sg_init_one(sg, rsp, npu_dev->buf_size);
 
 		/* add the buffer back to the remote processor's virtqueue */
+		spin_lock_irqsave(&npu_dev->vq_lock, flags);
+
 		if (virtqueue_add_inbuf(npu_dev->rvq, sg, 1, rsp, GFP_KERNEL))
 			NPU_ERR("fail to add input buffer\n");
 		else
 			virtqueue_kick(npu_dev->rvq);
+
+		spin_unlock_irqrestore(&npu_dev->vq_lock, flags);
 	}
 	virt_free_msg(npu_dev, msg);
 
@@ -1150,6 +1248,7 @@ static int32_t npu_virt_exec_network_v2(struct npu_client *client,
 	struct virt_patch_buf_info *v_patch_buf_info;
 	struct scatterlist sg[1];
 	int rc, i, patch_info_size, total_size;
+	unsigned long flags;
 
 	if (!npu_validate_network(client, exec_ioctl->network_hdl)) {
 		NPU_ERR("Invalid network handle %x\n",
@@ -1192,16 +1291,16 @@ static int32_t npu_virt_exec_network_v2(struct npu_client *client,
 
 	sg_init_one(sg, vmsg, total_size);
 
-	mutex_lock(&npu_dev->lock);
+	spin_lock_irqsave(&npu_dev->vq_lock, flags);
 	rc = virtqueue_add_outbuf(npu_dev->svq, sg, 1, vmsg, GFP_KERNEL);
 	if (rc) {
-		mutex_unlock(&npu_dev->lock);
+		spin_unlock_irqrestore(&npu_dev->vq_lock, flags);
 		NPU_ERR("fail to add output buffer\n");
 		goto fail;
 	}
 
 	virtqueue_kick(npu_dev->svq);
-	mutex_unlock(&npu_dev->lock);
+	spin_unlock_irqrestore(&npu_dev->vq_lock, flags);
 	wait_for_completion(&msg->work);
 
 	rsp = msg->rxbuf;
@@ -1209,7 +1308,9 @@ static int32_t npu_virt_exec_network_v2(struct npu_client *client,
 	if (rc)
 		goto fail;
 
-	exec_ioctl->stats_buf_size = rsp->stats_buf_size;
+	exec_ioctl->stats_buf_size =
+		(exec_ioctl->stats_buf_size < rsp->stats_buf_size) ?
+		exec_ioctl->stats_buf_size : rsp->stats_buf_size;
 	if (copy_to_user(
 		(void __user *)exec_ioctl->stats_buf_addr,
 		(void *)rsp + rsp->stats_buf_off,
@@ -1223,10 +1324,13 @@ fail:
 		sg_init_one(sg, rsp, npu_dev->buf_size);
 
 		/* add the buffer back to the remote processor's virtqueue */
+		spin_lock_irqsave(&npu_dev->vq_lock, flags);
 		if (virtqueue_add_inbuf(npu_dev->rvq, sg, 1, rsp, GFP_KERNEL))
 			NPU_ERR("fail to add input buffer\n");
 		else
 			virtqueue_kick(npu_dev->rvq);
+
+		spin_unlock_irqrestore(&npu_dev->vq_lock, flags);
 	}
 	virt_free_msg(npu_dev, msg);
 
@@ -1301,6 +1405,7 @@ static int32_t npu_virt_set_property(struct npu_client *client,
 	struct virt_npu_msg *msg;
 	struct scatterlist sg[1];
 	int rc, i, total_size;
+	unsigned long flags;
 
 	total_size = sizeof(*vmsg);
 
@@ -1325,16 +1430,17 @@ static int32_t npu_virt_set_property(struct npu_client *client,
 
 	sg_init_one(sg, vmsg, total_size);
 
-	mutex_lock(&npu_dev->lock);
+	spin_lock_irqsave(&npu_dev->vq_lock, flags);
 	rc = virtqueue_add_outbuf(npu_dev->svq, sg, 1, vmsg, GFP_KERNEL);
 	if (rc) {
-		mutex_unlock(&npu_dev->lock);
+		spin_unlock_irqrestore(&npu_dev->vq_lock, flags);
 		NPU_ERR("fail to add output buffer\n");
 		goto fail;
 	}
 
 	virtqueue_kick(npu_dev->svq);
-	mutex_unlock(&npu_dev->lock);
+	spin_unlock_irqrestore(&npu_dev->vq_lock, flags);
+
 	wait_for_completion(&msg->work);
 
 	rsp = msg->rxbuf;
@@ -1347,10 +1453,13 @@ fail:
 		sg_init_one(sg, rsp, npu_dev->buf_size);
 
 		/* add the buffer back to the remote processor's virtqueue */
+		spin_lock_irqsave(&npu_dev->vq_lock, flags);
 		if (virtqueue_add_inbuf(npu_dev->rvq, sg, 1, rsp, GFP_KERNEL))
 			NPU_ERR("fail to add input buffer\n");
 		else
 			virtqueue_kick(npu_dev->rvq);
+
+		spin_unlock_irqrestore(&npu_dev->vq_lock, flags);
 	}
 	virt_free_msg(npu_dev, msg);
 
@@ -1383,6 +1492,7 @@ static int32_t npu_virt_get_property(struct npu_client *client,
 	struct virt_npu_msg *msg;
 	struct scatterlist sg[1];
 	int rc, i, total_size;
+	unsigned long flags;
 
 	total_size = sizeof(*vmsg);
 
@@ -1407,15 +1517,17 @@ static int32_t npu_virt_get_property(struct npu_client *client,
 
 	sg_init_one(sg, vmsg, total_size);
 
-	mutex_lock(&npu_dev->lock);
+	spin_lock_irqsave(&npu_dev->vq_lock, flags);
 	rc = virtqueue_add_outbuf(npu_dev->svq, sg, 1, vmsg, GFP_KERNEL);
 	if (rc) {
 		NPU_ERR("fail to add output buffer\n");
+		spin_unlock_irqrestore(&npu_dev->vq_lock, flags);
 		goto fail;
 	}
 
 	virtqueue_kick(npu_dev->svq);
-	mutex_unlock(&npu_dev->lock);
+	spin_unlock_irqrestore(&npu_dev->vq_lock, flags);
+
 	wait_for_completion(&msg->work);
 
 	rsp = msg->rxbuf;
@@ -1434,10 +1546,13 @@ fail:
 		sg_init_one(sg, rsp, npu_dev->buf_size);
 
 		/* add the buffer back to the remote processor's virtqueue */
+		spin_lock_irqsave(&npu_dev->vq_lock, flags);
 		if (virtqueue_add_inbuf(npu_dev->rvq, sg, 1, rsp, GFP_KERNEL))
 			NPU_ERR("fail to add input buffer\n");
 		else
 			virtqueue_kick(npu_dev->rvq);
+
+		spin_unlock_irqrestore(&npu_dev->vq_lock, flags);
 	}
 	virt_free_msg(npu_dev, msg);
 
@@ -1529,6 +1644,7 @@ static int virt_npu_open(struct npu_client *client)
 	struct virt_npu_msg *msg;
 	struct scatterlist sg[1];
 	int rc;
+	unsigned long flags;
 
 	msg = virt_alloc_msg(npu_dev, sizeof(*vmsg));
 	if (!msg)
@@ -1544,16 +1660,18 @@ static int virt_npu_open(struct npu_client *client)
 	vmsg->result = 0xffffffff;
 	sg_init_one(sg, vmsg, sizeof(*vmsg));
 
-	mutex_lock(&npu_dev->lock);
+	spin_lock_irqsave(&npu_dev->vq_lock, flags);
 	rc = virtqueue_add_outbuf(npu_dev->svq, sg, 1, vmsg, GFP_KERNEL);
 	if (rc) {
-		mutex_unlock(&npu_dev->lock);
+		spin_unlock_irqrestore(&npu_dev->vq_lock, flags);
+
 		NPU_ERR("fail to add output buffer\n");
 		goto fail;
 	}
 
 	virtqueue_kick(npu_dev->svq);
-	mutex_unlock(&npu_dev->lock);
+	spin_unlock_irqrestore(&npu_dev->vq_lock, flags);
+
 	wait_for_completion(&msg->work);
 
 	rsp = msg->rxbuf;
@@ -1577,10 +1695,13 @@ fail:
 		sg_init_one(sg, rsp, npu_dev->buf_size);
 
 		/* add the buffer back to the remote processor's virtqueue */
+		spin_lock_irqsave(&npu_dev->vq_lock, flags);
 		if (virtqueue_add_inbuf(npu_dev->rvq, sg, 1, rsp, GFP_KERNEL))
 			NPU_ERR("fail to add input buffer\n");
 		else
 			virtqueue_kick(npu_dev->rvq);
+
+		spin_unlock_irqrestore(&npu_dev->vq_lock, flags);
 	}
 	virt_free_msg(npu_dev, msg);
 
@@ -1623,6 +1744,7 @@ static int virt_npu_close(struct npu_client *client)
 	struct virt_npu_msg *msg;
 	struct scatterlist sg[1];
 	int rc;
+	unsigned long flags;
 
 	msg = virt_alloc_msg(npu_dev, sizeof(*vmsg));
 	if (!msg)
@@ -1639,16 +1761,18 @@ static int virt_npu_close(struct npu_client *client)
 	vmsg->result = 0xffffffff;
 	sg_init_one(sg, vmsg, sizeof(*vmsg));
 
-	mutex_lock(&npu_dev->lock);
+	spin_lock_irqsave(&npu_dev->vq_lock, flags);
+
 	rc = virtqueue_add_outbuf(npu_dev->svq, sg, 1, vmsg, GFP_KERNEL);
 	if (rc) {
-		mutex_unlock(&npu_dev->lock);
+		spin_unlock_irqrestore(&npu_dev->vq_lock, flags);
 		NPU_ERR("fail to add output buffer\n");
 		goto fail;
 	}
 
 	virtqueue_kick(npu_dev->svq);
-	mutex_unlock(&npu_dev->lock);
+	spin_unlock_irqrestore(&npu_dev->vq_lock, flags);
+
 	wait_for_completion(&msg->work);
 
 	rsp = msg->rxbuf;
@@ -1661,10 +1785,13 @@ fail:
 		sg_init_one(sg, rsp, npu_dev->buf_size);
 
 		/* add the buffer back to the remote processor's virtqueue */
+		spin_lock_irqsave(&npu_dev->vq_lock, flags);
 		if (virtqueue_add_inbuf(npu_dev->rvq, sg, 1, rsp, GFP_KERNEL))
 			NPU_ERR("fail to add input buffer\n");
 		else
 			virtqueue_kick(npu_dev->rvq);
+
+		spin_unlock_irqrestore(&npu_dev->vq_lock, flags);
 	}
 	virt_free_msg(npu_dev, msg);
 
@@ -1881,6 +2008,7 @@ static int32_t npu_virt_tx_debugfs_cmd(struct npu_device *npu_dev,
 	struct virt_npu_msg *msg;
 	int rc, i, total_size;
 	struct scatterlist sg[1];
+	unsigned long flags;
 
 	if (param_num > MAX_DEBUGFS_PARAM_NUM) {
 		NPU_ERR("Too many params %d\n", param_num);
@@ -1914,15 +2042,17 @@ static int32_t npu_virt_tx_debugfs_cmd(struct npu_device *npu_dev,
 
 	sg_init_one(sg, vmsg, total_size);
 
-	mutex_lock(&npu_dev->lock);
+	spin_lock_irqsave(&npu_dev->vq_lock, flags);
 	rc = virtqueue_add_outbuf(npu_dev->svq, sg, 1, vmsg, GFP_KERNEL);
 	if (rc) {
 		NPU_ERR("fail to add output buffer\n");
+		spin_unlock_irqrestore(&npu_dev->vq_lock, flags);
 		goto fail;
 	}
 
 	virtqueue_kick(npu_dev->svq);
-	mutex_unlock(&npu_dev->lock);
+	spin_unlock_irqrestore(&npu_dev->vq_lock, flags);
+
 	wait_for_completion(&msg->work);
 
 	rsp = msg->rxbuf;
@@ -1935,10 +2065,13 @@ fail:
 		sg_init_one(sg, rsp, npu_dev->buf_size);
 
 		/* add the buffer back to the remote processor's virtqueue */
+		spin_lock_irqsave(&npu_dev->vq_lock, flags);
 		if (virtqueue_add_inbuf(npu_dev->rvq, sg, 1, rsp, GFP_KERNEL))
 			NPU_ERR("fail to add input buffer\n");
 		else
 			virtqueue_kick(npu_dev->rvq);
+
+		spin_unlock_irqrestore(&npu_dev->vq_lock, flags);
 	}
 	virt_free_msg(npu_dev, msg);
 
@@ -2000,6 +2133,7 @@ static int32_t npu_virt_tx_bist_cmd(struct npu_device *npu_dev,
 	struct virt_npu_msg *msg;
 	int rc, i, total_size;
 	struct scatterlist sg[1];
+	unsigned long flags;
 
 	if (param_num > MAX_BIST_PARAM_NUM) {
 		NPU_ERR("Too many params %d\n", param_num);
@@ -2033,16 +2167,17 @@ static int32_t npu_virt_tx_bist_cmd(struct npu_device *npu_dev,
 
 	sg_init_one(sg, vmsg, total_size);
 
-	mutex_lock(&npu_dev->lock);
+	spin_lock_irqsave(&npu_dev->vq_lock, flags);
 	rc = virtqueue_add_outbuf(npu_dev->svq, sg, 1, vmsg, GFP_KERNEL);
 	if (rc) {
-		mutex_unlock(&npu_dev->lock);
+		spin_unlock_irqrestore(&npu_dev->vq_lock, flags);
 		NPU_ERR("fail to add output buffer\n");
 		goto fail;
 	}
 
 	virtqueue_kick(npu_dev->svq);
-	mutex_unlock(&npu_dev->lock);
+	spin_unlock_irqrestore(&npu_dev->vq_lock, flags);
+
 	wait_for_completion(&msg->work);
 
 	rsp = msg->rxbuf;
@@ -2055,10 +2190,14 @@ fail:
 		sg_init_one(sg, rsp, npu_dev->buf_size);
 
 		/* add the buffer back to the remote processor's virtqueue */
+		spin_lock_irqsave(&npu_dev->vq_lock, flags);
+
 		if (virtqueue_add_inbuf(npu_dev->rvq, sg, 1, rsp, GFP_KERNEL))
 			NPU_ERR("fail to add input buffer\n");
 		else
 			virtqueue_kick(npu_dev->rvq);
+
+		spin_unlock_irqrestore(&npu_dev->vq_lock, flags);
 	}
 	virt_free_msg(npu_dev, msg);
 
@@ -2192,8 +2331,12 @@ static void recv_done(struct virtqueue *rvq)
 	struct npu_device *npu_dev = rvq->vdev->priv;
 	struct virt_msg_hdr *rsp;
 	unsigned int len, msgs_received = 0;
+	unsigned long flags;
 
+	spin_lock_irqsave(&npu_dev->vq_lock, flags);
 	rsp = virtqueue_get_buf(rvq, &len);
+	spin_unlock_irqrestore(&npu_dev->vq_lock, flags);
+
 	if (!rsp) {
 		NPU_ERR("incoming signal, but no used buffer\n");
 		return;
@@ -2204,7 +2347,35 @@ static void recv_done(struct virtqueue *rvq)
 			break;
 
 		msgs_received++;
+		spin_lock_irqsave(&npu_dev->vq_lock, flags);
 		rsp = virtqueue_get_buf(rvq, &len);
+		spin_unlock_irqrestore(&npu_dev->vq_lock, flags);
+	}
+}
+
+static void tx_done(struct virtqueue *txq)
+{
+	struct npu_device *npu_dev = txq->vdev->priv;
+	struct virt_msg_hdr *cmd;
+	unsigned int len, msgs_received = 0;
+	unsigned long flags;
+
+	/* recycle the tx descs to free queue only*/
+	spin_lock_irqsave(&npu_dev->vq_lock, flags);
+	cmd = virtqueue_get_buf(txq, &len);
+	spin_unlock_irqrestore(&npu_dev->vq_lock, flags);
+
+	if (!cmd) {
+		NPU_ERR("incoming signal, but no used buffer in tx queue\n");
+		return;
+	}
+
+	while (cmd) {
+		msgs_received++;
+		NPU_DBG("get cmd from tx queue: total %d\n", msgs_received);
+		spin_lock_irqsave(&npu_dev->vq_lock, flags);
+		cmd = virtqueue_get_buf(txq, &len);
+		spin_unlock_irqrestore(&npu_dev->vq_lock, flags);
 	}
 }
 
@@ -2212,7 +2383,7 @@ static int init_vqs(struct npu_device *npu_dev)
 {
 	struct virtqueue *vqs[2];
 	const char * const names[] = { "output", "input" };
-	vq_callback_t *cbs[] = { NULL, recv_done };
+	vq_callback_t *cbs[] = { tx_done, recv_done };
 	size_t total_buf_space;
 	void *bufs;
 	int rc;
@@ -2229,7 +2400,8 @@ static int init_vqs(struct npu_device *npu_dev)
 	/* we expect symmetric tx/rx vrings */
 	WARN_ON(virtqueue_get_vring_size(npu_dev->rvq) !=
 			virtqueue_get_vring_size(npu_dev->svq));
-	npu_dev->num_bufs = virtqueue_get_vring_size(npu_dev->rvq) * 2;
+	npu_dev->num_descs = virtqueue_get_vring_size(npu_dev->rvq);
+	npu_dev->num_bufs = npu_dev->num_descs * 4;
 
 	npu_dev->buf_size = MAX_NPU_BUF_SIZE;
 	total_buf_space = npu_dev->num_bufs * npu_dev->buf_size;
@@ -2242,14 +2414,39 @@ static int init_vqs(struct npu_device *npu_dev)
 		goto vqs_del;
 	}
 
-	/* half of the buffers is dedicated for RX */
-	npu_dev->rbufs = bufs;
+	npu_dev->bufs = bufs;
 
-	/* and half is dedicated for TX */
-	npu_dev->sbufs = bufs + total_buf_space / 2;
+	/* one fourth of the buffers is dedicated for RX */
+	npu_dev->rbufs.bufs = bufs;
+	npu_dev->rbufs.buf_size = MAX_NPU_BUF_SIZE;
+	npu_dev->rbufs.total_buf_num = npu_dev->num_bufs / 4;
+	npu_dev->rbufs.free_buf_num = npu_dev->rbufs.total_buf_num;
+	npu_dev->rbufs.bitmap = bitmap_zalloc(npu_dev->rbufs.total_buf_num,
+		GFP_KERNEL);
+	if (!npu_dev->rbufs.bitmap) {
+		NPU_ERR("can't allocate bitmap for rbufs\n");
+		goto vqs_del;
+	}
+
+	/* and the rest is dedicated for TX */
+	npu_dev->sbufs.bufs = bufs + total_buf_space / 4;
+	npu_dev->sbufs.buf_size = MAX_NPU_BUF_SIZE;
+	npu_dev->sbufs.total_buf_num = (npu_dev->num_bufs / 4) * 3;
+	npu_dev->sbufs.free_buf_num = npu_dev->sbufs.total_buf_num;
+	npu_dev->sbufs.bitmap = bitmap_zalloc(npu_dev->sbufs.total_buf_num,
+		GFP_KERNEL);
+	if (!npu_dev->sbufs.bitmap) {
+		NPU_ERR("can't allocate bitmap for sbufs\n");
+		goto vqs_del;
+	}
+
 	return 0;
 
 vqs_del:
+	free_pages((unsigned long)npu_dev->bufs, npu_dev->order);
+	npu_dev->bufs = NULL;
+	bitmap_free(npu_dev->rbufs.bitmap);
+	npu_dev->rbufs.bitmap = NULL;
 	npu_dev->vdev->config->del_vqs(npu_dev->vdev);
 	return rc;
 }
@@ -2264,11 +2461,17 @@ static int virt_npu_probe(struct virtio_device *vdev)
 		return -ENODEV;
 	}
 
+	if (!virtio_has_feature(vdev, VIRTIO_NPU_F_MULTI_BUF)) {
+		NPU_ERR("Update BE driver to support multi-buf\n");
+		return -ENODEV;
+	}
+
 	npu_dev = kzalloc(sizeof(*npu_dev), GFP_KERNEL);
 	if (!npu_dev)
 		return -ENOMEM;
 
 	mutex_init(&npu_dev->lock);
+	spin_lock_init(&npu_dev->vq_lock);
 	spin_lock_init(&npu_dev->msglock);
 
 	vdev->priv = npu_dev;
@@ -2319,9 +2522,10 @@ static int virt_npu_probe(struct virtio_device *vdev)
 	virtio_device_ready(vdev);
 
 	/* set up the receive buffers */
-	for (i = 0; i < npu_dev->num_bufs / 2; i++) {
+	for (i = 0; i < npu_dev->rbufs.total_buf_num; i++) {
 		struct scatterlist sg;
-		void *cpu_addr = npu_dev->rbufs + i * npu_dev->buf_size;
+		void *cpu_addr = npu_dev->rbufs.bufs +
+			i * npu_dev->buf_size;
 
 		sg_init_one(&sg, cpu_addr, npu_dev->buf_size);
 		rc = virtqueue_add_inbuf(npu_dev->rvq, &sg, 1, cpu_addr,
@@ -2371,6 +2575,9 @@ static void virt_npu_remove(struct virtio_device *vdev)
 	unregister_chrdev_region(npu_dev->dev_num, 1);
 	vdev->config->reset(vdev);
 	vdev->config->del_vqs(vdev);
+	free_pages((unsigned long)npu_dev->bufs, npu_dev->order);
+	bitmap_free(npu_dev->rbufs.bitmap);
+	bitmap_free(npu_dev->sbufs.bitmap);
 	kfree(npu_dev);
 	vdev->priv = NULL;
 }
@@ -2381,6 +2588,7 @@ static struct virtio_device_id id_table[] = {
 };
 
 static unsigned int features[] = {
+	VIRTIO_NPU_F_MULTI_BUF,
 };
 
 static struct virtio_driver virtio_npu_driver = {

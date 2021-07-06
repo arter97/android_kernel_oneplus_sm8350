@@ -5,12 +5,12 @@
 #ifndef __KGSL_H
 #define __KGSL_H
 
+#include <uapi/linux/msm_kgsl.h>
 #include <linux/cdev.h>
 #include <linux/compat.h>
 #include <linux/interrupt.h>
 #include <linux/kthread.h>
 #include <linux/mm.h>
-#include <linux/msm_kgsl.h>
 #include <linux/uaccess.h>
 
 #include "kgsl_gmu_core.h"
@@ -617,9 +617,4 @@ static inline void kgsl_gpu_sysfs_add_link(struct kobject *dst,
 {
 }
 #endif
-
-static inline bool kgsl_is_compat_task(void)
-{
-	return (BITS_PER_LONG == 32) || is_compat_task();
-}
 #endif /* __KGSL_H */
