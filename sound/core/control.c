@@ -296,6 +296,7 @@ void snd_ctl_free_one(struct snd_kcontrol *kcontrol)
 }
 EXPORT_SYMBOL(snd_ctl_free_one);
 
+#ifndef CONFIG_DISABLE_SND_CTL_FIND_HOLE
 static bool snd_ctl_remove_numid_conflict(struct snd_card *card,
 					  unsigned int count)
 {
@@ -328,6 +329,7 @@ static int snd_ctl_find_hole(struct snd_card *card, unsigned int count)
 	}
 	return 0;
 }
+#endif
 
 enum snd_ctl_add_mode {
 	CTL_ADD_EXCLUSIVE, CTL_REPLACE, CTL_ADD_ON_REPLACE,
@@ -421,8 +423,10 @@ static int __snd_ctl_add_replace(struct snd_card *card,
 #ifdef CONFIG_SND_CTL_HASHTABLE
 	}
 #endif
+#ifndef CONFIG_DISABLE_SND_CTL_FIND_HOLE
 	if (snd_ctl_find_hole(card, kcontrol->count) < 0)
 		return -ENOMEM;
+#endif
 
 	list_add_tail(&kcontrol->list, &card->controls);
 	card->controls_count += kcontrol->count;
