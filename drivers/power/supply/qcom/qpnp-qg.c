@@ -3068,7 +3068,7 @@ static int qg_load_battery_profile(struct qpnp_qg *chip)
 	}
 
 	if (IS_ERR_OR_NULL(profile_node)) {
-		rc = PTR_ERR(profile_node);
+		rc = profile_node ? PTR_ERR(profile_node) : -EINVAL;
 		pr_err("Failed to detect valid QG battery profile %d\n", rc);
 		return rc;
 	}
