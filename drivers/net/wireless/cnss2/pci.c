@@ -1850,6 +1850,8 @@ static int cnss_wlan_adsp_pc_enable(struct cnss_pci_data *pci_priv,
 #endif
 
 #ifdef CONFIG_CNSS_SUPPORT_DUAL_DEV
+#define PLC_PCIE_NAME_LEN		14
+
 static struct cnss_plat_data *
 cnss_get_plat_priv_by_driver_ops(struct cnss_wlan_driver *driver_ops)
 {
@@ -1862,6 +1864,33 @@ cnss_get_plat_priv_by_driver_ops(struct cnss_wlan_driver *driver_ops)
 		cnss_pr_err("No cnss driver\n");
 		return NULL;
 	}
+
+	for (i = 0; i < plat_env_count; i++) {
+		plat_env = cnss_get_plat_env(i);
+		if (!plat_env)
+			continue;
+		if (driver_ops->name && plat_env->pld_bus_ops_name) {
+			/* driver_ops->name = PLD_PCIE_OPS_NAME
+			 * #ifdef MULTI_IF_NAME
+			 * #define PLD_PCIE_OPS_NAME "pld_pcie_" MULTI_IF_NAME
+			 * #else
+			 * #define PLD_PCIE_OPS_NAME "pld_pcie"
+			 * #endif
+			 */
+			if (memcmp(driver_ops->name,
+				   plat_env->pld_bus_ops_name,
+				   PLC_PCIE_NAME_LEN) == 0)
+				return plat_env;
+		}
+	}
+
+	cnss_pr_err("Invalid cnss driver name from ko %s\n", driver_ops->name);
+	/* in the dual wlan card case, the pld_bus_ops_name from dts
+	 * and driver_ops-> name from ko should match, otherwise
+	 * wlanhost driver don't know which plat_env it can use;
+	 * if doesn't find the match one, then get first available
+	 * instance insteadly.
+	 */
 
 	for (i = 0; i < plat_env_count; i++) {
 		plat_env = cnss_get_plat_env(i);
