@@ -11260,7 +11260,7 @@ csr_roam_chk_lnk_assoc_ind_upper_layer(
 			&session_id);
 	if (!QDF_IS_STATUS_SUCCESS(status)) {
 		sme_debug("Couldn't find session_id for given BSSID");
-		return;
+		goto free_mem;
 	}
 	csr_send_assoc_ind_to_upper_layer_cnf_msg(
 					mac_ctx, assoc_ind, status, session_id);
@@ -11271,6 +11271,7 @@ csr_roam_chk_lnk_assoc_ind_upper_layer(
 	 *in the csr_send_assoc_ind_to_upper_layer_cnf_msg and
 	 *then free the memroy here.
 	 */
+free_mem:
 	if (assoc_ind->assocReqLength != 0 && assoc_ind->assocReqPtr)
 		qdf_mem_free(assoc_ind->assocReqPtr);
 }
@@ -14791,6 +14792,8 @@ QDF_STATUS csr_send_join_req_msg(struct mac_context *mac, uint32_t sessionId,
 	bool follow_ap_edca;
 	bool reconn_after_assoc_timeout = false;
 	uint8_t programmed_country[REG_ALPHA2_LEN + 1];
+	enum reg_6g_ap_type power_type_6g;
+	bool ctry_code_match;
 
 	if (!pSession) {
 		sme_err("session %d not found", sessionId);
@@ -15557,30 +15560,15 @@ QDF_STATUS csr_send_join_req_msg(struct mac_context *mac, uint32_t sessionId,
 				sme_debug("Channel is 6G but country IE not present");
 			wlan_reg_read_current_country(mac->psoc,
 						      programmed_country);
-			if (qdf_mem_cmp(pIes->Country.country,
-					programmed_country,
-					REG_ALPHA2_LEN)) {
-				sme_debug("Country IE:%c%c, STA country:%c%c",
-					  pIes->Country.country[0],
-					  pIes->Country.country[1],
-					  programmed_country[0],
-					  programmed_country[1]);
-				csr_join_req->same_ctry_code = false;
-				if (wlan_reg_is_us(programmed_country)) {
-					sme_err("US VLP not in place yet, connection not allowed");
-					status = QDF_STATUS_E_NOSUPPORT;
-					break;
-				}
-				if (wlan_reg_is_etsi(programmed_country)) {
-					sme_debug("STA ctry:%c%c, doesn't match with AP ctry, switch to VLP",
-						  programmed_country[0],
-						  programmed_country[1]);
-					csr_join_req->ap_power_type_6g =
-							REG_VERY_LOW_POWER_AP;
-				}
-			} else {
-				csr_join_req->same_ctry_code = true;
-			}
+			status = wlan_reg_get_6g_power_type_for_ctry(
+					pIes->Country.country,
+					programmed_country, &power_type_6g,
+					&ctry_code_match);
+			if (QDF_IS_STATUS_ERROR(status))
+				break;
+			csr_join_req->ap_power_type_6g = power_type_6g;
+			csr_join_req->same_ctry_code = ctry_code_match;
+
 			status = csr_iterate_triplets(pIes->Country);
 		}
 
@@ -21291,7 +21279,9 @@ csr_process_roam_sync_callback(struct mac_context *mac_ctx,
 		}
 		qdf_mem_zero(pmkid_cache, sizeof(pmkid_cache));
 		qdf_mem_free(pmkid_cache);
-	} else {
+	}
+
+	if (roam_synch_data->authStatus != CSR_ROAM_AUTH_STATUS_AUTHENTICATED) {
 		roam_info->fAuthRequired = true;
 		csr_roam_substate_change(mac_ctx,
 				eCSR_ROAM_SUBSTATE_WAIT_FOR_KEY,
