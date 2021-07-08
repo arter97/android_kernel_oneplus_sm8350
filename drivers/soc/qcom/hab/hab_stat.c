@@ -119,14 +119,41 @@ static int print_ctx_total_expimp(struct uhab_context *ctx,
 	int exp_cnt = 0, imp_cnt = 0;
 	struct export_desc *exp = NULL;
 	int exim_size = 0;
+	int ret = 0;
+
+	read_lock(&ctx->exp_lock);
+	list_for_each_entry(exp, &ctx->exp_whse, node) {
+		pfn_table =	(struct compressed_pfns *)exp->payload;
+		exim_size = get_pft_tbl_total_size(pfn_table);
+		exp_total += exim_size;
+		exp_cnt++;
+	}
+	read_unlock(&ctx->exp_lock);
+
+	spin_lock_bh(&ctx->imp_lock);
+	list_for_each_entry(exp, &ctx->imp_whse, node) {
+		if (habmm_imp_hyp_map_check(ctx->import_ctx, exp)) {
+			pfn_table =	(struct compressed_pfns *)exp->payload;
+			exim_size = get_pft_tbl_total_size(pfn_table);
+			imp_total += exim_size;
+			imp_cnt++;
+		}
+	}
+	spin_unlock_bh(&ctx->imp_lock);
+
+	if (exp_cnt || exp_total || imp_cnt || imp_total)
+		hab_stat_buffer_print(buf, size,
+				"ctx %d exp %d size %d imp %d size %d\n",
+				ctx->owner, exp_cnt, exp_total,
+				imp_cnt, imp_total);
+	else
+		return 0;
 
 	read_lock(&ctx->exp_lock);
 	hab_stat_buffer_print(buf, size, "export[expid:vcid:size]: ");
 	list_for_each_entry(exp, &ctx->exp_whse, node) {
 		pfn_table =	(struct compressed_pfns *)exp->payload;
 		exim_size = get_pft_tbl_total_size(pfn_table);
-		exp_total += exim_size;
-		exp_cnt++;
 		hab_stat_buffer_print(buf, size,
 			"[%d:%x:%d] ", exp->export_id,
 			exp->vcid_local, exim_size);
@@ -140,23 +167,15 @@ static int print_ctx_total_expimp(struct uhab_context *ctx,
 		if (habmm_imp_hyp_map_check(ctx->import_ctx, exp)) {
 			pfn_table =	(struct compressed_pfns *)exp->payload;
 			exim_size = get_pft_tbl_total_size(pfn_table);
-			imp_total += exim_size;
-			imp_cnt++;
 			hab_stat_buffer_print(buf, size,
 				"[%d:%x:%d] ", exp->export_id,
 				exp->vcid_local, exim_size);
 		}
 	}
-	hab_stat_buffer_print(buf, size, "\n");
+	ret = hab_stat_buffer_print(buf, size, "\n");
 	spin_unlock_bh(&ctx->imp_lock);
 
-	if (exp_cnt || exp_total || imp_cnt || imp_total)
-		return hab_stat_buffer_print(buf, size,
-				"ctx %d exp %d size %d imp %d size %d\n",
-				ctx->owner, exp_cnt, exp_total,
-				imp_cnt, imp_total);
-	else
-		return 0;
+	return ret;
 }
 
 int hab_stat_show_expimp(struct hab_driver *driver,
