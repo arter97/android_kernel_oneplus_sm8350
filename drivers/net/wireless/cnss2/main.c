@@ -2499,6 +2499,11 @@ static int cnss_register_ramdump_v2(struct cnss_plat_data *plat_priv)
 
 	cnss_pr_dbg("Ramdump size 0x%lx\n", info_v2->ramdump_size);
 
+	if (info_v2->ramdump_size == 0) {
+		cnss_pr_info("Ramdump will not be collected");
+		return 0;
+	}
+
 	info_v2->dump_data_vaddr = kzalloc(CNSS_DUMP_DESC_SIZE, GFP_KERNEL);
 	if (!info_v2->dump_data_vaddr)
 		return -ENOMEM;
