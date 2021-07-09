@@ -2322,7 +2322,7 @@ int __qcom_scm_invoke_smc_legacy(struct device *dev, phys_addr_t in_buf,
 	desc.arginfo = QCOM_SCM_ARGS(4, QCOM_SCM_RW, QCOM_SCM_VAL, QCOM_SCM_RW,
 					QCOM_SCM_VAL);
 
-	ret = qcom_scm_call(dev, &desc);
+	ret = qcom_scm_call_noretry(dev, &desc);
 
 	if (result)
 		*result = desc.res[1];
@@ -2354,7 +2354,7 @@ int __qcom_scm_invoke_smc(struct device *dev, phys_addr_t in_buf,
 	desc.arginfo = QCOM_SCM_ARGS(4, QCOM_SCM_RW, QCOM_SCM_VAL, QCOM_SCM_RW,
 					QCOM_SCM_VAL);
 
-	ret = qcom_scm_call(dev, &desc);
+	ret = qcom_scm_call_noretry(dev, &desc);
 
 	if (result)
 		*result = desc.res[1];
@@ -2383,7 +2383,7 @@ int __qcom_scm_invoke_callback_response(struct device *dev, phys_addr_t out_buf,
 	desc.args[1] = out_buf_size;
 	desc.arginfo = QCOM_SCM_ARGS(2, QCOM_SCM_RW, QCOM_SCM_VAL);
 
-	ret = qcom_scm_call(dev, &desc);
+	ret = qcom_scm_call_noretry(dev, &desc);
 
 	if (result)
 		*result = desc.res[1];
