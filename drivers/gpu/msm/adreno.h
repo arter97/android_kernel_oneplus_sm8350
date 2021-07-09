@@ -1053,6 +1053,12 @@ static inline int adreno_is_a6xx(struct adreno_device *adreno_dev)
 			ADRENO_GPUREV(adreno_dev) <= 702;
 }
 
+static inline int adreno_is_a660v2(struct adreno_device *adreno_dev)
+{
+	return (ADRENO_GPUREV(adreno_dev) == ADRENO_REV_A660) &&
+		(ADRENO_CHIPID_PATCH(adreno_dev->chipid) == 1);
+}
+
 static inline int adreno_is_a642(struct adreno_device *adreno_dev)
 {
 	return (adreno_dev->gpucore->compatible &&
