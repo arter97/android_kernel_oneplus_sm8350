@@ -7,6 +7,9 @@
 
 #include <linux/init.h>
 #include <linux/threads.h>
+#ifdef CONFIG_FIX_BOOT_CPU_LOGICAL_MAPPING
+#include <linux/cpu.h>
+#endif
 
 /**
  * struct cpu_operations - Callback operations for hotplugging CPUs.
@@ -60,7 +63,11 @@ int __init cpu_read_ops(int cpu);
 
 static inline void __init cpu_read_bootcpu_ops(void)
 {
+#ifdef CONFIG_FIX_BOOT_CPU_LOGICAL_MAPPING
+	cpu_read_ops(logical_bootcpu_id);
+#else
 	cpu_read_ops(0);
+#endif
 }
 
 #endif /* ifndef __ASM_CPU_OPS_H */
