@@ -225,7 +225,7 @@ int hab_msg_recv(struct physical_channel *pchan,
 			pr_err("@@ %s Invalid msg type %d vcid %x bytes %zx sn %d\n",
 				pchan->name, payload_type,
 				vchan_id, sizebytes, session_id);
-			dump_hab_wq(pchan->hyp_data);
+			dump_hab_wq(pchan);
 		}
 
 		/*
@@ -269,7 +269,7 @@ int hab_msg_recv(struct physical_channel *pchan,
 					pchan->name,
 					payload_type,
 					session_id);
-				dump_hab_wq(pchan->hyp_data);
+				dump_hab_wq(pchan);
 			}
 			return -ENODEV;
 		}

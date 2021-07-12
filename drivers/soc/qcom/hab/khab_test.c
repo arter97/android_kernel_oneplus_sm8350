@@ -307,29 +307,39 @@ static ssize_t expimp_store(struct kobject *kobj, struct kobj_attribute *attr,
 {
 	int ret = -1;
 	char str[36] = {0};
-	unsigned long temp;
+	struct uhab_context *ctx = NULL;
+	struct virtual_channel *vchan = NULL;
 
 	if (buf) {
-		ret = sscanf(buf, "%s", str);
-		if (ret < 1)
+		ret = sscanf(buf, "%35s", str);
+		if (ret < 1) {
 			pr_err("failed to read anything from input %d\n", ret);
-
-		if (strnlen(str, strlen("dump_pipe")) == strlen("dump_pipe") &&
-			strcmp(str, "dump_pipe") == 0) {
-			/* string terminator is ignored */
-			dump_hab();
-			return strlen("dump_pipe");
+			return -EINVAL;
 		}
+	} else
+		return -EINVAL;
 
-		ret = kstrtol(buf, 10, &temp);
-		pid_stat = temp;
-
-		if (ret < 0)
-			pr_err("failed to read anything from input %d\n", ret);
-		else
-			return count; /* good result stored */
+	if (strnlen(str, strlen("dump_pipe")) == strlen("dump_pipe") &&
+		strcmp(str, "dump_pipe") == 0) {
+		/* string terminator is ignored */
+		list_for_each_entry(ctx, &hab_driver.uctx_list, node) {
+			if (ctx->owner == pid_stat) {
+				vchan = list_first_entry(&ctx->vchannels,
+					struct virtual_channel, node);
+				if (vchan) {
+					dump_hab_wq(vchan->pchan); /* user context */
+					break;
+				}
+			}
+		}
+		return count;
 	}
 
+	ret = sscanf(buf, "%du", &pid_stat);
+	if (ret < 1)
+		pr_err("failed to read anything from input %d\n", ret);
+	else
+		return count; /* good result stored */
 	return -EEXIST;
 }
 
