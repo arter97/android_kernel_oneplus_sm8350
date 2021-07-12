@@ -882,6 +882,10 @@ static inline bool _timestamp_retired(struct hgsl_context *ctxt,
 }
 
 static inline void _destroy_context(struct kref *kref);
+static struct hgsl_context *hgsl_context_get(struct qcom_hgsl *hgsl,
+						uint32_t id);
+static void hgsl_context_put(struct hgsl_context *ctxt);
+
 static void _signal_contexts(struct qcom_hgsl *hgsl)
 {
 	struct hgsl_context *ctxt;
@@ -889,21 +893,16 @@ static void _signal_contexts(struct qcom_hgsl *hgsl)
 	uint32_t ts;
 
 	for (i = 0; i < HGSL_CONTEXT_NUM; i++) {
-		read_lock(&hgsl->ctxt_lock);
-		ctxt = hgsl->contexts[i];
-		read_unlock(&hgsl->ctxt_lock);
-
-		if (ctxt == NULL)
+		ctxt = hgsl_context_get(hgsl, i);
+		if (!ctxt)
 			continue;
 
-		kref_get(&ctxt->kref);
 		ts = get_context_timestamp(ctxt);
 		if (ts != ctxt->last_ts) {
 			hgsl_hsync_timeline_signal(ctxt->timeline, ts);
 			ctxt->last_ts = ts;
 		}
-		kref_put(&ctxt->kref, _destroy_context);
-
+		hgsl_context_put(ctxt);
 	}
 
 }
@@ -1140,10 +1139,37 @@ static inline void _destroy_context(struct kref *kref)
 	struct hgsl_context *ctxt =
 			container_of(kref, struct hgsl_context, kref);
 
+
+	hgsl_hsync_timeline_fini(ctxt);
+	hgsl_hsync_timeline_put(ctxt->timeline);
+
 	dma_buf_vunmap(ctxt->shadow_dma, ctxt->shadow_vbase);
 	dma_buf_end_cpu_access(ctxt->shadow_dma, DMA_FROM_DEVICE);
 	dma_buf_put(ctxt->shadow_dma);
 	kfree(ctxt);
+}
+
+static struct hgsl_context *hgsl_context_get(struct qcom_hgsl *hgsl,
+						uint32_t id)
+{
+	struct hgsl_context *ctxt;
+
+	read_lock(&hgsl->ctxt_lock);
+	ctxt = hgsl->contexts[id];
+	if (ctxt == NULL)
+		goto out;
+
+	if (kref_get_unless_zero(&ctxt->kref) == 0)
+		ctxt = NULL;
+
+out:
+	read_unlock(&hgsl->ctxt_lock);
+	return ctxt;
+}
+
+static void hgsl_context_put(struct hgsl_context *ctxt)
+{
+	kref_put(&ctxt->kref, _destroy_context);
 }
 
 static int hgsl_context_create(struct file *filep, unsigned long arg)
@@ -1228,7 +1254,6 @@ static int hgsl_context_create(struct file *filep, unsigned long arg)
 	kref_init(&ctxt->kref);
 	write_unlock(&hgsl->ctxt_lock);
 
-
 	ret = hgsl_hsync_timeline_create(ctxt);
 	if (ret < 0) {
 		dev_err(hgsl->dev,
@@ -1299,9 +1324,7 @@ static int hgsl_context_destroy(struct file *filep, unsigned long arg,
 
 	write_unlock(&hgsl->ctxt_lock);
 
-	hgsl_hsync_timeline_put(ctxt->timeline);
-
-	kref_put(&ctxt->kref, _destroy_context);
+	hgsl_context_put(ctxt);
 	return 0;
 }
 
@@ -1335,9 +1358,7 @@ static int hgsl_wait_timestamp(struct file *filep, unsigned long arg)
 
 	timestamp = param.timestamp;
 
-	read_lock(&hgsl->ctxt_lock);
-	ctxt = hgsl->contexts[param.context_id];
-	read_unlock(&hgsl->ctxt_lock);
+	ctxt = hgsl_context_get(hgsl, param.context_id);
 	if (ctxt == NULL) {
 		dev_err(hgsl->dev,
 			"%s: context id %d is not created\n",
@@ -1345,14 +1366,16 @@ static int hgsl_wait_timestamp(struct file *filep, unsigned long arg)
 		return -EINVAL;
 	}
 
-	if (_timestamp_retired(ctxt, timestamp))
+	if (_timestamp_retired(ctxt, timestamp)) {
+		hgsl_context_put(ctxt);
 		return 0;
-
-	kref_get(&ctxt->kref);
+	}
 
 	wait = kzalloc(sizeof(*wait), GFP_KERNEL);
-	if (!wait)
+	if (!wait) {
+		hgsl_context_put(ctxt);
 		return -ENOMEM;
+	}
 
 	wait->ctxt = ctxt;
 	wait->timestamp = timestamp;
@@ -1379,7 +1402,7 @@ static int hgsl_wait_timestamp(struct file *filep, unsigned long arg)
 
 	kfree(wait);
 
-	kref_put(&ctxt->kref, _destroy_context);
+	hgsl_context_put(ctxt);
 
 	return ret;
 }
@@ -1449,6 +1472,7 @@ static int hgsl_release(struct inode *inodep, struct file *filep)
 	struct hgsl_dbq_release_info rel_info;
 	int i;
 
+	read_lock(&hgsl->ctxt_lock);
 	for (i = 0; i < HGSL_CONTEXT_NUM; i++) {
 		if ((hgsl->contexts != NULL) &&
 			(hgsl->contexts[i] != NULL) &&
@@ -1459,11 +1483,14 @@ static int hgsl_release(struct inode *inodep, struct file *filep)
 						(unsigned long)&rel_info,
 						true);
 
+			read_unlock(&hgsl->ctxt_lock);
 			hgsl_context_destroy(filep,
 					(unsigned long)&rel_info.ctxt_id,
 					true);
+			read_lock(&hgsl->ctxt_lock);
 		}
 	}
+	read_unlock(&hgsl->ctxt_lock);
 
 	hgsl_isync_fini(priv);
 
@@ -1512,10 +1539,7 @@ static int hgsl_ioctl_hsync_fence_create(struct file *filep,
 		(param.context_id < 0))
 		return -EINVAL;
 
-	read_lock(&hgsl->ctxt_lock);
-	ctxt = hgsl->contexts[param.context_id];
-	read_unlock(&hgsl->ctxt_lock);
-
+	ctxt = hgsl_context_get(hgsl, param.context_id);
 	if (ctxt == NULL) {
 		dev_err(hgsl->dev,
 			"%s: context id %d is not created\n",
@@ -1523,17 +1547,15 @@ static int hgsl_ioctl_hsync_fence_create(struct file *filep,
 		return -EINVAL;
 	}
 
-	kref_get(&ctxt->kref);
-
 	param.fence_fd = hgsl_hsync_fence_create_fd(ctxt, param.timestamp);
 	if (param.fence_fd < 0) {
 		ret = param.fence_fd;
 		goto out;
 	}
 	copy_to_user(USRPTR(arg), &param, sizeof(param));
-out:
-	kref_put(&ctxt->kref, _destroy_context);
 
+out:
+	hgsl_context_put(ctxt);
 	return ret;
 }
 
