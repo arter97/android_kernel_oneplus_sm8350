@@ -851,6 +851,7 @@ static void hab_mem_dma_buf_vunmap(struct dma_buf *dmabuf, void *vaddr)
 }
 
 static struct dma_buf_ops dma_buf_ops = {
+	.cache_sgt_mapping = true,
 	.map_dma_buf = hab_mem_map_dma_buf,
 	.unmap_dma_buf = hab_mem_unmap_dma_buf,
 	.mmap = hab_mem_mmap,
