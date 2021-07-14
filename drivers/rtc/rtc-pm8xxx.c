@@ -26,6 +26,9 @@
 
 #define RTC_SEC_TO_MSEC(s)	((s) * 1000ULL)
 
+#define PM8XXX_WAKEUP_DISABLE		0
+#define PM8XXX_WAKEUP_ENABLE		1
+
 /**
  * struct pm8xxx_rtc_regs - describe RTC registers per PMIC versions
  * @ctrl: base address of control register
@@ -402,8 +405,31 @@ static ssize_t rtc_ms_val_show(struct device *dev,
 
 static DEVICE_ATTR_RO(rtc_ms_val);
 
+static ssize_t rtc_wakeup_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t size)
+{
+	int wake;
+
+	if (kstrtou32(buf, 0, &wake)) {
+		dev_err(dev, "%s: failed to read data from string\n", __func__);
+		return -EINVAL;
+	}
+
+	if (wake == PM8XXX_WAKEUP_DISABLE)
+		device_set_wakeup_capable(dev->parent, false);
+	else if (wake == PM8XXX_WAKEUP_ENABLE)
+		device_set_wakeup_capable(dev->parent, true);
+	else
+		dev_err(dev, "%s: Invalid data\n", __func__);
+
+	return size;
+}
+
+static DEVICE_ATTR_WO(rtc_wakeup);
+
 static struct attribute *pm8xxx_rtc_attrs[] = {
 	&dev_attr_rtc_ms_val.attr,
+	&dev_attr_rtc_wakeup.attr,
 	NULL,
 };
 
