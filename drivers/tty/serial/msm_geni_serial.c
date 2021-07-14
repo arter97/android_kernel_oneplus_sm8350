@@ -2435,6 +2435,9 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 		/* Disable IRQ for hsuart with auto-suspend-disable flag. */
 		if (msm_port->pm_auto_suspend_disable)
 			disable_irq(uport->irq);
+
+		/* Reset UART error to default during port_close() */
+		msm_port->uart_error = UART_ERROR_DEFAULT;
 	}
 	UART_LOG_DBG(msm_port->ipc_log_misc, uport->dev, "%s: End\n", __func__);
 }
