@@ -59,6 +59,7 @@ obj-$(CONFIG_QCS_DEBUGCC_404) += debugcc-qcs404.o
 obj-$(CONFIG_QCS_GCC_404) += gcc-qcs404.o
 obj-$(CONFIG_QCS_TURING_404) += turingcc-qcs404.o
 obj-$(CONFIG_SA_DEBUGCC_DIREWOLF) += debugcc-direwolf.o
+obj-$(CONFIG_SA_DISPCC_DIREWOLF) += dispcc0-direwolf.o dispcc1-direwolf.o
 obj-$(CONFIG_SA_GCC_DIREWOLF) += gcc-direwolf.o
 obj-$(CONFIG_SC_CAMCC_SHRIKE) += camcc-scshrike.o
 obj-$(CONFIG_SC_DISPCC_SHRIKE) += dispcc-scshrike.o
