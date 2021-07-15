@@ -109,7 +109,7 @@ struct service_info {
 };
 
 static char *ssr_domains[] = {
-	"slate-wear",
+	"slatefw",
 	"modem",
 	"adsp",
 };
@@ -368,7 +368,7 @@ static long slate_com_ioctl(struct file *filp,
 			ret = -EFAULT;
 			break;
 		}
-		dev->pil_h = subsystem_get_with_fwname("slate-wear", "slate-wear");
+		dev->pil_h = subsystem_get_with_fwname("slatefw", "slatefw");
 		if (!dev->pil_h) {
 			pr_err("failed to load slate-wear\n");
 			ret = -EFAULT;
