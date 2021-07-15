@@ -341,9 +341,10 @@ static const struct pinctrl_pin_desc direwolf_pins[] = {
 	PINCTRL_PIN(226, "GPIO_226"),
 	PINCTRL_PIN(227, "GPIO_227"),
 	PINCTRL_PIN(228, "UFS_RESET"),
-	PINCTRL_PIN(229, "SDC2_CLK"),
-	PINCTRL_PIN(230, "SDC2_CMD"),
-	PINCTRL_PIN(231, "SDC2_DATA"),
+	PINCTRL_PIN(229, "UFS1_RESET"),
+	PINCTRL_PIN(230, "SDC2_CLK"),
+	PINCTRL_PIN(231, "SDC2_CMD"),
+	PINCTRL_PIN(232, "SDC2_DATA"),
 };
 
 #define DECLARE_MSM_GPIO_PINS(pin) \
@@ -578,9 +579,10 @@ DECLARE_MSM_GPIO_PINS(226);
 DECLARE_MSM_GPIO_PINS(227);
 
 static const unsigned int ufs_reset_pins[] = { 228 };
-static const unsigned int sdc2_clk_pins[] = { 229 };
-static const unsigned int sdc2_cmd_pins[] = { 230 };
-static const unsigned int sdc2_data_pins[] = { 231 };
+static const unsigned int ufs1_reset_pins[] = { 229 };
+static const unsigned int sdc2_clk_pins[] = { 230 };
+static const unsigned int sdc2_cmd_pins[] = { 231 };
+static const unsigned int sdc2_data_pins[] = { 232 };
 
 enum direwolf_functions {
 	msm_mux_gpio,
@@ -2281,10 +2283,11 @@ static const struct msm_pingroup direwolf_groups[] = {
 			 NA, NA),
 	[227] = PINGROUP(227, hs3_mi2s, phase_flag0, NA, NA, NA, NA, NA,
 			 NA, NA),
-	[228] = UFS_RESET(ufs_reset, 0x1f1000),
-	[229] = SDC_QDSD_PINGROUP(sdc2_clk, 0x1e8000, 14, 6),
-	[230] = SDC_QDSD_PINGROUP(sdc2_cmd, 0x1e8000, 11, 3),
-	[231] = SDC_QDSD_PINGROUP(sdc2_data, 0x1e8000, 9, 0),
+	[228] = UFS_RESET(ufs_reset, 0x1f1004),
+	[229] = UFS_RESET(ufs1_reset, 0x1f3004),
+	[230] = SDC_QDSD_PINGROUP(sdc2_clk, 0x1e8000, 14, 6),
+	[231] = SDC_QDSD_PINGROUP(sdc2_cmd, 0x1e8000, 11, 3),
+	[232] = SDC_QDSD_PINGROUP(sdc2_data, 0x1e8000, 9, 0),
 };
 
 static const struct msm_gpio_wakeirq_map direwolf_pdc_map[] = {
@@ -2323,7 +2326,7 @@ static struct msm_pinctrl_soc_data direwolf_pinctrl = {
 	.nfunctions = ARRAY_SIZE(direwolf_functions),
 	.groups = direwolf_groups,
 	.ngroups = ARRAY_SIZE(direwolf_groups),
-	.ngpios = 229,
+	.ngpios = 230,
 	.wakeirq_map = direwolf_pdc_map,
 	.nwakeirq_map = ARRAY_SIZE(direwolf_pdc_map),
 	.dir_conn = direwolf_dir_conn,
