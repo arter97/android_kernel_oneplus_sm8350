@@ -49,6 +49,9 @@ struct hgsl_hsync_fence *hgsl_hsync_fence_create(
 	struct hgsl_hsync_timeline *timeline = context->timeline;
 	struct hgsl_hsync_fence *fence;
 
+	if (timeline == NULL)
+		return NULL;
+
 	if (!kref_get_unless_zero(&timeline->kref))
 		return NULL;
 

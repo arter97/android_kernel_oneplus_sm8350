@@ -9,6 +9,9 @@
 #include <linux/types.h>
 #include <linux/ioctl.h>
 
+#define HGSL_SYNC_TYPE_HSYNC 1
+#define HGSL_SYNC_TYPE_ISYNC 2
+
 struct hgsl_ibdesc {
 	__u64 gpuaddr;
 	__u64 sizedwords;
@@ -22,6 +25,7 @@ struct hgsl_mem_object {
 #define HGSL_IOCTL_BASE	'h'
 #define HGSL_IORW(n, t)	_IOWR(HGSL_IOCTL_BASE, n, t)
 #define HGSL_IOW(n, t)	_IOW(HGSL_IOCTL_BASE, n, t)
+
 
 /**
  * return current status of Doorbell system
@@ -121,13 +125,27 @@ struct hgsl_ctxt_create_info {
 	__u32 shadow_eop_offset;
 };
 
-#define HGSL_IOCTL_CTXT_CREATE	HGSL_IOW(0x10,  \
-	struct hgsl_ctxt_create_info)
+struct hgsl_ioctl_ctxt_create_params {
+	__u32 devhandle;
+	__u32 type;
+	__u32 flags;
+	__u32 ctxthandle;
+	__u32 sync_type;
+	__u32 padding;
+};
 
-/**
- * Destroy a DB context - param is id of DB context
- */
-#define HGSL_IOCTL_CTXT_DESTROY	HGSL_IOW(0x11,  __u32)
+#define HGSL_IOCTL_CTXT_CREATE	HGSL_IOW(0x10,  \
+	struct hgsl_ioctl_ctxt_create_params)
+
+struct hgsl_ioctl_ctxt_destroy_params {
+	__u32 devhandle;
+	__u32 ctxthandle;
+	__u32 rval;
+	__u32 padding;
+};
+
+#define HGSL_IOCTL_CTXT_DESTROY	HGSL_IOW(0x11,  \
+	struct hgsl_ioctl_ctxt_destroy_params)
 
 /**
  * struct hgsl_wait_ts_info - wait a timestamp to be retired
@@ -139,11 +157,239 @@ struct hgsl_wait_ts_info {
 	__u32 timestamp;
 	__u32 timeout;
 	__u32 padding;
+	__u32 devhandle;
+	__u32 channel_id;
 };
 
 #define HGSL_IOCTL_WAIT_TIMESTAMP \
 	HGSL_IOW(0x12,  struct hgsl_wait_ts_info)
 
+/**
+ * struct hgsl_ioctl_issueib_params - submit cmds to GPU
+ * @ibs: db commands list
+ * @devhandle: GPU device handle
+ * @ctxthandle: Current context handle for the cmds
+ * @timestamp: Userspace time stamp
+ * @flags: reserved
+ * @num_ibs: Number of ib cmds
+ * @rval: return value from host
+ * @channel_id: hab channel id
+ */
+struct hgsl_ioctl_issueib_params {
+	__u64 ibs;
+	__u32 devhandle;
+	__u32 ctxthandle;
+	__u32 timestamp;
+	__u32 flags;
+	__u32 num_ibs;
+	__u32 rval;
+	__u32 channel_id;
+	__u32 padding;
+};
+#define HGSL_IOCTL_ISSUE_IB \
+	HGSL_IORW(0x20, struct hgsl_ioctl_issueib_params)
+
+struct hgsl_ioctl_issueib_with_alloc_list_params {
+	__u64 rpc_syncobj;
+	__u64 ibs;
+	__u64 allocations;
+	__u64 be_data;
+	__u32 devhandle;
+	__u32 ctxthandle;
+	__u32 timestamp;
+	__u32 flags;
+	__u32 num_ibs;
+	__u32 num_allocations;
+	__u32 rval;
+	__u32 channel_id;
+};
+
+#define HGSL_IOCTL_ISSUIB_WITH_ALLOC_LIST \
+	HGSL_IORW(0x21,  struct hgsl_ioctl_issueib_with_alloc_list_params)
+
+#define HGSL_HYP_GENERAL_MAX_SEND_NUM     2
+#define HGSL_HYP_GENERAL_MAX_REPLY_NUM    1
+
+struct hgsl_ioctl_hyp_generic_transaction_params {
+	__u64 send_data[HGSL_HYP_GENERAL_MAX_SEND_NUM];
+	__u64 reply_data[HGSL_HYP_GENERAL_MAX_REPLY_NUM];
+	__u32 send_size[HGSL_HYP_GENERAL_MAX_SEND_NUM];
+	__u32 reply_size[HGSL_HYP_GENERAL_MAX_REPLY_NUM];
+	__u32 send_num;
+	__u32 reply_num;
+	__u32 cmd_id;
+	__u64 ret_value;
+};
+
+#define HGSL_IOCTL_HYP_GENERIC_TRANSACTION \
+	HGSL_IORW(0x22,  struct hgsl_ioctl_hyp_generic_transaction_params)
+
+struct hgsl_ioctl_get_shadowts_mem_params {
+	__u64 size;
+	__u32 device_id;
+	__u32 ctxthandle;
+	__u32 flags;
+	__s32 fd;
+};
+
+#define HGSL_IOCTL_GET_SHADOWTS_MEM \
+	HGSL_IORW(0x23,  struct hgsl_ioctl_get_shadowts_mem_params)
+
+struct hgsl_ioctl_put_shadowts_mem_params {
+	__u32 ctxthandle;
+	__u32 padding;
+};
+
+#define HGSL_IOCTL_PUT_SHADOWTS_MEM \
+	HGSL_IOW(0x24,	struct hgsl_ioctl_put_shadowts_mem_params)
+
+struct hgsl_ioctl_mem_alloc_params {
+	__u64 memdesc;
+	__u32 sizebytes;
+	__u32 flags;
+	__s32 fd;
+	__u32 padding;
+};
+
+#define HGSL_IOCTL_MEM_ALLOC \
+	HGSL_IORW(0x25,  struct hgsl_ioctl_mem_alloc_params)
+
+struct hgsl_ioctl_mem_free_params {
+	__u64 memdesc;
+};
+
+#define HGSL_IOCTL_MEM_FREE \
+	HGSL_IORW(0x26,  struct hgsl_ioctl_mem_free_params)
+
+struct hgsl_ioctl_mem_map_smmu_params {
+	__u64 size;
+	__u64 offset;
+	__u64 uva;
+	__u64 memdesc;
+	__s32 fd;
+	__u32 memtype;
+	__u32 flags;
+	__u32 padding;
+};
+
+#define HGSL_IOCTL_MEM_MAP_SMMU \
+	HGSL_IORW(0x27,  struct hgsl_ioctl_mem_map_smmu_params)
+
+struct hgsl_ioctl_mem_unmap_smmu_params {
+	__u64 gpuaddr;
+	__u64 size;
+	__u32 memtype;
+	__u32 padding;
+};
+
+#define HGSL_IOCTL_MEM_UNMAP_SMMU \
+	HGSL_IOW(0x28,  struct hgsl_ioctl_mem_unmap_smmu_params)
+
+struct hgsl_ioctl_mem_cache_operation_params {
+	__u64 offsetbytes;
+	__u64 sizebytes;
+	__u64 gpuaddr;
+	__u32 operation;
+	__u32 padding;
+};
+
+#define HGSL_IOCTL_MEM_CACHE_OPERATION \
+	HGSL_IORW(0x29,  struct hgsl_ioctl_mem_cache_operation_params)
+
+struct hgsl_ioctl_read_ts_params {
+	__u32 devhandle;
+	__u32 ctxthandle;
+	__u32 type;
+	__u32 timestamp;
+};
+
+#define HGSL_IOCTL_READ_TIMESTAMP \
+	HGSL_IORW(0x2A,  struct hgsl_ioctl_read_ts_params)
+
+struct hgsl_ioctl_check_ts_params {
+	__u32 devhandle;
+	__u32 ctxthandle;
+	__u32 type;
+	__u32 timestamp;
+	__u32 rval;
+	__u32 padding;
+};
+
+#define HGSL_IOCTL_CHECK_TIMESTAMP \
+	HGSL_IORW(0x2B,  struct hgsl_ioctl_check_ts_params)
+
+struct hgsl_ioctl_syncobj_wait_multiple_params {
+	__u64 num_syncobjs;
+	__u64 rpc_syncobj;
+	__u64 status;
+	__u32 timeout_ms;
+	__u32 result;
+};
+
+#define HGSL_IOCTL_SYNCOBJ_WAIT_MULTIPLE \
+	HGSL_IORW(0x2C,  struct hgsl_ioctl_syncobj_wait_multiple_params)
+
+struct hgsl_ioctl_set_metainfo_params {
+	__u64  memdesc_priv;
+	__u64  metainfo;
+	__u32  flags;
+	__u32  metainfo_len;
+};
+
+#define HGSL_IOCTL_SET_METAINFO \
+	HGSL_IORW(0x2D,  struct hgsl_ioctl_set_metainfo_params)
+
+#define HGSL_IOCTL_GET_SYSTEM_TIME \
+	HGSL_IORW(0x2E,  __u64)
+
+struct hgsl_ioctl_perfcounter_select_params {
+	__u64 groups;
+	__u64 counter_ids;
+	__u64 counter_val_regs;
+	__u64 counter_val_hi_regs;
+	__u32 devhandle;
+	__u32 ctxthandle;
+	__u32 num_counters;
+	__u32 rval;
+};
+
+#define HGSL_IOCTL_PERFCOUNTER_SELECT \
+	HGSL_IORW(0x30,  struct hgsl_ioctl_perfcounter_select_params)
+
+struct hgsl_ioctl_perfcounter_deselect_params {
+	__u64 groups;
+	__u64 counter_ids;
+	__u32 devhandle;
+	__u32 ctxthandle;
+	__u32 timestamp;
+	__u32 num_counters;
+};
+
+#define HGSL_IOCTL_PERFCOUNTER_DESELECT \
+	HGSL_IOW(0x31,  struct hgsl_ioctl_perfcounter_deselect_params)
+
+struct hgsl_ioctl_perfcounter_query_selections_params {
+	__u64 selections;
+	__u32 devhandle;
+	__u32 ctxthandle;
+	__u32 num_counters;
+	__u32 group;
+	__u32 max_counters;
+	__u32 padding;
+};
+#define HGSL_IOCTL_PERFCOUNTER_QUERY_SELECTION \
+	HGSL_IORW(0x32,  struct hgsl_ioctl_perfcounter_query_selections_params)
+
+struct hgsl_ioctl_perfcounter_read_params {
+	__u64 value;
+	__u32 devhandle;
+	__u32 group;
+	__u32 counter;
+	__u32 rval;
+};
+
+#define HGSL_IOCTL_PERFCOUNTER_READ \
+		HGSL_IORW(0x33,  struct hgsl_ioctl_perfcounter_read_params)
 
 /**
  * struct hgsl_hsync_fence_create - wait a h-sync fence
