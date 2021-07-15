@@ -1255,9 +1255,10 @@ config QTI_CRYPTO_FDE
 	depends on QTI_CRYPTO_COMMON
 	help
 	 Say 'Y' to enable hardware Full Disk Encryption implementation to be used by
-	 different storage layers such as UFS. Enabling the FDE will reserve one slot
-	 of KSM(Key Slot Manager) for the FDE. Making one less slot available for FBE
-	 (File based encryption) in case both encryption mechanism are enabled on device.
+	 different storage layers such as UFS or eMMC. Enabling the FDE will reserve
+	 one slot of KSM(Key Slot Manager) for the FDE. Making one less slot available
+	 for FBE(File based encryption) in case both encryption mechanism are enabled
+	 on device.
 
 config QTI_CRYPTO_VIRTUALIZATION
 	tristate "Enable hypervysor to be used for FBE"
