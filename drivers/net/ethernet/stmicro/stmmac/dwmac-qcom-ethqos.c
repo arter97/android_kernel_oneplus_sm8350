@@ -1052,16 +1052,22 @@ static int emac_emb_smmu_cb_probe(struct platform_device *pdev)
 	int result = 0;
 	u32 iova_ap_mapping[2];
 	struct device *dev = &pdev->dev;
+	const char *str = NULL;
 
 	ETHQOSDBG("EMAC EMB SMMU CB probe: smmu pdev=%p\n", pdev);
+	result = of_property_read_string(dev->of_node, "qcom,iommu-dma", &str);
 
-	result = of_property_read_u32_array(dev->of_node,
-					    "qcom,iommu-dma-addr-pool",
-					    iova_ap_mapping,
-					    ARRAY_SIZE(iova_ap_mapping));
-	if (result) {
-		ETHQOSERR("Failed to read EMB start/size iova addresses\n");
-		return result;
+	if (result == 0 && !strcmp(str, "bypass")) {
+		ETHQOSINFO("iommu-dma-addr-pool not required in bypass mode\n");
+	} else {
+		result = of_property_read_u32_array(dev->of_node,
+						    "qcom,iommu-dma-addr-pool",
+						    iova_ap_mapping,
+						    ARRAY_SIZE(iova_ap_mapping));
+		if (result) {
+			ETHQOSERR("Failed to read EMB start/size iova addresses\n");
+			return result;
+		}
 	}
 
 	emac_emb_smmu_ctx.smmu_pdev = pdev;
