@@ -178,6 +178,33 @@ qmi_registered:
 	return ret;
 }
 
+static void cnss_wlfw_host_cap_parse_mlo(struct cnss_plat_data *plat_priv,
+					 struct wlfw_host_cap_req_msg_v01 *req)
+{
+	if (plat_priv->device_id == WCN7850_DEVICE_ID) {
+		req->mlo_capable_valid = 1;
+		req->mlo_capable = 1;
+		req->mlo_chip_id_valid = 1;
+		req->mlo_chip_id = 0;
+		req->mlo_group_id_valid = 1;
+		req->mlo_group_id = 0;
+		req->max_mlo_peer_valid = 1;
+		/* Max peer number generally won't change for the same device
+		 * but needs to be synced with host driver.
+		 */
+		req->max_mlo_peer = 32;
+		req->mlo_num_chips_valid = 1;
+		req->mlo_num_chips = 1;
+		req->mlo_chip_info_valid = 1;
+		req->mlo_chip_info[0].chip_id = 0;
+		req->mlo_chip_info[0].num_local_links = 2;
+		req->mlo_chip_info[0].hw_link_id[0] = 0;
+		req->mlo_chip_info[0].hw_link_id[1] = 1;
+		req->mlo_chip_info[0].valid_mlo_link_id[0] = 1;
+		req->mlo_chip_info[0].valid_mlo_link_id[1] = 1;
+	}
+}
+
 static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 {
 	struct wlfw_host_cap_req_msg_v01 *req;
@@ -249,6 +276,8 @@ static int cnss_wlfw_host_cap_send_sync(struct cnss_plat_data *plat_priv)
 		cnss_pr_dbg("Sending feature list 0x%llx\n",
 			    req->feature_list);
 	}
+
+	cnss_wlfw_host_cap_parse_mlo(plat_priv, req);
 
 	ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
 			   wlfw_host_cap_resp_msg_v01_ei, resp);
