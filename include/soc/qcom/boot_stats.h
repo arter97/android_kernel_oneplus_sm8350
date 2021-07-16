@@ -9,6 +9,7 @@ void place_marker(const char *name);
 void destroy_marker(const char *name);
 unsigned long long msm_timer_get_sclk_ticks(void);
 static inline int boot_marker_enabled(void) { return 1; }
+uint64_t get_sleep_exit_time(void);
 #else
 static inline int init_bootkpi(void) { return 0; }
 static inline void exit_bootkpi(void) { };
