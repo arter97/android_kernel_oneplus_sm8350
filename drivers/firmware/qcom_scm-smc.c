@@ -2253,6 +2253,21 @@ int __qcom_scm_reboot(struct device *dev)
 	return qcom_scm_call_atomic(dev, &desc);
 }
 
+int __qcom_scm_custom_reboot(struct device *dev,
+			enum qcom_scm_custom_reset_type reboot_type)
+{
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_OEM_POWER,
+		.cmd = QCOM_SCM_OEM_POWER_CUSTOM_REBOOT,
+		.owner = ARM_SMCCC_OWNER_OEM,
+	};
+
+	desc.args[0] = reboot_type;
+	desc.arginfo = QCOM_SCM_ARGS(1);
+
+	return qcom_scm_call_atomic(dev, &desc);
+}
+
 int __qcom_scm_ice_restore_cfg(struct device *dev)
 {
 	struct qcom_scm_desc desc = {
