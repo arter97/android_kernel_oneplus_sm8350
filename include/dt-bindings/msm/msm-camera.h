@@ -99,4 +99,9 @@
 #define CAM_FLASH_TYPE_I2C  1
 #define CAM_FLASH_TYPE_GPIO 2
 
+/* CCI master */
+#define CCI_MASTER_0 0
+#define CCI_MASTER_1 1
+#define CCI_MASTER_MAX 2
+
 #endif
