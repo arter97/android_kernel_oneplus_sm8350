@@ -507,6 +507,7 @@ static long slate_com_ioctl(struct file *filp,
 		ret = slatecom_tx_msg(dev, &ui_obj_msg.buffer, sizeof(ui_obj_msg.buffer));
 		if (ret < 0)
 			pr_err("send_time_data cmd failed\n");
+		break;
 
 	default:
 		ret = -ENOIOCTLCMD;
@@ -613,6 +614,7 @@ static int ssr_modem_cb(struct notifier_block *this,
 		unsigned long opcode, void *data)
 {
 	struct slate_event modeme;
+	struct wear_header wear_header_t = {0, 0};
 	int ret;
 
 	switch (opcode) {
@@ -620,14 +622,18 @@ static int ssr_modem_cb(struct notifier_block *this,
 		modeme.e_type = MODEM_BEFORE_POWER_DOWN;
 		reinit_completion(&slate_modem_down_wait);
 		send_uevent(&modeme);
-		ret = wait_for_completion_timeout(&slate_modem_down_wait,
-			msecs_to_jiffies(MPPS_DOWN_EVENT_TO_SLATE_TIMEOUT));
-		if (!ret)
-			pr_err("Time out on modem down event\n");
+		wear_header_t.opcode = GMI_WEAR_MGR_SSR_MPSS_DOWN_NOTIFICATION;
+		ret = slatecom_tx_msg(dev, &(wear_header_t.opcode), sizeof(wear_header_t.opcode));
+		if (ret < 0)
+			pr_err("failed to send mdsp down event to slate\n");
 		break;
 	case SUBSYS_AFTER_POWERUP:
 		modeme.e_type = MODEM_AFTER_POWER_UP;
 		send_uevent(&modeme);
+		wear_header_t.opcode = GMI_WEAR_MGR_SSR_MPSS_UP_NOTIFICATION;
+		ret = slatecom_tx_msg(dev, &(wear_header_t.opcode), sizeof(wear_header_t.opcode));
+		if (ret < 0)
+			pr_err("failed to send mdsp up event to slate\n");
 		break;
 	}
 	return NOTIFY_DONE;
@@ -637,6 +643,7 @@ static int ssr_adsp_cb(struct notifier_block *this,
 		unsigned long opcode, void *data)
 {
 	struct slate_event adspe;
+	struct wear_header wear_header_t = {0, 0};
 	int ret;
 
 	switch (opcode) {
@@ -644,14 +651,18 @@ static int ssr_adsp_cb(struct notifier_block *this,
 		adspe.e_type = ADSP_BEFORE_POWER_DOWN;
 		reinit_completion(&slate_adsp_down_wait);
 		send_uevent(&adspe);
-		ret = wait_for_completion_timeout(&slate_adsp_down_wait,
-			msecs_to_jiffies(ADSP_DOWN_EVENT_TO_SLATE_TIMEOUT));
-		if (!ret)
-			pr_err("Time out on adsp down event\n");
+		wear_header_t.opcode = GMI_WEAR_MGR_SSR_ADSP_DOWN_INDICATION;
+		ret = slatecom_tx_msg(dev, &(wear_header_t.opcode), sizeof(wear_header_t.opcode));
+		if (ret < 0)
+			pr_err("failed to send adsp up event to slate\n");
 		break;
 	case SUBSYS_AFTER_POWERUP:
 		adspe.e_type = ADSP_AFTER_POWER_UP;
 		send_uevent(&adspe);
+		wear_header_t.opcode = GMI_WEAR_MGR_SSR_ADSP_UP_INDICATION;
+		ret = slatecom_tx_msg(dev, &(wear_header_t.opcode), sizeof(wear_header_t.opcode));
+		if (ret < 0)
+			pr_err("failed to send adsp up event to slate\n");
 		break;
 	}
 	return NOTIFY_DONE;
