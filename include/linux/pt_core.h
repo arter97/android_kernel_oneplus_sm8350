@@ -38,14 +38,13 @@
 #define PT_CORE_NAME "pt_core"
 #define PT_MT_NAME "pt_mt"
 #define PT_BTN_NAME "pt_btn"
-#define PT_PEN_NAME "pt_pen"
 #define PT_PROXIMITY_NAME "pt_proximity"
 
 #define PT_DRIVER_NAME TTDL
 #define PT_DRIVER_MAJOR 04
 #define PT_DRIVER_MINOR 11
 
-#define PT_DRIVER_REVCTRL 000000
+#define PT_DRIVER_REVCTRL 977092
 
 #define PT_DRIVER_VERSION		    \
 __stringify(PT_DRIVER_NAME)		    \
@@ -53,7 +52,7 @@ __stringify(PT_DRIVER_NAME)		    \
 "." __stringify(PT_DRIVER_MINOR)	    \
 "." __stringify(PT_DRIVER_REVCTRL)
 
-#define PT_DRIVER_DATE "20180116"
+#define PT_DRIVER_DATE "20201210"
 
 /* abs settings */
 #define PT_IGNORE_VALUE             -1
@@ -133,7 +132,9 @@ typedef int (*pt_platform_read) (struct device *dev, void *buf, int size);
 
 struct pt_core_platform_data {
 	int irq_gpio;
+	u32 irq_gpio_flags;
 	int rst_gpio;
+	u32 rst_gpio_flags;
 	int ddi_rst_gpio;
 	int vddi_gpio;
 	int vcc_gpio;
@@ -164,6 +165,8 @@ struct pt_core_platform_data {
 	u8 config_dut_generation;
 	u8 watchdog_force_stop;
 	u8 panel_id_support;
+
+	struct device_node *node;
 };
 
 struct touch_framework {
@@ -204,10 +207,6 @@ struct pt_btn_platform_data {
 	char const *inp_dev_name;
 };
 
-struct pt_pen_platform_data {
-	char const *inp_dev_name;
-};
-
 struct pt_proximity_platform_data {
 	struct touch_framework *frmwrk;
 	char const *inp_dev_name;
@@ -217,7 +216,6 @@ struct pt_platform_data {
 	struct pt_core_platform_data *core_pdata;
 	struct pt_mt_platform_data *mt_pdata;
 	struct pt_btn_platform_data *btn_pdata;
-	struct pt_pen_platform_data *pen_pdata;
 	struct pt_proximity_platform_data *prox_pdata;
 	struct pt_loader_platform_data *loader_pdata;
 };

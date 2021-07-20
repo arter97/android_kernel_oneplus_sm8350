@@ -1,4 +1,3 @@
-#ifndef TTDL_KERNEL_SUBMISSION
 /*
  * pt_device_access.c
  * Parade TrueTouch(TM) Standard Product Device Access Module.
@@ -40,7 +39,7 @@
 #define CMCP_THRESHOLD_FILE_NAME "ttdl_cmcp_thresholdfile.csv"
 
 /* Max test case number */
-#define MAX_CASE_NUM            (23)
+#define MAX_CASE_NUM            (22)
 
 /* ASCII */
 #define ASCII_LF                (0x0A)
@@ -51,9 +50,6 @@
 
 /* Max characters of test case name */
 #define NAME_SIZE_MAX           (50)
-
-/* Max characters of project information */
-#define NAME_PROJECT_INFO_MAX   (128)
 
 /* Max sensor and button number */
 #define MAX_BUTTONS             (PIP1_SYSINFO_MAX_BTN)
@@ -85,8 +81,6 @@ enum print_buffer_format {
 
 /* cmcp csv file information */
 struct configuration {
-	/* One more space in the arrary below is left for null character */
-	char proj_info[NAME_PROJECT_INFO_MAX + 1];
 	u32 cm_range_limit_row;
 	u32 cm_range_limit_col;
 	u32 cm_min_limit_cal;
@@ -146,12 +140,10 @@ enum test_case_type {
 	TEST_CASE_TYPE_ONE,
 	TEST_CASE_TYPE_MUL,
 	TEST_CASE_TYPE_MUL_LINES,
-	TEST_CASE_TYPE_STRING,
 };
 
 /* Test case order in test_case_field_array */
 enum case_order {
-	PROJ_VERSION,
 	CM_TEST_INPUTS,
 	CM_EXCLUDING_COL_EDGE,
 	CM_EXCLUDING_ROW_EDGE,
@@ -245,7 +237,7 @@ struct pt_device_access_data {
 	struct dentry *cmcp_results_debugfs;
 	struct dentry *base_dentry;
 	struct dentry *mfg_test_dentry;
-	u8 ic_buf[10 * PT_MAX_PRBUF_SIZE];
+	u8 ic_buf[PT_MAX_PRBUF_SIZE];
 	u8 response_buf[PT_MAX_PRBUF_SIZE];
 	struct mutex cmcp_threshold_lock;
 	u8 *cmcp_threshold_data;
@@ -353,7 +345,7 @@ static struct pt_module device_access_module;
 
 static ssize_t pt_run_and_get_selftest_result(struct device *dev,
 		int protect, char *buf, size_t buf_len, u8 test_id,
-		u16 read_length, u8 get_result_on_pass,
+		u16 read_length, bool get_result_on_pass,
 		bool print_results, u8 print_format);
 
 static int _pt_calibrate_idacs_cmd(struct device *dev,
@@ -1820,36 +1812,36 @@ start_testing:
 	if (result->test_summary) {
 		pt_debug(dev, DL_INFO,
 			"%s: Finish Cm/Cp test! All Test Passed\n", __func__);
-		index = snprintf(buf, PT_MAX_PRBUF_SIZE, "Status: 1\n");
+		index = scnprintf(buf, PT_MAX_PRBUF_SIZE, "Status: 1\n");
 	} else {
 		pt_debug(dev, DL_INFO,
 			"%s: Finish Cm/Cp test! Range Check Failure\n",
 			__func__);
-		index = snprintf(buf, PT_MAX_PRBUF_SIZE, "Status: 6\n");
+		index = scnprintf(buf, PT_MAX_PRBUF_SIZE, "Status: 6\n");
 	}
 	goto cmcp_ready;
 
 mismatch:
-	index = snprintf(buf, PT_MAX_PRBUF_SIZE,
+	index = scnprintf(buf, PT_MAX_PRBUF_SIZE,
 		 "Status: 2\nInput cmcp threshold file mismatches with FW\n");
 	goto cmcp_ready;
 invalid_item_btn:
-	index = snprintf(buf, PT_MAX_PRBUF_SIZE,
+	index = scnprintf(buf, PT_MAX_PRBUF_SIZE,
 		"Status: 3\nFW doesn't support button!\n");
 	goto cmcp_ready;
 invalid_item:
-	index = snprintf(buf, PT_MAX_PRBUF_SIZE,
+	index = scnprintf(buf, PT_MAX_PRBUF_SIZE,
 		"Status: 4\nWrong test item or range check input!\nOnly support below items:\n0 - Cm/Cp Panel & Button with Gradient (Typical)\n1 - Cm Panel with Gradient\n2 - Cp Panel\n3 - Cm Button\n4 - Cp Button\nOnly support below range check:\n0 - Full Range Checking (default)\n1 - Basic Range Checking(TSG5 style)\n");
 	goto cmcp_ready;
 self_test_failed:
-	index = snprintf(buf, PT_MAX_PRBUF_SIZE,
+	index = scnprintf(buf, PT_MAX_PRBUF_SIZE,
 		"Status: 5\nget self test ID not supported!\n");
 	goto cmcp_ready;
 cmcp_not_ready:
-	index = snprintf(buf, PT_MAX_PRBUF_SIZE, "Status: 0\n");
+	index = scnprintf(buf, PT_MAX_PRBUF_SIZE, "Status: 0\n");
 	goto cmcp_ready;
 no_builtin:
-	index = snprintf(buf, PT_MAX_PRBUF_SIZE,
+	index = scnprintf(buf, PT_MAX_PRBUF_SIZE,
 		"Status: 7\nNo cmcp threshold file!\n");
 cmcp_ready:
 	mutex_lock(&dad->sysfs_lock);
@@ -2030,17 +2022,16 @@ int prepare_print_data(char *out_buf, int32_t *in_buf, int index, int data_num)
  *   index    - index in output buffer for appending content
  *  *result   - pointer to result structure
  ******************************************************************************/
-int save_header(char *out_buf, int index, struct configuration *config,
-		struct result *result)
+static int save_header(char *out_buf, int index, struct result *result)
 {
 	struct rtc_time tm;
 	char time_buf[100] = {0};
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0))
-	struct timespec64 ts;
+	struct timespec ts;
 
-	ktime_get_real_ts64(&ts);
-	rtc_time64_to_tm(ts.tv_sec, &tm);
+	getnstimeofday(&ts);
+	rtc_time_to_tm(ts.tv_sec, &tm);
 #else
 	struct timex txc;
 
@@ -2058,12 +2049,6 @@ int save_header(char *out_buf, int index, struct configuration *config,
 	index = prepare_print_string(out_buf, ",SW_VERSION,", index);
 	index = prepare_print_string(out_buf, PT_DRIVER_VERSION, index);
 	index = prepare_print_string(out_buf, ",\n", index);
-	if (config) {
-		index = prepare_print_string(out_buf, ",PROJ_VERSION,", index);
-		index = prepare_print_string(out_buf, config->proj_info, index);
-		index = prepare_print_string(out_buf, ",\n", index);
-	}
-
 	index = prepare_print_string(out_buf, ",.end,\n", index);
 	index = prepare_print_string(out_buf, ",.engineering data,\n", index);
 
@@ -2972,7 +2957,7 @@ int result_save(struct device *dev, char *buf,
 	if (cmcp_info == NULL)
 		pt_debug(dev, DL_WARN, "cmcp_info is NULL");
 
-	index = save_header(out_buf, index, configuration, result);
+	index = save_header(out_buf, index, result);
 	index = save_engineering_data(dev, out_buf, index,
 		cmcp_info, configuration, result,
 		test_item, no_builtin_file);
@@ -3319,65 +3304,6 @@ exit:
 }
 
 /*******************************************************************************
- * FUNCTION: cmcp_get_one_string
- *
- * SUMMARY: Parses csv file at a given row and offset and find out one string
- *  which must start with a comma and should end with a comma. The character
- *  LF/CR will also be taken as the symbol to end the search.
- *
- * NOTE: There is a static value to calculate line count inside this function.
- *
- * RETURN:
- *   0 = success
- *  !0 = failure
- *
- * PARAMETERS:
- *  *dev         - pointer to devices structure
- *  *input_buf   - pointer to input buffer
- *  *offset      - offset index of input buffer
- *  *out_buf     - pointer to store string
- *   out_buf_len - size of out_buf
- *   pFileEnd    - pointer to the end of threshold file
- ******************************************************************************/
-static int cmcp_get_one_string(struct device *dev, const char *input_buf,
-			       u32 *offset, char *out_buf, u32 out_buf_len,
-			       const char *pFileEnd)
-{
-	u8 token = ASCII_COMMA;
-	u32 i;
-	u32 temp_offset = *offset + 1; /* skip first comma */
-	u32 pre_index; /* to store the start index of string */
-	u32 next_index; /* to store the index of comma after string */
-	u32 total_len = pFileEnd - input_buf; /* valid range of index */
-
-	memset(out_buf, 0, out_buf_len);
-
-	pre_index = next_index = temp_offset;
-	for (i = temp_offset; i < total_len; i++) {
-		if (input_buf[i] == token || input_buf[i] == ASCII_LF ||
-		    input_buf[i] == ASCII_CR) {
-			next_index = i;
-			/*
-			 * next_index could be equal to pre_index if string is
-			 * null. The max size of string is restricted by macro
-			 * NAME_PROJECT_INFO_MAX.
-			 */
-			if (pre_index < next_index)
-				memcpy(out_buf, input_buf + pre_index,
-						MIN(next_index - pre_index,
-						NAME_PROJECT_INFO_MAX));
-			*offset = next_index;
-			return 0;
-		}
-
-		if (input_buf[i] == ASCII_LF || input_buf[i] == ASCII_CR)
-			break;
-	}
-
-	return -ENODATA;
-}
-
-/*******************************************************************************
  * FUNCTION: cmcp_get_configuration_info
  *
  * SUMMARY: Gets cmcp configuration information.
@@ -3441,16 +3367,6 @@ void cmcp_get_configuration_info(struct device *dev,
 				*field_array[count].bufptr =
 						cmcp_return_one_value(dev, buf,
 						&value_offset, 0, pFileEnd);
-				field_array[count].data_num = 1;
-				field_array[count].line_num = 1;
-				break;
-			case TEST_CASE_TYPE_STRING:
-				value_offset = search_array[sub_count].offset
-					+ search_array[sub_count].name_size;
-				cmcp_get_one_string(
-				    dev, buf, &value_offset,
-				    (char *)field_array[count].bufptr,
-				    NAME_PROJECT_INFO_MAX, pFileEnd);
 				field_array[count].data_num = 1;
 				field_array[count].line_num = 1;
 				break;
@@ -3658,8 +3574,6 @@ void cmcp_test_case_field_init(struct test_case_field *test_field_array,
 	struct configuration *configs)
 {
 	struct test_case_field test_case_field_array[MAX_CASE_NUM] = {
-		{"PROJ_VERSION", 12, TEST_CASE_TYPE_STRING,
-				(void *)&configs->proj_info, 0, 0, 0},
 		{"CM TEST INPUTS", 14, TEST_CASE_TYPE_NO,
 				NULL, 0, 0, 0},
 		{"CM_EXCLUDING_COL_EDGE", 21, TEST_CASE_TYPE_ONE,
@@ -4350,7 +4264,7 @@ exit:
  ******************************************************************************/
 static ssize_t pt_run_and_get_selftest_result(struct device *dev,
 		int protect, char *buf, size_t buf_len, u8 test_id,
-		u16 read_length, u8 get_result_on_pass, bool print_results,
+		u16 read_length, bool get_result_on_pass, bool print_results,
 		u8 print_format)
 {
 	struct pt_device_access_data *dad = pt_get_device_access_data(dev);
@@ -4443,22 +4357,12 @@ static ssize_t pt_run_and_get_selftest_result(struct device *dev,
 	length = 2;
 
 	/*
-	 * For "auto_shorts" sysfs node, detailed data is
-	 * retrieved only when the summary result is fail.
-	 */
-	if (get_result_on_pass == PT_ST_GET_RESULTS_BASED_ON_DATA &&
-		test_id == PT_ST_ID_AUTOSHORTS &&
-		summary_result == PT_ST_RESULT_PASS)
-		goto resume_scan;
-
-	/*
 	 * Get data if requested and the cmd status indicates that the test
 	 * completed with either a pass or a fail. All other status codes
 	 * indicate the test itself was not run so there is no data to retrieve
 	 */
 	if ((cmd_status == PT_ST_RESULT_PASS ||
-	     cmd_status == PT_ST_RESULT_FAIL)  &&
-	     get_result_on_pass != PT_ST_DONT_GET_RESULTS) {
+	     cmd_status == PT_ST_RESULT_FAIL)  && get_result_on_pass) {
 		rc = pt_get_selftest_result_cmd_(dev, 0, read_length,
 			test_id, &cmd_status, &act_length, &dad->ic_buf[6]);
 		if (rc) {
@@ -5538,7 +5442,7 @@ static ssize_t auto_shorts_debugfs_read(struct file *filp, char __user *buf,
 			data->dad->dev, PT_CORE_CMD_PROTECTED,
 			data->pr_buf, sizeof(data->pr_buf),
 			PT_ST_ID_AUTOSHORTS, PIP_CMD_MAX_LENGTH,
-			PT_ST_GET_RESULTS_BASED_ON_DATA, PT_ST_PRINT_RESULTS,
+			PT_ST_DONT_GET_RESULTS, PT_ST_PRINT_RESULTS,
 			PT_PR_FORMAT_DEFAULT);
 
 	return simple_read_from_buffer(buf, count, ppos, data->pr_buf,
@@ -5832,7 +5736,7 @@ exit:
 /*******************************************************************************
  * FUNCTION: fw_self_test_debugfs_write
  *
- * SUMMARY: Store the self test ID and output format, the read method will
+ * SUMMARY: Store the self test ID and ouptut format, the read method will
  *  perform.
  *
  * RETURN: Size of debugfs data write
@@ -5968,7 +5872,7 @@ static ssize_t tthe_get_panel_data_debugfs_read(struct file *filp,
 		rc = pt_ret_scan_data_cmd_(dev, elem_offset,
 		PT_MAX_ELEN, dad->heatmap.data_type, dad->ic_buf,
 		&config, &actual_read_len, NULL);
-	} else{
+	} else {
 		rc = pt_ret_scan_data_cmd_(dev, elem_offset, elem,
 			dad->heatmap.data_type, dad->ic_buf, &config,
 			&actual_read_len, NULL);
@@ -5994,7 +5898,7 @@ static ssize_t tthe_get_panel_data_debugfs_read(struct file *filp,
 			rc = pt_ret_scan_data_cmd_(dev, elem_offset,
 			PT_MAX_ELEN, dad->heatmap.data_type, NULL, &config,
 			&actual_read_len, buf_offset);
-		} else{
+		} else {
 			rc = pt_ret_scan_data_cmd_(dev, elem_offset, elem,
 				dad->heatmap.data_type, NULL, &config,
 				&actual_read_len, buf_offset);
@@ -6355,7 +6259,7 @@ static int pt_setup_sysfs(struct device *dev)
 	rc = device_create_file(dev, &dev_attr_cmcp_threshold_loading);
 	if (rc) {
 		pt_debug(dev, DL_ERROR,
-			"%s: Error, could not create cmcp_thresold_loading\n",
+			"%s: Error, could not create cmcp_threshold_loading\n",
 			__func__);
 		goto unregister_cmcp_test;
 	}
@@ -6363,7 +6267,7 @@ static int pt_setup_sysfs(struct device *dev)
 	rc = device_create_bin_file(dev, &bin_attr_cmcp_threshold_data);
 	if (rc) {
 		pt_debug(dev, DL_ERROR,
-			"%s: Error, could not create cmcp_thresold_data\n",
+			"%s: Error, could not create cmcp_threshold_data\n",
 			__func__);
 		goto unregister_cmcp_thresold_loading;
 	}
@@ -6827,4 +6731,3 @@ module_exit(pt_device_access_exit);
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Parade TrueTouch(R) Standard Product Device Access Driver");
 MODULE_AUTHOR("Parade Technologies <ttdrivers@paradetech.com>");
-#endif /* !TTDL_KERNEL_SUBMISSION */

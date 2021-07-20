@@ -4,13 +4,11 @@
 #
 
 # Each configuration option enables a list of files.
-
 obj-$(CONFIG_TOUCHSCREEN_PARADE)      += pt.o
 pt-y := pt_core.o pt_mt_common.o
 pt-$(CONFIG_TOUCHSCREEN_PARADE_MT_A) += pt_mta.o
 pt-$(CONFIG_TOUCHSCREEN_PARADE_MT_B) += pt_mtb.o
 pt-$(CONFIG_TOUCHSCREEN_PARADE_BUTTON) += pt_btn.o
-pt-$(CONFIG_TOUCHSCREEN_PARADE_PEN) += pt_pen.o
 pt-$(CONFIG_TOUCHSCREEN_PARADE_PROXIMITY) += pt_proximity.o
 obj-$(CONFIG_TOUCHSCREEN_PARADE_DEVICETREE_SUPPORT) += pt_devtree.o
 ifdef CONFIG_TOUCHSCREEN_PARADE
@@ -30,7 +28,6 @@ CFLAGS_pt_mta.o += -DDEBUG
 CFLAGS_pt_mtb.o += -DDEBUG
 CFLAGS_pt_mt_common.o += -DDEBUG
 CFLAGS_pt_btn.o += -DDEBUG
-CFLAGS_pt_pen.o += -DDEBUG
 CFLAGS_pt_proximity.o += -DDEBUG
 CFLAGS_pt_device_access.o += -DDEBUG
 CFLAGS_pt_loader.o += -DDEBUG
@@ -47,7 +44,6 @@ CFLAGS_pt_mta.o += -DVERBOSE_DEBUG
 CFLAGS_pt_mtb.o += -DVERBOSE_DEBUG
 CFLAGS_pt_mt_common.o += -DVERBOSE_DEBUG
 CFLAGS_pt_btn.o += -DVERBOSE_DEBUG
-CFLAGS_pt_pen.o += -DVERBOSE_DEBUG
 CFLAGS_pt_proximity.o += -DVERBOSE_DEBUG
 CFLAGS_pt_device_access.o += -DVERBOSE_DEBUG
 CFLAGS_pt_loader.o += -DVERBOSE_DEBUG

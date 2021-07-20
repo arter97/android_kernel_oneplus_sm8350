@@ -51,179 +51,6 @@ static u8 *tmp_rbuf;
 static u8 *tmp_wbuf;
 DEFINE_MUTEX(pt_spi_bus_lock);
 
-#ifdef TTDL_PTVIRTDUT_SUPPORT
-#define VIRT_DUT_BUF_SIZE  300
-static unsigned char pt_dut_cmd_buf[VIRT_DUT_BUF_SIZE];
-static unsigned char pt_dut_out_buf[VIRT_DUT_BUF_SIZE];
-static int pt_dut_cmd_len;
-static int pt_dut_out_len;
-DEFINE_MUTEX(virt_spi_lock);
-
-/*******************************************************************************
- * FUNCTION: virt_spi_transfer
- *
- * SUMMARY: Copies the current spi output message to the temporary buffer
- *	used by the dut_cmd sysfs node
- *
- * RETURN VALUE:
- *	Number of messages transferred which in this function will be 1
- *
- * PARAMETERS:
- *      *buf - pointer to spi command
- *	 len - length of command in the buffer
- ******************************************************************************/
-static int virt_spi_transfer(u8 *buf, int len)
-{
-	int rc = 0;
-
-	mutex_lock(&virt_spi_lock);
-	if (len <= sizeof(pt_dut_cmd_buf)) {
-		memcpy(pt_dut_cmd_buf, buf, len);
-		pt_dut_cmd_len = len;
-		rc = 1;
-	} else
-		rc = 0;
-	mutex_unlock(&virt_spi_lock);
-
-	return rc;
-}
-
-/*******************************************************************************
- * FUNCTION: virt_spi_master_recv
- *
- * SUMMARY: Copies the spi input message from the dut_out sysfs node into a
- *	temporary buffer.
- *
- * RETURN VALUE:
- *	Length of data transferred
- *
- * PARAMETERS:
- *      *dev  - pointer to device struct
- *      *buf  - pointer to spi incoming report
- *       size - size to be read
- ******************************************************************************/
-static int virt_spi_master_recv(struct device *dev, u8 *buf, int size)
-{
-#ifndef PT_POLL_RESP_BY_BUS
-	struct pt_core_data *cd = dev_get_drvdata(dev);
-	int i = 0;
-#endif
-
-	mutex_lock(&virt_spi_lock);
-	memcpy(buf, pt_dut_out_buf, size);
-
-	/* Set "empty buffer" */
-	pt_dut_out_buf[1] = 0xFF;
-	pt_dut_out_len = 0;
-	mutex_unlock(&virt_spi_lock);
-
-#ifndef PT_POLL_RESP_BY_BUS
-	if (cd->bl_with_no_int) {
-		/*
-		 * Wait for IRQ gpio to be released, make read operation
-		 * synchronize with PtVirtDut tool.
-		 * Safety net: Exit after 500ms (50us * 10000 loops = 500ms)
-		 */
-		while (i < VIRT_MAX_IRQ_RELEASE_TIME_US &&
-		       !gpio_get_value(cd->cpdata->irq_gpio)) {
-			pt_debug(dev, DL_INFO, "%s: %d IRQ still Enabled\n",
-				__func__, i);
-			usleep_range(50, 60);
-			i += 50;
-		}
-	}
-#endif
-
-	pt_debug(dev, DL_INFO,
-		"%s: Copy msg from dut_out to spi buffer, size=%d\n",
-		__func__, size);
-
-	return size;
-}
-
-/*******************************************************************************
- * FUNCTION: pt_dut_cmd_show
- *
- * SUMMARY: The show function for the dut_cmd sysfs node. Provides read access
- *	to the pt_dut_cmd_buf and clears it after it has been read.
- *
- * RETURN VALUE:
- *	Number of bytes transferred
- *
- * PARAMETERS:
- *      *dev  - pointer to device structure
- *      *attr - pointer to device attributes
- *	*buf  - pointer to output buffer
- ******************************************************************************/
-static ssize_t pt_dut_cmd_show(struct device *dev,
-	struct device_attribute *attr, char *buf)
-{
-	int i;
-	int index = 0;
-
-	/* Only print to sysfs if the buffer has data */
-	mutex_lock(&virt_spi_lock);
-	if (pt_dut_cmd_len > 0) {
-		for (i = 0; i < pt_dut_cmd_len; i++)
-			index += scnprintf(buf + index, strlen(buf), "%02X",
-				pt_dut_cmd_buf[i]);
-		index += scnprintf(buf + index, strlen(buf), "\n");
-	}
-	pt_dut_cmd_len = 0;
-	mutex_unlock(&virt_spi_lock);
-	return index;
-}
-static DEVICE_ATTR(dut_cmd, 0444, pt_dut_cmd_show, NULL);
-
-/*******************************************************************************
- * FUNCTION: pt_dut_out_store
- *
- * SUMMARY: The store function for the dut_out sysfs node. Provides write
- *	access to the pt_dut_out_buf. The smallest valid PIP response is 2
- *	bytes so don't update buffer if only 1 byte passed in.
- *
- * RETURN VALUE:
- *	Number of bytes read from virtual DUT
- *
- * PARAMETERS:
- *	*dev  - pointer to device structure
- *	*attr - pointer to device attributes
- *	*buf  - pointer to buffer that hold the command parameters
- *	 size - size of buf
- ******************************************************************************/
-static ssize_t pt_dut_out_store(struct device *dev,
-	struct device_attribute *attr, const char *buf, size_t size)
-{
-	int loop_max = ARRAY_SIZE(pt_dut_out_buf);
-	int hex_str_len = strlen(buf)/2;
-	int i;
-	const char *pos = buf;
-
-	/* Clear out the last message */
-	mutex_lock(&virt_spi_lock);
-	memset(pt_dut_out_buf, 0, VIRT_DUT_BUF_SIZE);
-	pt_dut_out_len = 0;
-
-	/* Only update the dut_out buffer if at least 2 byte payload */
-	if (size >= 2 && hex_str_len <= loop_max) {
-		/* Convert string of hex values to byte array */
-		for (i = 0; i < hex_str_len; i++) {
-			pt_dut_out_buf[i] = ((HEXOF(*pos)) << 4) +
-					     HEXOF(*(pos + 1));
-			pos += 2;
-		}
-		pt_dut_out_len = get_unaligned_le16(&pt_dut_out_buf[0]);
-	} else if (size >= PT_PIP_1P7_EMPTY_BUF) {
-		/* Message too large, set to 'empty buffer' message */
-		pt_dut_out_buf[1] = 0xFF;
-		pt_dut_out_len = 0;
-	}
-	mutex_unlock(&virt_spi_lock);
-
-	return size;
-}
-static DEVICE_ATTR(dut_out, 0200, NULL, pt_dut_out_store);
-#endif /* TTDL_PTVIRTDUT_SUPPORT */
 
 /*******************************************************************************
  * FUNCTION: pt_spi_xfer
@@ -312,23 +139,13 @@ exit:
  ******************************************************************************/
 static int pt_spi_read_default(struct device *dev, void *buf, int size)
 {
-#ifdef TTDL_PTVIRTDUT_SUPPORT
-	struct pt_core_data *cd = dev_get_drvdata(dev);
-#endif /* TTDL_PTVIRTDUT_SUPPORT */
 	int rc = 0;
 
 	if (!buf || !size || size > PT_MAX_PIP2_MSG_SIZE)
 		return -EINVAL;
 
 	mutex_lock(&pt_spi_bus_lock);
-#ifdef TTDL_PTVIRTDUT_SUPPORT
-	if (cd->route_bus_virt_dut)
-		virt_spi_master_recv(dev, buf, size);
-	else
-		rc = pt_spi_xfer(dev, PT_SPI_RD_OP, buf, size);
-#else
 	rc = pt_spi_xfer(dev, PT_SPI_RD_OP, buf, size);
-#endif /* TTDL_PTVIRTDUT_SUPPORT */
 	mutex_unlock(&pt_spi_bus_lock);
 
 	return rc;
@@ -357,21 +174,6 @@ static int pt_spi_read_default_nosize(struct device *dev, u8 *buf, u32 max)
 {
 	u32 size;
 	int rc = 0;
-#ifdef TTDL_PTVIRTDUT_SUPPORT
-	struct pt_core_data *cd = dev_get_drvdata(dev);
-
-	if (cd->route_bus_virt_dut) {
-		mutex_lock(&virt_spi_lock);
-		size = pt_dut_out_len;
-		mutex_unlock(&virt_spi_lock);
-		/* Only copy 2 bytes for "empty buffer" or "FW sentinel" */
-		if (!size || size == 2 || size >= PT_PIP_1P7_EMPTY_BUF)
-			size = 2;
-		virt_spi_master_recv(dev, buf, size);
-		return 0;
-	}
-
-#endif /* TTDL_PTVIRTDUT_SUPPORT */
 
 	if (!buf)
 		return 0;
@@ -418,18 +220,14 @@ exit:
  *	!0 = failure
  *
  * PARAMETERS:
- *  *dev       - pointer to Device structure
- *   write_len - length of data buffer write_buf
- *  *write_buf - pointer to buffer to write
- *  *read_buf  - pointer to buffer to read response into
- *   read_len  - length to read, 0 to use pt_spi_read_default_nosize
+ *      *dev       - pointer to Device structure
+ *       write_len - length of data buffer write_buf
+ *      *write_buf - pointer to buffer to write
+ *      *read_buf  - pointer to buffer to read response into
  ******************************************************************************/
 static int pt_spi_write_read_specific(struct device *dev, u16 write_len,
-		u8 *write_buf, u8 *read_buf, u16 read_len)
+		u8 *write_buf, u8 *read_buf)
 {
-#ifdef TTDL_PTVIRTDUT_SUPPORT
-	struct pt_core_data *cd = dev_get_drvdata(dev);
-#endif /* TTDL_PTVIRTDUT_SUPPORT */
 	int rc = 0;
 
 	/* Ensure no packet larger than what the PIP spec allows */
@@ -447,21 +245,9 @@ static int pt_spi_write_read_specific(struct device *dev, u16 write_len,
 	}
 
 	mutex_lock(&pt_spi_bus_lock);
-#ifdef TTDL_PTVIRTDUT_SUPPORT
-	if (cd->route_bus_virt_dut) {
-		virt_spi_transfer(write_buf, write_len);
-		pt_debug(dev, DL_DEBUG, "%s: Virt transfer size = %d",
-			__func__, write_len);
-	} else {
-		rc = pt_spi_xfer(dev, PT_SPI_WR_OP, write_buf, write_len);
-		if (rc < 0)
-			goto error;
-	}
-#else
 	rc = pt_spi_xfer(dev, PT_SPI_WR_OP, write_buf, write_len);
 	if (rc < 0)
 		goto error;
-#endif /* TTDL_PTVIRTDUT_SUPPORT */
 	mutex_unlock(&pt_spi_bus_lock);
 
 	if (read_buf)
@@ -534,10 +320,6 @@ static int pt_spi_probe(struct spi_device *spi)
 	if (!tmp_wbuf || !tmp_rbuf)
 		return -ENOMEM;
 
-#ifdef TTDL_PTVIRTDUT_SUPPORT
-	device_create_file(dev, &dev_attr_dut_cmd);
-	device_create_file(dev, &dev_attr_dut_out);
-#endif /* TTDL_PTVIRTDUT_SUPPORT */
 
 	rc = pt_probe(&pt_spi_bus_ops, &spi->dev, spi->irq,
 			  PT_SPI_DATA_BUF_SIZE);
@@ -547,12 +329,6 @@ static int pt_spi_probe(struct spi_device *spi)
 		pt_devtree_clean_pdata(dev);
 #endif
 
-#ifdef TTDL_PTVIRTDUT_SUPPORT
-	if (rc) {
-		device_remove_file(dev, &dev_attr_dut_cmd);
-		device_remove_file(dev, &dev_attr_dut_out);
-	}
-#endif /* TTDL_PTVIRTDUT_SUPPORT */
 
 	return rc;
 }
@@ -580,10 +356,6 @@ static int pt_spi_remove(struct spi_device *spi)
 	kfree(tmp_rbuf);
 	kfree(tmp_wbuf);
 
-#ifdef TTDL_PTVIRTDUT_SUPPORT
-	device_remove_file(dev, &dev_attr_dut_cmd);
-	device_remove_file(dev, &dev_attr_dut_out);
-#endif /* TTDL_PTVIRTDUT_SUPPORT */
 
 	pt_release(cd);
 

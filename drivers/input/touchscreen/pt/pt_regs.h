@@ -74,9 +74,12 @@
 #include <linux/version.h>
 #include <linux/pt_core.h>
 
+#include <linux/i2c.h>
+#include <linux/of_gpio.h>
 #include <linux/timer.h>
 #include <linux/timex.h>
 #include <linux/rtc.h>
+#include <linux/regulator/consumer.h>
 
 #define STATUS_SUCCESS   0
 #define STATUS_FAIL     -1
@@ -85,7 +88,6 @@
 #define PT_FW_FILE_SUFFIX	".bin"
 #define PT_FW_FILE_NAME		"tt_fw.bin"
 #define PT_FW_RAM_FILE_NAME	"tt_fw_ram.bin"
-#ifndef TTDL_KERNEL_SUBMISSION
 /* Enable special TTDL features */
 #ifndef TTHE_TUNER_SUPPORT
 #define TTHE_TUNER_SUPPORT
@@ -98,7 +100,6 @@
 #ifndef EASYWAKE_TSG6
 #define EASYWAKE_TSG6
 #endif
-#endif /* !TTDL_KERNEL_SUBMISSION */
 
 #ifdef TTHE_TUNER_SUPPORT
 #define PT_TTHE_TUNER_FILE_NAME "tthe_tuner"
@@ -118,13 +119,11 @@
  * The largest PIP message is the PIP2 FILE_WRITE which has:
  *     2 byte register
  *     4 byte header
- *     1 byte file handle
  *   256 byte payload
  *     2 byte CRC
  */
-#define PT_MAX_PIP2_MSG_SIZE      265
+#define PT_MAX_PIP2_MSG_SIZE      264
 #define PT_MAX_PIP1_MSG_SIZE      255
-#define PT_HID_DESC_SIZE           30
 
 /*
  * The minimun size of PIP2 packet includes:
@@ -165,26 +164,6 @@ enum PT_STARTUP_STATUS {
 	STARTUP_STATUS_FULL               = 0x1FF
 };
 
-#define SLAVE_DETECT_MASK                   0x01
-/* TTDL Built In Self Test selection bit masks */
-enum PT_TTDL_BIST_TESTS {
-	PT_BIST_BUS_TEST                  = 0x01,
-	PT_BIST_IRQ_TEST                  = 0x02,
-	PT_BIST_TP_XRES_TEST              = 0x04,
-	PT_BIST_SLAVE_BUS_TEST            = 0x08,
-	PT_BIST_SLAVE_IRQ_TEST            = 0x10,
-	PT_BIST_SLAVE_XRES_TEST           = 0x20
-};
-
-/* tthe_tuner node format options */
-enum PT_TTHE_TUNER_FORMAT {
-	PT_TTHE_TUNER_FORMAT_HID_USB                   = 0x01,
-	PT_TTHE_TUNER_FORMAT_HID_I2C                   = 0x02,
-	PT_TTHE_TUNER_FORMAT_HID_FINGER_TO_PIP         = 0x03,
-	PT_TTHE_TUNER_FORMAT_HID_FINGER_AND_PEN_TO_PIP = 0x04,
-	PT_TTHE_TUNER_FORMAT_RESERVED                  = 0xFE,
-};
-
 #define PT_INITIAL_SHOW_TIME_STAMP 0
 
 /*
@@ -220,9 +199,7 @@ enum PT_PIP_REPORT_ID {
 
 enum PT_HID_REPORT_ID {
 	PT_HID_FINGER_REPORT_ID            = 0x01,
-	PT_HID_PEN_REPORT_ID               = 0x02,
-	PT_HID_VS_FINGER_REPORT_ID         = 0x41, /* Vendor Specific ID */
-	PT_HID_VS_PEN_REPORT_ID            = 0x42  /* Vendor Specific ID */
+	PT_HID_PEN_REPORT_ID               = 0x02
 };
 
 
@@ -230,7 +207,6 @@ enum PT_HID_REPORT_ID {
 #define HID_VENDOR_ID                         0x04B4
 #define HID_APP_PRODUCT_ID                    0xC101
 #define HID_VERSION                           0x0100
-#define HID_REPORT_DESC_ID                      0xF6
 #define HID_APP_REPORT_ID                       0xF7
 #define HID_BL_REPORT_ID                        0xFF
 #define HID_RESPONSE_REPORT_ID                  0xF0
@@ -259,7 +235,6 @@ enum PT_HID_REPORT_ID {
 #define PT_BL_WAIT_FOR_SENTINEL                  500
 #define PT_REQUEST_ENUM_TIMEOUT                 4000
 #define PT_GET_HID_DESCRIPTOR_TIMEOUT            500
-#define PT_HID_GET_REPORT_DESCRIPTOR_TIMEOUT     500
 #define PT_HID_CMD_DEFAULT_TIMEOUT               500
 #define PT_PIP_CMD_DEFAULT_TIMEOUT              2000
 #define PT_PIP1_CMD_DEFAULT_TIMEOUT             1000
@@ -272,11 +247,6 @@ enum PT_HID_REPORT_ID {
 #define PT_PIP1_CMD_INITIATE_BL_TIMEOUT        20000
 #define PT_PIP1_CMD_PROGRAM_AND_VERIFY_TIMEOUT   400
 #define PT_PIP2_CMD_FILE_ERASE_TIMEOUT          3000
-/*
- * BL internal timeout is 500 ms and here it is slightly larger to consider
- * the BUS communication cost. (Bugz#92376)
- */
-#define PT_PIP2_CMD_FILE_SECTOR_ERASE_TIMEOUT   600
 
 /* Max counts */
 #define PT_WATCHDOG_RETRY_COUNT                   30
@@ -293,7 +263,6 @@ enum PT_HID_REPORT_ID {
 #define BTN_INPUT_HEADER_SIZE                      5
 #define SENSOR_REPORT_SIZE                       150
 #define SENSOR_HEADER_SIZE                         4
-#define MAX_TOUCH_NUM                              6
 
 /* helpers */
 #define GET_NUM_TOUCHES(x)          ((x) & 0x1F)
@@ -317,22 +286,6 @@ enum PT_HID_REPORT_ID {
 	(x >= 'A' && x <= 'F') ? 'A' - 10 : \
 	'\255')
 #define HEXOF(x) (x - _base(x))
-
-#define HID_ITEM_SIZE_MASK	0x03
-#define HID_ITEM_TYPE_MASK	0x0C
-#define HID_ITEM_TAG_MASK	0xF0
-
-#define HID_ITEM_SIZE_SHIFT	0
-#define HID_ITEM_TYPE_SHIFT	2
-#define HID_ITEM_TAG_SHIFT	4
-
-#define HID_GET_ITEM_SIZE(x)  \
-	((x & HID_ITEM_SIZE_MASK) >> HID_ITEM_SIZE_SHIFT)
-#define HID_GET_ITEM_TYPE(x) \
-	((x & HID_ITEM_TYPE_MASK) >> HID_ITEM_TYPE_SHIFT)
-#define HID_GET_ITEM_TAG(x) \
-	((x & HID_ITEM_TAG_MASK) >> HID_ITEM_TAG_SHIFT)
-
 
 #define IS_EASY_WAKE_CONFIGURED(x) \
 		((x) != 0 && (x) != 0xFF)
@@ -381,7 +334,6 @@ enum PT_HID_REPORT_ID {
 #define	PT_DRV_DBG_CLEAR_PARM_LIST           110
 #define PT_DRV_DBG_FORCE_BUS_READ            111
 #define PT_DRV_DBG_CLEAR_CAL_DATA            112
-#define PT_DUT_DBG_REPORT_DESC               113
 
 /*
  * Commands that require additional parameters
@@ -406,14 +358,24 @@ enum PT_HID_REPORT_ID {
 #define PT_DRV_DBG_SET_FORCE_SEQ             214
 #define PT_DRV_DBG_BL_WITH_NO_INT            215
 #define PT_DRV_DBG_CAL_CACHE_IN_HOST         216
-#define PT_DRV_DBG_NUM_DEVICES               217
+#define PT_DRV_DBG_MULTI_CHIP                217
 #define PT_DRV_DBG_SET_PANEL_ID_TYPE         218
 #define PT_DRV_DBG_PIP_TIMEOUT               219
-#define PT_DRV_DBG_CORE_PLATFORM_FLAG        220
+#define PT_DRV_DBG_TTHE_HID_USB_FORMAT       220
 #ifdef TTDL_PTVIRTDUT_SUPPORT
 #define PT_DRV_DBG_SET_HW_DETECT             298
 #define PT_DRV_DBG_VIRTUAL_I2C_DUT           299
 #endif /* TTDL_PTVIRTDUT_SUPPORT */
+
+/* TTDL Built In Self Test selection bit masks */
+#define PT_TTDL_BIST_BUS_TEST           0x01
+#define PT_TTDL_BIST_IRQ_TEST           0x02
+#define PT_TTDL_BIST_TP_XRES_TEST       0x04
+#define PT_TTDL_BIST_SLAVE_BUS_TEST     0x08
+#define PT_TTDL_BIST_SLAVE_IRQ_TEST     0x10
+#define PT_TTDL_BIST_SLAVE_XRES_TEST    0x20
+
+#define SLAVE_DETECT_MASK               0x01
 
 #define VIRT_MAX_IRQ_RELEASE_TIME_US    500000
 #endif /* TTDL DIAGNOSTICS */
@@ -448,9 +410,8 @@ enum PT_HID_REPORT_ID {
 #define HID_PT_BUTTONSIGNAL               0xff010065
 #define HID_PT_MAJOR_CONTACT_AXIS_LENGTH  0xff010066
 #define HID_PT_MINOR_CONTACT_AXIS_LENGTH  0xff010067
-#define HID_PT_TCH_COL_USAGE_PG           0x000D0004
+#define HID_PT_TCH_COL_USAGE_PG           0x000D0022
 #define HID_PT_BTN_COL_USAGE_PG           0xFF010020
-#define HID_PT_PEN_COL_USAGE_PG           0x000D0020
 
 #define PANEL_ID_NOT_ENABLED	0xFF
 
@@ -621,30 +582,26 @@ enum PIP2_FW_SYSTEM_MODE {
 
 /* PIP2 Command/Response data and structures */
 enum PIP2_FILE_ID {
-	PIP2_RAM_FILE                   = 0x00,
-	PIP2_FW_FILE                    = 0x01,
-	PIP2_CONFIG_FILE                = 0x02,
-	PIP2_FILE_3                     = 0x03,
-	PIP2_FILE_4                     = 0x04,
-	PIP2_FILE_5                     = 0x05,
-	PIP2_FILE_6                     = 0x06,
-	PIP2_FILE_7                     = 0x07,
-	PIP2_FILE_8                     = 0x08,
-	PIP2_FILE_RESERVED              = 0x0F,
-	PIP2_FILE_MAX                   = PIP2_FILE_RESERVED,
+	PIP2_RAM_FILE			= 0x00,
+	PIP2_FW_FILE			= 0x01,
+	PIP2_CONFIG_FILE		= 0x02,
+	PIP2_FILE_3			= 0x03,
+	PIP2_FILE_4			= 0x04,
+	PIP2_FILE_5			= 0x05,
+	PIP2_FILE_6			= 0x06,
+	PIP2_FILE_7			= 0x07,
+	PIP2_FILE_MAX			= PIP2_FILE_7,
 };
 
 /* Optimize packet sizes per Allwinner H3 bus drivers */
-#define PIP2_FILE_WRITE_LEN_PER_PACKET          (245)
-#define PIP2_BL_I2C_FILE_WRITE_LEN_PER_PACKET   (245)
-#define PIP2_BL_SPI_FILE_WRITE_LEN_PER_PACKET   (256)
-#define PIP2_FILE_WRITE_MAX_LEN_PER_PACKET      \
-				PIP2_BL_SPI_FILE_WRITE_LEN_PER_PACKET
+#define PIP2_FILE_WRITE_LEN_PER_PACKET		245
+#define PIP2_BL_I2C_FILE_WRITE_LEN_PER_PACKET	245
+#define PIP2_BL_SPI_FILE_WRITE_LEN_PER_PACKET	256
 
 enum DUT_GENERATION {
 	DUT_UNKNOWN                     = 0x00,
-	DUT_PIP1_ONLY                   = 0x01,
-	DUT_PIP2_CAPABLE                = 0x02,
+	DUT_PIP1_ONLY			= 0x01,
+	DUT_PIP2_CAPABLE		= 0x02,
 };
 
 enum PIP2_RSP_ERR {
@@ -673,10 +630,6 @@ enum PIP2_RSP_ERR {
 	PIP2_RSP_ERR_UNKNOWN_REGISTER   = 0x16,
 	PIP2_RSP_ERR_BAD_LENGTH         = 0x17,
 	PIP2_RSP_ERR_TRIM_FAILURE       = 0x18,
-	PIP2_RSP_ERR_BAD_SEQ            = 0x19,
-	PIP2_RSP_ERR_BUF_TOO_SMALL      = 0x1A,
-	PIP2_RSP_ERR_ASYNC_SEQ          = 0x1B,
-	PIP2_RSP_ERR_EXEC_IMAGE         = 0x1C,
 };
 
 /*
@@ -731,7 +684,7 @@ enum pip1_bl_status {
 	ERROR_FLASH_ARRAY,
 	ERROR_FLASH_ROW,
 	ERROR_FLASH_PROTECTION,
-	ERROR_UKNOWN             = 15,
+	ERROR_UNKNOWN             = 15,
 	ERROR_INVALID,
 };
 
@@ -741,18 +694,6 @@ enum pt_mode {
 	PT_MODE_OPERATIONAL  = 2,
 	PT_MODE_IGNORE       = 255,
 };
-
-enum pt_protocol_mode {
-	PT_PROTOCOL_MODE_PIP         = 0,
-	PT_PROTOCOL_MODE_HID         = 1,
-	PT_PROTOCOL_MODE_IGNORE      = 255,
-};
-
-struct pt_dut_status {
-	enum PIP2_FW_SYSTEM_MODE fw_system_mode;
-	enum pt_mode mode;
-	enum pt_protocol_mode protocol_mode;
-} __packed;
 
 enum PT_ENTER_BL_RESULT {
 	PT_ENTER_BL_PASS                = 0,
@@ -823,12 +764,8 @@ enum pt_self_test_result {
 };
 #define PT_ST_PRINT_RESULTS    true
 #define PT_ST_NOPRINT          false
-
-enum pt_st_get_result {
-	PT_ST_DONT_GET_RESULTS          = 0,
-	PT_ST_GET_RESULTS               = 1,
-	PT_ST_GET_RESULTS_BASED_ON_DATA = 2,
-};
+#define PT_ST_GET_RESULTS      true
+#define PT_ST_DONT_GET_RESULTS false
 
 /*
  * Maximum number of parameters for the fw_self_test sysfs (255 - 12 + 2)
@@ -1058,62 +995,12 @@ struct pt_tch_abs_params {
 	size_t min;	/* min value */
 	size_t max;	/* max value */
 	size_t bofs;	/* bit offset */
-	u8 report;	/* non-zero: valid; 0: invalid */
-	size_t logical_max;	/* logical max value */
+	u8 report;
 };
 
 struct pt_touch {
 	int hdr[PT_TCH_NUM_HDR];
 	int abs[PT_TCH_NUM_ABS];
-};
-
-enum pt_pen_abs {	/* for ordering within the extracted pen data array */
-	PT_PEN_X,	/* X */
-	PT_PEN_Y,	/* Y */
-	PT_PEN_P,	/* P (Z) */
-	PT_PEN_X_TILT,	/* X TILT */
-	PT_PEN_Y_TILT,	/* Y TILT */
-	PT_PEN_TS,   /* Tip Switch */
-	PT_PEN_BS,   /* Barrel Switch */
-	PT_PEN_IV,   /* Invert */
-	PT_PEN_ER,   /* Eraser */
-	PT_PEN_2ND_BS,  /* 2nd Barrel Switch */
-	PT_PEN_IR,   /* In Range */
-	PT_PEN_NUM_ABS,
-};
-
-static const int pt_pen_abs_field_map[] = {
-	[PT_PEN_X]       = 0x00010030 /* HID_GD_X */,
-	[PT_PEN_Y]       = 0x00010031 /* HID_GD_Y */,
-	[PT_PEN_P]       = 0x000D0030,
-	[PT_PEN_X_TILT]  = 0x000D003D,
-	[PT_PEN_Y_TILT]  = 0x000D003E,
-	[PT_PEN_TS]      = 0x000D0042,
-	[PT_PEN_BS]      = 0x000D0044,
-	[PT_PEN_IV]      = 0x000D003C,
-	[PT_PEN_ER]      = 0x000D0045,
-	[PT_PEN_2ND_BS]  = 0x000D005A,
-	[PT_PEN_IR]      = 0x000D0032,
-	[PT_PEN_NUM_ABS] = 0,
-};
-
-static const char * const pt_pen_abs_string[] = {
-	[PT_PEN_X]       = "X",
-	[PT_PEN_Y]       = "Y",
-	[PT_PEN_P]       = "P",
-	[PT_PEN_X_TILT]  = "X_TILT",
-	[PT_PEN_Y_TILT]  = "Y_TILT",
-	[PT_PEN_TS]      = "Tip_Switch",
-	[PT_PEN_BS]      = "Barrel_Switch",
-	[PT_PEN_IV]      = "Invert",
-	[PT_PEN_ER]      = "Eraser",
-	[PT_PEN_2ND_BS]  = "2nd Barrel_Switch",
-	[PT_PEN_IR]      = "In_Range",
-	[PT_PEN_NUM_ABS] = "INVALID",
-};
-
-struct pt_pen {
-	int abs[PT_PEN_NUM_ABS];
 };
 
 /* button to keycode support */
@@ -1154,9 +1041,6 @@ struct pt_report_desc_data {
 	u16 tch_record_size;
 	u16 tch_header_size;
 	u16 btn_report_id;
-	u16 pen_report_id;
-	u8 max_touch_num;
-	u8 max_tch_per_packet;
 };
 
 struct pt_sysinfo {
@@ -1169,7 +1053,6 @@ struct pt_sysinfo {
 	struct pt_ttconfig ttconfig;
 	struct pt_tch_abs_params tch_hdr[PT_TCH_NUM_HDR];
 	struct pt_tch_abs_params tch_abs[PT_TCH_NUM_ABS];
-	struct pt_tch_abs_params pen_abs[PT_PEN_NUM_ABS];
 	u8 *xy_mode;
 	u8 *xy_data;
 };
@@ -1238,14 +1121,13 @@ struct pt_hid_core {
 	u16 hid_max_output_len;
 };
 
-#define PT_HID_MAX_REPORTS                   20
-#define PT_HID_MAX_FIELDS                    128
-#define PT_HID_MAX_COLLECTIONS               3
-#define PT_HID_MAX_NESTED_COLLECTIONS        PT_HID_MAX_COLLECTIONS
-#define PT_HID_MAX_CONTINUOUS_USAGES         8
+#define PT_HID_MAX_REPORTS		8
+#define PT_HID_MAX_FIELDS		128
+#define PT_HID_MAX_COLLECTIONS		3
+#define PT_HID_MAX_NESTED_COLLECTIONS	PT_HID_MAX_COLLECTIONS
 
 /* Max input is for ASCII representation of hex characters */
-#define PT_MAX_INPUT            2048
+#define PT_MAX_INPUT            (PT_MAX_PIP2_MSG_SIZE * 2)
 #define PT_PIP_1P7_EMPTY_BUF    0xFF00
 
 enum pt_module_id {
@@ -1283,18 +1165,6 @@ struct pt_mt_data {
 	int or_max;
 	int t_min;
 	int t_max;
-};
-
-struct pt_pen_data {
-	struct device *dev;
-	struct pt_pen_platform_data *pdata;
-	struct pt_sysinfo *si;
-	struct input_dev *input;
-	struct mutex pen_lock;
-	bool is_suspended;
-	bool input_device_registered;
-	bool input_device_allocated;
-	char phys[NAME_MAX];
 };
 
 struct pt_btn_data {
@@ -1423,8 +1293,7 @@ struct pt_core_nonhid_cmd {
 	int (*get_bl_pip2_version)(struct device *dev);
 	int (*pip2_file_open)(struct device *dev, u8 file_no);
 	int (*pip2_file_close)(struct device *dev, u8 file_no);
-	int (*pip2_file_erase)(struct device *dev, u8 file_no, u16 file_sector,
-			int *status);
+	int (*pip2_file_erase)(struct device *dev, u8 file_no, int *status);
 	int (*read_us_file)(struct device *dev, u8 *file_path, u8 *buf,
 			int *size);
 	int (*pip2_file_read)(struct device *dev, u8 file_no,
@@ -1472,11 +1341,9 @@ struct pt_core_commands {
 		struct pt_bin_file_hdr *hdr);
 	int (*request_dut_generation)(struct device *dev);
 	int (*request_hw_version)(struct device *dev, char *hw_version);
-#ifndef TTDL_KERNEL_SUBMISSION
 	int (*parse_sysfs_input)(struct device *dev,
 		const char *buf, size_t buf_size,
 		u32 *out_buf, size_t out_buf_size);
-#endif
 #ifdef TTHE_TUNER_SUPPORT
 	int (*request_tthe_print)(struct device *dev, u8 *buf, int buf_len,
 			const u8 *data_name);
@@ -1529,26 +1396,18 @@ struct pt_bus_ops {
 	int (*read_default)(struct device *dev, void *buf, int size);
 	int (*read_default_nosize)(struct device *dev, u8 *buf, u32 max);
 	int (*write_read_specific)(struct device *dev, u16 write_len,
-			u8 *write_buf, u8 *read_buf, u16 read_len);
-};
-
-#define PT_MAX_DEVICES   3
-struct pt_bist_data {
-	u8 detected;
-	u8 mask;
-	u8 boot_err;
-	u8 bus_toggled;
-	u8 irq_toggled;
-	u8 xres_toggled;
-	char *bus_err_str;
-	char *irq_err_str;
-	char *xres_err_str;
-	char *print_buf;
-	u16 pr_index;
-	int status;
+			u8 *write_buf, u8 *read_buf);
 };
 
 struct pt_core_data {
+	struct pinctrl *ts_pinctrl;
+	struct pinctrl_state *pinctrl_state_active;
+	struct pinctrl_state *pinctrl_state_suspend;
+	struct pinctrl_state *pinctrl_state_release;
+
+	struct regulator *vdd;
+	struct regulator *vcc_i2c;
+
 	struct list_head node;
 	struct list_head module_list; /* List of probed modules */
 	char core_id[20];
@@ -1560,11 +1419,9 @@ struct pt_core_data {
 	struct mutex sysfs_lock;
 	struct mutex ttdl_restart_lock;
 	struct mutex firmware_class_lock;
-	struct mutex hid_report_lock;
 	enum pt_mode mode;
 	spinlock_t spinlock;
 	struct pt_mt_data md;
-	struct pt_pen_data pend;
 	struct pt_btn_data bd;
 	struct pt_proximity_data pd;
 	int phys_num;
@@ -1602,32 +1459,23 @@ struct pt_core_data {
 #endif
 	struct pt_sysinfo sysinfo;
 	struct pt_bl_info bl_info;
-	struct pt_dut_status dut_status;
 	void *exclusive_dev;
 	int exclusive_waits;
 	struct timer_list watchdog_timer;
 	struct work_struct watchdog_work;
 	struct work_struct enum_work;
 	struct work_struct ttdl_restart_work;
-#ifdef PT_PTSBC_SUPPORT
-	struct work_struct irq_work;
-	struct work_struct probe_work;
-	struct timer_list probe_timer;
-#endif
 	u16 startup_retry_count;
 	struct pt_hid_core hid_core;
 	int hid_cmd_state;
 	int hid_reset_cmd_state; /* reset can happen any time */
 	struct pt_hid_desc hid_desc;
-	struct pt_hid_report *hid_reports[PT_HID_MAX_REPORTS];
-	int num_hid_reports;
 	struct pt_features features;
 #define PT_PREALLOCATED_CMD_BUFFER 32
 	u8 cmd_buf[PT_PREALLOCATED_CMD_BUFFER];
 	u8 input_buf[PT_MAX_INPUT];
 	u8 response_buf[PT_MAX_INPUT];
 	u8 cmd_rsp_buf[PT_MAX_INPUT];
-	u8 touch_buf[PT_MAX_INPUT];
 	u16 cmd_rsp_buf_len;
 	int raw_cmd_status;
 #ifdef CONFIG_HAS_EARLYSUSPEND
@@ -1663,7 +1511,7 @@ struct pt_core_data {
 	u8 flashless_dut;
 	u8 bl_with_no_int;
 	u8 cal_cache_in_host;
-	u8 num_devices;
+	u8 multi_chip;
 	u8 tthe_hid_usb_format;
 	u8 flashless_auto_bl;
 	u8 pip2_us_file_path[PT_MAX_PATH_SIZE];
@@ -1741,10 +1589,10 @@ static inline int pt_adap_read_default_nosize(struct pt_core_data *cd,
 }
 
 static inline int pt_adap_write_read_specific(struct pt_core_data *cd,
-		u16 write_len, u8 *write_buf, u8 *read_buf, u16 read_len)
+		u16 write_len, u8 *write_buf, u8 *read_buf)
 {
 	return cd->bus_ops->write_read_specific(cd->dev, write_len, write_buf,
-			read_buf, read_len);
+			read_buf);
 }
 
 static inline void *pt_get_dynamic_data(struct device *dev, int id)
@@ -1815,9 +1663,6 @@ int pt_release(struct pt_core_data *cd);
 struct pt_core_commands *pt_get_commands(void);
 struct pt_core_data *pt_get_core_data(char *id);
 
-#ifdef PT_AUX_BRIDGE_ENABLED
-int pt_trigger_ttdl_irq(void);
-#endif
 
 int pt_mt_release(struct device *dev);
 int pt_mt_probe(struct device *dev);
@@ -1841,9 +1686,9 @@ static inline int pt_proximity_release(struct device *dev) { return 0; }
 static inline unsigned int pt_get_time_stamp(void)
 {
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0))
-	struct timespec64 ts;
+	struct timespec ts;
 
-	ktime_get_real_ts64(&ts);
+	getnstimeofday(&ts);
 	return (ts.tv_sec*1000 + ts.tv_nsec/1000000);
 #else
 	struct timeval tv;
@@ -1854,8 +1699,6 @@ static inline unsigned int pt_get_time_stamp(void)
 }
 
 void pt_init_function_ptrs(struct pt_mt_data *md);
-void pt_get_touch_field(struct device *dev,
-	int *field, int size, int max, u8 *data, int bofs);
 int _pt_subscribe_attention(struct device *dev,
 	enum pt_atten_type type, char *id, int (*func)(struct device *),
 	int mode);

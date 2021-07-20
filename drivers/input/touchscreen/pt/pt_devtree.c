@@ -31,8 +31,8 @@
 #include <linux/err.h>
 #include <linux/of_device.h>
 #include <linux/slab.h>
-#include "pt_regs.h"
 #include <linux/pt_platform.h>
+#include "pt_regs.h"
 
 #define MAX_NAME_LENGTH		64
 
@@ -41,7 +41,6 @@ static bool is_create_and_get_pdata;
 enum pt_device_type {
 	DEVICE_MT,
 	DEVICE_BTN,
-	DEVICE_PEN,
 	DEVICE_PROXIMITY,
 	DEVICE_TYPE_MAX,
 };
@@ -486,58 +485,6 @@ static void free_btn_pdata(void *pdata)
 }
 
 /*******************************************************************************
- * FUNCTION: create_and_get_pen_pdata
- *
- * SUMMARY: Create and get pen platform data from dts.
- *
- * RETURN:
- *   success: the pointer of the platform data
- *   fail   : error code with type of error pointer
- *
- * PARAMETERS:
- *   *dev_node - pointer to device_node structure
- ******************************************************************************/
-static void *create_and_get_pen_pdata(struct device_node *dev_node)
-{
-	struct pt_pen_platform_data *pdata;
-	int rc;
-
-	pdata = kzalloc(sizeof(*pdata), GFP_KERNEL);
-	if (!pdata) {
-		rc = -ENOMEM;
-		goto fail;
-	}
-
-	rc = get_inp_dev_name(dev_node, &pdata->inp_dev_name);
-	if (rc)
-		goto fail_free_pdata;
-
-	return pdata;
-
-fail_free_pdata:
-	kfree(pdata);
-fail:
-	return ERR_PTR(rc);
-}
-
-/*******************************************************************************
- * FUNCTION: free_pen_pdata
- *
- * SUMMARY: Free all pointers for pen platform data.
- *
- * PARAMETERS:
- *   *pdata  - pointer to virtual key structure
- ******************************************************************************/
-static void free_pen_pdata(void *pdata)
-{
-	struct pt_pen_platform_data *pen_pdata =
-		(struct pt_pen_platform_data *)pdata;
-
-	kfree(pen_pdata);
-}
-
-
-/*******************************************************************************
  * FUNCTION: create_and_get_proximity_pdata
  *
  * SUMMARY: Create and get proximity platform data from dts.
@@ -608,10 +555,6 @@ static struct pt_device_pdata_func device_pdata_funcs[DEVICE_TYPE_MAX] = {
 		.create_and_get_pdata = create_and_get_btn_pdata,
 		.free_pdata = free_btn_pdata,
 	},
-	[DEVICE_PEN] = {
-		.create_and_get_pdata = create_and_get_pen_pdata,
-		.free_pdata = free_pen_pdata,
-	},
 	[DEVICE_PROXIMITY] = {
 		.create_and_get_pdata = create_and_get_proximity_pdata,
 		.free_pdata = free_proximity_pdata,
@@ -623,7 +566,6 @@ static struct pt_pdata_ptr pdata_ptr[DEVICE_TYPE_MAX];
 static const char *device_names[DEVICE_TYPE_MAX] = {
 	[DEVICE_MT] = "parade,mt",
 	[DEVICE_BTN] = "parade,btn",
-	[DEVICE_PEN] = "parade,pen",
 	[DEVICE_PROXIMITY] = "parade,proximity",
 };
 
@@ -639,7 +581,6 @@ static void set_pdata_ptr(struct pt_platform_data *pdata)
 {
 	pdata_ptr[DEVICE_MT].pdata = (void **)&pdata->mt_pdata;
 	pdata_ptr[DEVICE_BTN].pdata = (void **)&pdata->btn_pdata;
-	pdata_ptr[DEVICE_PEN].pdata = (void **)&pdata->pen_pdata;
 	pdata_ptr[DEVICE_PROXIMITY].pdata = (void **)&pdata->prox_pdata;
 }
 
@@ -832,9 +773,7 @@ static struct pt_core_platform_data *create_and_get_core_pdata(
 	}
 
 	/* Required fields */
-	rc = of_property_read_u32(core_node, "parade,irq_gpio", &value);
-	if (rc)
-		goto fail_free;
+	value = of_get_named_gpio_flags(core_node, "parade,irq_gpio", 0, &pdata->irq_gpio_flags);
 	pdata->irq_gpio = value;
 
 	rc = of_property_read_u32(core_node, "parade,hid_desc_register",
@@ -847,9 +786,8 @@ static struct pt_core_platform_data *create_and_get_core_pdata(
 	/* rst_gpio is optional since a platform may use
 	 * power cycling instead of using the XRES pin
 	 */
-	rc = of_property_read_u32(core_node, "parade,rst_gpio", &value);
-	if (!rc)
-		pdata->rst_gpio = value;
+	value = of_get_named_gpio_flags(core_node, "parade,rst_gpio", 0, &pdata->rst_gpio_flags);
+	pdata->rst_gpio = value;
 
 	rc = of_property_read_u32(core_node, "parade,ddi_rst_gpio", &value);
 	if (!rc)

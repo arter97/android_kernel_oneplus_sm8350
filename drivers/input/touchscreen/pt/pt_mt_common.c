@@ -56,6 +56,42 @@ static void pt_mt_lift_all(struct pt_mt_data *md)
 }
 
 /*******************************************************************************
+ * FUNCTION: pt_get_touch_axis
+ *
+ * SUMMARY: Calculates touch axis
+ *
+ * PARAMETERS:
+ *     *md      - pointer to touch data structure
+ *     *axis    - pointer to axis calculation result
+ *      size    - size in byte
+ *      max     - max value of result
+ *     *xy_data - pointer to input data to be parsed
+ *      bofs    - bit offset
+ ******************************************************************************/
+static void pt_get_touch_axis(struct pt_mt_data *md,
+	int *axis, int size, int max, u8 *xy_data, int bofs)
+{
+	int nbyte;
+	int next;
+
+	for (nbyte = 0, *axis = 0, next = 0; nbyte < size; nbyte++) {
+		pt_debug(md->dev, DL_DEBUG,
+			"%s: *axis=%02X(%d) size=%d max=%08X xy_data=%p xy_data[%d]=%02X(%d) bofs=%d\n",
+			__func__, *axis, *axis, size, max, xy_data, next,
+			xy_data[next], xy_data[next], bofs);
+		*axis = *axis + ((xy_data[next] >> bofs) << (nbyte * 8));
+		next++;
+	}
+
+	*axis &= max - 1;
+
+	pt_debug(md->dev, DL_DEBUG,
+		"%s: *axis=%02X(%d) size=%d max=%08X xy_data=%p xy_data[%d]=%02X(%d)\n",
+		__func__, *axis, *axis, size, max, xy_data, next,
+		xy_data[next], xy_data[next]);
+}
+
+/*******************************************************************************
  * FUNCTION: pt_get_touch_hdr
  *
  * SUMMARY: Get the header of touch report
@@ -75,7 +111,7 @@ static void pt_get_touch_hdr(struct pt_mt_data *md,
 	for (hdr = PT_TCH_TIME; hdr < PT_TCH_NUM_HDR; hdr++) {
 		if (!si->tch_hdr[hdr].report)
 			continue;
-		pt_get_touch_field(dev, &touch->hdr[hdr],
+		pt_get_touch_axis(md, &touch->hdr[hdr],
 			si->tch_hdr[hdr].size,
 			si->tch_hdr[hdr].max,
 			xy_mode + si->tch_hdr[hdr].ofs,
@@ -115,7 +151,7 @@ static void pt_get_touch_record(struct pt_mt_data *md,
 	for (abs = PT_TCH_X; abs < PT_TCH_NUM_ABS; abs++) {
 		if (!si->tch_abs[abs].report)
 			continue;
-		pt_get_touch_field(dev, &touch->abs[abs],
+		pt_get_touch_axis(md, &touch->abs[abs],
 			si->tch_abs[abs].size,
 			si->tch_abs[abs].max,
 			xy_data + si->tch_abs[abs].ofs,
@@ -249,9 +285,8 @@ static void pt_get_mt_touches(struct pt_mt_data *md,
 
 	if (PT_TOUCH_ID_MAX < si->tch_abs[PT_TCH_T].max) {
 		pt_debug(dev, DL_ERROR,
-			 "%s: Touch ID %d is allocated less than needed %d\n",
-			 __func__, PT_TOUCH_ID_MAX,
-			(int)si->tch_abs[PT_TCH_T].max);
+			"%s: Touch ID num %d is allocated less than needed %d\n",
+			__func__, PT_TOUCH_ID_MAX, si->tch_abs[PT_TCH_T].max);
 		return;
 	}
 

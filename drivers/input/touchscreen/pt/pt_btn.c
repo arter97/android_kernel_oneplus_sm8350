@@ -1,4 +1,3 @@
-#ifndef TTDL_KERNEL_SUBMISSION
 /*
  * pt_btn.c
  * Parade TrueTouch(TM) Standard Product CapSense Reports Module.
@@ -382,7 +381,7 @@ static int pt_setup_input_attention(struct device *dev)
 
 	bd->si = _pt_request_sysinfo(dev);
 	if (!bd->si)
-		return -1;
+		return -EPERM;
 
 	rc = pt_setup_input_device(dev);
 
@@ -521,4 +520,3 @@ int pt_btn_release(struct device *dev)
 
 	return 0;
 }
-#endif /*!TTDL_KERNEL_SUBMISSION */

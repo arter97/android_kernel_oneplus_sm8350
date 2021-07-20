@@ -1,4 +1,3 @@
-#ifndef TTDL_KERNEL_SUBMISSION
 /*
  * pt_proximity.c
  * Parade TrueTouch(TM) Standard Product Proximity Module.
@@ -76,6 +75,42 @@ static void pt_report_proximity(struct pt_proximity_data *pd,
 }
 
 /*******************************************************************************
+ * FUNCTION: pt_get_touch_axis
+ *
+ * SUMMARY: Calculates touch axis
+ *
+ * PARAMETERS:
+ *     *pd      - pointer to proximity data structure
+ *     *axis    - pointer to axis calculation result
+ *      size    - size in bytes
+ *      max     - max value of result
+ *     *xy_data - pointer to input data to be parsed
+ *      bofs    - bit offset
+ ******************************************************************************/
+static void pt_get_touch_axis(struct pt_proximity_data *pd,
+	int *axis, int size, int max, u8 *xy_data, int bofs)
+{
+	int nbyte;
+	int next;
+
+	for (nbyte = 0, *axis = 0, next = 0; nbyte < size; nbyte++) {
+		pt_debug(pd->dev, DL_INFO,
+			"%s: *axis=%02X(%d) size=%d max=%08X xy_data=%p xy_data[%d]=%02X(%d) bofs=%d\n",
+			__func__, *axis, *axis, size, max, xy_data, next,
+			xy_data[next], xy_data[next], bofs);
+		*axis = *axis + ((xy_data[next] >> bofs) << (nbyte * 8));
+		next++;
+	}
+
+	*axis &= max - 1;
+
+	pt_debug(pd->dev, DL_INFO,
+		"%s: *axis=%02X(%d) size=%d max=%08X xy_data=%p xy_data[%d]=%02X(%d)\n",
+		__func__, *axis, *axis, size, max, xy_data, next,
+		xy_data[next], xy_data[next]);
+}
+
+/*******************************************************************************
  * FUNCTION: pt_get_touch_hdr
  *
  * SUMMARY: Gets header of touch report
@@ -95,7 +130,7 @@ static void pt_get_touch_hdr(struct pt_proximity_data *pd,
 	for (hdr = PT_TCH_TIME; hdr < PT_TCH_NUM_HDR; hdr++) {
 		if (!si->tch_hdr[hdr].report)
 			continue;
-		pt_get_touch_field(dev, &touch->hdr[hdr],
+		pt_get_touch_axis(pd, &touch->hdr[hdr],
 			si->tch_hdr[hdr].size,
 			si->tch_hdr[hdr].max,
 			xy_mode + si->tch_hdr[hdr].ofs,
@@ -126,7 +161,7 @@ static void pt_get_touch(struct pt_proximity_data *pd,
 	for (abs = PT_TCH_X; abs < PT_TCH_NUM_ABS; abs++) {
 		if (!si->tch_abs[abs].report)
 			continue;
-		pt_get_touch_field(dev, &touch->abs[abs],
+		pt_get_touch_axis(pd, &touch->abs[abs],
 			si->tch_abs[abs].size,
 			si->tch_abs[abs].max,
 			xy_data + si->tch_abs[abs].ofs,
@@ -778,4 +813,3 @@ int pt_proximity_release(struct device *dev)
 
 	return 0;
 }
-#endif /* !TTDL_KERNEL_SUBMISSION */

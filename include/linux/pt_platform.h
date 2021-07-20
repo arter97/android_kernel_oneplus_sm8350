@@ -31,6 +31,7 @@
 #define _LINUX_PT_PLATFORM_H
 
 #include <linux/pt_core.h>
+#include <linux/irq.h>
 
 #if defined(CONFIG_TOUCHSCREEN_PARADE) \
 	|| defined(CONFIG_TOUCHSCREEN_PARADE_MODULE)

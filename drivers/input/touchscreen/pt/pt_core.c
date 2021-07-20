@@ -27,16 +27,23 @@
  * Contact Parade Technologies at www.paradetech.com <ttdrivers@paradetech.com>
  */
 
-#include "pt_regs.h"
-#include <linux/kthread.h>
 #include <linux/i2c.h>
 #include <linux/gpio.h>
+#include <linux/kthread.h>
+#include "pt_regs.h"
 
-#ifdef PT_PTSBC_SUPPORT
-#define PT_CORE_PROBE_STARTUP_DELAY_MS		500
-#endif /* PT_PTSBC_SUPPORT */
+#define PINCTRL_STATE_ACTIVE    "pmx_ts_active"
+#define PINCTRL_STATE_SUSPEND   "pmx_ts_suspend"
+#define PINCTRL_STATE_RELEASE   "pmx_ts_release"
+
+#define FT_VTG_MIN_UV           2800000
+#define FT_VTG_MAX_UV           2800000
+#define FT_I2C_VTG_MIN_UV       1800000
+#define FT_I2C_VTG_MAX_UV       1800000
 
 #define PT_CORE_STARTUP_RETRY_COUNT		3
+
+#define PT_STATUS_STR_LEN (50)
 
 MODULE_FIRMWARE(PT_FW_FILE_NAME);
 
@@ -69,7 +76,6 @@ struct pt_hid_report {
 	int header_size;
 	int record_size;
 	u32 usage_page;
-	int log_collection_num;
 };
 
 struct atten_node {
@@ -95,7 +101,6 @@ struct module_node {
 };
 
 struct pt_hid_cmd {
-	__le16 descriptor;
 	u8 opcode;
 	u8 report_type;
 	union {
@@ -104,7 +109,6 @@ struct pt_hid_cmd {
 	};
 	u8 has_data_register;
 	size_t write_length;
-	size_t read_length;
 	u8 *write_buf;
 	u8 *read_buf;
 	u8 wait_interrupt;
@@ -155,7 +159,7 @@ void pt_pr_buf(struct device *dev, u8 debug_level, u8 *buf,
 {
 	struct pt_core_data *cd = dev_get_drvdata(dev);
 	int i;
-	int pr_buf_index = 0;
+	ssize_t pr_buf_index = 0;
 	int max_size;
 
 	/* only proceed if valid debug level and there is data to print */
@@ -166,12 +170,15 @@ void pt_pr_buf(struct device *dev, u8 debug_level, u8 *buf,
 			return;
 
 		/*
-		 * With spaces each printed char takes 3 bytes, subtract
-		 * the length of the data_name and length prefix and divide 3
+		 * With a space each printed char takes 3 bytes, subtract
+		 * the length of the data_name prefix as well as 11 bytes
+		 * for the " [0..xxx]: " printed before the data.
 		 */
+		max_size = (PT_MAX_PR_BUF_SIZE - sizeof(data_name) - 11) / 3;
+
+		/* Ensure pr_buf_index stays within the 1018 size */
 		pr_buf_index += scnprintf(pr_buf, PT_MAX_PR_BUF_SIZE, "%s [0..%d]: ",
-			data_name, buf_len);
-		max_size = (PT_MAX_PR_BUF_SIZE - pr_buf_index) / 3;
+			data_name);
 		for (i = 0; i < buf_len && i < max_size; i++)
 			pr_buf_index += scnprintf(pr_buf + pr_buf_index,
 				PT_MAX_PR_BUF_SIZE, "%02X ", buf[i]);
@@ -325,6 +332,7 @@ static int pt_add_parameter(struct pt_core_data *cd,
 
 	/* Check if parameter already exists in the list */
 	spin_lock(&cd->spinlock);
+
 	list_for_each_entry(param, &cd->param_list, node) {
 		if (param->id == param_id) {
 			/* Update parameter */
@@ -357,7 +365,6 @@ exit_unlock:
 	return 0;
 }
 
-#ifndef TTDL_KERNEL_SUBMISSION
 #ifdef TTDL_DIAGNOSTICS
 /*******************************************************************************
  * FUNCTION: pt_erase_parameter_list
@@ -415,7 +422,6 @@ static int pt_count_parameter_list(struct pt_core_data *cd)
 	return entries;
 }
 #endif /* TTDL_DIAGNOSTICS */
-#endif /* !TTDL_KERNEL_SUBMISSION */
 
 /*******************************************************************************
  * FUNCTION: request_exclusive
@@ -523,7 +529,7 @@ int release_exclusive(struct pt_core_data *cd, void *ownptr)
 }
 
 /*******************************************************************************
- * FUNCTION: pt_hid_create_cmd_and_send_
+ * FUNCTION: pt_hid_exec_cmd_
  *
  * SUMMARY: Send the HID command to the DUT
  *
@@ -535,7 +541,7 @@ int release_exclusive(struct pt_core_data *cd, void *ownptr)
  *	*cd      - pointer to core data
  *	*hid_cmd - pointer to the HID command to send
  ******************************************************************************/
-static int pt_hid_create_cmd_and_send_(struct pt_core_data *cd,
+static int pt_hid_exec_cmd_(struct pt_core_data *cd,
 		struct pt_hid_cmd *hid_cmd)
 {
 	int rc = 0;
@@ -543,26 +549,15 @@ static int pt_hid_create_cmd_and_send_(struct pt_core_data *cd,
 	u16 cmd_length;
 	u8 cmd_offset = 0;
 
-	if (hid_cmd->descriptor) {
-		cmd_length = 2; /* hid or report register */
-	} else {
-		cmd_length =
-		    2 /* command register */
-		    + 2 /* command */
-		    + (hid_cmd->report_id >= 0XF ? 1 : 0) /* Report ID */
-		    + (hid_cmd->has_data_register ? 2 : 0) /* Data register */
-		    + hid_cmd->write_length;		   /* Data length */
-	}
+	cmd_length = 2 /* command register */
+		+ 2    /* command */
+		+ (hid_cmd->report_id >= 0XF ? 1 : 0)   /* Report ID */
+		+ (hid_cmd->has_data_register ? 2 : 0)	/* Data register */
+		+ hid_cmd->write_length;                /* Data length */
 
 	cmd = kzalloc(cmd_length, GFP_KERNEL);
 	if (!cmd)
 		return -ENOMEM;
-
-	/* hid & report descriptor doesn't require other field */
-	if (hid_cmd->descriptor) {
-		memcpy(&cmd[cmd_offset], &hid_cmd->descriptor, cmd_length);
-		goto skip_other_field;
-	}
 
 	/* Set Command register */
 	memcpy(&cmd[cmd_offset], &cd->hid_desc.command_register,
@@ -604,14 +599,12 @@ static int pt_hid_create_cmd_and_send_(struct pt_core_data *cd,
 		">>> %s: Write Buffer Size[%d] Cmd[0x%02X]\n",
 		__func__, cmd_length, hid_cmd->report_id);
 
-skip_other_field:
 	pt_pr_buf(cd->dev, DL_DEBUG, cmd, cmd_length, ">>> CMD");
-
-	rc = pt_adap_write_read_specific(cd, cmd_length, cmd, hid_cmd->read_buf,
-					 hid_cmd->read_length);
+	rc = pt_adap_write_read_specific(cd, cmd_length, cmd,
+			hid_cmd->read_buf);
 	if (rc)
 		pt_debug(cd->dev, DL_ERROR,
-			"%s: Fail pt_adap_transfer\n", __func__);
+		"%s: Fail pt_adap_transfer\n", __func__);
 
 	kfree(cmd);
 	return rc;
@@ -685,13 +678,22 @@ static int pt_hid_exec_cmd_and_wait_(struct pt_core_data *cd,
 	else
 		cmd_state = &cd->hid_cmd_state;
 
-	mutex_lock(&cd->system_lock);
-	*cmd_state = 1;
-	mutex_unlock(&cd->system_lock);
+	if (hid_cmd->wait_interrupt) {
+		mutex_lock(&cd->system_lock);
+		*cmd_state = 1;
+		mutex_unlock(&cd->system_lock);
+	}
 
-	rc = pt_hid_create_cmd_and_send_(cd, hid_cmd);
-	if (rc)
-		goto error;
+	rc = pt_hid_exec_cmd_(cd, hid_cmd);
+	if (rc) {
+		if (hid_cmd->wait_interrupt)
+			goto error;
+
+		goto exit;
+	}
+
+	if (!hid_cmd->wait_interrupt)
+		goto exit;
 
 	if (hid_cmd->timeout_ms)
 		timeout_ms = hid_cmd->timeout_ms;
@@ -724,60 +726,6 @@ exit:
 }
 
 /*******************************************************************************
- * FUNCTION: pt_hid_exec_cmd_no_wait_
- *
- * SUMMARY: The function works to send HID command and can read response
- *  directly instead of waiting it to be received in interrupt function. It
- *  assgins the read buffer to receive response in following condition:
- *   1) descriptor is assigned to get hid descriptor or report descripter
- *   2) output register is assigned for vendor-defined commands (TBD)
- *
- * NOTE: If no read buffer is assigned, it only perform send action.
- *
- * RETURN:
- *	 0 = success
- *	!0 = failure
- *
- * PARAMETERS:
- *	*cd      - pointer to core data
- *	*hid_cmd - pointer to the HID command to send
- ******************************************************************************/
-static int pt_hid_exec_cmd_no_wait_(struct pt_core_data *cd,
-		struct pt_hid_cmd *hid_cmd)
-{
-	int rc = 0;
-
-	if (hid_cmd->descriptor)
-		hid_cmd->read_buf = cd->response_buf;
-
-	rc = pt_hid_create_cmd_and_send_(cd, hid_cmd);
-	return rc;
-}
-
-/*******************************************************************************
- * FUNCTION: pt_hid_send_command
- *
- * SUMMARY: Wrapper function to call pt_hid_exec_cmd_no_wait_() for HID protocol
- *  and pt_hid_exec_cmd_and_wait_() for PIP protocol.
- *
- * RETURN:
- *	 0 = success
- *	!0 = failure
- *
- * PARAMETERS:
- *	*cd      - pointer to core data
- *	*hid_cmd - pointer to the HID command to send
- ******************************************************************************/
-static int pt_hid_send_command(struct pt_core_data *cd,
-		struct pt_hid_cmd *hid_cmd)
-{
-	if (cd->dut_status.protocol_mode == PT_PROTOCOL_MODE_HID)
-		return pt_hid_exec_cmd_no_wait_(cd, hid_cmd);
-	else
-		return pt_hid_exec_cmd_and_wait_(cd, hid_cmd);
-}
-
-/*******************************************************************************
  * FUNCTION: pt_hid_cmd_reset_
  *
  * SUMMARY: Send the HID RESET command to the DUT
@@ -793,11 +741,12 @@ static int pt_hid_cmd_reset_(struct pt_core_data *cd)
 {
 	struct pt_hid_cmd hid_cmd = {
 		.opcode = HID_CMD_RESET,
+		.wait_interrupt = 1,
 		.reset_cmd = 1,
 		.timeout_ms = PT_HID_CMD_DEFAULT_TIMEOUT,
 	};
 
-	return pt_hid_send_command(cd, &hid_cmd);
+	return pt_hid_exec_cmd_and_wait_(cd, &hid_cmd);
 }
 
 /*******************************************************************************
@@ -854,13 +803,14 @@ static int pt_hid_cmd_set_power_(struct pt_core_data *cd,
 	int rc = 0;
 	struct pt_hid_cmd hid_cmd = {
 		.opcode = HID_CMD_SET_POWER,
+		.wait_interrupt = 1,
 		.timeout_ms = PT_HID_CMD_DEFAULT_TIMEOUT,
 	};
 	hid_cmd.power_state = power_state;
 
 	/* The chip won't give response if goes to Deep Standby */
 	if (power_state == HID_POWER_STANDBY) {
-		rc = pt_hid_exec_cmd_no_wait_(cd, &hid_cmd);
+		rc =  pt_hid_exec_cmd_(cd, &hid_cmd);
 		if (rc)
 			pt_debug(cd->dev, DL_ERROR,
 				"%s: Failed to set power to state:%d\n",
@@ -871,17 +821,13 @@ static int pt_hid_cmd_set_power_(struct pt_core_data *cd,
 	}
 	cd->fw_sys_mode_in_standby_state = false;
 
-	rc = pt_hid_send_command(cd, &hid_cmd);
+	rc =  pt_hid_exec_cmd_and_wait_(cd, &hid_cmd);
 	if (rc) {
 		pt_debug(cd->dev, DL_ERROR,
 			"%s: Failed to set power to state:%d\n",
 			__func__, power_state);
 		return rc;
 	}
-
-	/* HID COMMAND doesn't have a response */
-	if (cd->dut_status.protocol_mode == PT_PROTOCOL_MODE_HID)
-		return rc;
 
 	/* validate */
 	if ((cd->response_buf[2] != HID_RESPONSE_REPORT_ID)
@@ -892,7 +838,6 @@ static int pt_hid_cmd_set_power_(struct pt_core_data *cd,
 	return rc;
 }
 
-#ifndef TTDL_KERNEL_SUBMISSION
 /*******************************************************************************
  * FUNCTION: pt_hid_cmd_set_power
  *
@@ -928,7 +873,6 @@ static int pt_hid_cmd_set_power(struct pt_core_data *cd,
 
 	return rc;
 }
-#endif /* !TTDL_KERNEL_SUBMISSION */
 
 static const u16 crc_table[16] = {
 	0x0000, 0x1021, 0x2042, 0x3063,
@@ -1229,7 +1173,7 @@ static int pt_pip2_get_cmd_response_len(u8 id)
 	if (p->id != PIP2_CMD_ID_END)
 		return p->response_len;
 	else
-		return -1;
+		return -EPERM;
 }
 
 /*******************************************************************************
@@ -1627,11 +1571,12 @@ static int pt_hid_send_output_user_(struct pt_core_data *cd,
 	pt_debug(cd->dev, DL_INFO,
 		">>> %s: Write Buffer Size[%d] Cmd[0x%02X]\n",
 		__func__, hid_output->length, cmd);
+
 	pt_pr_buf(cd->dev, DL_DEBUG, hid_output->write_buf,
 		hid_output->length, ">>> User CMD");
 
 	rc = pt_adap_write_read_specific(cd, hid_output->length,
-			hid_output->write_buf, NULL, 0);
+			hid_output->write_buf, NULL);
 	if (rc)
 		pt_debug(cd->dev, DL_ERROR,
 			"%s: Fail pt_adap_transfer\n", __func__);
@@ -1679,9 +1624,7 @@ static int pt_hid_send_output_user_and_wait_(struct pt_core_data *cd,
 		rc = -ETIME;
 		goto error;
 	}
-
 	pt_check_command(cd, hid_output, true);
-
 	goto exit;
 
 error:
@@ -1764,15 +1707,7 @@ static ssize_t pt_flush_bus(struct pt_core_data *cd,
 	int rc = 0;
 
 	if (flush_type == PT_FLUSH_BUS_BASED_ON_LEN) {
-#ifdef TTDL_PTVIRTDUT_SUPPORT
-		if (cd->route_bus_virt_dut)
-			rc = pt_adap_read_default(cd, buf,
-				PT_MAX_PIP2_MSG_SIZE);
-		else
-			rc = pt_adap_read_default(cd, buf, 2);
-#else
 		rc = pt_adap_read_default(cd, buf, 2);
-#endif /* TTDL_PTVIRTDUT_SUPPORT */
 		if (rc) {
 			bytes_read = 0;
 			goto exit;
@@ -1807,15 +1742,7 @@ static ssize_t pt_flush_bus(struct pt_core_data *cd,
 				"%s: Flush read of %d bytes...\n",
 				__func__, pip_len);
 
-#ifdef TTDL_PTVIRTDUT_SUPPORT
-			rc = 0;
-			if (cd->route_bus_virt_dut)
-				bytes_read = pip_len;
-			else
-				rc = pt_adap_read_default(cd, buf, pip_len);
-#else
 			rc = pt_adap_read_default(cd, buf, pip_len);
-#endif /* TTDL_PTVIRTDUT_SUPPORT */
 			if (!rc)
 				bytes_read = pip_len;
 			else
@@ -1903,15 +1830,6 @@ static int pt_hid_send_output_(struct pt_core_data *cd,
 	u8 cmd_offset = 0;
 	u8 cmd_allocated = 0;
 
-#ifdef FUTURE
-	/*
-	 * *** TODO - Determine side effects of adding this safety net ***
-	 * If IRQ is already asserted due to a pending report, it must be
-	 * cleared before sending command.
-	 */
-	pt_flush_bus_if_irq_asserted(cd, PT_FLUSH_BUS_BASED_ON_LEN);
-#endif
-
 	switch (hid_output->cmd_type) {
 	case PIP1_CMD_TYPE_FW:
 		report_id = PT_PIP_NON_HID_COMMAND_ID;
@@ -1971,8 +1889,9 @@ static int pt_hid_send_output_(struct pt_core_data *cd,
 	pt_debug(cd->dev, DL_INFO,
 		">>> %s: Write Buffer Size[%d] Cmd[0x%02X]\n",
 		__func__, length + 2, hid_output->command_code);
+
 	pt_pr_buf(cd->dev, DL_DEBUG, cmd, length + 2, ">>> CMD");
-	rc = pt_adap_write_read_specific(cd, length + 2, cmd, NULL, 0);
+	rc = pt_adap_write_read_specific(cd, length + 2, cmd, NULL);
 
 	if (rc)
 		pt_debug(cd->dev, DL_ERROR,
@@ -2072,7 +1991,6 @@ static int pt_hid_output_user_cmd_(struct pt_core_data *cd,
 		.length = write_len,
 		.write_buf = write_buf,
 	};
-
 #ifdef TTHE_TUNER_SUPPORT
 	if (!cd->pip2_send_user_cmd) {
 		int command_code = 0;
@@ -2092,7 +2010,6 @@ static int pt_hid_output_user_cmd_(struct pt_core_data *cd,
 			tthe_print(cd, write_buf, len, "CMD=");
 	}
 #endif
-
 	rc = pt_hid_send_output_user_and_wait_(cd, &hid_output);
 	if (rc)
 		return rc;
@@ -2198,7 +2115,6 @@ static int _pt_request_pip2_send_cmd(struct device *dev,
 	u8 extra_bytes;
 
 	memset(&pip2_cmd, 0, sizeof(pip2_cmd));
-
 	/* Hard coded register for PIP2.x */
 	pip2_cmd.reg[0] = 0x01;
 	pip2_cmd.reg[1] = 0x01;
@@ -2225,6 +2141,7 @@ static int _pt_request_pip2_send_cmd(struct device *dev,
 	pip2_cmd.id   = id & PIP2_CMD_COMMAND_ID_MASK;
 	pip2_cmd.seq  = pt_pip2_get_next_cmd_seq(cd);
 	pip2_cmd.data = data;
+
 	pt_pip2_cmd_calculate_crc(&pip2_cmd, extra_bytes);
 
 	/* Add the command length to the extra bytes based on PIP version */
@@ -2234,6 +2151,7 @@ static int _pt_request_pip2_send_cmd(struct device *dev,
 		__func__, pip2_cmd.len, write_len);
 
 	write_buf = kzalloc(write_len, GFP_KERNEL);
+
 	if (write_buf == NULL) {
 		rc = -ENOMEM;
 		goto exit;
@@ -2254,6 +2172,7 @@ static int _pt_request_pip2_send_cmd(struct device *dev,
 	read_len = pt_pip2_get_cmd_response_len(pip2_cmd.id);
 	if (read_len < 0)
 		read_len = 255;
+
 	pt_debug(dev, DL_INFO,
 		"%s cmd_id[0x%02X] expected response length:%d ",
 		__func__, pip2_cmd.id, read_len);
@@ -2271,19 +2190,18 @@ static int _pt_request_pip2_send_cmd(struct device *dev,
 	if (protect == PT_CORE_CMD_PROTECTED)
 		rc = pt_hid_output_user_cmd(cd, read_len, read_buf,
 			write_len, write_buf, actual_read_len);
-	else
+	else {
 		rc = pt_hid_output_user_cmd_(cd, read_len, read_buf,
 			write_len, write_buf, actual_read_len);
+	}
 	if (rc) {
 		pt_debug(dev, DL_ERROR,
 			"%s: nonhid_cmd->user_cmd() Error = %d\n",
 			__func__, rc);
 		goto exit;
 	}
-
 	rc = pt_pip2_validate_response(cd, &pip2_cmd, read_buf,
 		*actual_read_len);
-
 exit:
 	mutex_lock(&cd->system_lock);
 	cd->pip2_prot_active = false;
@@ -2400,7 +2318,7 @@ static int _pt_pip2_send_cmd_no_int(struct device *dev,
 
 	pt_pr_buf(cd->dev, DL_DEBUG, write_buf, write_len, ">>> NO_INT CMD");
 
-	rc = pt_adap_write_read_specific(cd, write_len, write_buf, NULL, 0);
+	rc = pt_adap_write_read_specific(cd, write_len, write_buf, NULL);
 	if (rc) {
 		pt_debug(dev, DL_ERROR,
 			"%s: SPI write Error = %d\n",
@@ -2533,11 +2451,9 @@ static int pt_pip_null_(struct pt_core_data *cd)
 	struct pt_hid_output hid_output = {
 		CREATE_PIP1_FW_CMD(PIP1_CMD_ID_NULL),
 	};
-
 	return pt_pip1_send_output_and_wait_(cd, &hid_output);
 }
 
-#ifndef TTDL_KERNEL_SUBMISSION
 /*******************************************************************************
  * FUNCTION: pt_pip_null
  *
@@ -2570,13 +2486,12 @@ static int pt_pip_null(struct pt_core_data *cd)
 
 	return rc;
 }
-#endif /*!TTDL_KERNEL_SUBMISSION */
 
 static void pt_stop_wd_timer(struct pt_core_data *cd);
 /*******************************************************************************
  * FUNCTION: pt_pip_start_bootloader_
  *
- * SUMMARY: Sends the PIP command start_bootloader [PIP cmd 0x01] to the DUT
+ * SUMMARY: Sends the HID command start_bootloader [PIP cmd 0x01] to the DUT
  *
  *	NOTE: The WD MUST be stopped/restarted by the calling Function. Having
  *        the WD active could cause this function to fail!
@@ -2597,7 +2512,6 @@ static int pt_pip_start_bootloader_(struct pt_core_data *cd)
 		.timeout_ms = PT_PIP1_START_BOOTLOADER_TIMEOUT,
 		.reset_expected = 1,
 	};
-
 	if (cd->watchdog_enabled) {
 		pt_debug(cd->dev, DL_WARN,
 			"%s: watchdog isn't stopped before enter bl\n",
@@ -2820,7 +2734,6 @@ static void pt_si_get_sensing_conf_data(struct pt_core_data *cd)
 		scd->tx_num = scd->electrodes_y;
 		scd->rx_num = scd->electrodes_x;
 	}
-
 	/*
 	 * When the Panel ID is coming from an XY pin and not a dedicated
 	 * GPIO, store the PID in pid_for_loader. This cannot be done for all
@@ -3120,7 +3033,6 @@ static int pt_hid_output_get_sysinfo_(struct pt_core_data *cd)
 	return rc;
 }
 
-#ifndef TTDL_KERNEL_SUBMISSION
 /*******************************************************************************
  * FUNCTION: pt_hid_output_get_sysinfo
  *
@@ -3153,7 +3065,6 @@ static int pt_hid_output_get_sysinfo(struct pt_core_data *cd)
 
 	return rc;
 }
-#endif /*!TTDL_KERNEL_SUBMISSION */
 
 /*******************************************************************************
  * FUNCTION: pt_pip_suspend_scanning_
@@ -3466,7 +3377,6 @@ static int pt_pip_set_param_(struct pt_core_data *cd,
 		CREATE_PIP1_FW_CMD(PIP1_CMD_ID_SET_PARAM),
 		.write_buf = write_buf,
 	};
-
 	write_buf[0] = param_id;
 	write_buf[1] = size;
 	for (i = 0; i < size; i++) {
@@ -3576,7 +3486,6 @@ static int pt_hid_output_enter_easywake_state_(
 		.write_length = write_length,
 		.write_buf = param,
 	};
-
 	rc = pt_pip1_send_output_and_wait_(cd, &hid_output);
 	if (rc)
 		return rc;
@@ -3614,7 +3523,6 @@ static int pt_pip_verify_config_block_crc_(
 		.write_length = write_length,
 		.write_buf = param,
 	};
-
 	rc = pt_pip1_send_output_and_wait_(cd, &hid_output);
 	if (rc)
 		return rc;
@@ -4978,7 +4886,6 @@ static int pt_pip_calibrate_idacs_(struct pt_core_data *cd,
 		.write_buf = write_buf,
 		.timeout_ms = PT_PIP1_CMD_CALIBRATE_IDAC_TIMEOUT,
 	};
-
 	write_buf[cmd_offset++] = mode;
 	rc =  pt_pip1_send_output_and_wait_(cd, &hid_output);
 	if (rc)
@@ -5083,7 +4990,6 @@ static int pt_hid_output_initialize_baselines_(
 		.write_length = write_length,
 		.write_buf = write_buf,
 	};
-
 	write_buf[cmd_offset++] = test_id;
 
 	rc = pt_pip1_send_output_and_wait_(cd, &hid_output);
@@ -5619,7 +5525,7 @@ static int _pt_request_pip_bl_get_information(struct device *dev,
 /*******************************************************************************
  * FUNCTION: pt_hid_output_bl_initiate_bl_
  *
- * SUMMARY: Sends the PIP "Initiate Bootload" (0x48) command to the
+ * SUMMARY: Sends the PIP "Get Bootloader Information" (0x48) command to the
  *  DUT to erases the entire TrueTouch application, Configuration Data block,
  *  and Design Data block in flash and enables the host to execute the Program
  *  and Verify Row command to bootload the application image and data.
@@ -5742,7 +5648,7 @@ static int _pt_request_pip_bl_initiate_bl(struct device *dev,
 /*******************************************************************************
  * FUNCTION: pt_hid_output_bl_program_and_verify_
  *
- * SUMMARY: Sends the PIP "Program and Verify" (0x39) command to upload
+ * SUMMARY: Sends the PIP "Get Bootloader Information" (0x39) command to upload
  *  and program a 128-byte row into the flash, and then verifies written data.
  *
  * RETURN:
@@ -5836,7 +5742,7 @@ static int _pt_request_pip_bl_program_and_verify(
 /*******************************************************************************
  * FUNCTION: pt_hid_output_bl_verify_app_integrity_
  *
- * SUMMARY: Sends the PIP "Verify Application Integrity" (0x31) command to
+ * SUMMARY: Sends the PIP "Get Bootloader Information" (0x31) command to
  *  perform a full verification of the application integrity by calculating the
  *  CRC of the image in flash and compare it to the expected CRC stored in the
  *  Metadata row.
@@ -6113,55 +6019,6 @@ static int _pt_request_pip_bl_get_panel_id(
 }
 
 /*******************************************************************************
- * FUNCTION: pt_pip2_get_status_
- *
- * SUMMARY: Sends a PIP2 STATUS command to the DUT and stores the data in
- *	cd status_data.
- *
- * RETURN:
- *	 0 = success
- *	!0 = failure
- *
- * PARAMETERS:
- *	*cd       - pointer to core data structure
- ******************************************************************************/
-static int pt_pip2_get_status_(struct pt_core_data *cd)
-{
-	u16 actual_read_len;
-	u8 read_buf[12];
-	u8 status, boot;
-	int rc = 0;
-
-	rc = _pt_request_pip2_send_cmd(cd->dev, PT_CORE_CMD_UNPROTECTED,
-		PIP2_CMD_ID_STATUS, NULL, 0, read_buf, &actual_read_len);
-	if (rc) {
-		pt_debug(cd->dev, DL_ERROR, "%s: PIP2 STATUS command rc = %d\n",
-		__func__, rc);
-		return rc;
-	}
-
-	pt_pr_buf(cd->dev, DL_DEBUG, read_buf, actual_read_len,
-		"PIP2 STATUS");
-
-	status = read_buf[PIP2_RESP_STATUS_OFFSET];
-	boot = read_buf[PIP2_RESP_BODY_OFFSET] & 0x01;
-
-	cd->dut_status.fw_system_mode =
-		read_buf[PIP2_RESP_BODY_OFFSET + 1];
-
-	if (status == PIP2_RSP_ERR_NONE && boot == 0x00)
-		cd->dut_status.mode = PT_MODE_BOOTLOADER;
-	else if (status == PIP2_RSP_ERR_NONE && boot == 0x01) {
-		cd->dut_status.mode = PT_MODE_OPERATIONAL;
-		cd->dut_status.protocol_mode =
-			read_buf[PIP2_RESP_BODY_OFFSET + 2];
-	} else
-		cd->dut_status.mode = PT_MODE_UNKNOWN;
-
-	return rc;
-}
-
-/*******************************************************************************
  * FUNCTION: pt_pip2_get_mode_sysmode_
  *
  * SUMMARY: Determine the current mode and system mode of the DUT by use of the
@@ -6179,14 +6036,39 @@ static int pt_pip2_get_status_(struct pt_core_data *cd)
 static int pt_pip2_get_mode_sysmode_(struct pt_core_data *cd,
 		u8 *mode, u8 *sys_mode)
 {
+	u16 actual_read_len;
+	u8 read_buf[12];
+	u8 status, boot;
 	int rc = 0;
 
-	rc = pt_pip2_get_status_(cd);
+	rc = _pt_request_pip2_send_cmd(cd->dev, PT_CORE_CMD_UNPROTECTED,
+		PIP2_CMD_ID_STATUS, NULL, 0, read_buf, &actual_read_len);
+
+	pt_debug(cd->dev, DL_INFO, "%s: PIP2 STATUS command rc = %d\n",
+		__func__, rc);
+
 	if (!rc) {
-		if (sys_mode)
-			*sys_mode = cd->dut_status.fw_system_mode;
-		if (mode)
-			*mode = cd->dut_status.mode;
+		pt_pr_buf(cd->dev, DL_DEBUG, read_buf, actual_read_len,
+			"PIP2 STATUS");
+		status = read_buf[PIP2_RESP_STATUS_OFFSET];
+		boot = read_buf[PIP2_RESP_BODY_OFFSET] & 0x01;
+		if (sys_mode) {
+			if (status == PIP2_RSP_ERR_NONE &&
+			    boot == PIP2_STATUS_APP_EXEC)
+				*sys_mode = read_buf[PIP2_RESP_BODY_OFFSET + 1];
+			else
+				*sys_mode = FW_SYS_MODE_UNDEFINED;
+		}
+		if (mode) {
+			if (status == PIP2_RSP_ERR_NONE &&
+			    boot == PIP2_STATUS_BOOT_EXEC)
+				*mode = PT_MODE_BOOTLOADER;
+			else if (status == PIP2_RSP_ERR_NONE &&
+				 boot == PIP2_STATUS_APP_EXEC)
+				*mode = PT_MODE_OPERATIONAL;
+			else
+				*mode = PT_MODE_UNKNOWN;
+		}
 	} else {
 		if (mode)
 			*mode = PT_MODE_UNKNOWN;
@@ -6581,12 +6463,9 @@ static int pt_get_hid_descriptor_(struct pt_core_data *cd,
 		struct pt_hid_desc *desc)
 {
 	struct device *dev = cd->dev;
-	struct pt_hid_cmd hid_cmd = {
-		.descriptor = cd->hid_core.hid_desc_register,
-		.read_length = 0,
-	};
 	int rc = 0;
-	u16 hid_len;
+	int t;
+	u8 cmd[2];
 
 	/*
 	 * During startup the HID descriptor is required for all future
@@ -6595,68 +6474,63 @@ static int pt_get_hid_descriptor_(struct pt_core_data *cd,
 	 */
 	pt_flush_bus_if_irq_asserted(cd, PT_FLUSH_BUS_BASED_ON_LEN);
 
-	rc = pt_hid_send_command(cd, &hid_cmd);
+	/* Read HID descriptor length and version */
+	mutex_lock(&cd->system_lock);
+	cd->hid_cmd_state = 1;
+	mutex_unlock(&cd->system_lock);
+
+	/* Set HID descriptor register */
+	memcpy(cmd, &cd->hid_core.hid_desc_register,
+		sizeof(cd->hid_core.hid_desc_register));
+
+	pt_debug(cd->dev, DL_INFO, ">>> %s: Write Buffer [%zu]",
+		__func__, sizeof(cmd));
+	pt_pr_buf(cd->dev, DL_DEBUG, cmd, sizeof(cmd), ">>> Get HID Desc");
+	rc = pt_adap_write_read_specific(cd, 2, cmd, NULL);
 	if (rc) {
 		pt_debug(dev, DL_ERROR,
 			"%s: failed to get HID descriptor, rc=%d\n",
 			__func__, rc);
-		goto exit;
+		goto error;
 	}
 
-	hid_len = get_unaligned_le16(&cd->response_buf[0]);
-	pt_pr_buf(cd->dev, DL_DEBUG, cd->response_buf, hid_len, "<<< HIDDesc");
+	t = wait_event_timeout(cd->wait_q, (cd->hid_cmd_state == 0),
+		msecs_to_jiffies(PT_GET_HID_DESCRIPTOR_TIMEOUT));
 
-	/*
-	 * HID doesn't have packet_id and reserve_byte in struct struct
-	 * pt_hid_desc and assign fixed value to packet_id.
-	 */
-	if (cd->dut_status.protocol_mode == PT_PROTOCOL_MODE_HID) {
-		if ((hid_len + 2) != sizeof(*desc)) {
-			pt_debug(dev, DL_ERROR, "%s: Unsupported HID length: %X\n",
-				__func__, hid_len);
-			rc = -ENODEV;
-			goto exit;
-		}
-		/* Copy length filed */
-		memcpy((u8 *)desc, &cd->response_buf[0], 2);
-		/* Assign fixed value to packet_id */
-		desc->packet_id = HID_APP_REPORT_ID;
-		/* Skip 2 bytes in desc and Copy to left fields */
-		memcpy((u8 *)desc + 4, &cd->response_buf[2], hid_len - 2);
+	if (IS_TMO(t)) {
+#ifdef TTDL_DIAGNOSTICS
+		cd->bus_transmit_error_count++;
+		pt_toggle_err_gpio(cd, PT_ERR_GPIO_I2C_TRANS);
+#endif /* TTDL_DIAGNOSTICS */
+		pt_debug(cd->dev, DL_ERROR,
+			"%s: HID get descriptor timed out\n", __func__);
+		rc = -ETIME;
+		goto error;
 	} else {
-		if (hid_len != sizeof(*desc)) {
-			pt_debug(dev, DL_ERROR, "%s: Unsupported HID length: %X\n",
-				__func__, hid_len);
-			rc = -ENODEV;
-			goto exit;
-		}
-
-		/* Load the HID descriptor including all registers */
-		memcpy((u8 *)desc, cd->response_buf, hid_len);
+		cd->hw_detected = true;
 	}
+
+	/* Load the HID descriptor including all registers */
+	memcpy((u8 *)desc, cd->response_buf, sizeof(struct pt_hid_desc));
 
 	/* Check HID descriptor length and version */
 	pt_debug(dev, DL_INFO, "%s: HID len:%X HID ver:%X\n", __func__,
 		le16_to_cpu(desc->hid_desc_len),
 		le16_to_cpu(desc->bcd_version));
 
-	cd->hid_core.hid_report_desc_len =
-	    le16_to_cpu(desc->report_desc_len);
-
-	pt_debug(dev, DL_INFO, "%s: report descriptor len:%d\n", __func__,
-		cd->hid_core.hid_report_desc_len);
-
-	if (le16_to_cpu(desc->bcd_version) != HID_VERSION) {
+	if (le16_to_cpu(desc->hid_desc_len) != sizeof(*desc) ||
+		le16_to_cpu(desc->bcd_version) != HID_VERSION) {
 		pt_debug(dev, DL_ERROR, "%s: Unsupported HID version\n",
 			__func__);
-		rc = -ENODEV;
-		goto exit;
+		return -ENODEV;
 	}
 
-#ifdef TTHE_TUNER_SUPPORT
-	tthe_print(cd, cd->response_buf, hid_len, "HIDDesc=");
-#endif
+	goto exit;
 
+error:
+	mutex_lock(&cd->system_lock);
+	cd->hid_cmd_state = 0;
+	mutex_unlock(&cd->system_lock);
 exit:
 	return rc;
 }
@@ -6888,15 +6762,9 @@ static int _pt_detect_dut_generation(struct device *dev,
 	struct pt_core_data *cd = dev_get_drvdata(dev);
 	struct pt_hid_desc hid_desc;
 
-	/* protocol_mode must be known before dut gen */
-	rc = pt_pip2_get_status_(cd);
-	if (rc) {
-		/* PIP prot assumed if error */
-		cd->dut_status.protocol_mode = PT_PROTOCOL_MODE_PIP;
-	}
-
 	memset(&hid_desc, 0, sizeof(hid_desc));
 	rc = pt_get_hid_descriptor_(cd, &hid_desc);
+
 	while (rc && attempt < 3) {
 		attempt++;
 		usleep_range(2000, 5000);
@@ -7460,996 +7328,11 @@ static void pt_init_pip_report_fields(struct pt_core_data *cd)
 	si->desc.tch_record_size = TOUCH_REPORT_SIZE;
 	si->desc.tch_header_size = TOUCH_INPUT_HEADER_SIZE;
 	si->desc.btn_report_id = PT_PIP_CAPSENSE_BTN_REPORT_ID;
-	si->desc.pen_report_id = PT_HID_PEN_REPORT_ID;
-	si->desc.max_touch_num = MAX_TOUCH_NUM;
 
 	cd->features.easywake = 1;
 	cd->features.noise_metric = 1;
 	cd->features.tracking_heatmap = 1;
 	cd->features.sensor_data = 1;
-}
-
-/*******************************************************************************
- * FUNCTION: pt_get_hid_report_
- *
- * SUMMARY: Get or create report. Must be called with cd->hid_report_lock
- *   acquired.
- *
- * RETURN:
- *	 0 = success
- *	!0 = failure
- *
- * PARAMETERS:
- *  *cd          - pointer to core data structure
- *  *index       - pointer to report index
- *   report_type - type of hid report
- *   report_id   - id of hid report
- *   create      - true: will create a new report
- *                 false: will not create a new report
- ******************************************************************************/
-static int pt_get_hid_report_(struct pt_core_data *cd, u8 *index,
-		u8 report_type, u8 report_id, bool create)
-{
-	struct pt_hid_report *report = NULL;
-	int i;
-	int rc = 0;
-
-	/* Look for created reports */
-	for (i = 0; i < cd->num_hid_reports; i++) {
-		if (cd->hid_reports[i]->type == report_type &&
-		    cd->hid_reports[i]->id == report_id) {
-			*index = i;
-			goto exit;
-		}
-	}
-
-	if (create && cd->num_hid_reports >= PT_HID_MAX_REPORTS) {
-		pt_debug(cd->dev, DL_WARN,
-			"%s: num_hid_reports=%d max=%d\n", __func__,
-			cd->num_hid_reports, PT_HID_MAX_REPORTS);
-		rc = -EINVAL;
-	} else if (create && cd->num_hid_reports < PT_HID_MAX_REPORTS) {
-		/* Create a new report */
-		report = kzalloc(sizeof(struct pt_hid_report),
-				GFP_KERNEL);
-		if (!report)
-			rc = -ENOMEM;
-		else {
-			report->type = report_type;
-			report->id = report_id;
-			*index = cd->num_hid_reports;
-			cd->hid_reports[cd->num_hid_reports++] = report;
-		}
-	}
-
-exit:
-	return rc;
-}
-
-/*******************************************************************************
- * FUNCTION: pt_free_hid_reports_
- *
- * SUMMARY: Free HID report. Must be called with cd->hid_report_lock acquired.
- *
- * PARAMETERS:
- *  *cd  - pointer to core data structure
- ******************************************************************************/
-static void pt_free_hid_reports_(struct pt_core_data *cd)
-{
-	struct pt_hid_report *report;
-	int i, j;
-
-	for (i = 0; i < cd->num_hid_reports; i++) {
-		report = cd->hid_reports[i];
-		for (j = 0; j < report->num_fields; j++)
-			kfree(report->fields[j]);
-		kfree(report);
-		cd->hid_reports[i] = NULL;
-	}
-
-	cd->num_hid_reports = 0;
-}
-
-/*******************************************************************************
- * FUNCTION: pt_free_hid_reports
- *
- * SUMMARY: Protected call to pt_free_hid_reports_() by a mutex lock.
- *
- * PARAMETERS:
- *  *cd  - pointer to core data structure
- ******************************************************************************/
-static void pt_free_hid_reports(struct pt_core_data *cd)
-{
-	mutex_lock(&cd->hid_report_lock);
-	pt_free_hid_reports_(cd);
-	mutex_unlock(&cd->hid_report_lock);
-}
-
-/*******************************************************************************
- * FUNCTION: pt_create_hid_field_
- *
- * SUMMARY: Create field for HID report.Must be called with cd->hid_report_lock
- *   acquired.
- *
- * RETURN:
- *	 pointer to hid field structure
- *
- * PARAMETERS:
- *  *report - pointer to hid report structure
- ******************************************************************************/
-static struct pt_hid_field *pt_create_hid_field_(
-		struct pt_hid_report *report)
-{
-	struct pt_hid_field *field;
-
-	if (!report)
-		return NULL;
-
-	if (report->num_fields == PT_HID_MAX_FIELDS)
-		return NULL;
-
-	field = kzalloc(sizeof(struct pt_hid_field), GFP_KERNEL);
-	if (!field)
-		return NULL;
-
-	field->report = report;
-
-	report->fields[report->num_fields++] = field;
-
-	return field;
-}
-
-/*******************************************************************************
- * FUNCTION: get_hid_item_data
- *
- * SUMMARY: Get hid item data according to the item size.
- *
- * RETURN:
- *	 0 = no data
- *	!0 = data
- *
- * PARAMETERS:
- *  *data      - pointer to item data
- *   item_size - the size of the item
- ******************************************************************************/
-static inline int get_hid_item_data(u8 *data, int item_size)
-{
-	if (item_size == 1)
-		return (int)*data;
-	else if (item_size == 2)
-		return (int)get_unaligned_le16(data);
-	else if (item_size == 4)
-		return (int)get_unaligned_le32(data);
-	return 0;
-}
-
-/*******************************************************************************
- * FUNCTION: parse_report_descriptor
- *
- * SUMMARY: Parse report descriptor.
- *
- * RETURN:
- *	 0 = success
- *	!0 = failure
- *
- * PARAMETERS:
- *  *cd           - pointer to core data structure
- *  *report_desc  - pointer to report descriptor structure
- *  len           - length of the data buffer to be parsed
- ******************************************************************************/
-static int parse_report_descriptor(struct pt_core_data *cd,
-		u8 *report_desc, size_t len)
-{
-	struct pt_hid_report *report;
-	struct pt_hid_field *field;
-	u8 *buf = report_desc;
-	u8 *end = buf + len;
-	int rc = 0;
-	int offset = 0;
-	int i, j;
-	u8 report_type;
-	u32 up_usage;
-	/* Global items */
-	u8 report_id = 0;
-	u16 usage_page = 0;
-	int report_count = 0;
-	int report_size = 0;
-	int logical_min = 0;
-	int logical_max = 0;
-	/* Local items */
-	u16 usage = 0;
-	/* Main items - Collection stack */
-	u32 collection_usages[PT_HID_MAX_NESTED_COLLECTIONS] = {0};
-	u8 collection_types[PT_HID_MAX_NESTED_COLLECTIONS] = {0};
-	u32 usages_pen[PT_HID_MAX_CONTINUOUS_USAGES] = {0};
-	/* First collection for header, second for report */
-	int logical_collection_count = 0;
-	int app_collection_count = 0;
-	int collection_nest = 0;
-	int usage_cnt = 0;
-	u8 report_index = 0;
-
-	pt_debug(cd->dev, DL_DEBUG, "%s: Report descriptor length: %u\n",
-		__func__, (u32)len);
-
-	mutex_lock(&cd->hid_report_lock);
-	pt_free_hid_reports_(cd);
-
-	while (buf < end) {
-		int item_type;
-		int item_size;
-		int item_tag;
-		u8 *data;
-
-		/* Get Item */
-		item_size = HID_GET_ITEM_SIZE(buf[0]);
-		if (item_size == 3)
-			item_size = 4;
-		item_type = HID_GET_ITEM_TYPE(buf[0]);
-		item_tag = HID_GET_ITEM_TAG(buf[0]);
-
-		data = ++buf;
-		buf += item_size;
-
-		/* Process current item */
-		switch (item_type) {
-		case HID_ITEM_TYPE_GLOBAL:     /* 1 */
-			switch (item_tag) {
-			case HID_GLOBAL_ITEM_TAG_USAGE_PAGE:        /* 0 */
-				if (item_size == 0 || item_size == 4) {
-					rc = -EINVAL;
-					goto exit;
-				}
-				usage_page = (u16)get_hid_item_data(data,
-						item_size);
-				break;
-			case HID_GLOBAL_ITEM_TAG_LOGICAL_MINIMUM:   /* 1 */
-				if (item_size == 0) {
-					rc = -EINVAL;
-					goto exit;
-				}
-				logical_min = get_hid_item_data(data,
-						item_size);
-				break;
-			case HID_GLOBAL_ITEM_TAG_LOGICAL_MAXIMUM:   /* 2 */
-				if (item_size == 0) {
-					rc = -EINVAL;
-					goto exit;
-				}
-				logical_max = get_hid_item_data(data,
-						item_size);
-				break;
-			case HID_GLOBAL_ITEM_TAG_PHYSICAL_MINIMUM:  /* 3 */
-				pt_debug(cd->dev, DL_INFO,
-					"%s: TAG Ignored - Physical Min\n",
-					__func__);
-				break;
-			case HID_GLOBAL_ITEM_TAG_PHYSICAL_MAXIMUM:  /* 4 */
-				pt_debug(cd->dev, DL_INFO,
-					"%s: TAG Ignored - Physical Max\n",
-					__func__);
-				break;
-			case HID_GLOBAL_ITEM_TAG_UNIT_EXPONENT:     /* 5 */
-				pt_debug(cd->dev, DL_INFO,
-					"%s: TAG Ignored - Unit Exponent\n",
-					__func__);
-				break;
-			case HID_GLOBAL_ITEM_TAG_UNIT:              /* 6 */
-				pt_debug(cd->dev, DL_INFO,
-					"%s: TAG Ignored - Unit\n",
-					__func__);
-				break;
-			case HID_GLOBAL_ITEM_TAG_REPORT_SIZE:       /* 7 */
-				if (item_size == 0) {
-					rc = -EINVAL;
-					goto exit;
-				}
-				report_size = get_hid_item_data(data,
-						item_size);
-				break;
-			case HID_GLOBAL_ITEM_TAG_REPORT_ID:         /* 8 */
-				if (item_size != 1) {
-					rc = -EINVAL;
-					goto exit;
-				}
-				report_id = get_hid_item_data(data, item_size);
-				offset = 0;
-				logical_collection_count = 0;
-				break;
-			case HID_GLOBAL_ITEM_TAG_REPORT_COUNT:      /* 9 */
-				if (item_size == 0) {
-					rc = -EINVAL;
-					goto exit;
-				}
-				report_count = get_hid_item_data(data,
-						item_size);
-				break;
-			case HID_GLOBAL_ITEM_TAG_PUSH:              /* A */
-				pt_debug(cd->dev, DL_INFO,
-					"%s: TAG Ignored - Push\n",
-					__func__);
-				break;
-			case HID_GLOBAL_ITEM_TAG_POP:               /* B */
-				pt_debug(cd->dev, DL_INFO,
-					"%s: TAG Ignored - Pop\n",
-					__func__);
-				break;
-			default:
-				pt_debug(cd->dev, DL_INFO,
-					"%s: Unrecognized Global tag 0x%X\n",
-					__func__, item_tag);
-			}
-			break;
-		case HID_ITEM_TYPE_LOCAL:      /* 2 */
-			switch (item_tag) {
-			case HID_LOCAL_ITEM_TAG_USAGE:
-				if (item_size == 0 || item_size == 4) {
-					rc = -EINVAL;
-					goto exit;
-				}
-				usage = (u16)get_hid_item_data(data,
-						item_size);
-				if (report_id == PT_HID_PEN_REPORT_ID) {
-					usages_pen[usage_cnt++] =
-						usage_page << 16 | usage;
-				}
-				break;
-			case HID_LOCAL_ITEM_TAG_USAGE_MINIMUM:
-				if (item_size == 0) {
-					rc = -EINVAL;
-					goto exit;
-				}
-				/* usage_min = */
-				get_hid_item_data(data, item_size);
-				break;
-			case HID_LOCAL_ITEM_TAG_USAGE_MAXIMUM:
-				if (item_size == 0) {
-					rc = -EINVAL;
-					goto exit;
-				}
-				/* usage_max = */
-				get_hid_item_data(data, item_size);
-				break;
-			default:
-				pt_debug(cd->dev, DL_INFO,
-					"%s: Unrecognized Local tag %d\n",
-					__func__, item_tag);
-			}
-			break;
-		case HID_ITEM_TYPE_MAIN:       /* 0 */
-			switch (item_tag) {
-			case HID_MAIN_ITEM_TAG_BEGIN_COLLECTION:
-				usage_cnt = 0;
-
-				if (item_size != 1) {
-					rc = -EINVAL;
-					goto exit;
-				}
-				if (PT_HID_MAX_NESTED_COLLECTIONS ==
-						collection_nest) {
-					rc = -EINVAL;
-					goto exit;
-				}
-
-				up_usage = usage_page << 16 | usage;
-
-				/* Update collection stack */
-				collection_usages[collection_nest] = up_usage;
-				collection_types[collection_nest] =
-					get_hid_item_data(data, item_size);
-
-				if (collection_types[collection_nest] ==
-					HID_COLLECTION_LOGICAL) {
-					logical_collection_count++;
-					app_collection_count = 0;
-				}
-				if (collection_types[collection_nest] ==
-					HID_COLLECTION_APPLICATION)
-					app_collection_count++;
-
-				collection_nest++;
-				break;
-			case HID_MAIN_ITEM_TAG_END_COLLECTION:
-				if (item_size != 0) {
-					rc = -EINVAL;
-					goto exit;
-				}
-				if (--collection_nest < 0) {
-					rc = -EINVAL;
-					goto exit;
-				}
-				break;
-			case HID_MAIN_ITEM_TAG_INPUT:
-				report_type = HID_INPUT_REPORT;
-				goto continue_main_item;
-			case HID_MAIN_ITEM_TAG_OUTPUT:
-				report_type = HID_OUTPUT_REPORT;
-				goto continue_main_item;
-			case HID_MAIN_ITEM_TAG_FEATURE:
-				report_type = HID_FEATURE_REPORT;
-continue_main_item:
-				if (item_size != 1) {
-					pt_debug(cd->dev, DL_WARN,
-						"%s: %s=%d\n",
-						__func__,
-						"item_size", item_size);
-					rc = -EINVAL;
-					goto exit;
-				}
-
-				up_usage = usage_page << 16 | usage;
-
-				/* Get or create report */
-				rc = pt_get_hid_report_(cd, &report_index,
-					report_type, report_id, true);
-				if (rc) {
-					pt_debug(cd->dev, DL_WARN,
-						"%s: %s rc=%d\n",
-						__func__,
-						"get_hid_report failed", rc);
-					goto exit;
-				} else
-					report = cd->hid_reports[report_index];
-
-				if (!report->usage_page && collection_nest > 0)
-					report->usage_page =
-						collection_usages
-							[collection_nest - 1];
-
-				if (report->id == PT_HID_PEN_REPORT_ID
-					&& report_count > 1)
-					goto continue_pen_usages;
-
-				/* Create field */
-				field = pt_create_hid_field_(report);
-				if (!field) {
-					pt_debug(cd->dev, DL_WARN,
-						"%s: %s\n",
-						__func__,
-						"create field failed");
-					rc = -ENOMEM;
-					goto exit;
-				}
-
-				field->report_count = report_count;
-				field->report_size = report_size;
-				field->size = report_count
-					* report_size;
-				field->offset = offset;
-				field->data_type =
-					get_hid_item_data(data,
-						item_size);
-				field->logical_min = logical_min;
-				field->logical_max = logical_max;
-				field->usage_page = up_usage;
-				usages_pen[0] = 0;
-				for (j = 0; j < collection_nest; j++) {
-					field->collection_usage_pages
-						[collection_types[j]] =
-						collection_usages[j];
-				}
-
-				goto exit_main_item;
-continue_pen_usages:
-				for (i = 0; i < report_count; i++) {
-					/* Create field */
-					field = pt_create_hid_field_(
-						report);
-					if (!field) {
-						pt_debug(cd->dev, DL_WARN,
-							"%s: Pen - %s\n",
-							__func__,
-							"create field failed");
-						rc = -ENOMEM;
-						goto exit;
-					}
-
-					field->report_size = report_size;
-					field->size = report_count *
-						report_size;
-					field->report_count = 1;
-					field->offset = offset + i*report_size;
-					field->data_type =
-						get_hid_item_data(data,
-							item_size);
-					field->logical_min = logical_min;
-					field->logical_max = logical_max;
-					field->usage_page = usages_pen[i];
-					usages_pen[i] = 0;
-					for (j = 0; j < collection_nest; j++) {
-						field->collection_usage_pages
-						[collection_types[j]] =
-						collection_usages[j];
-					}
-				}
-
-exit_main_item:
-				/* Update report's header or record size */
-				if (app_collection_count == 1) {
-					report->header_size += field->size;
-				} else if (logical_collection_count == 1) {
-					field->record_field = true;
-					field->offset -= report->header_size;
-					/* Set record field index */
-					if (report->record_field_index == 0)
-						report->record_field_index =
-							report->num_fields - 1;
-					report->record_size += field->size;
-				}
-
-				report->size += field->size;
-				report->log_collection_num =
-					logical_collection_count;
-
-				offset += field->size;
-
-				usage_cnt = 0;
-				break;
-			default:
-				pt_debug(cd->dev, DL_INFO,
-					"%s: Unrecognized Main tag %d\n",
-					__func__, item_tag);
-			}
-
-			/* Reset all local items */
-			usage = 0;
-			break;
-		}
-	}
-
-	if (buf != end) {
-		pt_debug(cd->dev, DL_ERROR,
-			"%s: Report descriptor length invalid\n",
-			__func__);
-		rc = -EINVAL;
-		goto exit;
-	}
-
-	if (collection_nest) {
-		pt_debug(cd->dev, DL_ERROR,
-			"%s: Unbalanced collection items (%d)\n",
-			__func__, collection_nest);
-		rc = -EINVAL;
-		goto exit;
-	}
-
-exit:
-	if (rc)
-		pt_free_hid_reports_(cd);
-	mutex_unlock(&cd->hid_report_lock);
-	return rc;
-}
-
-/*******************************************************************************
- * FUNCTION: find_report_desc_field
- *
- * SUMMARY: Find the corresponding field from report according to the usage page
- *    and collection usage page.
- *
- * RETURN:
- *	 pointer to hid field structure
- *
- * PARAMETERS:
- *  *cd                   - pointer to core data structure
- *  usage_page            - hid usage page
- *  collection_usage_page - hid collection usage page
- *  collection_type       - hid collection type
- ******************************************************************************/
-static struct pt_hid_field *find_report_desc_field(
-		struct pt_core_data *cd, u32 usage_page,
-		u32 collection_usage_page, u8 collection_type)
-{
-	struct pt_hid_report *report = NULL;
-	struct pt_hid_field *field = NULL;
-	int i;
-	int j;
-	u32 field_cup;
-	u32 field_up;
-
-	for (i = 0; i < cd->num_hid_reports; i++) {
-		report = cd->hid_reports[i];
-		for (j = 0; j < report->num_fields; j++) {
-			field = report->fields[j];
-			field_cup = field->collection_usage_pages
-				[collection_type];
-			field_up = field->usage_page;
-			if (field_cup == collection_usage_page
-					&& field_up == usage_page) {
-				return field;
-			}
-		}
-	}
-
-	return NULL;
-}
-
-/*******************************************************************************
- * FUNCTION: fill_tch_abs
- *
- * SUMMARY: Fill touch abs with hid field.
- *
- * PARAMETERS:
- *  *cd    - pointer to core data structure
- *  *field - pointer to hid field structure
- ******************************************************************************/
-static void fill_tch_abs(struct pt_tch_abs_params *tch_abs,
-		struct pt_hid_field *field)
-{
-	tch_abs->ofs = field->offset / 8;
-	tch_abs->size = field->report_size / 8;
-	if (field->report_size % 8)
-		tch_abs->size += 1;
-	tch_abs->min = 0;
-	tch_abs->max = 1 << field->report_size;
-	tch_abs->bofs = field->offset - (tch_abs->ofs << 3);
-	tch_abs->logical_max = field->logical_max;
-}
-
-/*******************************************************************************
- * FUNCTION: find_report_desc
- *
- * SUMMARY: Find out the corresponding report based on the usage page.
- *
- * RETURN:
- *	 pointer to hid report structure
- *
- * PARAMETERS:
- *  *cd        - pointer to core data structure
- *  id         - report id
- *  usage_page - hid usage page
- ******************************************************************************/
-static struct pt_hid_report *find_report_desc(struct pt_core_data *cd,
-		u8 id, u32 usage_page)
-{
-	struct pt_hid_report *report = NULL;
-	int i;
-
-	for (i = 0; i < cd->num_hid_reports; i++) {
-		if (cd->hid_reports[i]->usage_page == usage_page &&
-			cd->hid_reports[i]->id == id) {
-			report = cd->hid_reports[i];
-			break;
-		}
-	}
-
-	return report;
-}
-
-/*******************************************************************************
- * FUNCTION: setup_pen_report_from_report_desc
- *
- * SUMMARY: Setup values for pen report according to report descriptor.
- *
- * PARAMETERS:
- *  *cd  - pointer to core data structure
- ******************************************************************************/
-static void setup_pen_report_from_report_desc(
-	struct pt_core_data *cd)
-{
-	struct pt_sysinfo *si = &cd->sysinfo;
-	struct pt_hid_report *report;
-	struct pt_hid_field *field;
-	int i;
-	u32 pen_collection_usage_page = HID_PT_PEN_COL_USAGE_PG;
-	u8 id = PT_HID_PEN_REPORT_ID;
-
-	/*
-	 * Search each pen abs field. If found, fill the values into the
-	 * pen struct.If not, mark this pen field as invalid (report = 0).
-	 */
-	for (i = PT_PEN_X; i < PT_PEN_NUM_ABS; i++) {
-		field = find_report_desc_field(cd,
-				pt_pen_abs_field_map[i],
-				pen_collection_usage_page,
-				HID_COLLECTION_PHYSICAL);
-		if (field) {
-			pt_debug(cd->dev, DL_DEBUG,
-				" Field %p: rep_cnt:%d rep_sz:%d off:%d data:%02X min:%d max:%d usage_page:%08X\n",
-				field, field->report_count, field->report_size,
-				field->offset, field->data_type,
-				field->logical_min, field->logical_max,
-				field->usage_page);
-			fill_tch_abs(&si->pen_abs[i], field);
-			si->pen_abs[i].report = 2;
-			pt_debug(cd->dev, DL_DEBUG, "%s: ofs:%u size:%u min:%u max:%u bofs:%u report:%d",
-				pt_pen_abs_string[i],
-				(u32)si->pen_abs[i].ofs,
-				(u32)si->pen_abs[i].size,
-				(u32)si->pen_abs[i].min,
-				(u32)si->pen_abs[i].max,
-				(u32)si->pen_abs[i].bofs,
-				si->pen_abs[i].report);
-
-		} else {
-			si->pen_abs[i].report = 0;
-			pt_debug(cd->dev, DL_DEBUG, "%s: report:%d\n",
-				pt_pen_abs_string[i], si->pen_abs[i].report);
-		}
-	}
-
-	report = find_report_desc(cd, id, pen_collection_usage_page);
-	if (report)
-		si->desc.pen_report_id = report->id;
-	else
-		si->desc.pen_report_id = PT_HID_PEN_REPORT_ID;
-}
-
-/*******************************************************************************
- * FUNCTION: setup_finger_report_from_report_desc
- *
- * SUMMARY: Setup values for finger report according to report descriptor.
- *
- * PARAMETERS:
- *  *cd  - pointer to core data structure
- ******************************************************************************/
-static void setup_finger_report_from_report_desc(
-	struct pt_core_data *cd)
-{
-	struct pt_sysinfo *si = &cd->sysinfo;
-	struct pt_hid_report *report;
-	struct pt_hid_field *field;
-	u32 tch_collection_usage_page = HID_PT_TCH_COL_USAGE_PG;
-	u8 id = PT_HID_FINGER_REPORT_ID;
-	int i;
-
-	/*
-	 * Search each touch abs field. If found, fill the values into the
-	 * abs struct. If not, mark this abs field as invalid (report = 0).
-	 */
-	for (i = PT_TCH_X; i < PT_TCH_NUM_ABS; i++) {
-		field = find_report_desc_field(cd,
-				pt_tch_abs_field_map[i],
-				tch_collection_usage_page,
-				HID_COLLECTION_APPLICATION);
-		if (field) {
-			pt_debug(cd->dev, DL_DEBUG,
-				" Field %p: rep_cnt:%d rep_sz:%d off:%d data:%02X min:%d max:%d usage_page:%08X\n",
-				field, field->report_count, field->report_size,
-				field->offset, field->data_type,
-				field->logical_min, field->logical_max,
-				field->usage_page);
-			fill_tch_abs(&si->tch_abs[i], field);
-			si->tch_abs[i].report = 1;
-			pt_debug(cd->dev, DL_DEBUG, "%s: ofs:%u size:%u min:%u max:%u bofs:%u report:%d",
-				pt_tch_abs_string[i],
-				(u32)si->tch_abs[i].ofs,
-				(u32)si->tch_abs[i].size,
-				(u32)si->tch_abs[i].min,
-				(u32)si->tch_abs[i].max,
-				(u32)si->tch_abs[i].bofs,
-				si->tch_abs[i].report);
-		} else {
-			si->tch_abs[i].report = 0;
-		}
-	}
-
-	/*
-	 * Search each touch header field. If found, fill the values into
-	 * the header struct. If not, mark this header field as invalid
-	 * (report = 0).
-	 */
-	for (i = PT_TCH_TIME; i < PT_TCH_NUM_HDR; i++) {
-		field = find_report_desc_field(cd,
-				pt_tch_hdr_field_map[i],
-				tch_collection_usage_page,
-				HID_COLLECTION_APPLICATION);
-		if (field) {
-			pt_debug(cd->dev, DL_DEBUG,
-				" Field %p: rep_cnt:%d rep_sz:%d off:%d data:%02X min:%d max:%d usage_page:%08X\n",
-				field, field->report_count, field->report_size,
-				field->offset, field->data_type,
-				field->logical_min, field->logical_max,
-				field->usage_page);
-			fill_tch_abs(&si->tch_hdr[i], field);
-			si->tch_hdr[i].report = 1;
-			pt_debug(cd->dev, DL_DEBUG, "%s: ofs:%u size:%u min:%u max:%u bofs:%u report:%d",
-				pt_tch_hdr_string[i],
-				(u32)si->tch_hdr[i].ofs,
-				(u32)si->tch_hdr[i].size,
-				(u32)si->tch_hdr[i].min,
-				(u32)si->tch_hdr[i].max,
-				(u32)si->tch_hdr[i].bofs,
-				si->tch_hdr[i].report);
-		} else {
-			si->tch_hdr[i].report = 0;
-		}
-	}
-
-	si->desc.max_touch_num = si->tch_hdr[PT_TCH_NUM].max;
-
-	report = find_report_desc(cd, id, tch_collection_usage_page);
-	if (report) {
-		si->desc.tch_report_id = report->id;
-		/* First, report->record_size and report->header_size are based
-		 * on 'BIT', they need to be divided by 8 to get tch_record_size
-		 * and tch_header_size, which are based on 'BYTE'.
-		 * Second, tch_header_size needs to add 3 bytes: 2 bytes length,
-		 * 1 byte report id.
-		 */
-		si->desc.tch_record_size = report->record_size / 8;
-		si->desc.tch_header_size = (report->header_size / 8) + 3;
-		si->desc.max_tch_per_packet = report->log_collection_num;
-	} else {
-		si->desc.tch_report_id = PT_HID_FINGER_REPORT_ID;
-		si->desc.tch_record_size = TOUCH_REPORT_SIZE;
-		si->desc.tch_header_size = TOUCH_INPUT_HEADER_SIZE;
-		si->desc.max_tch_per_packet = MAX_TOUCH_NUM;
-	}
-
-	pt_debug(cd->dev, DL_DEBUG,
-		"%s: tch_record_size:%d, tch_header_size:%d, max_touch_num:%d\n",
-		__func__,
-		si->desc.tch_record_size,
-		si->desc.tch_header_size,
-		si->desc.max_touch_num);
-}
-
-/*******************************************************************************
- * FUNCTION: publish_report_desc
- *
- * SUMMARY: If TTHE_TUNER_SUPPORT is defined print the report descriptor data
- *	into the tthe_tuner sysfs node under the label "HIDRptDesc".
- *
- * PARAMETERS:
- *	*cd  - pointer to core data
- *	 len - Report descriptor length
- ******************************************************************************/
-static void publish_report_desc(struct pt_core_data *cd, u16 len)
-{
-	int max_bytes = 300;
-	int pr_bytes = 0;
-	int size = len;
-
-#ifdef TTHE_TUNER_SUPPORT
-	tthe_print(cd, cd->response_buf, size,
-		"HIDRptDesc=");
-#endif
-
-	while (size > max_bytes) {
-		pt_pr_buf(cd->dev, DL_DEBUG,
-			cd->response_buf + pr_bytes,
-			max_bytes, "<<< HIDRptDesc");
-		pr_bytes += max_bytes;
-		size -= max_bytes;
-	}
-	if (size > 0)
-		pt_pr_buf(cd->dev, DL_DEBUG,
-			cd->response_buf + pr_bytes,
-			size, "<<< HIDRptDesc");
-}
-
-/*******************************************************************************
- * FUNCTION: pt_get_report_descriptor_
- *
- * SUMMARY: Get and parse report descriptor.
- *
- * RETURN:
- *	 0 = success
- *	!0 = failure
- *
- * PARAMETERS:
- *	*cd - pointer to core data
- ******************************************************************************/
-static int pt_get_report_descriptor_(struct pt_core_data *cd)
-{
-	struct device *dev = cd->dev;
-	struct pt_hid_cmd hid_cmd = {
-		.descriptor = cd->hid_desc.report_desc_register,
-		.read_length = cd->hid_core.hid_report_desc_len,
-	};
-	int rc;
-	int t;
-	u8 *desc;
-	u16 desc_len;
-
-	rc = pt_hid_send_command(cd, &hid_cmd);
-	if (rc) {
-		pt_debug(dev, DL_ERROR,
-			"%s: failed to get HID report descriptor length, rc=%d\n",
-			__func__, rc);
-		goto exit;
-	}
-
-	desc = cd->response_buf;
-	desc_len = cd->hid_core.hid_report_desc_len;
-
-	/* Remove length field and report id to prepare parse work */
-	if (cd->dut_status.protocol_mode != PT_PROTOCOL_MODE_HID) {
-		desc = cd->response_buf + 3;
-		desc_len -= 3;
-	}
-
-	publish_report_desc(cd, cd->hid_core.hid_report_desc_len);
-
-	rc = parse_report_descriptor(cd, desc, desc_len);
-	if (rc) {
-		pt_debug(cd->dev, DL_ERROR,
-			"%s: Error parsing report descriptor rc=%d\n",
-			__func__, rc);
-	}
-
-	pt_debug(cd->dev, DL_INFO, "%s: %d reports found in descriptor\n",
-		__func__, cd->num_hid_reports);
-
-	for (t = 0; t < cd->num_hid_reports; t++) {
-		struct pt_hid_report *report = cd->hid_reports[t];
-		int j;
-
-		pt_debug(cd->dev, DL_DEBUG,
-			"Report %d: type:%d id:%02X size:%d fields:%d rec_fld_index:%d hdr_sz:%d rec_sz:%d usage_page:%08X\n",
-			t, report->type, report->id,
-			report->size, report->num_fields,
-			report->record_field_index, report->header_size,
-			report->record_size, report->usage_page);
-
-		if (report->id == PT_HID_FINGER_REPORT_ID)
-			pt_debug(cd->dev, DL_INFO, "%s: logical collection number: %d\n",
-				__func__, report->log_collection_num);
-
-		for (j = 0; j < report->num_fields; j++) {
-			struct pt_hid_field *field = report->fields[j];
-
-			pt_debug(cd->dev, DL_DEBUG,
-				" Field %d: rep_cnt:%d rep_sz:%d off:%d data:%02X min:%d max:%d usage_page:%08X\n",
-				j, field->report_count, field->report_size,
-				field->offset, field->data_type,
-				field->logical_min, field->logical_max,
-				field->usage_page);
-
-			pt_debug(cd->dev, DL_DEBUG, "  Collections Phys:%08X App:%08X Log:%08X\n",
-				field->collection_usage_pages
-					[HID_COLLECTION_PHYSICAL],
-				field->collection_usage_pages
-					[HID_COLLECTION_APPLICATION],
-				field->collection_usage_pages
-					[HID_COLLECTION_LOGICAL]);
-		}
-	}
-
-	setup_pen_report_from_report_desc(cd);
-	setup_finger_report_from_report_desc(cd);
-
-	/* Free it for now */
-	pt_free_hid_reports_(cd);
-
-	pt_debug(cd->dev, DL_INFO, "%s: %d reports found in descriptor\n",
-		__func__, cd->num_hid_reports);
-
-exit:
-	return rc;
-}
-
-/*******************************************************************************
- * FUNCTION: pt_get_report_descriptor
- *
- * SUMMARY: Protected call to pt_get_report_descriptor_()
- *
- * RETURN:
- *   0 = success
- *  !0 = failure
- *
- * PARAMETERS:
- *  *cd   - pointer to core data
- ******************************************************************************/
-static int pt_get_report_descriptor(struct pt_core_data *cd)
-{
-	int rc;
-
-	rc = request_exclusive(cd, cd->dev, PT_REQUEST_EXCLUSIVE_TIMEOUT);
-	if (rc < 0) {
-		pt_debug(cd->dev, DL_ERROR,
-			"%s: fail get exclusive ex=%p own=%p\n",
-			__func__, cd->exclusive_dev, cd->dev);
-		return rc;
-	}
-
-	rc = pt_get_report_descriptor_(cd);
-
-	if (release_exclusive(cd, cd->dev) < 0)
-		pt_debug(cd->dev, DL_ERROR,
-			"%s: fail to release exclusive\n", __func__);
-
-	return rc;
 }
 
 /*******************************************************************************
@@ -8498,6 +7381,7 @@ static int _pt_request_get_mode(struct device *dev, int protect, u8 *mode)
 	int rc = 0;
 
 	memset(&hid_desc, 0, sizeof(hid_desc));
+
 	if (protect)
 		rc = pt_get_hid_descriptor(cd, &hid_desc);
 	else
@@ -8764,15 +7648,13 @@ static int pt_core_sleep_(struct pt_core_data *cd)
 {
 	int rc = 0;
 
-	/*
-	 * Do nothing if system already sleeping or in progress of
-	 * entering sleep. Proceed if awake or waking.
-	 */
-	if (cd->sleep_state == SS_SLEEP_ON || cd->sleep_state == SS_SLEEPING)
-		goto exit;
-
 	mutex_lock(&cd->system_lock);
-	cd->sleep_state = SS_SLEEPING;
+	if (cd->sleep_state == SS_SLEEP_OFF) {
+		cd->sleep_state = SS_SLEEPING;
+	} else {
+		mutex_unlock(&cd->system_lock);
+		return 1;
+	}
 	mutex_unlock(&cd->system_lock);
 
 	/* Ensure watchdog and startup works stopped */
@@ -8790,15 +7672,9 @@ static int pt_core_sleep_(struct pt_core_data *cd)
 		rc = pt_put_device_into_deep_sleep_(cd);
 
 	mutex_lock(&cd->system_lock);
-	if (rc == 0) {
-		cd->sleep_state = SS_SLEEP_ON;
-	} else {
-		cd->sleep_state = SS_SLEEP_OFF;
-		pt_start_wd_timer(cd);
-	}
+	cd->sleep_state = SS_SLEEP_ON;
 	mutex_unlock(&cd->system_lock);
 
-exit:
 	return rc;
 }
 
@@ -8911,43 +7787,30 @@ exit:
 }
 
 /*******************************************************************************
- * FUNCTION: pt_get_touch_field
+ * FUNCTION: pt_get_touch_axis
  *
- * SUMMARY: Function to calculate touch fields. The field refers to each element
- *     in the input report, such as "Number of Records", "X-axis". This function
- *     can calculate the value of element based on the bit offset, size and the
- *     max value of the element.
+ * SUMMARY: Function to calculate touch axis
  *
  * PARAMETERS:
- *     *dev     - pointer to device structure
- *     *field   - pointer to field calculation result
+ *     *cd      - pointer to core data structure
+ *     *axis    - pointer to axis calculation result
  *      size    - size in bytes
  *      max     - max value of result
- *     *data    - pointer to input data to be parsed
+ *     *xy_data - pointer to input data to be parsed
  *      bofs    - bit offset
  ******************************************************************************/
-void pt_get_touch_field(struct device *dev,
-	int *field, int size, int max, u8 *data, int bofs)
+static void pt_get_touch_axis(struct pt_core_data *cd,
+	int *axis, int size, int max, u8 *data, int bofs)
 {
 	int nbyte;
 	int next;
 
-	for (nbyte = 0, *field = 0, next = 0; nbyte < size; nbyte++) {
-		pt_debug(dev, DL_DEBUG,
-			"%s: *field=%02X(%d) size=%d max=%08X data=%p data[%d]=%02X(%d) bofs=%d\n",
-			__func__, *field, *field, size, max, data, next,
-			data[next], data[next], bofs);
-		*field = *field + ((data[next] >> bofs) << (nbyte * 8));
+	for (nbyte = 0, *axis = 0, next = 0; nbyte < size; nbyte++) {
+		*axis = *axis + ((data[next] >> bofs) << (nbyte * 8));
 		next++;
 	}
 
-	if (max > 0)
-		*field &= max - 1;
-
-	pt_debug(dev, DL_DEBUG,
-		"%s: *field=%02X(%d) size=%d max=%08X data=%p data[%d]=%02X(%d)\n",
-		__func__, *field, *field, size, max, data, next,
-		data[next], data[next]);
+	*axis &= max - 1;
 }
 
 /*******************************************************************************
@@ -9045,7 +7908,7 @@ static int move_button_data(struct pt_core_data *cd,
 }
 
 /*******************************************************************************
- * FUNCTION: move_touch_data_pip
+ * FUNCTION: move_touch_data
  *
  * SUMMARY: Move the valid touch data from the input buffer into the system
  *	information structure, xy_mode and xy_data.
@@ -9060,17 +7923,16 @@ static int move_button_data(struct pt_core_data *cd,
  *	*cd - pointer to core data
  *	*si - pointer to the system information structure
  ******************************************************************************/
-static int move_touch_data_pip(struct pt_core_data *cd, struct pt_sysinfo *si)
+static int move_touch_data(struct pt_core_data *cd, struct pt_sysinfo *si)
 {
 	int max_tch = si->sensing_conf_data.max_tch;
-	int num_cur_tch = 0;
+	int num_cur_tch;
 	int length;
-	int actual_tch_num;
 	struct pt_tch_abs_params *tch = &si->tch_hdr[PT_TCH_NUM];
-
-	int size = get_unaligned_le16(&cd->input_buf[0]);
 #ifdef TTHE_TUNER_SUPPORT
-	if (size > 0)
+	int size = get_unaligned_le16(&cd->input_buf[0]);
+
+	if (size)
 		tthe_print(cd, cd->input_buf, size, "OpModeData=");
 #endif
 
@@ -9078,170 +7940,16 @@ static int move_touch_data_pip(struct pt_core_data *cd, struct pt_sysinfo *si)
 	pt_pr_buf(cd->dev, DL_INFO, (u8 *)si->xy_mode,
 		si->desc.tch_header_size, "xy_mode");
 
-	pt_get_touch_field(cd->dev, &num_cur_tch, tch->size,
+	pt_get_touch_axis(cd, &num_cur_tch, tch->size,
 			tch->max, si->xy_mode + 3 + tch->ofs, tch->bofs);
 	if (unlikely(num_cur_tch > max_tch))
 		num_cur_tch = max_tch;
-
-	actual_tch_num = (size - si->desc.tch_header_size)
-		/ si->desc.tch_record_size;
-
-	if (actual_tch_num < num_cur_tch) {
-		pt_debug(cd->dev, DL_ERROR,
-			"%s: ATM - Malformed touch packet. actual_tch_num=%d, num_cur_tch=%d\n",
-			__func__, actual_tch_num, num_cur_tch);
-		num_cur_tch = actual_tch_num;
-	}
 
 	length = num_cur_tch * si->desc.tch_record_size;
 
 	memcpy(si->xy_data, &cd->input_buf[si->desc.tch_header_size], length);
 	pt_pr_buf(cd->dev, DL_INFO, (u8 *)si->xy_data, length, "xy_data");
 	return 0;
-}
-
-/*******************************************************************************
- * FUNCTION: move_touch_data_hid
- *
- * SUMMARY: Move the valid touch data from the input buffer into the system
- *	information structure, xy_mode and xy_data.
- *	- If TTHE_TUNER_SUPPORT is defined print the raw touch data into
- *	the tthe_tuner sysfs node under the label "HID-USB", "HID-I2C" or
- *  "OpModeData"
- *
- * RETURN:
- *	 0 = success
- *	!0 = failure
- *
- * PARAMETERS:
- *	*cd - pointer to core data
- *	*si - pointer to the system information structure
- ******************************************************************************/
-static int move_touch_data_hid(struct pt_core_data *cd,
-	struct pt_sysinfo *si)
-{
-	int max_tch = si->sensing_conf_data.max_tch;
-	int num_cur_tch = 0;
-	u16 hdr_sz;
-	u16 rec_sz;
-	int max_tch_per_packet;
-	static u8 remain_tch;
-	static u8 packet_no;
-	static u8 input_sz;
-	int length;
-	int rc = 0;
-	struct pt_tch_abs_params *tch = &si->tch_hdr[PT_TCH_NUM];
-	int size = get_unaligned_le16(&cd->input_buf[0]);
-
-	hdr_sz = si->desc.tch_header_size;
-	rec_sz = si->desc.tch_record_size;
-	max_tch_per_packet = si->desc.max_tch_per_packet;
-
-#ifdef TTHE_TUNER_SUPPORT
-	length = hdr_sz + rec_sz * max_tch_per_packet;
-	pt_debug(cd->dev, DL_DEBUG,
-		"%s: touch report size=%d, len=%d, record=%d, max_tch=%d\n",
-		__func__, size, length, rec_sz, max_tch_per_packet);
-	/*
-	 * HID over USB does not require the two byte length field, so
-	 * this should print from input_buf[2] but to keep both finger
-	 * and pen reports the same the length is included
-	 */
-	if (cd->tthe_hid_usb_format == PT_TTHE_TUNER_FORMAT_HID_USB)
-		tthe_print(cd, &(cd->input_buf[2]), length - 2,
-			"HID-USB=");
-	else if (cd->tthe_hid_usb_format ==
-		PT_TTHE_TUNER_FORMAT_HID_I2C)
-		tthe_print(cd, &(cd->input_buf[0]), length,
-			"HID-I2C=");
-#endif
-
-	memcpy(si->xy_mode, cd->input_buf, hdr_sz);
-	pt_pr_buf(cd->dev, DL_INFO, (u8 *)si->xy_mode,
-		hdr_sz, "xy_mode");
-
-	/*
-	 * The fifth parameter points to the location of "Number of Records":
-	 * Pointer "xy_mode" points to start address of touch report header.
-	 * The byte offset of "Number of Records" is 2 (tch->ofs, retrieved
-	 * from report descriptor). Then the pointer "xy_mode + 3 (skip the
-	 * two bytes length and 1 byte report ID) + tch->ofs" points to the
-	 * location of "Number of Records".
-	 */
-	pt_get_touch_field(cd->dev, &num_cur_tch, tch->size,
-			tch->max, si->xy_mode + 3 + tch->ofs, tch->bofs);
-
-	if (unlikely(num_cur_tch > max_tch))
-		num_cur_tch = max_tch;
-
-	/* According to Hybrid Mode touch report defined by Microsoft,
-	 * if the touch number exceeds the max touch per packet (defined
-	 * in report descriptor), the touch packet will be broken up into
-	 * to multiple reports. Timestamp will be consistent across all
-	 * touches in a single frame. The "Number of records" will have the
-	 * total in the first report and be 0 in all subsequent reports that
-	 * belong to the same frame.
-	 */
-	pt_debug(cd->dev, DL_INFO, "%s: max_tch=%d, packet_no=%d, num_cur_tch=%d\n",
-		__func__, max_tch, packet_no, num_cur_tch);
-
-	if (packet_no == 0) {
-		input_sz = hdr_sz + num_cur_tch * rec_sz;
-		memset(cd->touch_buf, 0, sizeof(cd->touch_buf));
-		memcpy(cd->touch_buf, cd->input_buf, input_sz);
-		if (num_cur_tch > max_tch_per_packet) {
-			remain_tch = num_cur_tch - max_tch_per_packet;
-			packet_no++;
-			rc = -EINVAL;
-			goto exit;
-		}
-	} else {
-		if (remain_tch <= max_tch_per_packet) {
-			memcpy(&cd->touch_buf[hdr_sz +
-				max_tch_per_packet * packet_no * rec_sz],
-				&(cd->input_buf[hdr_sz]),
-				rec_sz * remain_tch);
-			remain_tch = 0;
-			packet_no = 0;
-			rc = 0;
-		} else {
-			memcpy(&cd->touch_buf[hdr_sz +
-				max_tch_per_packet * packet_no * rec_sz],
-				&(cd->input_buf[hdr_sz]),
-				rec_sz * max_tch_per_packet);
-			remain_tch -= max_tch_per_packet;
-			packet_no++;
-			rc = -EINVAL;
-			goto exit;
-		}
-	}
-
-#ifdef TTHE_TUNER_SUPPORT
-	/* Update pip packet length */
-	cd->touch_buf[0] = input_sz & 0xff;
-	cd->touch_buf[1] = (input_sz & 0xff00) >> 8;
-
-	/*
-	 * For PT_TTHE_TUNER_FORMAT_HID_FINGER_TO_PIP and
-	 * PT_TTHE_TUNER_FORMAT_HID_FINGER_AND_PEN_TO_PIP mode, all touches
-	 * should be combined into a single row for the tthe_tuner node.
-	 */
-	if (cd->tthe_hid_usb_format ==
-		PT_TTHE_TUNER_FORMAT_HID_FINGER_TO_PIP ||
-		cd->tthe_hid_usb_format ==
-		PT_TTHE_TUNER_FORMAT_HID_FINGER_AND_PEN_TO_PIP)
-		tthe_print(cd, cd->touch_buf, input_sz,
-			"OpModeData=");
-#endif
-
-	memcpy(si->xy_data, &cd->touch_buf[hdr_sz], input_sz - hdr_sz);
-	pt_pr_buf(cd->dev, DL_INFO,
-		(u8 *)si->xy_data, input_sz - hdr_sz, "xy_data");
-
-	input_sz = 0;
-
-exit:
-	return rc;
 }
 
 /*******************************************************************************
@@ -9263,17 +7971,8 @@ exit:
  ******************************************************************************/
 static int move_hid_pen_data(struct pt_core_data *cd, struct pt_sysinfo *si)
 {
-	int size = get_unaligned_le16(&cd->input_buf[0]);
-
 #ifdef TTHE_TUNER_SUPPORT
-	enum pt_pen_abs abs;
-	struct pt_pen pen;
-	int packet_len = 17;
-	int report_id = 1;
-	static int report_counter;
-	int event_id = 2;
-	int touch_id = 0;
-	int i = 0;
+	int size = get_unaligned_le16(&cd->input_buf[0]);
 
 	if (size) {
 		/*
@@ -9281,77 +7980,14 @@ static int move_hid_pen_data(struct pt_core_data *cd, struct pt_sysinfo *si)
 		 * this should print from input_buf[2] but to keep both finger
 		 * and pen reports the same the length is included
 		 */
-		if (cd->tthe_hid_usb_format == PT_TTHE_TUNER_FORMAT_HID_USB)
+		if (cd->tthe_hid_usb_format == PT_FEATURE_ENABLE)
 			tthe_print(cd, &(cd->input_buf[2]), size - 2,
 				"HID-USB=");
-		else if (cd->tthe_hid_usb_format ==
-			PT_TTHE_TUNER_FORMAT_HID_I2C ||
-			cd->tthe_hid_usb_format ==
-			PT_TTHE_TUNER_FORMAT_HID_FINGER_TO_PIP)
+		else
 			tthe_print(cd, &(cd->input_buf[0]), size,
 				"HID-I2C=");
-		else if (cd->tthe_hid_usb_format ==
-			PT_TTHE_TUNER_FORMAT_HID_FINGER_AND_PEN_TO_PIP) {
-			memset(cd->touch_buf, 0, sizeof(cd->touch_buf));
-
-			for (abs = PT_PEN_X; abs < PT_PEN_NUM_ABS; abs++) {
-				if (!si->pen_abs[abs].report)
-					continue;
-				pt_get_touch_field(cd->dev, &pen.abs[abs],
-					si->pen_abs[abs].size,
-					si->pen_abs[abs].max,
-					cd->input_buf + 3 +
-						si->pen_abs[abs].ofs,
-					si->pen_abs[abs].bofs);
-				pt_debug(cd->dev, DL_DEBUG, "%s: get %s=%04X(%d)\n",
-					__func__, pt_pen_abs_string[abs],
-					pen.abs[abs], pen.abs[abs]);
-			}
-			/* pip packet length: 17  */
-			cd->touch_buf[i++] = packet_len & 0xff;
-			cd->touch_buf[i++] = (packet_len & 0xff00) >> 8;
-			/* pip finger report id: 1*/
-			cd->touch_buf[i++] = report_id;
-			/* Timestamp: 0 */
-			cd->touch_buf[i++] = 0;
-			cd->touch_buf[i++] = 0;
-			/* LO: 0; Number of Records: 1*/
-			cd->touch_buf[i++] = 1;
-			/* Report Counter:[0-3]; Noise Effects:0 */
-			cd->touch_buf[i++] = (report_counter & 0x03) << 6;
-			/* Touch Type: Stylus (2)*/
-			cd->touch_buf[i++] = PT_OBJ_STYLUS;
-			/* Tip: pen tip switch; Event ID: 2; Touch ID: 0 */
-			cd->touch_buf[i++] =
-				((pen.abs[PT_PEN_TS] & 0x01) << 7) |
-				((event_id & 0x03) << 5) |
-				(touch_id & 0x1f);
-			/* X: Pen X */
-			cd->touch_buf[i++] = pen.abs[PT_PEN_X] & 0xff;
-			cd->touch_buf[i++] = (pen.abs[PT_PEN_X] & 0xff00) >> 8;
-			/* Y: Pen Y */
-			cd->touch_buf[i++] = pen.abs[PT_PEN_Y] & 0xff;
-			cd->touch_buf[i++] = (pen.abs[PT_PEN_Y] & 0xff00) >> 8;
-			/* Pressure: Pen pressure drop the least 4 bits */
-			cd->touch_buf[i++] = (pen.abs[PT_PEN_P] & 0xff0) >> 4;
-			/* Major: Pen Tilt_X*/
-			cd->touch_buf[i++] = pen.abs[PT_PEN_X_TILT] & 0xff;
-			/* Minor: Pen Tilt_Y*/
-			cd->touch_buf[i++] = pen.abs[PT_PEN_Y_TILT] & 0xff;
-			/* Orientation: Btn2, Btn1*/
-			cd->touch_buf[i++] =
-				(pen.abs[PT_PEN_BS] & 0x01) |
-				((pen.abs[PT_PEN_2ND_BS] & 0x01) << 1);
-
-			if (++report_counter > 3)
-				report_counter = 0;
-
-			tthe_print(cd, cd->touch_buf, packet_len,
-				"OpModeData=");
-		}
 	}
 #endif
-	memcpy(si->xy_data, cd->input_buf, size);
 	pt_pr_buf(cd->dev, DL_INFO, (u8 *)&(cd->input_buf[0]), size, "HID Pen");
 	return 0;
 }
@@ -9388,22 +8024,9 @@ static int parse_touch_input(struct pt_core_data *cd, int size)
 	if (!si->xy_mode || !si->xy_data)
 		return rc;
 
-	if (report_id == PT_PIP_TOUCH_REPORT_ID ||
-	    report_id == PT_HID_VS_FINGER_REPORT_ID) {
-		if (cd->dut_status.protocol_mode == PT_PROTOCOL_MODE_PIP)
-			rc = move_touch_data_pip(cd, si);
-		else {
-			rc = move_touch_data_hid(cd, si);
-			if (rc) {
-				pt_debug(cd->dev, DL_INFO,
-					"%s: Skip report for the first touch packet\n",
-					__func__);
-				return 0;
-			}
-		}
-	} else if ((report_id == PT_HID_PEN_REPORT_ID ||
-		   report_id == PT_HID_VS_PEN_REPORT_ID) &&
-		   cd->dut_status.protocol_mode == PT_PROTOCOL_MODE_HID)
+	if (report_id == PT_PIP_TOUCH_REPORT_ID)
+		rc = move_touch_data(cd, si);
+	else if (report_id == PT_HID_PEN_REPORT_ID)
 		rc = move_hid_pen_data(cd, si);
 	else if (report_id == PT_PIP_CAPSENSE_BTN_REPORT_ID)
 		rc = move_button_data(cd, si);
@@ -9515,8 +8138,6 @@ static bool pt_is_touch_report(int id)
 {
 	if (id == PT_PIP_TOUCH_REPORT_ID ||
 	    id == PT_HID_PEN_REPORT_ID ||
-	    id == PT_HID_VS_FINGER_REPORT_ID ||
-	    id == PT_HID_VS_PEN_REPORT_ID ||
 	    id == PT_PIP_CAPSENSE_BTN_REPORT_ID ||
 	    id == PT_PIP_SENSOR_DATA_REPORT_ID ||
 	    id == PT_PIP_TRACKING_HEATMAP_REPORT_ID)
@@ -9549,7 +8170,7 @@ static bool pt_is_touch_report(int id)
  ******************************************************************************/
 static int pt_parse_input(struct pt_core_data *cd)
 {
-	int report_id = 0;
+	int report_id;
 	int cmd_id;
 	int is_command = 0;
 	int size;
@@ -9566,7 +8187,6 @@ static int pt_parse_input(struct pt_core_data *cd)
 	if (print_size <= PT_MAX_INPUT)
 		pt_pr_buf(cd->dev, DL_DEBUG, cd->input_buf, print_size,
 			"<<< Read buf");
-
 	if (size == 0 ||
 	   (size == 11 &&
 	   (cd->input_buf[PIP2_RESP_SEQUENCE_OFFSET] &
@@ -9604,7 +8224,6 @@ static int pt_parse_input(struct pt_core_data *cd)
 						STARTUP_STATUS_START;
 				}
 				cd->fw_system_mode = FW_SYS_MODE_UNDEFINED;
-
 				pt_debug(cd->dev, DL_INFO,
 					"%s: ATM Gen5/6 %s sentinel received\n",
 					__func__,
@@ -9622,7 +8241,6 @@ static int pt_parse_input(struct pt_core_data *cd)
 					__func__);
 			}
 			mutex_unlock(&cd->system_lock);
-
 			if (pt_allow_enumeration(cd)) {
 				if (cd->active_dut_generation == DUT_UNKNOWN) {
 					pt_debug(cd->dev, DL_INFO,
@@ -9698,11 +8316,9 @@ static int pt_parse_input(struct pt_core_data *cd)
 		/* PIP2 does not have a report id, hard code it */
 		report_id = 0x00;
 		cmd_id = cd->input_buf[PIP2_RESP_COMMAND_ID_OFFSET];
-
 		calc_crc = crc_ccitt_calculate(cd->input_buf, size - 2);
 		resp_crc  = cd->input_buf[size - 2] << 8;
 		resp_crc |= cd->input_buf[size - 1];
-
 		if ((cd->pip2_cmd_tag_seq !=
 			(cd->input_buf[PIP2_RESP_SEQUENCE_OFFSET] & 0x0F)) &&
 			(resp_crc != calc_crc) &&
@@ -9710,17 +8326,16 @@ static int pt_parse_input(struct pt_core_data *cd)
 				== PT_PIP_TOUCH_REPORT_ID) ||
 			(cd->input_buf[PIP1_RESP_REPORT_ID_OFFSET]
 				== PT_PIP_CAPSENSE_BTN_REPORT_ID))) {
-			report_id = cd->input_buf[PIP1_RESP_REPORT_ID_OFFSET];
-			cmd_id = cd->input_buf[PIP1_RESP_COMMAND_ID_OFFSET];
-			pt_debug(cd->dev, DL_INFO,
-				"%s: %s %d %s\n", __func__,
-				 "Received PIP1 report id =",
-				 report_id,
-				 "when expecting a PIP2 report");
-		} else {
-			is_command = 1;
-			touch_report = false;
+			pt_debug(cd->dev, DL_WARN,
+				"%s: %s %d %s\n",
+				__func__,
+				"Received PIP1 report id =",
+				cd->input_buf[PIP1_RESP_REPORT_ID_OFFSET],
+				"when expecting a PIP2 report - IGNORE report");
+			return 0;
 		}
+		is_command = 1;
+		touch_report = false;
 	} else {
 		report_id = cd->input_buf[PIP1_RESP_REPORT_ID_OFFSET];
 		cmd_id = cd->input_buf[PIP1_RESP_COMMAND_ID_OFFSET];
@@ -9740,7 +8355,6 @@ static int pt_parse_input(struct pt_core_data *cd)
 #endif
 		return 0;
 	}
-
 	mod_timer_pending(&cd->watchdog_timer, jiffies +
 			msecs_to_jiffies(cd->watchdog_interval));
 
@@ -9752,12 +8366,10 @@ static int pt_parse_input(struct pt_core_data *cd)
 		is_command = 1;
 		touch_report = false;
 	}
-
 	if (unlikely(is_command)) {
 		parse_command_input(cd, size);
 		return 0;
 	}
-
 	if (touch_report)
 		parse_touch_input(cd, size);
 
@@ -9788,6 +8400,7 @@ static int pt_read_input(struct pt_core_data *cd)
 	 * Interrupt for easywake, wait for bus controller to wake
 	 */
 	mutex_lock(&cd->system_lock);
+
 	if (IS_EASY_WAKE_CONFIGURED(cd->easy_wakeup_gesture)) {
 		if (cd->sleep_state == SS_SLEEP_ON) {
 			mutex_unlock(&cd->system_lock);
@@ -9815,7 +8428,6 @@ static int pt_read_input(struct pt_core_data *cd)
 	mutex_unlock(&cd->system_lock);
 
 read:
-	memset(cd->input_buf, 0, sizeof(cd->input_buf));
 	/* Try reading up to 'retry' times */
 	while (retry-- != 0) {
 		rc = pt_adap_read_default_nosize(cd, cd->input_buf,
@@ -9851,15 +8463,8 @@ irqreturn_t pt_irq(int irq, void *handle)
 	struct pt_core_data *cd = handle;
 	int rc = 0;
 
-#ifdef TTDL_PTVIRTDUT_SUPPORT
-	if (!cd->route_bus_virt_dut) {
-		if (!pt_check_irq_asserted(cd))
-			return IRQ_HANDLED;
-	}
-#else
 	if (!pt_check_irq_asserted(cd))
 		return IRQ_HANDLED;
-#endif /* TTDL_PTVIRTDUT_SUPPORT */
 
 	rc = pt_read_input(cd);
 #ifdef TTDL_DIAGNOSTICS
@@ -9886,36 +8491,6 @@ irqreturn_t pt_irq(int irq, void *handle)
 	return IRQ_HANDLED;
 }
 
-#ifdef PT_AUX_BRIDGE_ENABLED
-/*******************************************************************************
- * FUNCTION: pt_trigger_ttdl_irq
- *
- * SUMMARY: API for other kernel drivers to artificially trigger a TTDL IRQ
- *
- *	IMPROVE - dpmux should likely call pt_get_core_data once and make a
- *		copy of cd so that the function only needs to be called once.
- * RETURN:
- *	 0 = success
- *	!0 = failure
- *
- * PARAMETERS: none
- *
- ******************************************************************************/
-int pt_trigger_ttdl_irq(void)
-{
-	struct pt_core_data *cd;
-	char *core_name = PT_DEFAULT_CORE_ID;
-
-	cd = pt_get_core_data(core_name);
-	if (!cd) {
-		pr_err("%s: No Device\n", __func__);
-		return -ENODEV;
-	}
-	pt_irq(cd->irq, (void *)cd);
-	return 0;
-}
-EXPORT_SYMBOL_GPL(pt_trigger_ttdl_irq);
-#endif
 
 /*******************************************************************************
  * FUNCTION: _pt_subscribe_attention
@@ -10002,11 +8577,11 @@ int _pt_unsubscribe_attention(struct device *dev,
 		if (atten->id == id && atten->mode == mode) {
 			list_del(&atten->node);
 			spin_unlock(&cd->spinlock);
-			kfree(atten);
 			pt_debug(cd->dev, DL_DEBUG, "%s: %s=%p %s=%d\n",
 				__func__,
 				"unsub for atten->dev", atten->dev,
 				"atten->mode", atten->mode);
+			kfree(atten);
 			return 0;
 		}
 	}
@@ -10520,8 +9095,7 @@ int pt_pip2_exit_bl_(struct pt_core_data *cd, u8 *status_str, int buf_size)
 				rc = _pt_request_wait_for_enum_state(cd->dev,
 					4000, STARTUP_STATUS_FW_RESET_SENTINEL);
 				if (rc && load_status_str) {
-					strlcpy(status_str,
-						"No FW sentinel after BL", 
+					strlcpy(status_str, "No FW sentinel after BL",
 						sizeof(*status_str)*PT_STATUS_STR_LEN);
 					goto exit;
 				}
@@ -10550,9 +9124,8 @@ int pt_pip2_exit_bl_(struct pt_core_data *cd, u8 *status_str, int buf_size)
 					cd->startup_status);
 				if (load_status_str && !(cd->startup_status &
 				    STARTUP_STATUS_FW_OUT_OF_BOOT)) {
-					strlcpy(status_str,
-					       "FW Stuck in Boot mode", 
-						   sizeof(*status_str)*PT_STATUS_STR_LEN);
+					strlcpy(status_str, "FW Stuck in Boot mode",
+						sizeof(*status_str)*PT_STATUS_STR_LEN);
 					goto exit;
 				}
 			}
@@ -10569,15 +9142,13 @@ int pt_pip2_exit_bl_(struct pt_core_data *cd, u8 *status_str, int buf_size)
 		}
 		if (load_status_str) {
 			if (rc == PIP2_RSP_ERR_INVALID_IMAGE)
-				strlcpy(status_str,
-					"Failed - Invalid image in FLASH", 
+				strlcpy(status_str, "Failed - Invalid image in FLASH",
 					sizeof(*status_str)*PT_STATUS_STR_LEN);
 			else if (!rc)
-				strlcpy(status_str,
-					"Entered APP from BL mode", sizeof(*status_str)*PT_STATUS_STR_LEN);
+				strlcpy(status_str, "Entered APP from BL mode",
+					sizeof(*status_str)*PT_STATUS_STR_LEN);
 			else
-				strlcpy(status_str,
-					"Failed to enter APP from BL mode", 
+				strlcpy(status_str, "Failed to enter APP from BL mode",
 					sizeof(*status_str)*PT_STATUS_STR_LEN);
 		}
 	} else if (mode == PT_MODE_OPERATIONAL) {
@@ -10587,12 +9158,10 @@ int pt_pip2_exit_bl_(struct pt_core_data *cd, u8 *status_str, int buf_size)
 		rc = pt_poll_for_fw_exit_boot_mode(cd, 1500, &wait_time);
 		if (load_status_str) {
 			if (!rc)
-				strlcpy(status_str,
-					"Already in APP mode", 
+				strlcpy(status_str, "Already in APP mode",
 					sizeof(*status_str)*PT_STATUS_STR_LEN);
 			else
-				strlcpy(status_str,
-					"Already in APP mode - FW stuck in Boot mode", 
+				strlcpy(status_str, "Already in APP mode - FW stuck in Boot mode",
 					sizeof(*status_str)*PT_STATUS_STR_LEN);
 		}
 	} else if (rc || mode == PT_MODE_UNKNOWN) {
@@ -10600,7 +9169,7 @@ int pt_pip2_exit_bl_(struct pt_core_data *cd, u8 *status_str, int buf_size)
 		cd->mode = mode;
 		mutex_unlock(&cd->system_lock);
 		if (load_status_str)
-			strlcpy(status_str, "Failed to determine active mode", 
+			strlcpy(status_str, "Failed to determine active mode",
 				sizeof(*status_str)*PT_STATUS_STR_LEN);
 	}
 
@@ -10668,7 +9237,6 @@ static int _fast_startup(struct pt_core_data *cd)
 	int wait_time = 0;
 
 	memset(&hid_desc, 0, sizeof(hid_desc));
-
 reset:
 	if (retry != PT_CORE_STARTUP_RETRY_COUNT)
 		pt_debug(cd->dev, DL_INFO, "%s: Retry %d\n", __func__,
@@ -10910,15 +9478,13 @@ static int pt_core_wake_(struct pt_core_data *cd)
 {
 	int rc = 0;
 
-	/*
-	 * Do nothing if system already awake or in progress of waking.
-	 * Proceed if sleeping or entering sleep state.
-	 */
-	if (cd->sleep_state == SS_SLEEP_OFF || cd->sleep_state == SS_WAKING)
-		goto exit;
-
 	mutex_lock(&cd->system_lock);
-	cd->sleep_state = SS_WAKING;
+	if (cd->sleep_state == SS_SLEEP_ON) {
+		cd->sleep_state = SS_WAKING;
+	} else {
+		mutex_unlock(&cd->system_lock);
+		return 1;
+	}
 	mutex_unlock(&cd->system_lock);
 
 	if (!(cd->cpdata->flags & PT_CORE_FLAG_SKIP_RESUME)) {
@@ -10933,20 +9499,15 @@ static int pt_core_wake_(struct pt_core_data *cd)
 	}
 
 	mutex_lock(&cd->system_lock);
-	if (rc == 0)
-		cd->sleep_state = SS_SLEEP_OFF;
-	else
-		cd->sleep_state = SS_SLEEP_ON;
+	cd->sleep_state = SS_SLEEP_OFF;
 	mutex_unlock(&cd->system_lock);
 
 	pt_start_wd_timer(cd);
-
-exit:
 	return rc;
 }
 
 /*******************************************************************************
- * FUNCTION: pt_core_wake
+ * FUNCTION: pt_core_wake_
  *
  * SUMMARY: Protected call to pt_core_wake_ by exclusive access to the DUT.
  *
@@ -11153,7 +9714,6 @@ static int pt_enum_with_dut_(struct pt_core_data *cd, bool reset,
 	bool detected = false;
 	u8 return_data[8];
 	u8 mode = PT_MODE_UNKNOWN;
-	u8 protocol_mode = PT_PROTOCOL_MODE_PIP;
 	u8 pid = PANEL_ID_NOT_ENABLED;
 	u8 sys_mode = FW_SYS_MODE_UNDEFINED;
 	struct pt_hid_desc hid_desc;
@@ -11165,13 +9725,11 @@ static int pt_enum_with_dut_(struct pt_core_data *cd, bool reset,
 	pt_debug(cd->dev, DL_INFO, "%s: Start enum... 0x%04X, reset=%d\n",
 		__func__, cd->startup_status, reset);
 	pt_stop_wd_timer(cd);
-
 reset:
 	if (try > 1)
 		pt_debug(cd->dev, DL_WARN, "%s: DUT Enum Attempt %d\n",
 			__func__, try);
 	pt_flush_bus_if_irq_asserted(cd, PT_FLUSH_BUS_BASED_ON_LEN);
-
 	if (cd->active_dut_generation == DUT_PIP1_ONLY) {
 		pt_debug(cd->dev, DL_INFO,
 			"%s: PIP1 Enumeration start\n", __func__);
@@ -11196,7 +9754,6 @@ reset:
 			/* sleep to allow FW to be launched if available */
 			msleep(120);
 		}
-
 		rc = pt_get_hid_descriptor_(cd, &hid_desc);
 		if (rc < 0) {
 			pt_debug(cd->dev, DL_ERROR,
@@ -11209,7 +9766,6 @@ reset:
 		}
 		detected = true;
 		cd->mode = pt_get_mode(cd, &hid_desc);
-
 		/*
 		 * Most systems do not use an XY pin as the panel_id and so
 		 * the BL is used to retrieve the panel_id, however for
@@ -11230,10 +9786,9 @@ reset:
 					goto exit;
 				}
 				cd->mode = PT_MODE_BOOTLOADER;
-				pt_debug(cd->dev, DL_INFO,
-					"%s: Bootloader mode\n", __func__);
+				pt_debug(cd->dev, DL_INFO, "%s: Bootloader mode\n",
+					__func__);
 			}
-
 			rc = pt_hid_output_bl_get_information_(cd, return_data);
 			if (!rc) {
 				cd->bl_info.ready = true;
@@ -11246,13 +9801,11 @@ reset:
 					 "%s: failed to get chip ID, r=%d\n",
 					 __func__, rc);
 			}
-
 			rc = pt_hid_output_bl_get_panel_id_(cd, &pid);
 			mutex_lock(&cd->system_lock);
 			if (!rc) {
 				cd->pid_for_loader = pid;
-				pt_debug(cd->dev, DL_INFO,
-					"%s: Panel ID: 0x%02X\n",
+				pt_debug(cd->dev, DL_INFO, "%s: Panel ID: 0x%02X\n",
 					__func__, cd->pid_for_loader);
 			} else {
 				cd->pid_for_loader = PANEL_ID_NOT_ENABLED;
@@ -11262,7 +9815,6 @@ reset:
 			}
 			mutex_unlock(&cd->system_lock);
 		}
-
 
 		/* Exit BL due to XY_PIN case or any other cause to be in BL */
 		if (cd->mode == PT_MODE_BOOTLOADER) {
@@ -11291,6 +9843,7 @@ reset:
 				rc = -EIO;
 				goto exit;
 			}
+
 			cd->mode = pt_get_mode(cd, &hid_desc);
 			if (cd->mode == PT_MODE_BOOTLOADER) {
 				pt_debug(cd->dev, DL_WARN,
@@ -11310,24 +9863,21 @@ reset:
 		/* Generation is PIP2 Capable */
 		pt_debug(cd->dev, DL_INFO,
 			"%s: PIP2 Enumeration start\n", __func__);
-		rc = pt_pip2_get_status_(cd);
+
+		rc = pt_pip2_get_mode_sysmode_(cd, &mode, NULL);
 		if (rc) {
 			pt_debug(cd->dev, DL_ERROR,
 				"%s: Get mode failed, mode unknown\n",
 				__func__);
 			mode = PT_MODE_UNKNOWN;
-		} else {
-			mode = cd->dut_status.mode;
+		} else
 			detected = true;
-		}
 
 		cd->mode = mode;
-
 		switch (cd->mode) {
 		case PT_MODE_OPERATIONAL:
 			pt_debug(cd->dev, DL_INFO,
 				"%s: Operational mode\n", __func__);
-			protocol_mode = cd->dut_status.protocol_mode;
 			if (cd->app_pip_ver_ready == false) {
 				rc = pt_pip2_get_version_(cd);
 				if (!rc)
@@ -11405,20 +9955,19 @@ reset:
 			 */
 			msleep(60);
 			/* Check and update the mode */
-			rc = pt_pip2_get_status_(cd);
+			rc = pt_pip2_get_mode_sysmode_(cd, &mode, NULL);
 			if (rc) {
 				pt_debug(cd->dev, DL_ERROR,
 					"%s: Get mode failed, mode unknown\n",
 					__func__);
 				mode = PT_MODE_UNKNOWN;
-			} else
-				mode = cd->dut_status.mode;
+			}
+
 			cd->mode = mode;
 			if (cd->mode == PT_MODE_OPERATIONAL) {
 				pt_debug(cd->dev, DL_INFO,
 					 "%s: Launched to Operational mode\n",
 					 __func__);
-				protocol_mode = cd->dut_status.protocol_mode;
 			} else if (cd->mode == PT_MODE_BOOTLOADER) {
 				pt_debug(cd->dev, DL_ERROR,
 					 "%s: Launch failed, Bootloader mode\n",
@@ -11432,7 +9981,6 @@ reset:
 					goto reset;
 				goto exit;
 			}
-
 			if (cd->app_pip_ver_ready == false) {
 				rc = pt_pip2_get_version_(cd);
 				if (!rc)
@@ -11451,30 +9999,11 @@ reset:
 				goto reset;
 			goto exit;
 		}
-		if (cd->dut_status.protocol_mode == PT_PROTOCOL_MODE_HID) {
-			rc = pt_get_hid_descriptor_(cd, &hid_desc);
-			if (!rc)
-				*enum_status |= STARTUP_STATUS_GET_DESC;
-		} else {
-			*enum_status |= STARTUP_STATUS_GET_DESC;
-		}
+		*enum_status |= STARTUP_STATUS_GET_DESC;
 	}
 
 	pt_init_pip_report_fields(cd);
-	if (protocol_mode == PT_PROTOCOL_MODE_HID) {
-		rc = pt_get_report_descriptor_(cd);
-		if (rc < 0) {
-			pt_debug(cd->dev, DL_ERROR,
-				"%s: Error on getting report descriptor r=%d\n",
-				__func__, rc);
-			if (try++ < PT_CORE_STARTUP_RETRY_COUNT)
-				goto reset;
-			goto exit;
-		}
-	}
-
 	*enum_status |= STARTUP_STATUS_GET_RPT_DESC;
-
 	if (!cd->features.easywake)
 		cd->easy_wakeup_gesture = PT_CORE_EWG_NONE;
 
@@ -11488,7 +10017,6 @@ reset:
 		goto exit;
 	}
 	*enum_status |= STARTUP_STATUS_GET_SYS_INFO;
-
 	/* FW cannot handle most PIP cmds when it is still in BOOT mode */
 	rc = _pt_poll_for_fw_exit_boot_mode(cd, 10000, &wait_time);
 	if (!rc) {
@@ -11507,7 +10035,6 @@ reset:
 			__func__,
 			cd->sysinfo.ttdata.pip_ver_major,
 			cd->sysinfo.ttdata.pip_ver_minor);
-
 	rc = pt_get_ic_crc_(cd, PT_TCH_PARM_EBID);
 	if (rc) {
 		pt_debug(cd->dev, DL_ERROR,
@@ -11526,7 +10053,6 @@ reset:
 		} else
 			*enum_status |= STARTUP_STATUS_GET_CFG_CRC;
 	}
-
 	rc = pt_restore_parameters_(cd);
 	if (rc) {
 		pt_debug(cd->dev, DL_ERROR,
@@ -11534,7 +10060,6 @@ reset:
 			__func__, rc);
 	} else
 		*enum_status |= STARTUP_STATUS_RESTORE_PARM;
-
 	call_atten_cb(cd, PT_ATTEN_STARTUP, 0);
 	cd->watchdog_interval = PT_WATCHDOG_TIMEOUT;
 	cd->startup_retry_count = 0;
@@ -11600,7 +10125,6 @@ static int pt_enum_with_dut(struct pt_core_data *cd, bool reset, u32 *status)
 	else
 		pt_debug(cd->dev, DL_DEBUG, "%s: pass release exclusive\n",
 			__func__);
-
 exit:
 	mutex_lock(&cd->system_lock);
 	/* Clear startup state for any tasks waiting for startup completion */
@@ -11616,11 +10140,9 @@ exit:
 	return rc;
 }
 
-#ifndef TTDL_KERNEL_SUBMISSION
 static int add_sysfs_interfaces(struct device *dev);
 static void remove_sysfs_interfaces(struct device *dev);
 static void remove_sysfs_and_modules(struct device *dev);
-#endif /*!TTDL_KERNEL_SUBMISSION */
 static void pt_release_modules(struct pt_core_data *cd);
 static void pt_probe_modules(struct pt_core_data *cd);
 /*******************************************************************************
@@ -11646,7 +10168,6 @@ static int _pt_ttdl_restart(struct device *dev)
 	struct i2c_client *client =
 		(struct i2c_client *)container_of(dev, struct i2c_client, dev);
 #endif
-
 	/*
 	 * Make sure the device is awake, pt_mt_release function will
 	 * cause pm sleep function and lead to deadlock.
@@ -11892,7 +10413,6 @@ static int pt_core_suspend_(struct device *dev)
 static int pt_core_suspend(struct device *dev)
 {
 	struct pt_core_data *cd = dev_get_drvdata(dev);
-
 	if (cd->cpdata->flags & PT_CORE_FLAG_SKIP_SYS_SLEEP)
 		return 0;
 
@@ -11915,7 +10435,6 @@ static int pt_core_suspend(struct device *dev)
 static int pt_core_resume_(struct device *dev)
 {
 	struct pt_core_data *cd = dev_get_drvdata(dev);
-
 	if (!IS_EASY_WAKE_CONFIGURED(cd->easy_wakeup_gesture))
 		goto exit;
 
@@ -11963,7 +10482,6 @@ exit:
 static int pt_core_resume(struct device *dev)
 {
 	struct pt_core_data *cd = dev_get_drvdata(dev);
-
 	if (cd->cpdata->flags & PT_CORE_FLAG_SKIP_SYS_SLEEP)
 		return 0;
 
@@ -11992,7 +10510,6 @@ static int pt_pm_notifier(struct notifier_block *nb,
 {
 	struct pt_core_data *cd = container_of(nb,
 			struct pt_core_data, pm_notifier);
-
 	if (action == PM_SUSPEND_PREPARE) {
 		pt_debug(cd->dev, DL_INFO, "%s: Suspend prepare\n",
 			__func__);
@@ -12176,12 +10693,13 @@ _retry:
 		pt_debug(cd->dev, DL_INFO,
 			">>> %s: Write Buffer Size[%d] Stay in BL\n",
 			__func__, (int)sizeof(host_mode_cmd));
+
 		pt_pr_buf(cd->dev, DL_DEBUG, host_mode_cmd,
 			(int)sizeof(host_mode_cmd), ">>> User CMD");
 		rc = 1;
 		while (rc && time < 34) {
 			rc = pt_adap_write_read_specific(cd, 4,
-				host_mode_cmd, NULL, 0);
+				host_mode_cmd, NULL);
 			usleep_range(1800, 2000);
 			time += 2;
 		}
@@ -12274,7 +10792,7 @@ exit:
 		}
 	}
 
-	pt_debug(dev, DL_INFO, "%s: Flashless Auto_BL - %s\n", __func__,
+	pt_debug(dev, DL_INFO, "%s Flashless Auto_BL - %s\n", __func__,
 		saved_flashless_auto_bl_mode == PT_ALLOW_AUTO_BL ? "ALLOW" :
 		"SUPPRESS");
 	cd->flashless_auto_bl = saved_flashless_auto_bl_mode;
@@ -12300,47 +10818,34 @@ exit:
  ******************************************************************************/
 int _pt_pip2_file_open(struct device *dev, u8 file_no)
 {
-	int rc = 0;
+	int ret = 0;
 	u16 status;
 	u16 actual_read_len;
 	u8  file_handle;
 	u8  data[2];
 	u8  read_buf[10];
-	u8  expected_len = pt_pip2_get_cmd_response_len(PIP2_CMD_ID_FILE_OPEN);
 
 	pt_debug(dev, DL_DEBUG, "%s: OPEN file %d\n", __func__, file_no);
 	data[0] = file_no;
-	rc = _pt_request_pip2_send_cmd(dev,
+	ret = _pt_request_pip2_send_cmd(dev,
 		PT_CORE_CMD_UNPROTECTED, PIP2_CMD_ID_FILE_OPEN,
 		data, 1, read_buf, &actual_read_len);
-	if (rc) {
+	if (ret) {
 		pt_debug(dev, DL_ERROR,
-			"%s: FILE_OPEN timeout for file=%d\n",
+			"%s ROM BL FILE_OPEN timeout for file = %d\n",
 			__func__, file_no);
 		return -PIP2_RSP_ERR_NOT_OPEN;
 	}
 
 	status = read_buf[PIP2_RESP_STATUS_OFFSET];
-	if (rc || ((status != PIP2_RSP_ERR_NONE) &&
-	    (status != PIP2_RSP_ERR_ALREADY_OPEN))) {
+	file_handle = read_buf[PIP2_RESP_BODY_OFFSET];
+	if (ret || ((status != 0x00) && (status != 0x03)) ||
+	    (file_handle != file_no)) {
 		pt_debug(dev, DL_ERROR,
-			"%s: %s 0x%02X for file=%d\n",
-			__func__, "FILE_OPEN failure:", status, file_no);
-		return -status;
-	} else if (actual_read_len == expected_len) {
-		/* File_open returned a file handle */
-		file_handle = read_buf[PIP2_RESP_BODY_OFFSET];
-		if (file_handle != file_no) {
-			pt_debug(dev, DL_ERROR,
-				"%s: %s 0x%02X file=%d returned handle=%d\n",
-				__func__, "FILE_OPEN failure:",
-				status, file_no, file_handle);
-			return -status;
-		}
-	} else {
+			"%s ROM BL FILE_OPEN failure: 0x%02X for file = %d\n",
+			__func__, status, file_handle);
 		return -status;
 	}
-
 	return file_handle;
 }
 
@@ -12390,25 +10895,24 @@ int _pt_pip2_file_close(struct device *dev, u8 file_handle)
 }
 
 /*******************************************************************************
- * FUNCTION: _pt_pip2_file_erase_by_file_no
+ * FUNCTION: _pt_pip2_file_erase
  *
- * SUMMARY: Using the BL PIP2 commands erase a file by file number only.
+ * SUMMARY: Using the BL PIP2 commands erase a file
  *
- *  NOTE: The DUT must be in BL mode for this command to work
- *  NOTE: Some FLASH parts can time out while erasing one or more sectors,
- *      one retry is attempted for each sector in a file.
+ *	NOTE: The DUT must be in BL mode for this command to work
+ *	NOTE: Some FLASH parts can time out while erasing one or more sectors,
+ *		one retry is attempted for each sector in a file.
  *
  * RETURNS:
- *  <0 = Error
- *  >0 = file handle closed
+ *	<0 = Error
+ *	>0 = file handle closed
  *
  * PARAMETERS:
- *  *dev         - pointer to device structure
- *   file_handle - handle to the file to be erased
- *  *status      - PIP2 erase status code
+ *	*dev         - pointer to device structure
+ *	 file_handle - handle to the file to be erased
+ *	 *status     - PIP2 erase status code
  ******************************************************************************/
-int _pt_pip2_file_erase_by_file_no(struct device *dev, u8 file_handle,
-				   int *status)
+static int _pt_pip2_file_erase(struct device *dev, u8 file_handle, int *status)
 {
 	int ret = 0;
 	int max_retry = PT_PIP2_MAX_FILE_SIZE/PT_PIP2_FILE_SECTOR_SIZE;
@@ -12464,129 +10968,6 @@ int _pt_pip2_file_erase_by_file_no(struct device *dev, u8 file_handle,
 }
 
 /*******************************************************************************
- * FUNCTION: _pt_pip2_file_erase_by_file_sector
- *
- * SUMMARY: Using the BL PIP2 commands erase a file sector by sector.
- *
- * NOTE: The DUT must be in BL mode for this command to work
- * NOTE: Some FLASH parts can time out while erasing one or more sectors,
- *     one retry is attempted for each sector in a file.
- *
- * RETURNS:
- *  <0 = Error
- *  >0 = file handle closed
- *
- * PARAMETERS:
- *  *dev         - pointer to device structure
- *   file_handle - handle to the file to be erased
- *   file_sector - Number of sectors to erase
- *  *status      - PIP2 erase status code
- ******************************************************************************/
-int _pt_pip2_file_erase_by_file_sector(struct device *dev, u8 file_handle,
-				       u16 file_sector, int *status)
-{
-	int ret = 0, index = 0;
-	int max_retry = 3;
-	int retry = 0;
-	int tmp_status = PIP2_RSP_ERR_NONE;
-	u16 sector_to_erase = 1;
-	u16 actual_read_len;
-	u8  data[6];
-	u8  read_buf[10];
-	struct pt_core_data *cd = dev_get_drvdata(dev);
-
-	pt_debug(dev, DL_DEBUG, "%s: ERASE file=%d, sector=%d\n", __func__,
-		 file_handle, file_sector);
-	data[0] = file_handle;
-	data[1] = PIP2_FILE_IOCTL_CODE_ERASE_FILE;
-	/* Set how many sectors to erase*/
-	data[4] = LOW_BYTE(sector_to_erase);
-	data[5] = HI_BYTE(sector_to_erase);
-
-	/* Increase waiting time for large file erase */
-	mutex_lock(&cd->system_lock);
-	cd->pip_cmd_timeout = PT_PIP2_CMD_FILE_SECTOR_ERASE_TIMEOUT;
-	mutex_unlock(&cd->system_lock);
-	for (retry = 0; retry < max_retry; retry++) {
-		for (index = 0; index < file_sector; index++) {
-			/* Initialize status code */
-			tmp_status = PIP2_RSP_ERR_NONE;
-			/* Set which sector starts to erase */
-			data[2] = LOW_BYTE(index);
-			data[3] = HI_BYTE(index);
-			ret = _pt_request_pip2_send_cmd(dev,
-				PT_CORE_CMD_UNPROTECTED, PIP2_CMD_ID_FILE_IOCTL,
-				data, 6, read_buf, &actual_read_len);
-
-			tmp_status = read_buf[PIP2_RESP_STATUS_OFFSET];
-			if (ret || tmp_status != PIP2_RSP_ERR_NONE)
-				break;
-		}
-		/*
-		 * Only retry if response doesn't arrive or the status code is
-		 * PIP2_RSP_ERR_TIMEOUT.
-		 */
-		if ((ret != -ETIME) || (tmp_status != PIP2_RSP_ERR_TIMEOUT))
-			break;
-		else {
-#ifdef TTDL_DIAGNOSTICS
-			cd->file_erase_timeout_count++;
-#endif
-			pt_debug(dev, DL_WARN,
-			    "%s: ERASE timeout %d for file=%d, sector=%d\n",
-			    __func__, retry, file_handle, index);
-		}
-	}
-
-	mutex_lock(&cd->system_lock);
-	*status = tmp_status;
-	cd->pip_cmd_timeout = cd->pip_cmd_timeout_default;
-	mutex_unlock(&cd->system_lock);
-	if (ret) {
-		pt_debug(dev, DL_ERROR,
-			"%s ROM FILE_ERASE cmd failure: %d for file=%d, sector=%d\n",
-			__func__, ret, file_handle, index);
-		return -EIO;
-	}
-
-	if (*status != 0x00) {
-		pt_debug(dev, DL_ERROR,
-			"%s ROM FILE_ERASE failure: 0x%02X for file=%d, sector=%d\n",
-			__func__, *status, file_handle, index);
-		return -EIO;
-	}
-	return file_handle;
-}
-
-/*******************************************************************************
- * FUNCTION: _pt_pip2_file_erase
- *
- * SUMMARY: Wrapper function to call _pt_pip2_file_erase_by_file_sector() and
- *   _pt_pip2_file_erase_by_file_no() by checking file_sector.
- *
- * NOTE: If the file_sector is 0, it will erase the entire file.
- *
- * RETURNS:
- *   <0 = Error
- *   >0 = file handle closed
- *
- * PARAMETERS:
- *  *dev         - pointer to device structure
- *   file_handle - handle to the file to be erased
- *   file_sector - Number of sectors to erase
- *  *status      - PIP2 erase status code
- ******************************************************************************/
-int _pt_pip2_file_erase(struct device *dev, u8 file_handle, u16 file_sector,
-			int *status)
-{
-	if (file_sector)
-		return _pt_pip2_file_erase_by_file_sector(dev, file_handle,
-							  file_sector, status);
-	else
-		return _pt_pip2_file_erase_by_file_no(dev, file_handle, status);
-}
-
-/*******************************************************************************
  * FUNCTION: _pt_pip2_file_read
  *
  * SUMMARY: Using the BL PIP2 commands read n bytes from a already opened file
@@ -12613,6 +10994,7 @@ int _pt_pip2_file_read(struct device *dev, u8 file_handle, u16 num_bytes,
 	data[0] = file_handle;
 	data[1] = (num_bytes & 0x00FF);
 	data[2] = (num_bytes & 0xFF00) >> 8;
+
 	ret = _pt_request_pip2_send_cmd(dev,
 		PT_CORE_CMD_UNPROTECTED, PIP2_CMD_ID_FILE_READ,
 		data, 3, read_buf, &actual_read_len);
@@ -12621,7 +11003,7 @@ int _pt_pip2_file_read(struct device *dev, u8 file_handle, u16 num_bytes,
 		pt_debug(dev, DL_ERROR,
 			"%s File open failure with error code = %d\n",
 			__func__, status);
-		return -1;
+		return -EPERM;
 	}
 	ret = num_bytes;
 
@@ -12657,14 +11039,13 @@ int _pt_read_us_file(struct device *dev, u8 *file_path, u8 *buf, int *size)
 		pt_debug(dev, DL_ERROR, "%s: path || buf is NULL.\n", __func__);
 		return -EINVAL;
 	}
-
 	pt_debug(dev, DL_WARN, "%s: path = %s\n", __func__, file_path);
 
 	oldfs = get_fs();
 	set_fs(KERNEL_DS);
 	filp = filp_open(file_path, O_RDONLY, 0400);
 	if (IS_ERR(filp)) {
-		pt_debug(dev, DL_WARN, "%s: Failed to open %s\n", __func__,
+		pt_debug(dev, DL_ERROR, "%s: Failed to open %s\n", __func__,
 			file_path);
 		rc = -ENOENT;
 		goto err;
@@ -12703,12 +11084,7 @@ int _pt_read_us_file(struct device *dev, u8 *file_path, u8 *buf, int *size)
 		goto exit;
 	}
 	filp->private_data = inode->i_private;
-
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0))
-	if (kernel_read(filp, buf, read_len, &(filp->f_pos)) != read_len) {
-#else
 	if (vfs_read(filp, buf, read_len, &(filp->f_pos)) != read_len) {
-#endif
 		pt_debug(dev, DL_ERROR, "%s: file read error.\n", __func__);
 		rc = -EINVAL;
 		goto exit;
@@ -12755,7 +11131,7 @@ int _pt_request_pip2_bin_hdr(struct device *dev, struct pt_bin_file_hdr *hdr)
 			read_buf, &read_size);
 		if (rc) {
 			ret = rc;
-			pt_debug(dev, DL_WARN,
+			pt_debug(dev, DL_ERROR,
 				"%s Failed to read fw image from US, rc=%d\n",
 				__func__, rc);
 			goto exit;
@@ -13098,7 +11474,6 @@ ping_test_exit:
 	return rc;
 }
 
-#ifndef TTDL_KERNEL_SUBMISSION
 /*******************************************************************************
  * FUNCTION: _pt_ic_parse_input_hex
  *
@@ -13301,7 +11676,6 @@ static int _pt_ic_parse_input(struct device *dev,
 error:
 	return ret;
 }
-#endif /* !TTDL_KERNEL_SUBMISSION */
 
 #ifdef TTHE_TUNER_SUPPORT
 /*******************************************************************************
@@ -13327,7 +11701,6 @@ static int tthe_debugfs_open(struct inode *inode, struct file *filp)
 	u32 buf_size = PT_MAX_PRBUF_SIZE;
 
 	filp->private_data = inode->i_private;
-
 	if (cd->tthe_buf)
 		return -EBUSY;
 
@@ -13363,89 +11736,10 @@ static int tthe_debugfs_close(struct inode *inode, struct file *filp)
 	struct pt_core_data *cd = filp->private_data;
 
 	filp->private_data = NULL;
-
 	kfree(cd->tthe_buf);
 	cd->tthe_buf = NULL;
 
 	return 0;
-}
-
-/*******************************************************************************
- * FUNCTION: tthe_debugfs_store
- *
- * SUMMARY: Write method for tthe_tuner debugfs node. This function allows
- *	user configuration of some output values via a bitmask.
- *		0x01 = HID USB vs I2C output
- *		0xFE = Reserved
- *
- * RETURN: Size of debugfs data write
- *
- * PARAMETERS:
- *      *filp   - file pointer to debugfs file
- *      *buf    - the user space buffer to read to
- *       count  - the maximum number of bytes to read
- *      *ppos   - the current position in the buffer
- ******************************************************************************/
-static ssize_t tthe_debugfs_store(struct file *filp, const char __user *buf,
-		size_t count, loff_t *ppos)
-{
-	struct pt_core_data *cd = filp->private_data;
-	ssize_t length;
-	u32 input_data[2];
-	u8 tmp_buf[4];    /* large enough for 1 32bit value */
-	int rc = 0;
-
-	mutex_lock(&cd->tthe_lock);
-
-	/* copy data from user space */
-	rc = simple_write_to_buffer(tmp_buf, sizeof(tmp_buf),
-		ppos, buf, count);
-	if (rc < 0)
-		goto exit;
-
-	length = _pt_ic_parse_input(cd->dev, tmp_buf, count,
-			input_data, ARRAY_SIZE(input_data));
-
-	if (length == 1) {
-		mutex_lock(&(cd->system_lock));
-		cd->tthe_hid_usb_format = input_data[0];
-		if (input_data[0] == PT_TTHE_TUNER_FORMAT_HID_USB)
-			pt_debug(cd->dev, DL_INFO,
-				"%s: Enable tthe_tuner HID-USB format\n",
-				__func__);
-		else if (input_data[0] == PT_TTHE_TUNER_FORMAT_HID_I2C)
-			pt_debug(cd->dev, DL_INFO,
-				"%s: Enable tthe_tuner HID-I2C format\n",
-				__func__);
-		else if (input_data[0] ==
-			PT_TTHE_TUNER_FORMAT_HID_FINGER_TO_PIP)
-			pt_debug(cd->dev, DL_INFO,
-				"%s: Enable tthe_tuner HID-FINGER-TO-PIP format\n",
-				__func__);
-		else if (input_data[0] ==
-			PT_TTHE_TUNER_FORMAT_HID_FINGER_AND_PEN_TO_PIP)
-			pt_debug(cd->dev, DL_INFO,
-				"%s: Enable tthe_tuner HID_FINGER_AND_PEN_TO_PIP format\n",
-				__func__);
-		else {
-			rc = -EINVAL;
-			pt_debug(cd->dev, DL_ERROR,
-				"%s: Invalid parameter: %d\n",
-				__func__, input_data[0]);
-		}
-		mutex_unlock(&(cd->system_lock));
-	} else {
-		rc = -EINVAL;
-		pt_debug(cd->dev, DL_ERROR,
-			"%s: Invalid number of parameters\n", __func__);
-	}
-
-exit:
-	mutex_unlock(&cd->tthe_lock);
-	if (rc)
-		return rc;
-	else
-		return count;
 }
 
 /*******************************************************************************
@@ -13492,18 +11786,11 @@ static ssize_t tthe_debugfs_read(struct file *filp, char __user *buf,
 	} else {
 		ret = copy_to_user(buf, cd->tthe_buf, size);
 	}
-
-	/*
-	 * When size >= tthe_buf_len setting partial_read will cause NULL
-	 * characters to be printed in the output.
-	 */
-	if (size == count && size < cd->tthe_buf_len)
+	if (size == count)
 		partial_read = count;
 
-	if (ret == size) {
-		mutex_unlock(&cd->tthe_lock);
+	if (ret == size)
 		return -EFAULT;
-	}
 	size -= ret;
 	cd->tthe_buf_len -= size;
 	mutex_unlock(&cd->tthe_lock);
@@ -13515,7 +11802,6 @@ static const struct file_operations tthe_debugfs_fops = {
 	.open = tthe_debugfs_open,
 	.release = tthe_debugfs_close,
 	.read = tthe_debugfs_read,
-	.write = tthe_debugfs_store,
 };
 #endif
 
@@ -13580,9 +11866,7 @@ static struct pt_core_commands _pt_core_commands = {
 	.request_pip2_bin_hdr          = _pt_request_pip2_bin_hdr,
 	.request_dut_generation        = _pt_request_dut_generation,
 	.request_hw_version            = _pt_request_hw_version,
-#ifndef TTDL_KERNEL_SUBMISSION
 	.parse_sysfs_input             = _pt_ic_parse_input,
-#endif
 #ifdef TTHE_TUNER_SUPPORT
 	.request_tthe_print            = _pt_request_tthe_print,
 #endif
@@ -13692,7 +11976,7 @@ static void pt_probe_modules(struct pt_core_data *cd)
 
 	mutex_lock(&module_list_lock);
 	list_for_each_entry(m, &module_list, node) {
-		pt_debug(cd->dev, DL_WARN, "%s: Probe module %s\n",
+		pt_debug(cd->dev, DL_ERROR, "%s: Probe module %s\n",
 			__func__, m->name);
 		rc = pt_probe_module(cd, m);
 		if (rc)
@@ -13918,12 +12202,11 @@ static void pt_early_suspend(struct early_suspend *h)
 
 	call_atten_cb(cd, PT_ATTEN_SUSPEND, 0);
 }
-
 /*******************************************************************************
  * FUNCTION: pt_late_resume
  *
  * SUMMARY: Android PM architecture function that will call "PT_ATTEN_RESUME"
- *  attention list.
+ * attention list.
  *
  * PARAMETERS:
  *  *h  - pointer to early_suspend structure
@@ -14018,7 +12301,6 @@ static void pt_setup_fb_notifier(struct pt_core_data *cd)
 	int rc = 0;
 
 	cd->fb_state = FB_ON;
-
 	cd->fb_notifier.notifier_call = fb_notifier_callback;
 
 	rc = fb_register_client(&cd->fb_notifier);
@@ -14054,7 +12336,6 @@ static void pt_watchdog_work(struct work_struct *work)
 	int rc = 0;
 	struct pt_core_data *cd = container_of(work,
 				struct pt_core_data, watchdog_work);
-
 	/*
 	 * if found the current sleep_state is SS_SLEEPING
 	 * then no need to request_exclusive, directly return
@@ -14081,7 +12362,7 @@ static void pt_watchdog_work(struct work_struct *work)
 		cd->watchdog_irq_stuck_count++;
 		pt_toggle_err_gpio(cd, PT_ERR_GPIO_IRQ_STUCK);
 #endif /* TTDL_DIAGNOSTICS */
-		pt_debug(cd->dev, DL_WARN,
+		pt_debug(cd->dev, DL_ERROR,
 			"%s: TTDL WD found IRQ asserted, attempt to clear\n",
 			__func__);
 		pt_flush_bus(cd, PT_FLUSH_BUS_BASED_ON_LEN, NULL);
@@ -14145,7 +12426,7 @@ queue_startup:
 			}
 #ifdef TTDL_DIAGNOSTICS
 			cd->wd_xres_count++;
-			pt_debug(cd->dev, DL_WARN,
+			pt_debug(cd->dev, DL_ERROR,
 				"%s: Comm Failed - DUT reset [#%d]\n",
 				__func__, cd->wd_xres_count);
 #endif /* TTDL_DIAGNOSTICS */
@@ -14154,7 +12435,7 @@ queue_startup:
 			 * After trying PT_WATCHDOG_RETRY_COUNT times to
 			 * reset the part to regain communications, try to BL
 			 */
-			pt_debug(cd->dev, DL_WARN,
+			pt_debug(cd->dev, DL_ERROR,
 				"%s: WD DUT access failure, Start FW Upgrade\n",
 				__func__);
 #ifdef TTDL_DIAGNOSTICS
@@ -14181,7 +12462,7 @@ queue_startup:
 			mutex_unlock(&cd->system_lock);
 
 			if (cd->active_dut_generation == DUT_UNKNOWN) {
-				pt_debug(cd->dev, DL_WARN,
+				pt_debug(cd->dev, DL_ERROR,
 					"%s: Queue Restart\n", __func__);
 				pt_queue_restart(cd);
 			} else
@@ -14191,7 +12472,7 @@ queue_startup:
 		cd->hw_detected = true;
 		if (cd->startup_status <= (STARTUP_STATUS_FW_RESET_SENTINEL |
 		    STARTUP_STATUS_BL_RESET_SENTINEL)) {
-			pt_debug(cd->dev, DL_WARN,
+			pt_debug(cd->dev, DL_ERROR,
 				"%s: HW detected but not enumerated\n",
 				__func__);
 			pt_queue_enum(cd);
@@ -14217,7 +12498,6 @@ exit:
 static void pt_watchdog_timer(unsigned long handle)
 {
 	struct pt_core_data *cd = (struct pt_core_data *)handle;
-
 	if (!cd)
 		return;
 
@@ -14242,7 +12522,6 @@ static void pt_watchdog_timer(unsigned long handle)
 static void pt_watchdog_timer(struct timer_list *t)
 {
 	struct pt_core_data *cd = from_timer(cd, t, watchdog_timer);
-
 	if (!cd)
 		return;
 
@@ -14254,65 +12533,6 @@ static void pt_watchdog_timer(struct timer_list *t)
 }
 #endif
 
-#ifdef PT_PTSBC_SUPPORT
-/* Required to support the Parade Techologies Development Platform */
-static int pt_probe_complete(struct pt_core_data *cd);
-
-/*******************************************************************************
- * FUNCTION: pt_probe_work
- *
- * SUMMARY: For the PtSBC the probe functionality is split into two functions;
- *	pt_probe() and pt_probe_complete() which is called from here.
- *	This function is scheduled as a "work" task in order to launch after
- *	I2C/SPI is up.
- *
- * RETURN: Void
- *
- * PARAMETERS:
- *	*work - pointer to work structure
- ******************************************************************************/
-static void pt_probe_work(struct work_struct *work)
-{
-	struct pt_core_data *cd =
-			container_of(work, struct pt_core_data,
-					probe_work);
-	int rc;
-
-	rc = pt_probe_complete(cd);
-
-	if (rc < 0)
-		pr_err("%s: Probe_complete returns rc=%d\n", __func__, rc);
-	else
-		pt_debug(cd->dev, DL_INFO,
-			"%s: Probe_complete returns rc=%d\n", __func__, rc);
-}
-
-/*******************************************************************************
- * FUNCTION: pt_probe_timer
- *
- * SUMMARY: For the PtSBC the probe functionality is split into two functions;
- *	pt_probe() and pt_probe_complete(). This timer shedules the
- *	probe_work function.
- *
- * RETURN: Void
- *
- * PARAMETERS:
- *	handle - pointer to the core data
- ******************************************************************************/
-static void pt_probe_timer(unsigned long handle)
-{
-	struct pt_core_data *cd = (struct pt_core_data *)handle;
-
-	if (!cd)
-		return;
-
-	pt_debug(cd->dev, DL_INFO, "%s: Watchdog timer triggered\n",
-		__func__);
-
-	if (!work_pending(&cd->probe_work))
-		schedule_work(&cd->probe_work);
-}
-#endif /* --- End PT_PTSBC_SUPPORT --- */
 
 
 
@@ -14337,9 +12557,8 @@ static ssize_t pt_hw_version_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	struct pt_core_data *cd = dev_get_drvdata(dev);
-
 	_pt_request_hw_version(dev, cd->hw_version);
-	return snprintf(buf, PT_MAX_PRBUF_SIZE, "%s\n", cd->hw_version);
+	return scnprintf(buf, PT_MAX_PRBUF_SIZE, "%s\n", cd->hw_version);
 }
 static DEVICE_ATTR(hw_version, 0444, pt_hw_version_show, NULL);
 
@@ -14359,7 +12578,7 @@ static DEVICE_ATTR(hw_version, 0444, pt_hw_version_show, NULL);
 static ssize_t pt_drv_version_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	return snprintf(buf, PT_MAX_PRBUF_SIZE,
+	return scnprintf(buf, PT_MAX_PRBUF_SIZE,
 		"Driver: %s\nVersion: %s\nDate: %s\n",
 		pt_driver_core_name, pt_driver_core_version,
 		pt_driver_core_date);
@@ -14537,7 +12756,6 @@ static ssize_t pt_sysinfo_show(struct device *dev,
 }
 static DEVICE_ATTR(sysinfo, 0444, pt_sysinfo_show, NULL);
 
-#ifndef TTDL_KERNEL_SUBMISSION
 /*******************************************************************************
  * FUNCTION: pt_hw_reset_show
  *
@@ -14590,7 +12808,7 @@ static ssize_t pt_hw_reset_show(struct device *dev,
 		t = wait_event_timeout(cd->wait_q, (cd->fw_updating == true),
 			msecs_to_jiffies(200));
 		if (IS_TMO(t)) {
-			pt_debug(dev, DL_WARN,
+			pt_debug(dev, DL_ERROR,
 				"%s: Timeout waiting for FW update",
 				__func__);
 			rc = -ETIME;
@@ -14611,7 +12829,7 @@ static ssize_t pt_hw_reset_show(struct device *dev,
 		}
 	} else {
 		/* Wait for any sentinel */
-		rc = _pt_request_wait_for_enum_state(dev, 250,
+		rc = _pt_request_wait_for_enum_state(dev, 150,
 			STARTUP_STATUS_BL_RESET_SENTINEL |
 			STARTUP_STATUS_FW_RESET_SENTINEL);
 		if (rc) {
@@ -14726,7 +12944,7 @@ static ssize_t pt_pip2_cmd_rsp_store(struct device *dev,
 	length = _pt_ic_parse_input_hex(dev, buf, size,
 			input_data, PT_MAX_PIP2_MSG_SIZE);
 	if (length <= 0 || length > PT_MAX_PIP2_MSG_SIZE) {
-		pt_debug(dev, DL_WARN, "%s: Invalid number of arguments\n",
+		pt_debug(dev, DL_ERROR, "%s: Invalid number of arguments\n",
 			__func__);
 		rc = -EINVAL;
 		goto exit;
@@ -14749,7 +12967,7 @@ static ssize_t pt_pip2_cmd_rsp_store(struct device *dev,
 		} else {
 			cd->cmd_rsp_buf_len = actual_read_len;
 			memcpy(cd->cmd_rsp_buf, read_buf, actual_read_len);
-			pt_debug(dev, DL_WARN,
+			pt_debug(dev, DL_ERROR,
 				"%s: PIP2 actual_read_len = %d\n",
 				__func__, actual_read_len);
 		}
@@ -14834,9 +13052,6 @@ static ssize_t pt_command_store(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t size)
 {
 	struct pt_core_data *cd = dev_get_drvdata(dev);
-#ifdef TTDL_PTVIRTDUT_SUPPORT
-	struct pt_hid_output hid_output;
-#endif
 	unsigned short crc;
 	u16 actual_read_len;
 	u8 input_data[PT_MAX_PIP2_MSG_SIZE + 1];
@@ -14852,42 +13067,9 @@ static ssize_t pt_command_store(struct device *dev,
 	length = _pt_ic_parse_input_hex(dev, buf, size,
 			input_data, PT_MAX_PIP2_MSG_SIZE);
 	if (length <= 0 || length > PT_MAX_PIP2_MSG_SIZE) {
-		pt_debug(dev, DL_WARN, "%s: Invalid number of arguments\n",
+		pt_debug(dev, DL_ERROR, "%s: Invalid number of arguments\n",
 			__func__);
 		rc = -EINVAL;
-		goto pt_command_store_exit;
-	}
-
-	/* Get HID Desc */
-	if (length == 2 && input_data[0] == 0x01 && input_data[1] == 0x00) {
-		pm_runtime_get_sync(dev);
-		rc = pt_get_hid_descriptor(cd, &cd->hid_desc);
-		mutex_lock(&cd->sysfs_lock);
-		if (!rc) {
-			cd->cmd_rsp_buf_len =
-			    get_unaligned_le16(&cd->response_buf[0]);
-			memcpy(cd->cmd_rsp_buf, cd->response_buf,
-			       cd->cmd_rsp_buf_len);
-		}
-		cd->raw_cmd_status = rc;
-		mutex_unlock(&cd->sysfs_lock);
-		pm_runtime_put(dev);
-		goto pt_command_store_exit;
-	}
-
-	/* Get Report Desc */
-	if (length == 2 && input_data[0] == 0x02 && input_data[1] == 0x00) {
-		pm_runtime_get_sync(dev);
-		rc = pt_get_report_descriptor(cd);
-		mutex_lock(&cd->sysfs_lock);
-		if (!rc) {
-			cd->cmd_rsp_buf_len = cd->hid_core.hid_report_desc_len;
-			memcpy(cd->cmd_rsp_buf, cd->response_buf,
-			       cd->cmd_rsp_buf_len);
-		}
-		cd->raw_cmd_status = rc;
-		mutex_unlock(&cd->sysfs_lock);
-		pm_runtime_put(dev);
 		goto pt_command_store_exit;
 	}
 
@@ -14901,7 +13083,7 @@ static ssize_t pt_command_store(struct device *dev,
 		if (len_field == length && length <= 254) {
 			crc = crc_ccitt_calculate(&input_data[2],
 				length - 2);
-			pt_debug(dev, DL_WARN, "%s: len=%d crc=0x%02X\n",
+			pt_debug(dev, DL_ERROR, "%s: len=%d crc=0x%02X\n",
 				__func__, length, crc);
 			input_data[length] = (crc & 0xFF00) >> 8;
 			input_data[length + 1] = crc & 0x00FF;
@@ -14914,19 +13096,6 @@ static ssize_t pt_command_store(struct device *dev,
 
 	pm_runtime_get_sync(dev);
 
-#ifdef TTDL_PTVIRTDUT_SUPPORT
-	/* Special case for handling Virtual DUT exit */
-	if (length >= 3 &&
-	    input_data[0] == 0xFF &&
-	    input_data[1] == 0xFF &&
-	    input_data[2] == 0x00) {
-		hid_output.length = length,
-		hid_output.write_buf = input_data,
-		rc = pt_hid_send_output_user_(cd, &hid_output);
-		pm_runtime_put(dev);
-		goto pt_command_store_exit;
-	}
-#endif
 	rc = pt_hid_output_user_cmd(cd, PT_MAX_INPUT, cd->cmd_rsp_buf,
 		length, input_data, &actual_read_len);
 	pm_runtime_put(dev);
@@ -14958,105 +13127,38 @@ static DEVICE_ATTR(command, 0220, NULL, pt_command_store);
  *	available to be read here.
  *
  * PARAMETERS:
- *  *filp     - pointer to file structure
- *  *kobj     - pointer to kobject structure
- *  *bin_attr - pointer to bin_attribute structure
- *   buf      - pointer to cmd input buffer
- *   offset   - offset index to store input buffer
- *   count    - size of data in buffer
+ *      *dev  - pointer to Device structure
+ *      *attr - pointer to the device attribute structure
+ *      *buf  - pointer to buffer to print
  ******************************************************************************/
-static ssize_t pt_response_show(struct file *filp,
-		struct kobject *kobj, struct bin_attribute *bin_attr,
-		char *buf, loff_t offset, size_t count)
+static ssize_t pt_response_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
 {
-	struct device *dev = container_of(kobj, struct device, kobj);
 	struct pt_core_data *cd = dev_get_drvdata(dev);
-	static int pr_left;
-	static int pr_index;
-	static u8 *pr_buf;
-	int i = 0;
-	int index = 0;
-	int rc = 0;
-	int print_len = 0;
+	int i;
+	ssize_t num_read;
+	int index;
 
-	if (pr_left) {
-		if (count < pr_left) {
-			index = count;
-			memcpy(buf, pr_buf + pr_index, index);
-			pr_left -= count;
-			pr_index += count;
-		} else {
-			index = pr_left;
-			memcpy(buf, pr_buf + pr_index, index);
-			pr_left = 0;
-			pr_index = 0;
-			kfree(pr_buf);
-		}
-		return index;
-	}
+	mutex_lock(&cd->sysfs_lock);
+	index = scnprintf(buf, PT_MAX_PRBUF_SIZE,
+		"Status: %d\n", cd->raw_cmd_status);
+	if (cd->raw_cmd_status)
+		goto error;
 
-	if (offset == 0) {
-		mutex_lock(&cd->sysfs_lock);
-		if (cd->raw_cmd_status) {
-			index = scnprintf(buf, PT_MAX_PRBUF_SIZE,
-					  "Status: %d\n", cd->raw_cmd_status);
-			mutex_unlock(&cd->sysfs_lock);
-			return index;
-		}
+	num_read = cd->cmd_rsp_buf_len;
+	for (i = 0; i < num_read; i++)
+		index += scnprintf(buf + index, PT_MAX_PRBUF_SIZE - index,
+			"0x%02X\n", cd->cmd_rsp_buf[i]);
 
-		/*
-		 * Allocate memory according to the cost, each byte need 5
-		 * character, and extra 100 bytes for the header and tail.
-		 */
-		if (cd->cmd_rsp_buf_len > PT_MAX_INPUT) {
-			rc = -EINVAL;
-			goto exit;
-		}
-		print_len = cd->cmd_rsp_buf_len * 5 + 100;
-		pr_buf = kzalloc(print_len, GFP_KERNEL);
-		if (!pr_buf) {
-			rc = -ENOMEM;
-			goto exit;
-		}
+	index += scnprintf(buf + index, PT_MAX_PRBUF_SIZE - index,
+		"(%zd bytes)\n", num_read);
 
-		/* Format all data to pr_buf */
-		index = scnprintf(pr_buf, print_len - index, "Status: %d\n",
-				cd->raw_cmd_status);
-		for (i = 0; i < cd->cmd_rsp_buf_len; i++)
-			index += scnprintf(pr_buf + index,
-				print_len - index, "0x%02X\n",
-				cd->cmd_rsp_buf[i]);
-		index += scnprintf(pr_buf + index, print_len - index,
-				   "(%zd bytes)\n", cd->cmd_rsp_buf_len);
-
-		mutex_unlock(&cd->sysfs_lock);
-
-		if (count < index) {
-			memcpy(buf, pr_buf, count);
-			pr_left = index - count;
-			pr_index = count;
-			index = count;
-		} else {
-			memcpy(buf, pr_buf, index);
-			pr_left = 0;
-			pr_index = 0;
-			kfree(pr_buf);
-		}
-		return index;
-	}
-
-exit:
+error:
 	mutex_unlock(&cd->sysfs_lock);
-	return rc;
+	return index;
 }
+static DEVICE_ATTR(response, 0444, pt_response_show, NULL);
 
-static struct bin_attribute bin_attr_pt_response = {
-	.attr = {
-		.name = "response",
-		.mode = (0444),
-	},
-	.read = pt_response_show,
-};
 /*******************************************************************************
  * FUNCTION: pt_dut_debug_show
  *
@@ -15097,7 +13199,6 @@ static ssize_t pt_dut_debug_show(struct device *dev,
 		"%d %s \t- %s\n"
 		"%d %s \t- %s\n"
 		"%d %s \t- %s\n"
-		"%d %s \t- %s\n"
 		,
 		PIP1_BL_CMD_ID_VERIFY_APP_INTEGRITY, "", "BL Verify APP",
 		PT_DUT_DBG_HID_RESET, "", "HID Reset",
@@ -15115,8 +13216,7 @@ static ssize_t pt_dut_debug_show(struct device *dev,
 		PT_DUT_DBG_HID_SYSINFO, "", "HID system info",
 		PT_DUT_DBG_PIP_SUSPEND_SCAN, "", "Suspend Scan",
 		PT_DUT_DBG_PIP_RESUME_SCAN, "", "Resume Scan",
-		PT_DUT_DBG_HID_DESC, "", "Get HID Desc",
-		PT_DUT_DBG_REPORT_DESC, "", "Get HID Report Desc"
+		PT_DUT_DBG_HID_DESC, "", "Get HID Desc"
 	);
 
 	return ret;
@@ -15171,6 +13271,7 @@ static ssize_t pt_drv_debug_show(struct device *dev,
 		"%d %s \t- %s\n"
 		"%d %s \t- %s\n"
 		"%d %s \t- %s\n"
+		"%d %s \t- %s\n"
 #endif /* TTDL_DIAGNOSTICS */
 		,
 		PT_DRV_DBG_SUSPEND, "       ", "Suspend TTDL responding to INT",
@@ -15198,8 +13299,10 @@ static ssize_t pt_drv_debug_show(struct device *dev,
 		PT_DRV_DBG_SET_FORCE_SEQ, "[8-15]", "Force PIP2 Sequence #",
 		PT_DRV_DBG_BL_WITH_NO_INT, "[0|1]", "BL with no INT",
 		PT_DRV_DBG_CAL_CACHE_IN_HOST, "[0|1]", "CAL Cache in host",
-		PT_DRV_DBG_NUM_DEVICES, "[1-255]", "Number of Devices",
-		PT_DRV_DBG_PIP_TIMEOUT, "[100-7000]", "PIP Resp Timeout (ms)"
+		PT_DRV_DBG_MULTI_CHIP, "[0|1]", "Multi Chip Support",
+		PT_DRV_DBG_PIP_TIMEOUT, "[100-7000]", "PIP Resp Timeout (ms)",
+		PT_DRV_DBG_TTHE_HID_USB_FORMAT, "[0|1]",
+			"TTHE_TUNER HID USB Format"
 #endif /* TTDL_DIAGNOSTICS */
 	);
 
@@ -15243,7 +13346,6 @@ static ssize_t pt_drv_debug_store(struct device *dev,
 	unsigned short crc = 0;
 	u16 cal_size;
 #endif
-
 	input_data[0] = 0;
 	input_data[1] = 0;
 
@@ -15251,7 +13353,7 @@ static ssize_t pt_drv_debug_store(struct device *dev,
 	length = _pt_ic_parse_input(dev, buf, size,
 			input_data, ARRAY_SIZE(input_data));
 	if (length < 1 || length > 2) {
-		pt_debug(dev, DL_WARN, "%s: Invalid number of arguments\n",
+		pt_debug(dev, DL_ERROR, "%s: Invalid number of arguments\n",
 			__func__);
 		rc = -EINVAL;
 		goto pt_drv_debug_store_exit;
@@ -15432,14 +13534,7 @@ static ssize_t pt_drv_debug_store(struct device *dev,
 				"%s: CAL Cleared, Chip ID=0x%04X size=%d\n",
 				__func__, crc, size);
 		break;
-	case PT_DUT_DBG_REPORT_DESC:			/* 113 */
-		rc = pt_get_report_descriptor(cd);
-		if (rc != 0) {
-			pt_debug(cd->dev, DL_ERROR,
-				"%s: Error on getting report descriptor r=%d\n",
-				__func__, rc);
-		}
-		break;
+
 	case PT_DRV_DBG_REPORT_LEVEL:			/* 200 */
 		mutex_lock(&cd->system_lock);
 		if (input_data[1] >= 0 && input_data[1] < DL_MAX) {
@@ -15510,11 +13605,11 @@ static ssize_t pt_drv_debug_store(struct device *dev,
 	case PT_DRV_DBG_GET_PUT_SYNC:			/* 206 */
 		if (input_data[1] == 0) {
 			pm_runtime_put(dev);
-			pt_debug(dev, DL_WARN,
+			pt_debug(dev, DL_ERROR,
 				"%s: Force call pm_runtime_put()\n", __func__);
 		} else if (input_data[1] == 1) {
 			pm_runtime_get_sync(dev);
-			pt_debug(dev, DL_WARN,
+			pt_debug(dev, DL_ERROR,
 				"%s: Force call pm_runtime_get_sync()\n",
 				__func__);
 		} else {
@@ -15676,25 +13771,18 @@ static ssize_t pt_drv_debug_store(struct device *dev,
 		}
 		mutex_unlock(&(cd->system_lock));
 		break;
-	case PT_DRV_DBG_NUM_DEVICES:			/* 217 */
+	case PT_DRV_DBG_MULTI_CHIP:			/* 217 */
 		mutex_lock(&cd->system_lock);
 		if (input_data[1] == 0) {
-			/* 0 is not supported */
-			rc = -EINVAL;
-			pt_debug(dev, DL_ERROR, "%s: Invalid parameter: %d\n",
-				__func__, input_data[1]);
-		} else if (input_data[1] == 1) {
-			cd->num_devices = input_data[1];
+			cd->multi_chip = PT_FEATURE_DISABLE;
 			cd->ttdl_bist_select = 0x07;
 			pt_debug(dev, DL_INFO,
-				"%s: Multi-chip support Disabled\n", __func__);
-		} else if (input_data[1] > 1 &&
-			   input_data[1] <= PT_MAX_DEVICES) {
-			cd->num_devices = input_data[1];
+				"%s: Disable Multi-chip support\n", __func__);
+		} else if (input_data[1] == 1) {
+			cd->multi_chip = PT_FEATURE_ENABLE;
 			cd->ttdl_bist_select = 0x3F;
 			pt_debug(dev, DL_INFO,
-				"%s: Multi-chip support Enabled with %d DUTs\n",
-				 __func__, cd->num_devices);
+				"%s: Enable Multi-chip support\n", __func__);
 		} else {
 			rc = -EINVAL;
 			pt_debug(dev, DL_ERROR, "%s: Invalid parameter: %d\n",
@@ -15707,12 +13795,11 @@ static ssize_t pt_drv_debug_store(struct device *dev,
 		if (input_data[1] <= 0x07) {
 			cd->panel_id_support = input_data[1];
 			pt_debug(dev, DL_INFO,
-				"%s: ATM - Set panel_id_support to %d\n",
+				"%s: Set panel_id_support to %d\n",
 				__func__, cd->panel_id_support);
 		} else {
 			rc = -EINVAL;
-			pt_debug(dev, DL_ERROR,
-				"%s: ATM - Invalid parameter: %d\n",
+			pt_debug(dev, DL_ERROR, "%s: Invalid parameter: %d\n",
 				__func__, input_data[1]);
 		}
 		mutex_unlock(&(cd->system_lock));
@@ -15728,73 +13815,34 @@ static ssize_t pt_drv_debug_store(struct device *dev,
 			cd->pip_cmd_timeout_default = input_data[1];
 			cd->pip_cmd_timeout = input_data[1];
 			pt_debug(dev, DL_INFO,
-				"%s: ATM - PIP Timeout = %d\n", __func__,
+				"%s: PIP Timeout = %d\n", __func__,
 				cd->pip_cmd_timeout_default);
 		} else {
 			rc = -EINVAL;
-			pt_debug(dev, DL_ERROR,
-				"%s: ATM - Invalid parameter: %d\n",
+			pt_debug(dev, DL_ERROR, "%s: Invalid parameter: %d\n",
 				__func__, input_data[1]);
 		}
 		mutex_unlock(&(cd->system_lock));
 		break;
-	case PT_DRV_DBG_CORE_PLATFORM_FLAG:		/* 220 */
+	case PT_DRV_DBG_TTHE_HID_USB_FORMAT:		/* 220 */
 		mutex_lock(&cd->system_lock);
-		if (cd->cpdata) {
-			cd->cpdata->flags = input_data[1];
-			pt_debug(dev, DL_INFO,
-				"%s: ATM - Set core platform flag to 0x%02X\n",
-				__func__, input_data[1]);
-		} else {
-			rc = -EINVAL;
-			pt_debug(dev, DL_ERROR, "%s: No platform data\n",
-				 __func__);
-		}
-		mutex_unlock(&cd->system_lock);
-		break;
-#ifdef TTDL_PTVIRTDUT_SUPPORT
-	case PT_DRV_DBG_SET_HW_DETECT:			/* 298 */
-		mutex_lock(&cd->system_lock);
-		if (input_data[1])
-			cd->hw_detect_enabled = true;
-		else
-			cd->hw_detect_enabled = false;
-		pt_debug(dev, DL_INFO,
-				"%s: Set hw_detect_enabled to %d\n",
-				__func__, cd->hw_detect_enabled);
-		mutex_unlock(&(cd->system_lock));
-		break;
-	case PT_DRV_DBG_VIRTUAL_I2C_DUT:		/* 299 */
 		if (input_data[1] == 0) {
-			/* Cancel all work threads when disabling */
-			pt_debug(dev, DL_WARN, "%s: Canceling Work", __func__);
-#ifdef PT_PTSBC_SUPPORT
-			cancel_work_sync(&cd->irq_work);
-			cancel_work_sync(&cd->probe_work);
-#endif
-			cancel_work_sync(&cd->ttdl_restart_work);
-			cancel_work_sync(&cd->enum_work);
-			pt_stop_wd_timer(cd);
-			call_atten_cb(cd, PT_ATTEN_CANCEL_LOADER, 0);
-
-			mutex_lock(&cd->system_lock);
-			cd->route_bus_virt_dut = 0;
-			mutex_unlock(&(cd->system_lock));
-			pt_debug(dev, DL_WARN, "%s: Enable Virtual DUT mode\n",
+			cd->tthe_hid_usb_format = PT_FEATURE_DISABLE;
+			pt_debug(dev, DL_INFO,
+				"%s: Disable tthe_tuner HID-USB format\n",
 				__func__);
 		} else if (input_data[1] == 1) {
-			mutex_lock(&cd->system_lock);
-			cd->route_bus_virt_dut = 1;
-			mutex_unlock(&(cd->system_lock));
-			pt_debug(dev, DL_WARN, "%s: Enable Virtual DUT mode\n",
+			cd->tthe_hid_usb_format = PT_FEATURE_ENABLE;
+			pt_debug(dev, DL_INFO,
+				"%s: Enable tthe_tuner HID-USB format\n",
 				__func__);
 		} else {
 			rc = -EINVAL;
 			pt_debug(dev, DL_ERROR, "%s: Invalid parameter: %d\n",
 				__func__, input_data[1]);
 		}
+		mutex_unlock(&(cd->system_lock));
 		break;
-#endif /* TTDL_PTVIRTDUT_SUPPORT */
 #endif /* TTDL_DIAGNOSTICS */
 	default:
 		rc = -EINVAL;
@@ -15836,9 +13884,9 @@ static ssize_t pt_sleep_status_show(struct device *dev,
 
 	mutex_lock(&cd->system_lock);
 	if (cd->sleep_state == SS_SLEEP_ON)
-		ret = snprintf(buf, PT_MAX_PRBUF_SIZE, "off\n");
+		ret = scnprintf(buf, PT_MAX_PRBUF_SIZE, "off\n");
 	else
-		ret = snprintf(buf, PT_MAX_PRBUF_SIZE, "on\n");
+		ret = scnprintf(buf, PT_MAX_PRBUF_SIZE, "on\n");
 	mutex_unlock(&cd->system_lock);
 
 	return ret;
@@ -15882,7 +13930,7 @@ static ssize_t pt_panel_id_show(struct device *dev,
 			if (cd->panel_id_support & PT_PANEL_ID_BY_BL) {
 				rc = pt_hid_output_bl_get_panel_id_(cd, &pid);
 				if (rc) {
-					pt_debug(dev, DL_WARN, "%s: %s %s\n",
+					pt_debug(dev, DL_ERROR, "%s: %s %s\n",
 						 "Failed to retrieve Panel ID. ",
 						 "Using cached value\n",
 						 __func__);
@@ -15896,12 +13944,12 @@ static ssize_t pt_panel_id_show(struct device *dev,
 				if (!rc)
 					pid =
 					 cd->sysinfo.sensing_conf_data.panel_id;
-				pt_debug(dev, DL_WARN,
+				pt_debug(dev, DL_ERROR,
 					 "%s: Gen6 FW mode rc=%d PID=0x%02X\n",
 					 __func__, rc, pid);
 			}
 		} else {
-			pt_debug(dev, DL_WARN, "%s: Active mode unknown\n",
+			pt_debug(dev, DL_ERROR, "%s: Active mode unknown\n",
 				__func__);
 			rc = -EPERM;
 		}
@@ -15922,22 +13970,22 @@ static ssize_t pt_panel_id_show(struct device *dev,
 				if (!rc)
 					pid =
 					 cd->sysinfo.sensing_conf_data.panel_id;
-				pt_debug(dev, DL_WARN,
+				pt_debug(dev, DL_ERROR,
 					 "%s: TT/TC FW mode rc=%d PID=0x%02X\n",
 					 __func__, rc, pid);
 			}
 		} else {
-			pt_debug(dev, DL_WARN, "%s: Active mode unknown\n",
+			pt_debug(dev, DL_ERROR, "%s: Active mode unknown\n",
 				__func__);
 			rc = -EPERM;
 		}
 	} else {
-		pt_debug(dev, DL_WARN, "%s: Dut generation is unknown\n",
+		pt_debug(dev, DL_ERROR, "%s: Dut generation is unknown\n",
 				__func__);
 		rc = -EPERM;
 	}
 
-	ret = snprintf(buf, PT_MAX_PRBUF_SIZE, "Status: %d\n0x%02X\n",
+	ret = scnprintf(buf, PT_MAX_PRBUF_SIZE, "Status: %d\n0x%02X\n",
 			rc, pid);
 	return ret;
 }
@@ -15970,7 +14018,7 @@ static ssize_t pt_get_param_store(struct device *dev,
 	length = _pt_ic_parse_input(dev, buf, size, input_data,
 		ARRAY_SIZE(input_data));
 	if (length != 1) {
-		pt_debug(dev, DL_WARN, "%s: Invalid number of arguments\n",
+		pt_debug(dev, DL_ERROR, "%s: Invalid number of arguments\n",
 			__func__);
 		rc = -EINVAL;
 		goto exit;
@@ -16019,6 +14067,7 @@ static ssize_t pt_get_param_show(struct device *dev,
 	u32     value = 0;
 
 	status = pt_pip_get_param(cd, cd->get_param_id, &value);
+
 	if (status) {
 		pt_debug(dev, DL_ERROR, "%s: %s Failed, status = %d\n",
 			__func__, "pt_get_param", status);
@@ -16059,7 +14108,6 @@ static ssize_t pt_ttdl_restart_show(struct device *dev,
 	mutex_lock(&cd->system_lock);
 	cd->startup_state = STARTUP_NONE;
 	mutex_unlock(&(cd->system_lock));
-
 	/* ensure no left over exclusive access is still locked */
 	release_exclusive(cd, cd->dev);
 
@@ -16109,17 +14157,17 @@ static ssize_t pt_pip2_gpio_read_show(struct device *dev,
 
 	if (!rc) {
 		if (status == 0)
-			return snprintf(buf, PT_MAX_PRBUF_SIZE,
+			return scnprintf(buf, PT_MAX_PRBUF_SIZE,
 					"Status: %d\n"
 					"DUT GPIO Reg: 0x%08X\n",
 					rc, gpio_value);
 		else
-			return snprintf(buf, PT_MAX_PRBUF_SIZE,
+			return scnprintf(buf, PT_MAX_PRBUF_SIZE,
 					"Status: %d\n"
 					"DUT GPIO Reg: n/a\n",
 					status);
 	} else
-		return snprintf(buf, PT_MAX_PRBUF_SIZE,
+		return scnprintf(buf, PT_MAX_PRBUF_SIZE,
 				"Status: %d\n"
 				"DUT GPIO Reg: n/a\n",
 				rc);
@@ -16147,7 +14195,7 @@ static ssize_t pt_pip2_version_show(struct device *dev,
 
 	rc = pt_pip2_get_version(cd);
 	if (!rc) {
-		return snprintf(buf, PT_MAX_PRBUF_SIZE,
+		return scnprintf(buf, PT_MAX_PRBUF_SIZE,
 			"PIP VERSION   : %02X.%02X\n"
 			"BL VERSION    : %02X.%02X\n"
 			"FW VERSION    : %02X.%02X\n"
@@ -16167,7 +14215,7 @@ static ssize_t pt_pip2_version_show(struct device *dev,
 		pt_debug(dev, DL_ERROR,
 			"%s: Failed to retriev PIP2 VERSION data\n", __func__);
 
-		return snprintf(buf, PT_MAX_PRBUF_SIZE,
+		return scnprintf(buf, PT_MAX_PRBUF_SIZE,
 			"PIP VERSION   : -\n"
 			"BL VERSION    : -\n"
 			"FW VERSION    : -\n"
@@ -16212,17 +14260,14 @@ static ssize_t pt_ttdl_status_show(struct device *dev,
 		"%s: 0x%04X\n"
 		"%s: %d\n"
 		"%s: %s\n"
+		"%s: %s %s\n"
+		"%s: %s\n"
 		"%s: 0x%02X\n"
 		"%s: %s\n"
 		"%s: %s\n"
+		"%s: %s\n"
+		"%s: %s\n"
 		"%s: %d\n"
-		"%s: %s %s\n"
-		"%s: %s\n"
-		"%s: %s\n"
-		"%s: %s\n"
-		"%s: %s\n"
-		"%s: %s\n"
-		"%s: %s\n"
 		"%s: %d\n"
 		"%s: %s\n"
 		"%s: %s\n"
@@ -16238,22 +14283,19 @@ static ssize_t pt_ttdl_status_show(struct device *dev,
 		"%s: %d\n"
 		"%s: %d\n"
 		"%s: %d\n"
-		"%s: %d\n"
+		"%s: %s\n"
+		"%s: %s\n"
 		"%s: %s\n"
 		"%s: %d\n"
 		"%s: 0x%04X\n"
+		"%s: %s\n"
 #endif /* TTDL_DIAGNOSTICS */
 		,
 		"Startup Status            ", cd->startup_status,
 		"TTDL Debug Level          ", cd->debug_level,
-		"Active Bus Module         ",
-			cd->bus_ops->bustype == BUS_I2C ? "I2C" : "SPI",
-		"I2C Address               ",
-			cd->bus_ops->bustype == BUS_I2C ? client->addr : 0,
-		"Exclusive Access Lock     ", cd->exclusive_dev ? "Set":"Free",
-		"HW Detected               ",
-			cd->hw_detected ? "True" : "False",
-		"Number of Devices         ", cd->num_devices,
+		"Mode                      ",
+			cd->mode ? (cd->mode == PT_MODE_OPERATIONAL ?
+			"Operational" : "BL") : "Unknown",
 		"DUT Generation            ",
 			cd->active_dut_generation ?
 			(cd->active_dut_generation == DUT_PIP2_CAPABLE ?
@@ -16261,17 +14303,14 @@ static ssize_t pt_ttdl_status_show(struct device *dev,
 			cd->active_dut_generation ?
 			(cd->set_dut_generation == true ?
 			"(Set)" : "(Detected)") : "",
-		"Protocol Mode             ",
-			cd->dut_status.protocol_mode == PT_PROTOCOL_MODE_HID ?
-			"Hybrid HID" : "PIP",
-		"Mode                      ",
-			cd->mode ? (cd->mode == PT_MODE_OPERATIONAL ?
-			"Operational" : "BL") : "Unknown",
+		"HW Detected               ",
+			cd->hw_detected ? "True" : "False",
+		"I2C Address               ",
+			cd->bus_ops->bustype == BUS_I2C ? client->addr : 0,
+		"Active Bus Module         ",
+			cd->bus_ops->bustype == BUS_I2C ? "I2C" : "SPI",
 		"Flashless Mode            ",
 			cd->flashless_dut == 1 ? "Yes" : "No",
-		"Suppress No-Flash Auto BL ",
-			cd->flashless_auto_bl == PT_SUPPRESS_AUTO_BL ?
-			"Yes" : "No",
 		"GPIO state - IRQ          ",
 			cd->cpdata->irq_stat ?
 			(cd->cpdata->irq_stat(cd->cpdata, dev) ?
@@ -16280,30 +14319,35 @@ static ssize_t pt_ttdl_status_show(struct device *dev,
 			pdata->core_pdata->rst_gpio ?
 			(gpio_get_value(pdata->core_pdata->rst_gpio) ?
 			"High" : "Low") : "not defined",
-		"Error GPIO trigger type   ", cd->err_gpio_type,
+		"RAM Parm restore list     ", pt_count_parameter_list(cd),
+		"Startup Retry Count       ", cd->startup_retry_count,
 		"WD - Manual Force Stop    ",
 			cd->watchdog_force_stop ? "True" : "False",
 		"WD - Enabled              ",
 			cd->watchdog_enabled ? "True" : "False",
 		"WD - Interval (ms)        ", cd->watchdog_interval
 #ifdef TTDL_DIAGNOSTICS
-		,
-		"WD - Triggered Count      ", cd->watchdog_count,
+		, "WD - Triggered Count      ", cd->watchdog_count,
 		"WD - IRQ Stuck low count  ", cd->watchdog_irq_stuck_count,
 		"WD - Device Access Errors ", cd->watchdog_failed_access_count,
 		"WD - XRES Count           ", cd->wd_xres_count,
-		"Startup Retry Count       ", cd->startup_retry_count,
 		"IRQ Triggered Count       ", cd->irq_count,
 		"BL Packet Retry Count     ", cd->bl_retry_packet_count,
 		"PIP2 CRC Error Count      ", cd->pip2_crc_error_count,
 		"Bus Transmit Error Count  ", cd->bus_transmit_error_count,
 		"File Erase Timeout Count  ", cd->file_erase_timeout_count,
-		"RAM Parm Restore Count    ", pt_count_parameter_list(cd),
+		"Error GPIO trigger type   ", cd->err_gpio_type,
+		"Exclusive Access Lock     ", cd->exclusive_dev ? "Set":"Free",
+		"Suppress No-Flash Auto BL ",
+			cd->flashless_auto_bl == PT_SUPPRESS_AUTO_BL ?
+			"Yes" : "No",
 		"Calibration Cache on host ",
 			cd->cal_cache_in_host == PT_FEATURE_ENABLE ?
 			"Yes" : "No",
 		"Calibration Cache size    ", cal_size,
-		"Calibration Cache chip ID ", crc
+		"Calibration Cache chip ID ", crc,
+		"Multi-Chip Support        ",
+			cd->multi_chip == PT_FEATURE_ENABLE ? "Yes" : "No"
 #endif /* TTDL_DIAGNOSTICS */
 	);
 
@@ -16346,7 +14390,6 @@ static ssize_t pt_pip2_enter_bl_show(struct device *dev,
 	int result = 0;
 	u8 mode = PT_MODE_UNKNOWN;
 	struct pt_core_data *cd = dev_get_drvdata(dev);
-	bool current_bridge_mode = cd->bridge_mode;
 
 	/* Turn off the TTDL WD before enter bootloader */
 	pt_stop_wd_timer(cd);
@@ -16361,45 +14404,42 @@ static ssize_t pt_pip2_enter_bl_show(struct device *dev,
 	rc = _pt_request_pip2_enter_bl(dev, &mode, &result);
 	switch (result) {
 	case PT_ENTER_BL_PASS:
-		ret = snprintf(buf, PT_MAX_PRBUF_SIZE,
+		ret = scnprintf(buf, PT_MAX_PRBUF_SIZE,
 			"Status: %d\nEntered BL\n", PT_ENTER_BL_PASS);
 		break;
 	case PT_ENTER_BL_ERROR:
-		ret = snprintf(buf, PT_MAX_PRBUF_SIZE, "Status: %d\n%s\n",
+		ret = scnprintf(buf, PT_MAX_PRBUF_SIZE, "Status: %d\n%s\n",
 			rc,
 			"  Unknown Error");
 		break;
 	case PT_ENTER_BL_RESET_FAIL:
-		ret = snprintf(buf, PT_MAX_PRBUF_SIZE, "Status: %d\n%s\n",
+		ret = scnprintf(buf, PT_MAX_PRBUF_SIZE, "Status: %d\n%s\n",
 			rc,
 			"  Soft Reset Failed");
 		break;
 	case PT_ENTER_BL_HID_START_BL_FAIL:
-		ret = snprintf(buf, PT_MAX_PRBUF_SIZE, "Status: %d\n%s\n",
+		ret = scnprintf(buf, PT_MAX_PRBUF_SIZE, "Status: %d\n%s\n",
 			rc,
 			"  PIP Start BL Cmd Failed");
 		break;
 	case PT_ENTER_BL_CONFIRM_FAIL:
-		ret = snprintf(buf, PT_MAX_PRBUF_SIZE, "Status: %d\n%s\n",
+		ret = scnprintf(buf, PT_MAX_PRBUF_SIZE, "Status: %d\n%s\n",
 			rc,
 			"  Error confirming DUT entered BL");
 		break;
 	default:
-		ret = snprintf(buf, PT_MAX_PRBUF_SIZE, "Status: %d\n%s\n",
+		ret = scnprintf(buf, PT_MAX_PRBUF_SIZE, "Status: %d\n%s\n",
 			rc, "  Unknown Error");
 		break;
 	};
 
-	/* Restore state of allowing enumeration work to be queued again */
-	mutex_lock(&cd->system_lock);
-	cd->bridge_mode = current_bridge_mode;
-	mutex_unlock(&cd->system_lock);
+	/* Allow enumeration work to be queued again */
+	cd->bridge_mode = false;
 
 	return ret;
 }
 static DEVICE_ATTR(pip2_enter_bl,  0444, pt_pip2_enter_bl_show, NULL);
 
-#define PT_STATUS_STR_LEN (50)
 /*******************************************************************************
  * FUNCTION: pt_pip2_exit_bl_show
  *
@@ -16465,7 +14505,7 @@ static ssize_t pt_easy_wakeup_gesture_show(struct device *dev,
 	ssize_t ret;
 
 	mutex_lock(&cd->system_lock);
-	ret = snprintf(buf, PT_MAX_PRBUF_SIZE, "0x%02X\n",
+	ret = scnprintf(buf, PT_MAX_PRBUF_SIZE, "0x%02X\n",
 			cd->easy_wakeup_gesture);
 	mutex_unlock(&cd->system_lock);
 	return ret;
@@ -16497,7 +14537,7 @@ static ssize_t pt_easy_wakeup_gesture_store(struct device *dev,
 	length = _pt_ic_parse_input(dev, buf, size, input_data,
 		ARRAY_SIZE(input_data));
 	if (length != 1) {
-		pt_debug(dev, DL_WARN, "%s: Invalid number of arguments\n",
+		pt_debug(dev, DL_ERROR, "%s: Invalid number of arguments\n",
 			__func__);
 		rc = -EINVAL;
 		goto exit;
@@ -16554,7 +14594,7 @@ static ssize_t pt_easy_wakeup_gesture_id_show(struct device *dev,
 	ssize_t ret;
 
 	mutex_lock(&cd->system_lock);
-	ret = snprintf(buf, PT_MAX_PRBUF_SIZE, "Status: 0\n0x%02X\n",
+	ret = scnprintf(buf, PT_MAX_PRBUF_SIZE, "Status: 0\n0x%02X\n",
 			cd->gesture_id);
 	mutex_unlock(&cd->system_lock);
 	return ret;
@@ -16584,13 +14624,12 @@ static ssize_t pt_easy_wakeup_gesture_data_show(struct device *dev,
 	int i;
 
 	mutex_lock(&cd->system_lock);
-
-	ret += snprintf(buf + ret, PT_MAX_PRBUF_SIZE - ret, "Status: %d\n", 0);
+	ret += scnprintf(buf + ret, PT_MAX_PRBUF_SIZE - ret, "Status: %d\n", 0);
 	for (i = 0; i < cd->gesture_data_length; i++)
-		ret += snprintf(buf + ret, PT_MAX_PRBUF_SIZE - ret,
+		ret += scnprintf(buf + ret, PT_MAX_PRBUF_SIZE - ret,
 				"0x%02X\n", cd->gesture_data[i]);
 
-	ret += snprintf(buf + ret, PT_MAX_PRBUF_SIZE - ret,
+	ret += scnprintf(buf + ret, PT_MAX_PRBUF_SIZE - ret,
 			"(%d bytes)\n", cd->gesture_data_length);
 
 	mutex_unlock(&cd->system_lock);
@@ -16655,12 +14694,11 @@ static ssize_t pt_err_gpio_store(struct device *dev,
 
 	input_data[0] = 0;
 	input_data[1] = 0;
-
 	/* Maximmum input is two elements */
 	length = _pt_ic_parse_input(dev, buf, size,
 			input_data, ARRAY_SIZE(input_data));
 	if (length < 1 || length > 2) {
-		pt_debug(dev, DL_WARN, "%s: Invalid number of arguments\n",
+		pt_debug(dev, DL_ERROR, "%s: Invalid number of arguments\n",
 			__func__);
 		rc = -EINVAL;
 		goto exit;
@@ -16716,12 +14754,12 @@ static ssize_t pt_drv_irq_show(struct device *dev,
 	ssize_t ret = 0;
 
 	mutex_lock(&cd->system_lock);
-	ret += snprintf(buf, PT_MAX_PRBUF_SIZE, "Status: %d\n", 0);
+	ret += scnprintf(buf, PT_MAX_PRBUF_SIZE, "Status: %d\n", 0);
 	if (cd->irq_enabled)
-		ret += snprintf(buf + ret, PT_MAX_PRBUF_SIZE - ret,
+		ret += scnprintf(buf + ret, PT_MAX_PRBUF_SIZE - ret,
 			"Driver interrupt: ENABLED\n");
 	else
-		ret += snprintf(buf + ret, PT_MAX_PRBUF_SIZE - ret,
+		ret += scnprintf(buf + ret, PT_MAX_PRBUF_SIZE - ret,
 			"Driver interrupt: DISABLED\n");
 	mutex_unlock(&cd->system_lock);
 
@@ -16754,7 +14792,7 @@ static ssize_t pt_drv_irq_store(struct device *dev,
 	length = _pt_ic_parse_input(dev, buf, size, input_data,
 		ARRAY_SIZE(input_data));
 	if (length != 1) {
-		pt_debug(dev, DL_WARN, "%s: Invalid number of arguments\n",
+		pt_debug(dev, DL_ERROR, "%s: Invalid number of arguments\n",
 			__func__);
 		rc = -EINVAL;
 		goto exit;
@@ -17014,9 +15052,10 @@ static int pt_bist_bus_test(struct device *dev, u8 *net_toggled, u8 *err_str)
 
 	pt_debug(cd->dev, DL_INFO, ">>> %s: Write Buffer Size[%d] VERSION\n",
 		__func__, (int)sizeof(ver_cmd));
+
 	pt_pr_buf(cd->dev, DL_DEBUG, ver_cmd, (int)sizeof(ver_cmd),
 		">>> User CMD");
-	rc = pt_adap_write_read_specific(cd, sizeof(ver_cmd), ver_cmd, NULL, 0);
+	rc = pt_adap_write_read_specific(cd, sizeof(ver_cmd), ver_cmd, NULL);
 	if (rc) {
 		pt_debug(dev, DL_ERROR,
 			"%s: BUS Test - Failed to send VER cmd\n", __func__);
@@ -17099,9 +15138,6 @@ exit:
 static int pt_bist_irq_test(struct device *dev,
 	u8 *bus_toggled, u8 *irq_toggled, u8 *xres_toggled, u8 *err_str)
 {
-#ifdef TTDL_PTVIRTDUT_SUPPORT
-	u8 release_irq[3] = {0xFF, 0xFF, 0x03};
-#endif /* TTDL_PTVIRTDUT_SUPPORT */
 	struct pt_core_data *cd = dev_get_drvdata(dev);
 	u8 *read_buf = NULL;
 	u8 mode = PT_MODE_UNKNOWN;
@@ -17127,14 +15163,6 @@ static int pt_bist_irq_test(struct device *dev,
 		count++;
 		bytes_read += pt_flush_bus(cd, PT_FLUSH_BUS_BASED_ON_LEN, NULL);
 	}
-#ifdef TTDL_PTVIRTDUT_SUPPORT
-	if (pt_check_irq_asserted(cd) && cd->route_bus_virt_dut) {
-		/* Force virtual DUT to release IRQ */
-		pt_pr_buf(cd->dev, DL_DEBUG, release_irq,
-			(int)sizeof(release_irq), ">>> User CMD");
-		pt_adap_write_read_specific(cd, 3, release_irq, NULL, 0);
-	}
-#endif /* TTDL_PTVIRTDUT_SUPPORT */
 
 	if (count > 1 && count < 5 && bytes_read > 0) {
 		/*
@@ -17291,9 +15319,6 @@ static int pt_bist_xres_test(struct device *dev,
 {
 	struct pt_core_data *cd = dev_get_drvdata(dev);
 	struct pt_platform_data *pdata = dev_get_platdata(dev);
-#ifdef TTDL_PTVIRTDUT_SUPPORT
-	u8 release_irq[3] = {0xFF, 0xFF, 0x03};
-#endif /* TTDL_PTVIRTDUT_SUPPORT */
 	u8 *read_buf = NULL;
 	u8 mode = PT_MODE_UNKNOWN;
 	int rc         = 0;
@@ -17319,14 +15344,6 @@ static int pt_bist_xres_test(struct device *dev,
 
 	/* Ensure we have nothing pending on active bus */
 	pt_flush_bus_if_irq_asserted(cd, PT_FLUSH_BUS_BASED_ON_LEN);
-#ifdef TTDL_PTVIRTDUT_SUPPORT
-	if (pt_check_irq_asserted(cd) && cd->route_bus_virt_dut) {
-		/* Force virtual DUT to release IRQ */
-		pt_pr_buf(cd->dev, DL_DEBUG, release_irq,
-			(int)sizeof(release_irq), ">>> User CMD");
-		pt_adap_write_read_specific(cd, 3, release_irq, NULL, 0);
-	}
-#endif /* TTDL_PTVIRTDUT_SUPPORT */
 
 	/* Perform a hard XRES toggle and wait for reset sentinel */
 	mutex_lock(&cd->system_lock);
@@ -17465,11 +15482,16 @@ exit:
  *	!0 = Failure
  *
  * PARAMETERS:
- *	*dev      - pointer to device structure
- *	*slave    - pointer to one entry in the slave info array
+ *	*dev                - pointer to device structure
+ *	*slave_irq_toggled  - pointer to where to store if slave IRQ toggled
+ *	*slave_bus_toggled  - pointer to where to store if slave Bus toggled
+ *	*err_str            - pointer to error string buffer
+ *	*slave_detect       - pointer to slave detect buffer
+ *	*boot_err           - pointer to boot_err  buffer
  ******************************************************************************/
 static int pt_bist_slave_irq_test(struct device *dev,
-	struct pt_bist_data *slave)
+	u8 *slave_irq_toggled, u8 *slave_bus_toggled, u8 *err_str,
+	u8 *slave_detect, u8 *boot_err)
 {
 	struct pt_core_data *cd = dev_get_drvdata(dev);
 	u8 mode = PT_MODE_UNKNOWN;
@@ -17489,11 +15511,9 @@ static int pt_bist_slave_irq_test(struct device *dev,
 	 */
 	rc = _pt_request_pip2_enter_bl(dev, &mode, &result);
 	if (rc) {
-		pt_debug(cd->dev, DL_WARN, "%s: Error entering BL rc=%d\n",
+		pt_debug(cd->dev, DL_ERROR, "%s: Error entering BL rc=%d\n",
 			__func__, rc);
-		if (slave->irq_err_str)
-			strlcpy(slave->irq_err_str,
-				"- State could not be determined.", PT_ERR_STR_SIZE);
+		strlcpy(err_str, "- State could not be determined.", PT_ERR_STR_SIZE);
 		goto exit;
 	}
 
@@ -17505,7 +15525,7 @@ static int pt_bist_slave_irq_test(struct device *dev,
 		pt_pr_buf(cd->dev, DL_INFO, read_buf, actual_read_len,
 			"PIP2 STATUS");
 		status = read_buf[PIP2_RESP_STATUS_OFFSET];
-		boot = read_buf[PIP2_RESP_BODY_OFFSET] & slave->mask;
+		boot = read_buf[PIP2_RESP_BODY_OFFSET] & 0x01;
 
 		/* Slave detect is only valid if status ok and in boot exec */
 		if (status == PIP2_RSP_ERR_NONE &&
@@ -17513,17 +15533,13 @@ static int pt_bist_slave_irq_test(struct device *dev,
 			detected = read_buf[PIP2_RESP_BODY_OFFSET + 2] &
 					SLAVE_DETECT_MASK;
 		} else {
-			if (slave->irq_err_str)
-				strlcpy(slave->irq_err_str,
-					"- State could not be determined", PT_ERR_STR_SIZE);
+			strlcpy(err_str, "- State could not be determined", PT_ERR_STR_SIZE);
 			rc = -EPERM;
 		}
 	} else {
-		pt_debug(cd->dev, DL_WARN, "%s: STATUS cmd failure\n",
+		pt_debug(cd->dev, DL_ERROR, "%s: STATUS cmd failure\n",
 			__func__);
-		if (slave->irq_err_str)
-			strlcpy(slave->irq_err_str,
-				"- State could not be determined.", PT_ERR_STR_SIZE);
+		strlcpy(err_str, "- State could not be determined.", PT_ERR_STR_SIZE);
 		goto exit;
 	}
 
@@ -17540,68 +15556,52 @@ static int pt_bist_slave_irq_test(struct device *dev,
 		status = read_buf[PIP2_RESP_STATUS_OFFSET];
 		last_err = read_buf[PIP2_RESP_BODY_OFFSET];
 		if (last_err) {
-			pt_debug(cd->dev, DL_WARN,
+			pt_debug(cd->dev, DL_ERROR,
 				"%s: Master Boot Last Err = 0x%02X\n",
 				__func__, last_err);
 		}
 	} else {
-		pt_debug(cd->dev, DL_WARN,
+		pt_debug(cd->dev, DL_ERROR,
 			"%s: GET_LAST_ERRNO cmd failure\n", __func__);
-		if (slave->irq_err_str)
-			strlcpy(slave->irq_err_str,
-				"- stuck, likely shorted to GND.", PT_ERR_STR_SIZE);
+		strlcpy(err_str, "- stuck, likely shorted to GND.", PT_ERR_STR_SIZE);
 	}
 
 exit:
 	pt_debug(cd->dev, DL_INFO,
 		"%s: rc=%d detected=0x%02X boot_err=0x%02X\n",
 		__func__, rc, detected, last_err);
-
-	/*
-	 * Clear any possible false positives:
-	 * - An invalid image error as BIST doesn't need valid FW
-	 * - A Flash file too small as BIST doesn't need FLASH
-	 * - FLASH access errors when in no-flash mode
-	 */
-	if ((last_err == PIP2_RSP_ERR_INVALID_IMAGE) ||
-	    (last_err == PIP2_RSP_ERR_BUF_TOO_SMALL) ||
-	    (last_err == PIP2_RSP_ERR_BAD_ADDRESS && cd->flashless_dut) ||
-	    (last_err == PIP2_RSP_ERR_BAD_FRAME && cd->flashless_dut)) {
-		pt_debug(cd->dev, DL_INFO, "%s: Cleared boot error: 0x%02X\n",
-			__func__, last_err);
-		last_err = PIP2_RSP_ERR_NONE;
-	}
-
-	/* Attempt to add a hint based on boot error and detection */
-	if (slave->irq_err_str) {
-		if (last_err && detected)
-			scnprintf(slave->irq_err_str,PT_ERR_STR_SIZE, "%s 0x%02X", 
+	if (err_str && last_err) {
+		if (detected)
+			scnprintf(err_str, PT_ERR_STR_SIZE, "%s 0x%02X",
 				"- Likely stuck low. Boot Error:",
 				last_err);
-		else if (last_err && !detected)
-			scnprintf(slave->irq_err_str, PT_ERR_STR_SIZE, "%s 0x%02X",
+		else
+			scnprintf(err_str, PT_ERR_STR_SIZE, "%s 0x%02X",
 				"- Likely stuck high. Boot Error:",
 				last_err);
-		else if (detected)
-			strlcpy(slave->irq_err_str,
-				"- Likely stuck low. No Critical Boot Error", PT_ERR_STR_SIZE);
-		else if (!detected)
-			strlcpy(slave->irq_err_str,
-				"- Likely stuck high. No Critical Boot Error.", PT_ERR_STR_SIZE);
 	}
 
-	slave->irq_toggled = (detected && !last_err) ? true : false;
-	/* Leave as UNTEST if slave not detected */
-	if (detected)
-		slave->bus_toggled = !last_err ? true : false;
-	slave->detected = detected;
-	slave->boot_err = last_err;
+	/* Ignore an invalid image error as BIST doesn't need valid FW */
+	if (last_err == PIP2_RSP_ERR_INVALID_IMAGE)
+		last_err = PIP2_RSP_ERR_NONE;
+
+	if (slave_irq_toggled)
+		*slave_irq_toggled = (detected && !last_err) ? true : false;
+	if (slave_bus_toggled) {
+		/* Leave as UNTEST if slave not detected */
+		if (detected)
+			*slave_bus_toggled = !last_err ? true : false;
+	}
+	if (slave_detect)
+		*slave_detect = detected;
+	if (boot_err)
+		*boot_err = last_err;
 
 	pt_debug(cd->dev, DL_INFO, "%s: %s=0x%02X, %s=0x%02X, %s=0x%02X\n",
 			__func__,
 			"Detected", detected,
-			"slave_irq_toggled", slave->irq_toggled,
-			"slave_bus_toggled", slave->bus_toggled);
+			"slave_irq_toggled", *slave_irq_toggled,
+			"slave_bus_toggled", *slave_bus_toggled);
 	return rc;
 }
 
@@ -17621,13 +15621,19 @@ exit:
  *	!0 = Failure
  *
  * PARAMETERS:
- *	*dev      - pointer to device structure
- *	*slave    - pointer to one entry in the slave info array
+ *	*dev                - pointer to device structure
+ *	*slave_irq_toggled  - pointer to where to store if slave IRQ toggled
+ *	*slave_bus_toggled  - pointer to where to store if slave Bus toggled
+ *	*slave_xres_toggled - pointer to where to store if slave XRES toggled
+ *	*err_str            - pointer to error string buffer
  ******************************************************************************/
 static int pt_bist_slave_xres_test(struct device *dev,
-	struct pt_bist_data *slave)
+	u8 *slave_irq_toggled, u8 *slave_bus_toggled, u8 *slave_xres_toggled,
+	u8 *err_str)
 {
 	struct pt_core_data *cd = dev_get_drvdata(dev);
+	u8 slave_detect = 0;
+	u8 boot_err = 0;
 	int rc = 0;
 
 	/* Force a reset to force the 'slave detect' bits to be re-acquired */
@@ -17638,39 +15644,31 @@ static int pt_bist_slave_xres_test(struct device *dev,
 	pt_hw_hard_reset(cd);
 	msleep(100);
 
-	rc = pt_bist_slave_irq_test(dev, slave);
+	rc = pt_bist_slave_irq_test(dev, slave_irq_toggled,
+		slave_bus_toggled, err_str, &slave_detect, &boot_err);
 	pt_debug(dev, DL_INFO, "%s: IRQ test rc = %d\n", __func__, rc);
 
-	if (!rc && slave->irq_toggled == false) {
+	if (!rc && *slave_irq_toggled == false) {
 		/*
 		 * If the slave IRQ did not toggle, either the slave_detect
 		 * bit was not set or we had a boot error. If the slave
 		 * detect was not set the slave did not reset causing a boot
 		 * error.
 		 */
-		if (slave->xres_err_str && !slave->detected) {
-			strlcpy(slave->xres_err_str, slave->irq_err_str, PT_ERR_STR_SIZE);
-			pt_debug(dev, DL_INFO,
-				"%s: detected=0 irq_err_str = %s\n",
-				__func__, slave->irq_err_str);
-		} else if (slave->xres_err_str && slave->boot_err > 0) {
-			scnprintf(slave->xres_err_str, PT_ERR_STR_SIZE, "%s 0x%02X",
+		if (!slave_detect)
+			strlcpy(err_str, "- likely open.", PT_ERR_STR_SIZE);
+		else
+			scnprintf(err_str, PT_ERR_STR_SIZE, "%s 0x%02X",
 				"- likely open or an IRQ issue. Boot Error:",
-				slave->boot_err);
-			pt_debug(dev, DL_INFO,
-				"%s: boot_err=%d xres_err_str = %s\n",
-				__func__,
-				slave->boot_err, slave->xres_err_str);
-		} else {
-			pt_debug(dev, DL_WARN, "%s: No xres_err_str buffer\n",
-				__func__);
-		}
+				boot_err);
 	}
+	if (slave_xres_toggled) {
+		if (!rc)
+			*slave_xres_toggled = *slave_irq_toggled ? true : false;
+		else
+			*slave_xres_toggled = false;
 
-	if (!rc)
-		slave->xres_toggled = slave->irq_toggled ? true : false;
-	else
-		slave->xres_toggled = false;
+	}
 
 	return rc;
 }
@@ -17691,11 +15689,13 @@ static int pt_bist_slave_xres_test(struct device *dev,
  *	!0 = Failure
  *
  * PARAMETERS:
- *	*dev      - pointer to device structure
- *	*slave    - pointer to one entry in the slave info array
+ *	*dev                - pointer to device structure
+ *	*slave_irq_toggled  - pointer to where to store if slave IRQ toggled
+ *	*slave_bus_toggled  - pointer to where to store if slave Bus toggled
+ *	*err_str            - pointer to error string buffer
  ******************************************************************************/
 static int pt_bist_slave_bus_test(struct device *dev,
-	struct pt_bist_data *slave)
+	u8 *slave_irq_toggled, u8 *slave_bus_toggled, u8 *err_str)
 {
 	struct pt_core_data *cd = dev_get_drvdata(dev);
 	u8 mode = PT_MODE_UNKNOWN;
@@ -17706,11 +15706,9 @@ static int pt_bist_slave_bus_test(struct device *dev,
 
 	rc = _pt_request_pip2_enter_bl(dev, &mode, &result);
 	if (rc) {
-		pt_debug(cd->dev, DL_WARN, "%s: Error entering BL rc=%d\n",
+		pt_debug(cd->dev, DL_ERROR, "%s: Error entering BL rc=%d\n",
 			__func__, rc);
-		if (slave->bus_err_str)
-			strlcpy(slave->bus_err_str,
-				"- State could not be determined.", PT_ERR_STR_SIZE);
+		strlcpy(err_str, "- State could not be determined.", PT_ERR_STR_SIZE);
 		goto exit;
 	}
 
@@ -17719,16 +15717,14 @@ static int pt_bist_slave_bus_test(struct device *dev,
 	if (file_handle != PIP2_RAM_FILE) {
 		rc = -ENOENT;
 		bus_toggled = false;
-		pt_debug(dev, DL_WARN,
+		pt_debug(dev, DL_ERROR,
 			"%s Failed to open bin file\n", __func__);
-		if (slave->bus_err_str)
-			strlcpy(slave->bus_err_str,
-				"- Bus open, shorted or DUT in reset", PT_ERR_STR_SIZE);
+		strlcpy(err_str, "- Bus open, shorted or DUT in reset", PT_ERR_STR_SIZE);
 		goto exit;
 	} else {
 		bus_toggled = true;
 		if (file_handle != _pt_pip2_file_close(dev, file_handle)) {
-			pt_debug(dev, DL_WARN,
+			pt_debug(dev, DL_ERROR,
 				"%s: File Close failed, file_handle=%d\n",
 				__func__, file_handle);
 		}
@@ -17736,315 +15732,10 @@ static int pt_bist_slave_bus_test(struct device *dev,
 
 exit:
 	/* If the master was able to send/recv a PIP msg, the IRQ must be ok */
-	slave->irq_toggled = bus_toggled;
-	slave->bus_toggled = bus_toggled;
-
-	return rc;
-}
-
-/*******************************************************************************
- * FUNCTION: pt_bist_slave_test
- *
- * SUMMARY: Tests XRES, SPI BUS and IRQ for the slave DUT
- *
- * RETURN:
- *	 0 = Success
- *	!0 = Failure
- *
- * PARAMETERS:
- *	*dev      - pointer to device structure
- *	*slave    - pointer to one entry in the bist info array
- *	slave_id  - id of the slave chip
- ******************************************************************************/
-static int pt_bist_slave_test(struct device *dev,
-	struct pt_bist_data *slave, int slave_id)
-{
-	struct pt_core_data *cd = dev_get_drvdata(dev);
-	char *pr_buf;
-	int rc = 0;
-
-	slave->mask = 0x01 << slave_id;
-	slave->bus_toggled  = 0x0F; /* untested */
-	slave->irq_toggled  = 0x0F; /* untested */
-	slave->xres_toggled = 0x0F; /* untested */
-
-	pr_buf = slave->print_buf;
-	if (!pr_buf) {
-		rc = -ENOMEM;
-		goto print_results;
-	}
-
-	slave->bus_err_str = kzalloc(PT_ERR_STR_SIZE,
-				GFP_KERNEL);
-	slave->irq_err_str = kzalloc(PT_ERR_STR_SIZE,
-				GFP_KERNEL);
-	slave->xres_err_str = kzalloc(PT_ERR_STR_SIZE,
-				GFP_KERNEL);
-
-	/* ensure no malloc failure */
-	if (!slave->bus_err_str ||
-	    !slave->irq_err_str ||
-	    !slave->xres_err_str)
-		goto print_results;
-
-	memset(slave->bus_err_str, 0, PT_ERR_STR_SIZE);
-	memset(slave->irq_err_str, 0, PT_ERR_STR_SIZE);
-	memset(slave->xres_err_str, 0, PT_ERR_STR_SIZE);
-
-	/* --------------- SLAVE XRES BIST TEST --------------- */
-	if ((cd->ttdl_bist_select & PT_BIST_SLAVE_XRES_TEST) != 0) {
-		pt_debug(dev, DL_INFO,
-			"%s: ----- Start Slave %d XRES BIST -----",
-			__func__, slave_id);
-		slave->xres_toggled = 0xFF;
-		rc = pt_bist_slave_xres_test(dev, slave);
-		if (slave->bus_toggled == 1 &&
-		    slave->irq_toggled == 1 &&
-		    slave->xres_toggled == 1)
-			goto print_results;
-	}
-
-	/* --------------- SLAVE IRQ BIST TEST --------------- */
-	if ((cd->ttdl_bist_select & PT_BIST_SLAVE_IRQ_TEST) != 0) {
-		pt_debug(dev, DL_INFO,
-			"%s: ----- Start Slave %d IRQ BIST -----",
-			__func__, slave_id);
-		slave->irq_toggled = 0xFF;
-		rc = pt_bist_slave_irq_test(dev, slave);
-		pt_debug(dev, DL_INFO,
-			"%s: slave_irq_toggled = 0x%02X\n",
-			__func__, slave->irq_toggled);
-		if (slave->irq_toggled == 1) {
-			slave->bus_toggled = 1;
-			goto print_results;
-		}
-	}
-
-	/* --------------- SLAVE BUS BIST TEST --------------- */
-	if ((cd->ttdl_bist_select & PT_BIST_SLAVE_BUS_TEST) != 0) {
-		pt_debug(dev, DL_INFO,
-			"%s: ----- Start Slave %d BUS BIST -----",
-			__func__, slave_id);
-		slave->bus_toggled = 0xFF;
-		rc = pt_bist_slave_bus_test(dev, slave);
-	}
-
-print_results:
-	/* --------------- PRINT OUT BIST RESULTS ---------------*/
-	pt_debug(dev, DL_INFO, "%s: ----- BIST Print Results ----", __func__);
-	if (!slave->bus_err_str ||
-		!slave->irq_err_str ||
-		!slave->xres_err_str) {
-		slave->pr_index = scnprintf(pr_buf, PT_MAX_PR_BUF_SIZE,
-				"M/S%d SPI (MISO,MOSI,CS,CLK): [UNTEST]\n"
-				"M/S%d IRQ connection:         [UNTEST]\n"
-				"M/S%d TP_XRES connection:     [UNTEST]\n",
-				slave_id, slave_id, slave_id);
-	} else {
-		if (slave->irq_toggled == 1)
-			memset(slave->irq_err_str, 0, PT_ERR_STR_SIZE);
-		if (slave->xres_toggled == 1)
-			memset(slave->xres_err_str, 0, PT_ERR_STR_SIZE);
-		if (slave->bus_toggled == 1)
-			memset(slave->bus_err_str, 0, PT_ERR_STR_SIZE);
-
-		slave->status = 0;
-		if (cd->ttdl_bist_select & PT_BIST_SLAVE_BUS_TEST)
-			slave->status += slave->bus_toggled;
-		if (cd->ttdl_bist_select & PT_BIST_SLAVE_IRQ_TEST)
-			slave->status += slave->irq_toggled;
-		if (cd->ttdl_bist_select & PT_BIST_SLAVE_XRES_TEST)
-			slave->status += slave->xres_toggled;
-		pt_debug(dev, DL_WARN,
-			"%s: status = %d (Slave %d: %d,%d,%d)\n",
-			__func__, slave->status, slave_id,
-			slave->bus_toggled,
-			slave->irq_toggled,
-			slave->xres_toggled);
-
-		slave->pr_index = scnprintf(pr_buf, PT_MAX_PR_BUF_SIZE,
-			"M/S%d SPI (MISO,MOSI,CS,CLK): %s %s\n"
-			"M/S%d IRQ connection:         %s %s\n"
-			"M/S%d TP_XRES connection:     %s %s\n",
-			slave_id,
-			slave->bus_toggled == 0x0F ?
-				"[UNTEST]" :
-				slave->bus_toggled == 1 ?
-				"[  OK  ]" :
-				"[FAILED]",
-				slave->bus_err_str,
-			slave_id,
-			slave->irq_toggled == 0x0F ?
-				"[UNTEST]" :
-				slave->irq_toggled == 1 ?
-				"[  OK  ]" :
-				"[FAILED]",
-				slave->irq_err_str,
-			slave_id,
-			slave->xres_toggled == 0x0F ?
-				"[UNTEST]" :
-				slave->xres_toggled == 1 ?
-				"[  OK  ]" :
-				"[FAILED]",
-				slave->xres_err_str);
-	}
-
-	kfree(slave->bus_err_str);
-	kfree(slave->irq_err_str);
-	kfree(slave->xres_err_str);
-
-	return rc;
-}
-
-/*******************************************************************************
- * FUNCTION: pt_bist_host_test
- *
- * SUMMARY: Tests XRES, SPI BUS and IRQ for the host DUT
- *
- * RETURN:
- *	 0 = Success
- *	!0 = Failure
- *
- * PARAMETERS:
- *	*dev      - pointer to device structure
- *	*host     - pointer to the entry in the bist info array
- ******************************************************************************/
-static int pt_bist_host_test(struct device *dev,
-	struct pt_bist_data *host)
-{
-	struct pt_core_data *cd = dev_get_drvdata(dev);
-	char *pr_buf;
-	int rc = 0;
-
-	u8 bus_toggled        = 0x0F; /* default to untested */
-	u8 i2c_toggled        = 0x0F; /* default to untested */
-	u8 spi_toggled        = 0x0F; /* default to untested */
-	u8 irq_toggled        = 0x0F; /* default to untested */
-	u8 xres_toggled       = 0x0F; /* default to untested */
-
-	pr_buf = host->print_buf;
-	if (!pr_buf) {
-		rc = -ENOMEM;
-		goto print_results;
-	}
-
-	host->bus_err_str = kzalloc(PT_ERR_STR_SIZE, GFP_KERNEL);
-	host->irq_err_str = kzalloc(PT_ERR_STR_SIZE, GFP_KERNEL);
-	host->xres_err_str = kzalloc(PT_ERR_STR_SIZE, GFP_KERNEL);
-	if (!host->bus_err_str ||
-		!host->irq_err_str ||
-		!host->xres_err_str)
-		goto print_results;
-
-	memset(host->xres_err_str, 0, PT_ERR_STR_SIZE);
-	memset(host->irq_err_str, 0, PT_ERR_STR_SIZE);
-	memset(host->bus_err_str, 0, PT_ERR_STR_SIZE);
-
-	/* --------------- TP_XRES BIST TEST --------------- */
-	if ((cd->ttdl_bist_select & PT_BIST_TP_XRES_TEST) != 0) {
-		pt_debug(dev, DL_INFO,
-			"%s: ----- Start TP_XRES BIST -----", __func__);
-		rc = pt_bist_xres_test(dev, &bus_toggled, &irq_toggled,
-			&xres_toggled, host->xres_err_str);
-		/* Done if the rest of all nets toggled */
-		if (bus_toggled == 1 && irq_toggled == 1 && xres_toggled == 1)
-			goto print_results;
-	}
-
-	/* Flush bus in case a PIP response is waiting from previous test */
-	pt_flush_bus(cd, PT_FLUSH_BUS_BASED_ON_LEN, NULL);
-
-	/* --------------- IRQ BIST TEST --------------- */
-	if ((cd->ttdl_bist_select & PT_BIST_IRQ_TEST) != 0) {
-		pt_debug(dev, DL_INFO,
-			"%s: ----- Start IRQ BIST -----", __func__);
-		bus_toggled = 0xFF;
-		irq_toggled = 0xFF;
-		rc = pt_bist_irq_test(dev, &bus_toggled, &irq_toggled,
-			&xres_toggled, host->irq_err_str);
-		/* If this net failed clear results from previous net */
-		if (irq_toggled != 1) {
-			xres_toggled = 0x0F;
-			memset(host->xres_err_str, 0, PT_ERR_STR_SIZE);
-		}
-		if (bus_toggled == 1 && irq_toggled == 1)
-			goto print_results;
-	}
-
-	/* Flush bus in case a PIP response is waiting from previous test */
-	pt_flush_bus(cd, PT_FLUSH_BUS_BASED_ON_LEN, NULL);
-
-	/* --------------- BUS BIST TEST --------------- */
-	if ((cd->ttdl_bist_select & PT_BIST_BUS_TEST) != 0) {
-		pt_debug(dev, DL_INFO,
-			"%s: ----- Start BUS BIST -----", __func__);
-		bus_toggled = 0xFF;
-		rc = pt_bist_bus_test(dev, &bus_toggled, host->bus_err_str);
-		/* If this net failed clear results from previous net */
-		if (bus_toggled == 0) {
-			irq_toggled = 0x0F;
-			memset(host->irq_err_str, 0, PT_ERR_STR_SIZE);
-		}
-	}
-
-print_results:
-	/* --------------- PRINT OUT BIST RESULTS ---------------*/
-	pt_debug(dev, DL_INFO, "%s: ----- BIST Print Results ----", __func__);
-
-	/* Cannot print if any memory allocation issues */
-	if (!host->bus_err_str || !host->irq_err_str || !host->xres_err_str) {
-		host->pr_index = scnprintf(pr_buf, PT_MAX_PR_BUF_SIZE,
-			"Status: %d\n"
-			"I2C (SDA,SCL):                [UNTEST]\n"
-			"SPI (MISO,MOSI,CS,CLK):       [UNTEST]\n"
-			"IRQ connection:               [UNTEST]\n"
-			"TP_XRES connection:           [UNTEST]\n", -ENOMEM);
-	} else {
-		host->status = 0;
-		if (bus_toggled == 1)
-			memset(host->bus_err_str, 0, PT_ERR_STR_SIZE);
-		if (irq_toggled == 1)
-			memset(host->irq_err_str, 0, PT_ERR_STR_SIZE);
-		if (xres_toggled == 1)
-			memset(host->xres_err_str, 0, PT_ERR_STR_SIZE);
-
-		if (cd->ttdl_bist_select & PT_BIST_BUS_TEST)
-			host->status += bus_toggled;
-		if (cd->ttdl_bist_select & PT_BIST_IRQ_TEST)
-			host->status += irq_toggled;
-		if (cd->ttdl_bist_select & PT_BIST_TP_XRES_TEST)
-			host->status += xres_toggled;
-		pt_debug(dev, DL_WARN, "%s: status = %d (%d,%d,%d)\n",
-			__func__, host->status, bus_toggled, irq_toggled,
-			xres_toggled);
-
-		if (cd->bus_ops->bustype == BUS_I2C)
-			i2c_toggled = bus_toggled;
-		else
-			spi_toggled = bus_toggled;
-
-		host->pr_index = scnprintf(pr_buf, PT_MAX_PR_BUF_SIZE,
-			"I2C (SDA,SCL):               %s %s\n"
-			"SPI (MISO,MOSI,CS,CLK):      %s %s\n"
-			"IRQ connection:              %s %s\n"
-			"TP_XRES connection:          %s %s\n",
-			i2c_toggled == 0x0F ? "[UNTEST]" :
-				i2c_toggled == 1 ? "[  OK  ]" : "[FAILED]",
-			i2c_toggled == 0x0F ? "" : host->bus_err_str,
-			spi_toggled == 0x0F ? "[UNTEST]" :
-				spi_toggled == 1 ? "[  OK  ]" : "[FAILED]",
-			spi_toggled == 0x0F ? "" : host->bus_err_str,
-			irq_toggled == 0x0F ? "[UNTEST]" :
-				irq_toggled == 1 ? "[  OK  ]" : "[FAILED]",
-			host->irq_err_str,
-			xres_toggled == 0x0F ? "[UNTEST]" :
-				xres_toggled == 1 ? "[  OK  ]" : "[FAILED]",
-			host->xres_err_str);
-	}
-
-	kfree(host->bus_err_str);
-	kfree(host->irq_err_str);
-	kfree(host->xres_err_str);
+	if (slave_irq_toggled)
+		*slave_irq_toggled = bus_toggled;
+	if (slave_bus_toggled)
+		*slave_bus_toggled = bus_toggled;
 
 	return rc;
 }
@@ -18075,27 +15766,48 @@ static ssize_t pt_ttdl_bist_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	struct pt_core_data *cd = dev_get_drvdata(dev);
-	ssize_t ret = 0;
+	ssize_t ret;
+	char *bus_err_str        = NULL;
+	char *irq_err_str        = NULL;
+	char *xres_err_str       = NULL;
+	char *slave_bus_err_str  = NULL;
+	char *slave_irq_err_str  = NULL;
+	char *slave_xres_err_str = NULL;
 	u8 tests;
-	int slave_id          = 0;
-	int num_slaves        = 0;
 	int rc                = 0;
 	int num_tests         = 0;
 	int status            = 1;    /* 0 = Pass, !0 = fail */
-	struct pt_bist_data host;
-	struct pt_bist_data slaves[PT_MAX_DEVICES];
-	int idx_status = 0;
+	u8 bus_toggled        = 0x0F; /* default to untested */
+	u8 i2c_toggled        = 0x0F; /* default to untested */
+	u8 spi_toggled        = 0x0F; /* default to untested */
+	u8 irq_toggled        = 0x0F; /* default to untested */
+	u8 xres_toggled       = 0x0F; /* default to untested */
+	u8 slave_bus_toggled  = 0x0F; /* default to untested */
+	u8 slave_irq_toggled  = 0x0F; /* default to untested */
+	u8 slave_xres_toggled = 0x0F; /* default to untested */
 
-	host.print_buf = kzalloc(PT_MAX_PR_BUF_SIZE, GFP_KERNEL);
-	if (!host.print_buf) {
-		ret = scnprintf(buf, strlen(buf),
-			"Status: 1\n"
-			"Failed to alloc memory");
-		return ret;
+	bus_err_str = kzalloc(PT_ERR_STR_SIZE, GFP_KERNEL);
+	irq_err_str = kzalloc(PT_ERR_STR_SIZE, GFP_KERNEL);
+	xres_err_str = kzalloc(PT_ERR_STR_SIZE, GFP_KERNEL);
+	if (!bus_err_str || !irq_err_str || !xres_err_str)
+		goto print_results;
+
+	memset(xres_err_str, 0, PT_ERR_STR_SIZE);
+	memset(irq_err_str, 0, PT_ERR_STR_SIZE);
+	memset(bus_err_str, 0, PT_ERR_STR_SIZE);
+
+	if (cd->multi_chip) {
+		slave_bus_err_str = kzalloc(PT_ERR_STR_SIZE, GFP_KERNEL);
+		slave_irq_err_str = kzalloc(PT_ERR_STR_SIZE, GFP_KERNEL);
+		slave_xres_err_str = kzalloc(PT_ERR_STR_SIZE, GFP_KERNEL);
+		if (!slave_bus_err_str ||
+		    !slave_irq_err_str ||
+		    !slave_xres_err_str)
+			goto print_results;
+		memset(slave_bus_err_str, 0, PT_ERR_STR_SIZE);
+		memset(slave_irq_err_str, 0, PT_ERR_STR_SIZE);
+		memset(slave_xres_err_str, 0, PT_ERR_STR_SIZE);
 	}
-
-	/* Load up slave info array when slaves present */
-	num_slaves = cd->num_devices - 1;
 
 	/* Turn off the TTDL WD during the test */
 	pt_stop_wd_timer(cd);
@@ -18109,7 +15821,7 @@ static ssize_t pt_ttdl_bist_show(struct device *dev,
 		num_tests += tests & 1;
 		tests >>= 1;
 	}
-	pt_debug(dev, DL_WARN, "%s: BIST select = 0x%02X, run %d tests\n",
+	pt_debug(dev, DL_ERROR, "%s: BIST select = 0x%02X, run %d tests\n",
 		__func__, cd->ttdl_bist_select, num_tests);
 
 	/* Suppress auto BL to avoid loader thread sending PIP during xres */
@@ -18121,43 +15833,95 @@ static ssize_t pt_ttdl_bist_show(struct device *dev,
 		mutex_unlock(&cd->system_lock);
 	}
 
-	/* --------------- TP HOST BIST TEST --------------- */
-	host.status = 0;
-	host.pr_index = 0;
-	rc = pt_bist_host_test(dev, &host);
-	pt_debug(dev, DL_INFO, "%s print_idx = %d\n",
-			__func__, host.pr_index);
+	/* --------------- TP_XRES BIST TEST --------------- */
+	if ((cd->ttdl_bist_select & PT_TTDL_BIST_TP_XRES_TEST) != 0) {
+		pt_debug(dev, DL_INFO,
+			"%s: ----- Start TP_XRES BIST -----", __func__);
+		rc = pt_bist_xres_test(dev, &bus_toggled, &irq_toggled,
+			&xres_toggled, xres_err_str);
+		/* Done if the rest of all nets toggled */
+		if (bus_toggled == 1 && irq_toggled == 1 && xres_toggled == 1)
+			goto host_nets_complete;
+	}
 
-	status = host.status;
+	/* Flush bus in case a PIP response is waiting from previous test */
+	pt_flush_bus(cd, PT_FLUSH_BUS_BASED_ON_LEN, NULL);
 
-	/* --------------- TP SLAVE BIST TEST --------------- */
-	for (slave_id = 0; slave_id < num_slaves; slave_id++) {
-		slaves[slave_id].print_buf = kzalloc(PT_MAX_PR_BUF_SIZE,
-					GFP_KERNEL);
-		if (!slaves[slave_id].print_buf) {
-			ret = scnprintf(buf, strlen(buf),
-				"Status: 1\n"
-				"Failed to alloc memory");
-			goto exit;
+	/* --------------- IRQ BIST TEST --------------- */
+	if ((cd->ttdl_bist_select & PT_TTDL_BIST_IRQ_TEST) != 0) {
+		pt_debug(dev, DL_INFO,
+			"%s: ----- Start IRQ BIST -----", __func__);
+		bus_toggled = 0xFF;
+		irq_toggled = 0xFF;
+		rc = pt_bist_irq_test(dev, &bus_toggled, &irq_toggled,
+			&xres_toggled, irq_err_str);
+		/* If this net failed clear results from previous net */
+		if (irq_toggled != 1) {
+			xres_toggled = 0x0F;
+			memset(xres_err_str, 0, PT_ERR_STR_SIZE);
 		}
-		slaves[slave_id].status = 0;
-		slaves[slave_id].pr_index = 0;
-		pt_bist_slave_test(dev, &slaves[slave_id], slave_id);
-		status += slaves[slave_id].status;
+		if (bus_toggled == 1 && irq_toggled == 1)
+			goto host_nets_complete;
 	}
 
-	idx_status = scnprintf(buf, strlen(buf), "Status: %d\n",
-			status == num_tests ? 0 : 1);
-	memcpy(buf + idx_status, host.print_buf, host.pr_index);
-	ret = idx_status + host.pr_index;
+	/* Flush bus in case a PIP response is waiting from previous test */
+	pt_flush_bus(cd, PT_FLUSH_BUS_BASED_ON_LEN, NULL);
 
-	for (slave_id = 0; slave_id < num_slaves; slave_id++) {
-		memcpy(buf + ret, slaves[slave_id].print_buf,
-			slaves[slave_id].pr_index);
-		ret += slaves[slave_id].pr_index;
+	/* --------------- BUS BIST TEST --------------- */
+	if ((cd->ttdl_bist_select & PT_TTDL_BIST_BUS_TEST) != 0) {
+		pt_debug(dev, DL_INFO,
+			"%s: ----- Start BUS BIST -----", __func__);
+		bus_toggled = 0xFF;
+		rc = pt_bist_bus_test(dev, &bus_toggled, bus_err_str);
+		/* If this net failed clear results from previous net */
+		if (bus_toggled == 0) {
+			irq_toggled = 0x0F;
+			memset(irq_err_str, 0, PT_ERR_STR_SIZE);
+		}
 	}
 
-exit:
+host_nets_complete:
+	/* --------------- SLAVE XRES BIST TEST --------------- */
+	if (cd->multi_chip &&
+	    (cd->ttdl_bist_select & PT_TTDL_BIST_SLAVE_XRES_TEST) != 0) {
+		pt_debug(dev, DL_INFO,
+			"%s: ----- Start Slave XRES BIST -----", __func__);
+		slave_xres_toggled = 0xFF;
+		rc = pt_bist_slave_xres_test(dev, &slave_irq_toggled,
+			&slave_bus_toggled, &slave_xres_toggled,
+			slave_xres_err_str);
+		if ((slave_bus_toggled == 1 && slave_irq_toggled == 1 &&
+		    slave_xres_toggled == 1) || slave_xres_toggled == 0)
+			goto print_results;
+	}
+
+	/* --------------- SLAVE IRQ BIST TEST --------------- */
+	if (cd->multi_chip &&
+	    (cd->ttdl_bist_select & PT_TTDL_BIST_SLAVE_IRQ_TEST) != 0) {
+		pt_debug(dev, DL_INFO,
+			"%s: ----- Start Slave IRQ BIST -----", __func__);
+		slave_irq_toggled = 0xFF;
+		rc = pt_bist_slave_irq_test(dev, &slave_irq_toggled,
+			&slave_bus_toggled, slave_irq_err_str, NULL, NULL);
+		pt_debug(dev, DL_INFO, "%s: slave_irq_toggled = 0x%02X\n",
+			__func__, slave_irq_toggled);
+		if (slave_irq_toggled == 1) {
+			slave_bus_toggled = 1;
+			goto print_results;
+		}
+	}
+
+	/* --------------- SLAVE BUS BIST TEST --------------- */
+	if (cd->multi_chip &&
+	    (cd->ttdl_bist_select & PT_TTDL_BIST_SLAVE_BUS_TEST) != 0) {
+		pt_debug(dev, DL_INFO,
+			"%s: ----- Start Slave BUS BIST -----", __func__);
+		slave_bus_toggled = 0xFF;
+		rc = pt_bist_slave_bus_test(dev, &slave_irq_toggled,
+			&slave_bus_toggled, slave_bus_err_str);
+	}
+
+print_results:
 	/* Restore PIP command timeout */
 	cd->pip_cmd_timeout = cd->pip_cmd_timeout_default;
 
@@ -18222,14 +15986,112 @@ exit:
 	}
 	msleep(20);
 
+	/* --------------- PRINT OUT BIST RESULTS ---------------*/
+	pt_debug(dev, DL_INFO, "%s: ----- BIST Print Results ----", __func__);
+	pt_start_wd_timer(cd);
+
+	/* Canned print if any memory allocation issues */
+	if (!bus_err_str || !irq_err_str || !xres_err_str) {
+		ret = scnprintf(buf, strlen(buf),
+			"Status: %d\n"
+			"I2C (SDA,SCL):              [UNTEST]\n"
+			"SPI (MISO,MOSI,CS,CLK):     [UNTEST]\n"
+			"IRQ connection:             [UNTEST]\n"
+			"TP_XRES connection:         [UNTEST]\n", -ENOMEM);
+		if (cd->multi_chip) {
+			ret += scnprintf(buf + ret, strlen(buf),
+				"I/P SPI (MISO,MOSI,CS,CLK): [UNTEST]\n"
+				"I/P IRQ connection:         [UNTEST]\n"
+				"I/P TP_XRES connection:     [UNTEST]\n");
+		}
+	} else {
+		status = 0;
+		if (bus_toggled == 1)
+			memset(bus_err_str, 0, PT_ERR_STR_SIZE);
+		if (irq_toggled == 1)
+			memset(irq_err_str, 0, PT_ERR_STR_SIZE);
+		if (xres_toggled == 1)
+			memset(xres_err_str, 0, PT_ERR_STR_SIZE);
+
+		if (cd->ttdl_bist_select & PT_TTDL_BIST_BUS_TEST)
+			status += bus_toggled;
+		if (cd->ttdl_bist_select & PT_TTDL_BIST_IRQ_TEST)
+			status += irq_toggled;
+		if (cd->ttdl_bist_select & PT_TTDL_BIST_TP_XRES_TEST)
+			status += xres_toggled;
+		pt_debug(dev, DL_ERROR, "%s: status = %d (%d,%d,%d)\n",
+			__func__, status, bus_toggled, irq_toggled,
+			xres_toggled);
+
+		if (cd->multi_chip) {
+			if (slave_irq_toggled == 1)
+				memset(slave_irq_err_str, 0, PT_ERR_STR_SIZE);
+			if (slave_xres_toggled == 1)
+				memset(slave_xres_err_str, 0, PT_ERR_STR_SIZE);
+			if (slave_bus_toggled == 1)
+				memset(slave_bus_err_str, 0, PT_ERR_STR_SIZE);
+
+			if (cd->ttdl_bist_select & PT_TTDL_BIST_SLAVE_BUS_TEST)
+				status += slave_bus_toggled;
+			if (cd->ttdl_bist_select & PT_TTDL_BIST_SLAVE_IRQ_TEST)
+				status += slave_irq_toggled;
+			if (cd->ttdl_bist_select & PT_TTDL_BIST_SLAVE_XRES_TEST)
+				status += slave_xres_toggled;
+			pt_debug(dev, DL_ERROR,
+				"%s: status = %d (%d,%d,%d,%d,%d,%d)\n",
+				__func__, status, bus_toggled, irq_toggled,
+				xres_toggled, slave_bus_toggled,
+				slave_irq_toggled, slave_xres_toggled);
+		}
+
+		if (cd->bus_ops->bustype == BUS_I2C)
+			i2c_toggled = bus_toggled;
+		else
+			spi_toggled = bus_toggled;
+
+		ret = scnprintf(buf, strlen(buf),
+			"Status: %d\n"
+			"I2C (SDA,SCL):               %s %s\n"
+			"SPI (MISO,MOSI,CS,CLK):      %s %s\n"
+			"IRQ connection:              %s %s\n"
+			"TP_XRES connection:          %s %s\n",
+			status == num_tests ? 0 : 1,
+			i2c_toggled == 0x0F ? "[UNTEST]" :
+				i2c_toggled == 1 ? "[  OK  ]" : "[FAILED]",
+			i2c_toggled == 0x0F ? "" : bus_err_str,
+			spi_toggled == 0x0F ? "[UNTEST]" :
+				spi_toggled == 1 ? "[  OK  ]" : "[FAILED]",
+			spi_toggled == 0x0F ? "" : bus_err_str,
+			irq_toggled == 0x0F ? "[UNTEST]" :
+				irq_toggled == 1 ? "[  OK  ]" : "[FAILED]",
+			irq_err_str,
+			xres_toggled == 0x0F ? "[UNTEST]" :
+				xres_toggled == 1 ? "[  OK  ]" : "[FAILED]",
+			xres_err_str);
+
+		if (cd->multi_chip) {
+			ret += scnprintf(buf + ret, strlen(buf),
+				"I/P SPI (MISO,MOSI,CS,CLK):  %s %s\n"
+				"I/P IRQ connection:          %s %s\n"
+				"I/P TP_XRES connection:      %s %s\n",
+				slave_bus_toggled == 0x0F ? "[UNTEST]" :
+					slave_bus_toggled == 1 ? "[  OK  ]" :
+						"[FAILED]", slave_bus_err_str,
+				slave_irq_toggled == 0x0F ? "[UNTEST]" :
+					slave_irq_toggled == 1 ? "[  OK  ]" :
+						"[FAILED]", slave_irq_err_str,
+				slave_xres_toggled == 0x0F ? "[UNTEST]" :
+					slave_xres_toggled == 1 ? "[  OK  ]" :
+						"[FAILED]", slave_xres_err_str);
+		}
+	}
+
 	/* Put TTDL back into a known state, issue a ttdl enum if needed */
 	pt_debug(dev, DL_INFO, "%s: Startup_status = 0x%04X\n",
 		__func__, cd->startup_status);
-
-	kfree(host.print_buf);
-	for (slave_id = 0; slave_id < num_slaves; slave_id++)
-		kfree(slaves[slave_id].print_buf);
-
+	kfree(bus_err_str);
+	kfree(irq_err_str);
+	kfree(xres_err_str);
 	return ret;
 }
 
@@ -18258,7 +16120,7 @@ static ssize_t pt_ttdl_bist_store(struct device *dev,
 	length = _pt_ic_parse_input(dev, buf, size, input_data,
 		ARRAY_SIZE(input_data));
 	if (length != 1) {
-		pt_debug(dev, DL_WARN, "%s: Invalid number of arguments\n",
+		pt_debug(dev, DL_ERROR, "%s: Invalid number of arguments\n",
 			__func__);
 		rc = -EINVAL;
 		goto exit;
@@ -18301,7 +16163,7 @@ static ssize_t pt_flush_bus_store(struct device *dev,
 	length = _pt_ic_parse_input(dev, buf, size, input_data,
 		ARRAY_SIZE(input_data));
 	if (length != 1) {
-		pt_debug(dev, DL_WARN, "%s: Invalid number of arguments\n",
+		pt_debug(dev, DL_ERROR, "%s: Invalid number of arguments\n",
 			__func__);
 		rc = -EINVAL;
 		goto exit;
@@ -18387,7 +16249,7 @@ static ssize_t pt_pip2_ping_test_store(struct device *dev,
 	length = _pt_ic_parse_input(dev, buf, size, input_data,
 		ARRAY_SIZE(input_data));
 	if (length != 1) {
-		pt_debug(dev, DL_WARN, "%s: Invalid number of arguments\n",
+		pt_debug(dev, DL_ERROR, "%s: Invalid number of arguments\n",
 			__func__);
 		rc = -EINVAL;
 		goto exit;
@@ -18474,7 +16336,7 @@ static ssize_t pt_t_refresh_store(struct device *dev,
 	length = _pt_ic_parse_input(dev, buf, size, input_data,
 		ARRAY_SIZE(input_data));
 	if (length != 1) {
-		pt_debug(dev, DL_WARN, "%s: Invalid number of arguments\n",
+		pt_debug(dev, DL_ERROR, "%s: Invalid number of arguments\n",
 			__func__);
 		rc = -EINVAL;
 		goto exit;
@@ -18488,13 +16350,13 @@ static ssize_t pt_t_refresh_store(struct device *dev,
 		cd->t_refresh_count  = 0;
 		cd->t_refresh_active = 1;
 	} else {
-		pt_debug(dev, DL_WARN, "%s: Invalid value\n", __func__);
+		pt_debug(dev, DL_ERROR, "%s: Invalid value\n", __func__);
 		rc = -EINVAL;
 	}
 	mutex_unlock(&cd->system_lock);
 
 exit:
-	pt_debug(dev, DL_WARN, "%s: rc = %d\n", __func__, rc);
+	pt_debug(dev, DL_ERROR, "%s: rc = %d\n", __func__, rc);
 	if (rc)
 		return rc;
 	return size;
@@ -18593,7 +16455,7 @@ static ssize_t pt_dut_status_show(struct device *dev,
 	/* Retrieve mode and FW system mode which can only be 0-4 */
 	rc = pt_get_fw_sys_mode(cd, &sys_mode, &mode);
 	if (rc || mode == PT_MODE_UNKNOWN) {
-		ret = snprintf(buf, PT_MAX_PRBUF_SIZE,
+		ret = scnprintf(buf, PT_MAX_PRBUF_SIZE,
 			"%s: %d\n"
 			"%s: n/a\n"
 			"%s: n/a\n"
@@ -18618,7 +16480,7 @@ static ssize_t pt_dut_status_show(struct device *dev,
 			if (rc)
 				goto print_limited_results;
 
-			ret = snprintf(buf, PT_MAX_PRBUF_SIZE,
+			ret = scnprintf(buf, PT_MAX_PRBUF_SIZE,
 				"%s: %d\n"
 				"%s: %s\n"
 				"%s: %s\n"
@@ -18637,7 +16499,7 @@ static ssize_t pt_dut_status_show(struct device *dev,
 	}
 
 print_limited_results:
-	ret = snprintf(buf, PT_MAX_PRBUF_SIZE,
+	ret = scnprintf(buf, PT_MAX_PRBUF_SIZE,
 		"%s: %d\n"
 		"%s: %s\n"
 		"%s: %s\n"
@@ -18664,11 +16526,11 @@ static struct attribute *early_attrs[] = {
 	&dev_attr_drv_ver.attr,
 	&dev_attr_fw_version.attr,
 	&dev_attr_sysinfo.attr,
-#ifndef TTDL_KERNEL_SUBMISSION
 	&dev_attr_pip2_cmd_rsp.attr,
 	&dev_attr_command.attr,
 	&dev_attr_drv_debug.attr,
 	&dev_attr_hw_reset.attr,
+	&dev_attr_response.attr,
 	&dev_attr_ttdl_restart.attr,
 #ifdef TTDL_DIAGNOSTICS
 	&dev_attr_ttdl_status.attr,
@@ -18678,7 +16540,6 @@ static struct attribute *early_attrs[] = {
 	&dev_attr_flush_bus.attr,
 	&dev_attr_ttdl_bist.attr,
 #endif /* TTDL_DIAGNOSTICS */
-#endif /* !TTDL_KERNEL_SUBMISSION */
 	NULL,
 };
 
@@ -18802,8 +16663,125 @@ static void remove_sysfs_and_modules(struct device *dev)
 	pt_mt_release(dev);
 	remove_sysfs_interfaces(dev);
 }
-#endif /* !TTDL_KERNEL_SUBMISSION */
 
+static int pt_power_init(struct pt_core_data *cd, bool on)
+{
+	int rc;
+
+	if (!on)
+		goto pwr_deinit;
+
+	cd->vdd = regulator_get(cd->dev, "vdd");
+	if (IS_ERR(cd->vdd)) {
+		rc = PTR_ERR(cd->vdd);
+		dev_err(cd->dev,
+			"Regulator get failed vdd rc=%d\n", rc);
+		return rc;
+	}
+	if (regulator_count_voltages(cd->vdd) > 0) {
+		rc = regulator_set_voltage(cd->vdd, FT_VTG_MIN_UV,
+					FT_VTG_MAX_UV);
+		if (rc) {
+			dev_err(cd->dev,
+				"Regulator set_vtg failed vdd rc=%d\n", rc);
+			goto reg_vdd_put;
+		}
+	}
+
+	cd->vcc_i2c = regulator_get(cd->dev, "vcc_i2c");
+	if (IS_ERR(cd->vcc_i2c)) {
+		rc = PTR_ERR(cd->vcc_i2c);
+		dev_err(cd->dev,
+			"Regulator get failed vcc_i2c rc=%d\n", rc);
+		goto reg_vdd_set_vtg;
+	}
+	if (regulator_count_voltages(cd->vcc_i2c) > 0) {
+		rc = regulator_set_voltage(cd->vcc_i2c, FT_I2C_VTG_MIN_UV,
+					FT_I2C_VTG_MAX_UV);
+		if (rc) {
+			dev_err(cd->dev,
+			"Regulator set_vtg failed vcc_i2c rc=%d\n", rc);
+			goto reg_vcc_i2c_put;
+		}
+	}
+
+	return 0;
+
+reg_vcc_i2c_put:
+	regulator_put(cd->vcc_i2c);
+reg_vdd_set_vtg:
+	if (regulator_count_voltages(cd->vdd) > 0)
+		regulator_set_voltage(cd->vdd, 0, FT_VTG_MAX_UV);
+reg_vdd_put:
+	regulator_put(cd->vdd);
+	return rc;
+
+pwr_deinit:
+	if (regulator_count_voltages(cd->vdd) > 0)
+		regulator_set_voltage(cd->vdd, 0, FT_VTG_MAX_UV);
+
+	regulator_put(cd->vdd);
+
+	if (regulator_count_voltages(cd->vcc_i2c) > 0)
+		regulator_set_voltage(cd->vcc_i2c, 0, FT_I2C_VTG_MAX_UV);
+
+	regulator_put(cd->vcc_i2c);
+	return 0;
+}
+
+static int pt_ts_pinctrl_init(struct pt_core_data *cd)
+{
+	int retval;
+
+	/* Get pinctrl if target uses pinctrl */
+	cd->ts_pinctrl = devm_pinctrl_get(cd->dev);
+	if (IS_ERR_OR_NULL(cd->ts_pinctrl)) {
+		retval = PTR_ERR(cd->ts_pinctrl);
+		dev_dbg(cd->dev,
+			"Target does not use pinctrl %d\n", retval);
+		goto err_pinctrl_get;
+	}
+
+	cd->pinctrl_state_active
+		= pinctrl_lookup_state(cd->ts_pinctrl,
+				PINCTRL_STATE_ACTIVE);
+	if (IS_ERR_OR_NULL(cd->pinctrl_state_active)) {
+		retval = PTR_ERR(cd->pinctrl_state_active);
+		dev_err(cd->dev,
+			"Can not lookup %s pinstate %d\n",
+			PINCTRL_STATE_ACTIVE, retval);
+		goto err_pinctrl_lookup;
+	}
+
+	cd->pinctrl_state_suspend
+		= pinctrl_lookup_state(cd->ts_pinctrl,
+			PINCTRL_STATE_SUSPEND);
+	if (IS_ERR_OR_NULL(cd->pinctrl_state_suspend)) {
+		retval = PTR_ERR(cd->pinctrl_state_suspend);
+		dev_err(cd->dev,
+			"Can not lookup %s pinstate %d\n",
+			PINCTRL_STATE_SUSPEND, retval);
+		goto err_pinctrl_lookup;
+	}
+
+	cd->pinctrl_state_release
+		= pinctrl_lookup_state(cd->ts_pinctrl,
+			PINCTRL_STATE_RELEASE);
+	if (IS_ERR_OR_NULL(cd->pinctrl_state_release)) {
+		retval = PTR_ERR(cd->pinctrl_state_release);
+		dev_dbg(cd->dev,
+			"Can not lookup %s pinstate %d\n",
+			PINCTRL_STATE_RELEASE, retval);
+	}
+
+	return 0;
+
+err_pinctrl_lookup:
+	devm_pinctrl_put(cd->ts_pinctrl);
+err_pinctrl_get:
+	cd->ts_pinctrl = NULL;
+	return retval;
+}
 
 /*******************************************************************************
  *******************************************************************************
@@ -18833,15 +16811,11 @@ int pt_probe(const struct pt_bus_ops *ops, struct device *dev,
 	struct pt_core_data *cd;
 	struct pt_platform_data *pdata = dev_get_platdata(dev);
 	enum pt_atten_type type;
+	struct i2c_client *client = to_i2c_client(dev);
 	int rc = 0;
-#ifndef PT_PTSBC_SUPPORT
 	u8 pip_ver_major;
 	u8 pip_ver_minor;
 	u32 status = STARTUP_STATUS_START;
-#endif
-#ifdef TTDL_PTVIRTDUT_SUPPORT
-	int retry = 3;
-#endif
 
 	if (!pdata || !pdata->core_pdata || !pdata->mt_pdata) {
 		pt_debug(dev, DL_ERROR, "%s: Missing platform data\n",
@@ -18859,14 +16833,12 @@ int pt_probe(const struct pt_bus_ops *ops, struct device *dev,
 			goto error_no_pdata;
 		}
 	}
-
 	/* get context and debug print buffers */
 	cd = kzalloc(sizeof(*cd), GFP_KERNEL);
 	if (!cd) {
 		rc = -ENOMEM;
 		goto error_alloc_data;
 	}
-
 	/* Initialize device info */
 	cd->dev                        = dev;
 	cd->pdata                      = pdata;
@@ -18892,8 +16864,8 @@ int pt_probe(const struct pt_bus_ops *ops, struct device *dev,
 	cd->flashless_auto_bl          = PT_SUPPRESS_AUTO_BL;
 	cd->bl_with_no_int             = 0;
 	cd->cal_cache_in_host          = PT_FEATURE_DISABLE;
-	cd->num_devices                = 1;
-	cd->tthe_hid_usb_format        = PT_TTHE_TUNER_FORMAT_HID_I2C;
+	cd->multi_chip                 = PT_FEATURE_DISABLE;
+	cd->tthe_hid_usb_format        = PT_FEATURE_DISABLE;
 
 	if (cd->cpdata->config_dut_generation == CONFIG_DUT_PIP2_CAPABLE) {
 		cd->set_dut_generation = true;
@@ -18905,17 +16877,12 @@ int pt_probe(const struct pt_bus_ops *ops, struct device *dev,
 		cd->set_dut_generation = false;
 		cd->active_dut_generation = DUT_UNKNOWN;
 	}
-
 	/* Initialize with platform data */
 	cd->watchdog_force_stop        = cd->cpdata->watchdog_force_stop;
-#ifdef PT_PTSBC_SUPPORT
-	/* Extend first WD to allow DDI to complete configuration */
-	cd->watchdog_interval          = PT_PTSBC_INIT_WATCHDOG_TIMEOUT;
-#else
 	cd->watchdog_interval          = PT_WATCHDOG_TIMEOUT;
-#endif
 	cd->hid_cmd_state                 = 1;
 	cd->fw_updating                   = false;
+	cd->multi_chip                    = 0;
 
 #ifdef TTDL_DIAGNOSTICS
 	cd->t_refresh_active              = 0;
@@ -18932,20 +16899,9 @@ int pt_probe(const struct pt_bus_ops *ops, struct device *dev,
 	cd->force_pip2_seq                = 0;
 #endif /* TTDL_DIAGNOSTICS */
 
-#ifdef TTDL_PTVIRTDUT_SUPPORT
-	/*
-	 * This variable is only used for BATS test. The
-	 * default value "true" has no effect on whether
-	 * the PT_DETECT_HW build flag is enabled or not.
-	 */
-	cd->hw_detect_enabled             = true;
-	cd->route_bus_virt_dut            = 0;
-#endif /* TTDL_PTVIRTDUT_SUPPORT */
-
 	memset(cd->pip2_us_file_path, 0, PT_MAX_PATH_SIZE);
 	memcpy(cd->pip2_us_file_path, PT_PIP2_BIN_FILE_PATH,
 		sizeof(PT_PIP2_BIN_FILE_PATH));
-
 	pt_init_hid_descriptor(&cd->hid_desc);
 	/* Read and store the descriptor lengths */
 	cd->hid_core.hid_report_desc_len =
@@ -18954,14 +16910,12 @@ int pt_probe(const struct pt_bus_ops *ops, struct device *dev,
 	    le16_to_cpu(cd->hid_desc.max_input_len);
 	cd->hid_core.hid_max_output_len =
 	    le16_to_cpu(cd->hid_desc.max_output_len);
-
 	/* Initialize mutexes and spinlocks */
 	mutex_init(&cd->module_list_lock);
 	mutex_init(&cd->system_lock);
 	mutex_init(&cd->sysfs_lock);
 	mutex_init(&cd->ttdl_restart_lock);
 	mutex_init(&cd->firmware_class_lock);
-	mutex_init(&cd->hid_report_lock);
 	spin_lock_init(&cd->spinlock);
 
 	/* Initialize module list */
@@ -18976,6 +16930,33 @@ int pt_probe(const struct pt_bus_ops *ops, struct device *dev,
 
 	/* Initialize wait queue */
 	init_waitqueue_head(&cd->wait_q);
+	rc = pt_ts_pinctrl_init(cd);
+	if (!rc && cd->ts_pinctrl) {
+		/*
+		 * Pinctrl handle is optional. If pinctrl handle is found
+		 * let pins to be configured in active state. If not
+		 * found continue further without error.
+		 */
+		rc = pinctrl_select_state(cd->ts_pinctrl,
+					cd->pinctrl_state_active);
+		if (rc < 0)
+			dev_err(&client->dev, "failed to select pin to active state\n");
+	}
+	rc = pt_power_init(cd, true);
+	if (rc < 0)
+		dev_err(&client->dev, "failed to cyttsp5_power_init\n");
+
+	rc = regulator_enable(cd->vdd);
+	if (rc) {
+		dev_err(dev, "Regulator vdd enable failed rc=%d\n", rc);
+		goto error_power;
+	}
+	rc = regulator_enable(cd->vcc_i2c);
+	if (rc) {
+		dev_err(dev, "Regulator vcc_i2c enable failed rc=%d\n", rc);
+		regulator_disable(cd->vdd);
+		goto error_power;
+	}
 
 	/* Initialize works */
 	INIT_WORK(&cd->enum_work, pt_enum_work_function);
@@ -19006,23 +16987,13 @@ int pt_probe(const struct pt_bus_ops *ops, struct device *dev,
 	snprintf(cd->hw_version, HW_VERSION_LEN_MAX, "FFFF.FFFF.FF");
 
 	dev_set_drvdata(dev, cd);
-#ifndef PT_PTSBC_SUPPORT
 	/* PtSBC builds will call this function in pt_probe_complete() */
 	pt_add_core(dev);
-#endif
 
 	rc = sysfs_create_group(&dev->kobj, &early_attr_group);
 	if (rc)
-		pt_debug(cd->dev, DL_WARN, "%s:create early attrs failed\n",
+		pt_debug(cd->dev, DL_ERROR, "%s:create early attrs failed\n",
 			__func__);
-#ifndef TTDL_KERNEL_SUBMISSION
-	rc = device_create_bin_file(dev, &bin_attr_pt_response);
-	if (rc) {
-		pt_debug(dev, DL_ERROR,
-			"%s: Error, could not create node response\n",
-			__func__);
-	}
-#endif /* !TTDL_KERNEL_SUBMISSION */
 
 	/*
 	 * Save the pointer to a global value, which will be used
@@ -19037,74 +17008,15 @@ int pt_probe(const struct pt_bus_ops *ops, struct device *dev,
 	 */
 	if (!cd->cpdata->irq_stat) {
 		cd->irq = irq;
-		pt_debug(cd->dev, DL_WARN, "%s:No irq_stat, Set cd->irq = %d\n",
+		pt_debug(cd->dev, DL_ERROR, "%s:No irq_stat, Set cd->irq = %d\n",
 			__func__, cd->irq);
 	}
-
-#ifdef PT_PTSBC_SUPPORT
-	/*
-	 * For the PtSBC, on the first bring up, I2C/SPI will not be ready
-	 * in time so complete probe with pt_probe_complete() after work
-	 * probe timer expires.
-	 */
-	INIT_WORK(&cd->probe_work, pt_probe_work);
-#if (KERNEL_VERSION(4, 14, 0) > LINUX_VERSION_CODE)
-	setup_timer(&cd->probe_timer, pt_probe_timer, (unsigned long)cd);
-#else
-	timer_setup(&cd->probe_timer, pt_probe_timer, 0);
-#endif
-
-	/* Some host i2c/spi busses start late and then run too slow */
-	pt_debug(cd->dev, DL_INFO, "%s:start wait for probe timer\n",
-		__func__);
-	mod_timer(&cd->probe_timer, jiffies +
-			msecs_to_jiffies(PT_CORE_PROBE_STARTUP_DELAY_MS));
-	return rc;
-
-error_alloc_data:
-error_no_pdata:
-	pt_debug(dev, DL_ERROR, "%s failed.\n", __func__);
-	return rc;
-}
-
-/*******************************************************************************
- * FUNCTION: pt_probe_complete
- *
- * SUMMARY: This function is only needed when PT_PTSBC_SUPPORT is enabled.
- *	For the PtSBC, the probe functionality is split into two functions;
- *	pt_probe() and pt_probe_complete(). The initial setup is done
- *	in pt_probe() and the rest is done here after I2C/SPI is up. This
- *	function also configures all voltage regulators for the PtSBC.
- *
- * RETURN:
- *	 0 = success
- *	!0 = failure
- *
- * PARAMETERS:
- *	*cd - pointer to the core data structure
- ******************************************************************************/
-static int pt_probe_complete(struct pt_core_data *cd)
-{
-	int rc = -1;
-	u32 status = STARTUP_STATUS_START;
-	struct device *dev = cd->dev;
-	u8 pip_ver_major;
-	u8 pip_ver_minor;
-#ifdef TTDL_PTVIRTDUT_SUPPORT
-	int retry = 3;
-#endif
-
-	pt_debug(cd->dev, DL_DEBUG,
-		"%s: PARADE Entering Probe complete function\n", __func__);
-	pt_add_core(cd->dev);
-#endif /* --- End PT_PTSBC_SUPPORT --- */
-
 	/* Call platform init function before setting up the GPIO's */
 	if (cd->cpdata->init) {
 		pt_debug(cd->dev, DL_INFO, "%s: Init HW\n", __func__);
 		rc = cd->cpdata->init(cd->cpdata, PT_MT_POWER_ON, cd->dev);
 	} else {
-		pt_debug(cd->dev, DL_WARN, "%s: No HW INIT function\n",
+		pt_debug(cd->dev, DL_ERROR, "%s: No HW INIT function\n",
 			__func__);
 		rc = 0;
 	}
@@ -19112,14 +17024,13 @@ static int pt_probe_complete(struct pt_core_data *cd)
 		pt_debug(cd->dev, DL_ERROR, "%s: HW Init fail r=%d\n",
 			__func__, rc);
 	}
-
 	/* Power on any needed regulator(s) */
 	if (cd->cpdata->setup_power) {
 		pt_debug(cd->dev, DL_INFO, "%s: Device power on!\n", __func__);
 		rc = cd->cpdata->setup_power(cd->cpdata,
 			PT_MT_POWER_ON, cd->dev);
 	} else {
-		pt_debug(cd->dev, DL_WARN, "%s: No setup power function\n",
+		pt_debug(cd->dev, DL_ERROR, "%s: No setup power function\n",
 			__func__);
 		rc = 0;
 	}
@@ -19131,18 +17042,6 @@ static int pt_probe_complete(struct pt_core_data *cd)
 	cd->watchdog_irq_stuck_count = 0;
 	cd->bus_transmit_error_count = 0;
 #endif /* TTDL_DIAGNOSTICS */
-
-#ifdef TTDL_PTVIRTDUT_SUPPORT
-	/*
-	 * In the case that the variable hw_detect_enabled needs to be set to
-	 * false as the default value, it needs to be set to true through
-	 * drv_debug sysfs node when testing HW detect function. But the probe()
-	 * function runs fast, and drv_debug may not set this variable to
-	 * true in time. This "retry" is to avoid this issue.
-	 */
-retry_hw_detect:
-	if (cd->hw_detect_enabled) {
-#endif
 		if (cd->cpdata->detect) {
 			pt_debug(cd->dev, DL_INFO, "%s: Detect HW\n", __func__);
 			rc = cd->cpdata->detect(cd->cpdata, cd->dev,
@@ -19159,7 +17058,7 @@ retry_hw_detect:
 				goto error_detect;
 			}
 		} else {
-			pt_debug(dev, DL_WARN,
+			pt_debug(dev, DL_ERROR,
 				"%s: PARADE No HW detect function pointer\n",
 				__func__);
 			/*
@@ -19173,14 +17072,6 @@ retry_hw_detect:
 					"%s: FAILED to execute HARD reset\n",
 					__func__);
 		}
-#ifdef TTDL_PTVIRTDUT_SUPPORT
-	} else {
-		if (retry--) {
-			msleep(50);
-			goto retry_hw_detect;
-		}
-	}
-#endif
 
 	if (cd->cpdata->setup_irq) {
 		pt_debug(cd->dev, DL_INFO, "%s: setup IRQ\n", __func__);
@@ -19204,7 +17095,6 @@ retry_hw_detect:
 	timer_setup(&cd->watchdog_timer, pt_watchdog_timer, 0);
 #endif
 	pt_stop_wd_timer(cd);
-
 #ifdef TTHE_TUNER_SUPPORT
 	mutex_init(&cd->tthe_lock);
 	cd->tthe_debugfs = debugfs_create_file(PT_TTHE_TUNER_FILE_NAME,
@@ -19218,7 +17108,6 @@ retry_hw_detect:
 	pm_runtime_get_noresume(dev);
 	pm_runtime_set_active(dev);
 	pm_runtime_enable(dev);
-
 	/* If IRQ asserted, read out all from buffer to release INT pin */
 	if (cd->cpdata->irq_stat) {
 		pt_flush_bus_if_irq_asserted(cd, PT_FLUSH_BUS_BASED_ON_LEN);
@@ -19228,10 +17117,8 @@ retry_hw_detect:
 		if (!rc)
 			pt_parse_input(cd);
 	}
-
 	/* Without sleep DUT is not ready and will NAK the first write */
 	msleep(150);
-
 	/* Attempt to set the DUT generation if not yet set */
 	if (cd->active_dut_generation == DUT_UNKNOWN) {
 		if (cd->bl_pip_ver_ready ||
@@ -19252,18 +17139,17 @@ retry_hw_detect:
 			}
 		}
 	}
-
 	_pt_request_active_pip_protocol(cd->dev, PT_CORE_CMD_PROTECTED,
 		&pip_ver_major, &pip_ver_minor);
 	if (pip_ver_major == 2) {
 		cd->bl_pip_ver_ready = true;
-		pt_debug(dev, DL_WARN,
+		pt_debug(dev, DL_ERROR,
 			" === PIP2.%d Detected, Attempt to launch APP ===\n",
 			pip_ver_minor);
 		cd->hw_detected = true;
 	} else if (pip_ver_major == 1) {
 		cd->app_pip_ver_ready = true;
-		pt_debug(dev, DL_WARN,
+		pt_debug(dev, DL_ERROR,
 			" === PIP1.%d Detected ===\n", pip_ver_minor);
 		cd->hw_detected = true;
 	} else {
@@ -19277,23 +17163,18 @@ retry_hw_detect:
 		if (cd->active_dut_generation != DUT_PIP1_ONLY)
 			goto skip_enum;
 	}
-
 	rc = pt_enum_with_dut(cd, false, &status);
-	pt_debug(dev, DL_WARN, "%s: cd->startup_status=0x%04X status=0x%04X\n",
+	pt_debug(dev, DL_ERROR, "%s: cd->startup_status=0x%04X status=0x%04X\n",
 		__func__, cd->startup_status, status);
 	if (rc == -ENODEV) {
 		pt_debug(cd->dev, DL_ERROR,
 			"%s: Enumeration Failed r=%d\n", __func__, rc);
-#ifndef PT_PTSBC_SUPPORT
 		/* For PtSBC don't error out, allow TTDL to stay up */
 		goto error_after_startup;
-#endif
 	}
-
 	/* Suspend scanning until probe is complete to avoid asyc touches */
 	pt_pip_suspend_scanning_(cd);
 
-#ifndef TTDL_KERNEL_SUBMISSION
 	if (cd->hw_detected) {
 		pt_debug(dev, DL_INFO, "%s: Add sysfs interfaces\n",
 			__func__);
@@ -19304,12 +17185,10 @@ retry_hw_detect:
 			goto error_after_startup;
 		}
 	} else {
-		pt_debug(dev, DL_WARN,
+		pt_debug(dev, DL_ERROR,
 			"%s: No HW detected, sysfs interfaces not added\n",
 			__func__);
 	}
-#endif /* !TTDL_KERNEL_SUBMISSION */
-
 skip_enum:
 	pm_runtime_put_sync(dev);
 
@@ -19320,14 +17199,12 @@ skip_enum:
 			__func__);
 		goto error_after_sysfs_create;
 	}
-
 	rc = pt_btn_probe(dev);
 	if (rc < 0) {
 		pt_debug(dev, DL_ERROR, "%s: Error, fail btn probe\n",
 			__func__);
 		goto error_after_startup_mt;
 	}
-
 	pt_probe_modules(cd);
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
@@ -19341,13 +17218,12 @@ skip_enum:
 	register_pm_notifier(&cd->pm_notifier);
 #endif
 	pt_pip_resume_scanning_(cd);
-
 	mutex_lock(&cd->system_lock);
 	cd->startup_status |= status;
 	cd->core_probe_complete = 1;
 	mutex_unlock(&cd->system_lock);
 
-	pt_debug(dev, DL_WARN, "%s: TTDL Core Probe Completed Successfully\n",
+	pt_debug(dev, DL_ERROR, "%s: TTDL Core Probe Completed Successfully\n",
 		__func__);
 	return 0;
 
@@ -19365,9 +17241,7 @@ error_after_sysfs_create:
 	cancel_work_sync(&cd->enum_work);
 	pt_stop_wd_timer(cd);
 	pt_free_si_ptrs(cd);
-#ifndef TTDL_KERNEL_SUBMISSION
 	remove_sysfs_interfaces(dev);
-#endif /* !TTDL_KERNEL_SUBMISSION */
 
 error_after_startup:
 	pr_err("%s PARADE error_after_startup\n", __func__);
@@ -19376,9 +17250,6 @@ error_after_startup:
 		cd->cpdata->setup_irq(cd->cpdata, PT_MT_IRQ_FREE, dev);
 error_setup_irq:
 error_detect:
-#ifdef PT_PTSBC_SUPPORT
-	del_timer(&cd->probe_timer);
-#endif
 	if (cd->cpdata->init)
 		cd->cpdata->init(cd->cpdata, PT_MT_POWER_OFF, dev);
 	if (cd->cpdata->setup_power)
@@ -19386,11 +17257,11 @@ error_detect:
 	sysfs_remove_group(&dev->kobj, &early_attr_group);
 	pt_del_core(dev);
 	dev_set_drvdata(dev, NULL);
+error_power:
+	pt_power_init(cd, false);
 	kfree(cd);
-#ifndef PT_PTSBC_SUPPORT
 error_alloc_data:
 error_no_pdata:
-#endif
 	pr_err("%s failed.\n", __func__);
 	return rc;
 }
@@ -19434,16 +17305,10 @@ int pt_release(struct pt_core_data *cd)
 	 * all I2C/SPI communication.
 	 */
 	pt_stop_wd_timer(cd);
-#ifdef PT_PTSBC_SUPPORT
-	cancel_work_sync(&cd->probe_work);
-#endif
 	call_atten_cb(cd, PT_ATTEN_CANCEL_LOADER, 0);
 	cancel_work_sync(&cd->ttdl_restart_work);
 	cancel_work_sync(&cd->enum_work);
 	pt_stop_wd_timer(cd);
-#ifdef PT_PTSBC_SUPPORT
-	cancel_work_sync(&cd->irq_work);
-#endif
 
 	pt_release_modules(cd);
 	pt_proximity_release(dev);
@@ -19475,9 +17340,7 @@ int pt_release(struct pt_core_data *cd)
 
 	sysfs_remove_group(&dev->kobj, &early_attr_group);
 
-#ifndef TTDL_KERNEL_SUBMISSION
 	remove_sysfs_interfaces(dev);
-#endif /* !TTDL_KERNEL_SUBMISSION */
 
 	disable_irq_nosync(cd->irq);
 	if (cd->cpdata->setup_irq)
@@ -19489,7 +17352,6 @@ int pt_release(struct pt_core_data *cd)
 	dev_set_drvdata(dev, NULL);
 	pt_del_core(dev);
 	pt_free_si_ptrs(cd);
-	pt_free_hid_reports(cd);
 	kfree(cd);
 	return 0;
 }

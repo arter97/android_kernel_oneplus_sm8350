@@ -29,10 +29,6 @@
 
 #include "pt_regs.h"
 #include <linux/pt_platform.h>
-#include <linux/regulator/consumer.h>
-#ifdef PT_PTSBC_SUPPORT
-#include <linux/init-input.h>
-#endif
 
 #ifdef CONFIG_TOUCHSCREEN_PARADE_PLATFORM_FW_UPGRADE
 /* FW for Panel ID = 0x00 */
@@ -368,193 +364,6 @@ static int pt_pinctrl_select_release(struct pt_core_platform_data *pdata,
 }
 #endif /* PT_PINCTRL_EN */
 
-#ifdef PT_REGULATOR_EN
-#define PT_VCC_MIN_UV (2800000)
-#define PT_VCC_MAX_UV (3300000)
-#define PT_VDDI_MIN_UV (1800000)
-#define PT_VDDI_MAX_UV (1900000)
-/*******************************************************************************
- * FUNCTION: pt_regulator_init
- *
- * SUMMARY: With regulator framework to get regulator handle and setup voltage
- *  level.
- *
- * NOTE: The function only contains setup for VCC and VDDI since AVDD AVEE is
- *  usually used by TDDI products while the power is setup on other driver.
- *
- * RETURN:
- *	 0 = success
- *	!0 = fail
- *
- * PARAMETERS:
- *  *pdata - pointer to the platform data structure
- *  *dev   - pointer to Device structure
- ******************************************************************************/
-static int pt_regulator_init(struct pt_core_platform_data *pdata,
-			     struct device *dev)
-{
-	int rc = 0;
-
-	pdata->vcc = devm_regulator_get(dev, "vcc");
-	if (IS_ERR(pdata->vcc)) {
-		rc = PTR_ERR(pdata->vcc);
-		pt_debug(dev, DL_ERROR, "get vcc regulator failed,rc=%d", rc);
-		return rc;
-	}
-
-	if (regulator_count_voltages(pdata->vcc) > 0) {
-		rc = regulator_set_voltage(pdata->vcc, PT_VCC_MIN_UV,
-			      PT_VCC_MAX_UV);
-		if (rc) {
-			pt_debug(dev, DL_ERROR,
-				 "set vcc regulator failed rc=%d", rc);
-			goto error_set_vcc;
-		}
-	}
-
-	pdata->vddi = devm_regulator_get(dev, "vddi");
-	if (IS_ERR(pdata->vddi)) {
-		rc = PTR_ERR(pdata->vddi);
-		pt_debug(dev, DL_ERROR, "get vddi regulator failed,rc=%d", rc);
-		goto error_get_vcc;
-	}
-
-	if (regulator_count_voltages(pdata->vddi) > 0) {
-		rc = regulator_set_voltage(pdata->vddi, PT_VDDI_MIN_UV,
-					   PT_VDDI_MAX_UV);
-		if (rc) {
-			pt_debug(dev, DL_ERROR,
-				 "set vddi regulator failed rc=%d", rc);
-			goto error_set_vddi;
-		}
-	}
-
-	return 0;
-
-error_set_vddi:
-	devm_regulator_put(pdata->vddi);
-error_get_vcc:
-	/*
-	 * regulator_set_voltage always select minimum legal voltage between
-	 * min_uV and max_uV. To set the minuV to 0 means to restore the default
-	 * value of regulator. Since regulator_set_voltage is the part to
-	 * release regulator source, it's not necessary to check the returned
-	 * value of it.
-	 */
-	if (regulator_count_voltages(pdata->vcc) > 0)
-		regulator_set_voltage(pdata->vcc, 0, PT_VCC_MAX_UV);
-error_set_vcc:
-	devm_regulator_put(pdata->vcc);
-
-	return rc;
-}
-
-/*******************************************************************************
- * FUNCTION: pt_setup_power_by_regulator
- *
- * SUMMARY:  With regulator framework to set power on/off.
- *
- * NOTE: The function only contains setup for VCC and VDDI since AVDD AVEE is
- *  usually used by TDDI products while the power is setup on other driver.
- *
- * NOTE: The timing sequence is the EXAMPLE ONLY for TT7XXX:
- *  power up order   : VDDI, VCC
- *  power down order : VCC, VDDI
- *
- * RETURN:
- *	 0 = success
- *	!0 = fail
- *
- * PARAMETERS:
- *  *pdata - pointer to the platform data structure
- *   on    - flag to decide power state,PT_MT_POWER_ON/PT_MT_POWER_OFF
- *  *dev   - pointer to Device structure
- ******************************************************************************/
-static int pt_setup_power_by_regulator(struct pt_core_platform_data *pdata,
-				       int on, struct device *dev)
-{
-	int rc = 0;
-
-	if (IS_ERR(pdata->vddi) || IS_ERR(pdata->vcc)) {
-		pt_debug(dev, DL_ERROR, "vddi or vcc is not valid\n");
-		return -EINVAL;
-	}
-
-	if (on == PT_MT_POWER_ON) {
-		rc = regulator_enable(pdata->vddi);
-		if (rc) {
-			pt_debug(dev, DL_ERROR,
-				 "enable vddi regulator failed,rc=%d", rc);
-		}
-		/* Ensure the power goes stable */
-		usleep_range(3000, 4000);
-
-		rc = regulator_enable(pdata->vcc);
-		if (rc) {
-			pt_debug(dev, DL_ERROR,
-				 "enable vcc regulator failed,rc=%d", rc);
-		}
-		/* Ensure the power goes stable */
-		usleep_range(3000, 4000);
-	} else {
-		rc = regulator_disable(pdata->vcc);
-		if (rc) {
-			pt_debug(dev, DL_ERROR,
-				 "disable vcc regulator failed,rc=%d", rc);
-		}
-		rc = regulator_disable(pdata->vddi);
-		if (rc) {
-			pt_debug(dev, DL_ERROR,
-				 "disable vddi regulator failed,rc=%d", rc);
-		}
-		/* Ensure the power ramp down completely */
-		usleep_range(10000, 12000);
-	}
-
-	return rc;
-}
-
-/*******************************************************************************
- * FUNCTION: pt_regulator_release
- *
- * SUMMARY: With regulator framework to release regulator resource
- *
- * NOTE: The regulator MUST be disabled before this call.
- * NOTE: The function only contains setup for VCC and VDDI since AVDD AVEE is
- *  usually used by TDDI products while the power is setup on other driver.
- *
- * RETURN:
- *	 0 = success
- *	!0 = fail
- *
- * PARAMETERS:
- *  *pdata - pointer to the platform data structure
- *  *dev   - pointer to Device structure
- ******************************************************************************/
-static int pt_regulator_release(struct pt_core_platform_data *pdata,
-				struct device *dev)
-{
-	if (IS_ERR(pdata->vddi) || IS_ERR(pdata->vcc))
-		return -EINVAL;
-
-	/*
-	 * regulator_set_voltage always select minimum legal voltage between
-	 * min_uV and max_uV. To set the minuV to 0 means to restore the default
-	 * value of regulator. Since regulator_set_voltage is the part to
-	 * release regulator source, it's not necessary to check the returned
-	 * value of it.
-	 */
-	if (regulator_count_voltages(pdata->vddi) > 0)
-		regulator_set_voltage(pdata->vddi, 0, PT_VDDI_MAX_UV);
-	devm_regulator_put(pdata->vddi);
-
-	if (regulator_count_voltages(pdata->vcc) > 0)
-		regulator_set_voltage(pdata->vcc, 0, PT_VCC_MAX_UV);
-	devm_regulator_put(pdata->vcc);
-
-	return 0;
-}
-#endif /* PT_REGULATOR_EN */
 /*******************************************************************************
  * FUNCTION: pt_init
  *
@@ -577,8 +386,8 @@ int pt_init(struct pt_core_platform_data *pdata,
 	int ddi_rst_gpio = pdata->ddi_rst_gpio;
 	int rc = 0;
 
-	if (on) {
 #ifdef PT_PINCTRL_EN
+	if (on) {
 		rc = pt_pinctrl_init(pdata, dev);
 		if (!rc) {
 			pt_pinctrl_select_normal(pdata, dev);
@@ -586,17 +395,8 @@ int pt_init(struct pt_core_platform_data *pdata,
 			pt_debug(dev, DL_ERROR,
 				 "%s: Failed to request pinctrl\n", __func__);
 		}
-#endif
-#ifdef PT_REGULATOR_EN
-		rc = pt_regulator_init(pdata, dev);
-		if (rc) {
-			pt_debug(dev, DL_ERROR,
-				 "%s: Failed requesting regulator rc=%d",
-				 __func__, rc);
-		}
-#endif
 	}
-
+#endif
 	if (on && rst_gpio) {
 		/* Configure RST GPIO */
 		pt_debug(dev, DL_WARN, "%s: Request RST GPIO %d",
@@ -687,9 +487,6 @@ int pt_init(struct pt_core_platform_data *pdata,
 			gpio_free(irq_gpio);
 		if (rst_gpio)
 			gpio_free(rst_gpio);
-#ifdef PT_REGULATOR_EN
-		pt_regulator_release(pdata, dev);
-#endif
 #ifdef PT_PINCTRL_EN
 		pt_pinctrl_select_release(pdata, dev);
 #endif
@@ -719,6 +516,193 @@ success:
 		"%s: SUCCESS - Configured DDI_XRES GPIO %d, IRQ GPIO %d, TP_XRES GPIO %d\n",
 		__func__, ddi_rst_gpio, irq_gpio, rst_gpio);
 	return rc;
+}
+
+/*******************************************************************************
+ * FUNCTION: pt_wakeup
+ *
+ * SUMMARY: Resume power for "power on/off" sleep strategy which against to
+ *  "deepsleep" strategy.
+ *
+ * RETURN:
+ *	 0 = success
+ *	!0 = fail
+ *
+ * PARAMETERS:
+ *  *pdata       - pointer to the platform data structure
+ *  *dev         - pointer to Device structure
+ *  *ignore_irq  - pointer to atomic structure to allow the host ignoring false
+ *                 IRQ during power up
+ ******************************************************************************/
+static int pt_wakeup(struct pt_core_platform_data *pdata,
+		struct device *dev, atomic_t *ignore_irq)
+{
+	/* Example for TT7XXX */
+	int rc = 0;
+
+#ifdef PT_PINCTRL_EN
+		pt_pinctrl_select_normal(pdata, dev);
+#endif
+
+#ifdef TT7XXX_EXAMPLE
+	pt_debug(dev, DL_INFO,
+		"%s: Enable defined pwr: VDDI, VCC\n", __func__);
+	/*
+	 * Force part into RESET by holding XRES#(TP_XRES)
+	 * while powering it up
+	 */
+	if (pdata->rst_gpio)
+		gpio_set_value(pdata->rst_gpio, 0);
+
+	/* Turn on VDDI [Digital Interface] (+1.8v) */
+	if (pdata->vddi_gpio) {
+		rc = gpio_request(pdata->vddi_gpio, NULL);
+		if (rc < 0) {
+			gpio_free(pdata->vddi_gpio);
+			rc = gpio_request(pdata->vddi_gpio, NULL);
+		}
+		if (rc < 0) {
+			pr_err("%s: Failed requesting VDDI GPIO %d\n",
+				__func__, pdata->vddi_gpio);
+		}
+		rc = gpio_direction_output(pdata->vddi_gpio, 1);
+		if (rc)
+			pr_err("%s: setcfg for VDDI GPIO %d failed\n",
+				__func__, pdata->vddi_gpio);
+		gpio_free(pdata->vddi_gpio);
+		usleep_range(3000, 4000);
+	}
+
+	/* Turn on VCC */
+	if (pdata->vcc_gpio) {
+		rc = gpio_request(pdata->vcc_gpio, NULL);
+		if (rc < 0) {
+			gpio_free(pdata->vcc_gpio);
+			rc = gpio_request(pdata->vcc_gpio, NULL);
+		}
+		if (rc < 0) {
+			pr_err("%s: Failed requesting VCC GPIO %d\n",
+				__func__, pdata->vcc_gpio);
+		}
+		rc = gpio_direction_output(pdata->vcc_gpio, 1);
+		if (rc)
+			pr_err("%s: setcfg for VCC GPIO %d failed\n",
+				__func__, pdata->vcc_gpio);
+		gpio_free(pdata->vcc_gpio);
+		usleep_range(3000, 4000);
+	}
+
+	usleep_range(12000, 15000);
+	/* Force part out of RESET by releasing XRES#(TP_XRES) */
+	if (pdata->rst_gpio)
+		gpio_set_value(pdata->rst_gpio, 1);
+#else
+	pt_debug(dev, DL_INFO, "%s: Enable defined pwr\n", __func__);
+#endif
+	return rc;
+}
+
+/*******************************************************************************
+ * FUNCTION: pt_sleep
+ *
+ * SUMMARY: Suspend power for "power on/off" sleep strategy which against to
+ *  "deepsleep" strategy.
+ *
+ * RETURN:
+ *	 0 = success
+ *	!0 = fail
+ *
+ * PARAMETERS:
+ *  *pdata       - pointer to the platform data structure
+ *  *dev         - pointer to Device structure
+ *  *ignore_irq  - pointer to atomic structure to allow the host ignoring false
+ *                 IRQ during power down
+ ******************************************************************************/
+static int pt_sleep(struct pt_core_platform_data *pdata,
+		struct device *dev, atomic_t *ignore_irq)
+{
+	/* Example for TT7XXX */
+	int rc = 0;
+
+#ifdef TT7XXX_EXAMPLE
+	pt_debug(dev, DL_INFO,
+		"%s: Turn off defined pwr: VCC, VDDI\n", __func__);
+	/*
+	 * Force part into RESET by holding XRES#(TP_XRES)
+	 * while powering it up
+	 */
+	if (pdata->rst_gpio)
+		gpio_set_value(pdata->rst_gpio, 0);
+
+	/* Turn off VCC */
+	if (pdata->vcc_gpio) {
+		rc = gpio_request(pdata->vcc_gpio, NULL);
+		if (rc < 0) {
+			gpio_free(pdata->vcc_gpio);
+			rc = gpio_request(pdata->vcc_gpio, NULL);
+		}
+		if (rc < 0) {
+			pr_err("%s: Failed requesting VCC GPIO %d\n",
+				__func__, pdata->vcc_gpio);
+		}
+		rc = gpio_direction_output(pdata->vcc_gpio, 0);
+		if (rc)
+			pr_err("%s: setcfg for VCC GPIO %d failed\n",
+				__func__, pdata->vcc_gpio);
+		gpio_free(pdata->vcc_gpio);
+	}
+
+	/* Turn off VDDI [Digital Interface] (+1.8v) */
+	if (pdata->vddi_gpio) {
+		rc = gpio_request(pdata->vddi_gpio, NULL);
+		if (rc < 0) {
+			gpio_free(pdata->vddi_gpio);
+			rc = gpio_request(pdata->vddi_gpio, NULL);
+		}
+		if (rc < 0) {
+			pr_err("%s: Failed requesting VDDI GPIO %d\n",
+				__func__, pdata->vddi_gpio);
+		}
+		rc = gpio_direction_output(pdata->vddi_gpio, 0);
+		if (rc)
+			pr_err("%s: setcfg for VDDI GPIO %d failed\n",
+				__func__, pdata->vddi_gpio);
+		gpio_free(pdata->vddi_gpio);
+		usleep_range(10000, 12000);
+	}
+#else
+	pt_debug(dev, DL_INFO, "%s: Turn off defined pwr\n", __func__);
+#endif
+#ifdef PT_PINCTRL_EN
+		pt_pinctrl_select_suspend(pdata, dev);
+#endif
+	return rc;
+}
+
+/*******************************************************************************
+ * FUNCTION: pt_power
+ *
+ * SUMMARY: Wrapper function to resume/suspend power with function
+ *  pt_wakeup()/pt_sleep().
+ *
+ * RETURN:
+ *	 0 = success
+ *	!0 = fail
+ *
+ * PARAMETERS:
+ *  *pdata       - pointer to the platform data structure
+ *   on          - flag to remsume/suspend power(0:resume; 1:suspend)
+ *  *dev         - pointer to Device structure
+ *  *ignore_irq  - pointer to atomic structure to allow the host ignoring false
+ *                 IRQ during power up/down
+ ******************************************************************************/
+int pt_power(struct pt_core_platform_data *pdata,
+		int on, struct device *dev, atomic_t *ignore_irq)
+{
+	if (on)
+		return pt_wakeup(pdata, dev, ignore_irq);
+
+	return pt_sleep(pdata, dev, ignore_irq);
 }
 
 /*******************************************************************************
@@ -780,29 +764,42 @@ int pt_detect(struct pt_core_platform_data *pdata,
 }
 #endif
 
-#ifndef PT_REGULATOR_EN
 /*******************************************************************************
- * FUNCTION: pt_setup_power_by_gpio
+ * FUNCTION: pt_setup_power
  *
- * SUMMARY:  With GPIOs to control LDO directly to set power on/off.
+ * SUMMARY: Turn on/turn off voltage regulator
  *
  * RETURN:
  *	 0 = success
- *	!0 = fail
+ *	!0 = failure
  *
  * PARAMETERS:
- *  *pdata - pointer to the platform data structure
- *   on    - flag to decide power state,PT_MT_POWER_ON/PT_MT_POWER_OFF
- *  *dev   - pointer to Device structure
+ *	*pdata - pointer to  core platform data
+ *	on     - flag to decide power state,PT_MT_POWER_ON/PT_MT_POWER_OFF
+ *	*dev   - pointer to device
  ******************************************************************************/
-static int pt_setup_power_by_gpio(struct pt_core_platform_data *pdata,
-				       int on, struct device *dev)
+int pt_setup_power(struct pt_core_platform_data *pdata, int on,
+		struct device *dev)
 {
-	int rc = 0;
 	int en_vcc  = pdata->vcc_gpio;
 	int en_vddi = pdata->vddi_gpio;
 	int en_avdd = pdata->avdd_gpio;
 	int en_avee = pdata->avee_gpio;
+	int rc = 0;
+
+	/*
+	 * For TDDI parts, force part into RESET by holding DDI XRES
+	 * while powering it up
+	 */
+	if (pdata->ddi_rst_gpio)
+		gpio_set_value(pdata->ddi_rst_gpio, 0);
+
+	/*
+	 * Force part into RESET by holding XRES#(TP_XRES)
+	 * while powering it up
+	 */
+	if (pdata->rst_gpio)
+		gpio_set_value(pdata->rst_gpio, 0);
 
 	if (on == PT_MT_POWER_ON) {
 		/*
@@ -975,58 +972,6 @@ static int pt_setup_power_by_gpio(struct pt_core_platform_data *pdata,
 		}
 	}
 
-	return rc;
-}
-#endif /* PT_REGULATOR_EN */
-/*******************************************************************************
- * FUNCTION: pt_setup_power
- *
- * SUMMARY: Turn on/turn off voltage regulator
- *
- * RETURN:
- *	 0 = success
- *	!0 = failure
- *
- * PARAMETERS:
- *  *pdata - pointer to  core platform data
- *   on     - flag to decide power state,PT_MT_POWER_ON/PT_MT_POWER_OFF
- *  *dev   - pointer to device
- ******************************************************************************/
-int pt_setup_power(struct pt_core_platform_data *pdata, int on,
-		struct device *dev)
-{
-	int rc = 0;
-
-	/*
-	 * For TDDI parts, force part into RESET by holding DDI XRES
-	 * while powering it up
-	 */
-	if (pdata->ddi_rst_gpio)
-		gpio_set_value(pdata->ddi_rst_gpio, 0);
-
-	/*
-	 * Force part into RESET by holding XRES#(TP_XRES)
-	 * while powering it up
-	 */
-	if (pdata->rst_gpio)
-		gpio_set_value(pdata->rst_gpio, 0);
-
-#ifdef PT_REGULATOR_EN
-	rc = pt_setup_power_by_regulator(pdata, on, dev);
-	if (rc) {
-		pt_debug(dev, DL_ERROR,
-			 "%s: Failed setup power by regulator rc=%d",
-			 __func__, rc);
-	}
-#else /* PT_REGULATOR_EN */
-	rc = pt_setup_power_by_gpio(pdata, on, dev);
-	if (rc) {
-		pt_debug(dev, DL_ERROR,
-			 "%s: Failed setup power by gpio rc=%d",
-			 __func__, rc);
-	}
-#endif /* PT_REGULATOR_EN */
-
 	/* Force part out of RESET by releasing XRES#(TP_XRES) */
 	if (pdata->rst_gpio)
 		gpio_set_value(pdata->rst_gpio, 1);
@@ -1038,137 +983,6 @@ int pt_setup_power(struct pt_core_platform_data *pdata, int on,
 	return rc;
 }
 
-/*******************************************************************************
- * FUNCTION: pt_wakeup
- *
- * SUMMARY: Resume power for "power on/off" sleep strategy which against to
- *  "deepsleep" strategy.
- *
- * RETURN:
- *	 0 = success
- *	!0 = fail
- *
- * PARAMETERS:
- *  *pdata       - pointer to the platform data structure
- *  *dev         - pointer to Device structure
- *  *ignore_irq  - pointer to atomic structure to allow the host ignoring false
- *                 IRQ during power up
- ******************************************************************************/
-static int pt_wakeup(struct pt_core_platform_data *pdata,
-		struct device *dev, atomic_t *ignore_irq)
-{
-	int rc = 0;
-
-#ifdef PT_PINCTRL_EN
-	pt_pinctrl_select_normal(pdata, dev);
-#endif
-	rc = pt_setup_power(pdata, PT_MT_POWER_ON, dev);
-	if (rc)
-		pt_debug(dev, DL_ERROR, "%s: Failed setup power\n", __func__);
-
-	return rc;
-}
-
-/*******************************************************************************
- * FUNCTION: pt_sleep
- *
- * SUMMARY: Suspend power for "power on/off" sleep strategy which against to
- *  "deepsleep" strategy.
- *
- * RETURN:
- *	 0 = success
- *	!0 = fail
- *
- * PARAMETERS:
- *  *pdata       - pointer to the platform data structure
- *  *dev         - pointer to Device structure
- *  *ignore_irq  - pointer to atomic structure to allow the host ignoring false
- *                 IRQ during power down
- ******************************************************************************/
-static int pt_sleep(struct pt_core_platform_data *pdata,
-		struct device *dev, atomic_t *ignore_irq)
-{
-	int rc = 0;
-
-	rc = pt_setup_power(pdata, PT_MT_POWER_OFF, dev);
-	if (rc)
-		pt_debug(dev, DL_ERROR, "%s: Failed setup power\n", __func__);
-
-#ifdef PT_PINCTRL_EN
-	pt_pinctrl_select_suspend(pdata, dev);
-#endif
-	return rc;
-}
-
-/*******************************************************************************
- * FUNCTION: pt_power
- *
- * SUMMARY: Wrapper function to resume/suspend power with function
- *  pt_wakeup()/pt_sleep().
- *
- * RETURN:
- *	 0 = success
- *	!0 = fail
- *
- * PARAMETERS:
- *  *pdata       - pointer to the platform data structure
- *   on          - flag to remsume/suspend power(0:resume; 1:suspend)
- *  *dev         - pointer to Device structure
- *  *ignore_irq  - pointer to atomic structure to allow the host ignoring false
- *                 IRQ during power up/down
- ******************************************************************************/
-int pt_power(struct pt_core_platform_data *pdata,
-		int on, struct device *dev, atomic_t *ignore_irq)
-{
-	if (on)
-		return pt_wakeup(pdata, dev, ignore_irq);
-
-	return pt_sleep(pdata, dev, ignore_irq);
-}
-
-#ifdef PT_PTSBC_SUPPORT
-
-static struct workqueue_struct *parade_wq;
-static u32 int_handle;
-
-/*******************************************************************************
- * FUNCTION: pt_irq_work_function
- *
- * SUMMARY: Work function for queued IRQ activity
- *
- * RETURN: Void
- *
- * PARAMETERS:
- *	*work - pointer to work structure
- ******************************************************************************/
-static void pt_irq_work_function(struct work_struct *work)
-{
-	struct pt_core_data *cd = container_of(work,
-			struct pt_core_data, irq_work);
-
-	pt_irq(cd->irq, (void *)cd);
-}
-
-/*******************************************************************************
- * FUNCTION: pt_irq_wrapper
- *
- * SUMMARY: Wrapper function for IRQ to queue the irq_work function
- *
- * RETURN:
- *	 0 = success
- *	!0 = failure
- *
- * PARAMETERS:
- *	*handle - void pointer to contain the core_data pointer
- ******************************************************************************/
-peint_handle *pt_irq_wrapper(void *handle)
-{
-	struct pt_core_data *cd = (struct pt_core_data *)handle;
-
-	queue_work(parade_wq, &cd->irq_work);
-	return 0;
-}
-#endif /* PT_PTSBC_SUPPORT */
 
 /*******************************************************************************
  * FUNCTION: pt_setup_irq
@@ -1209,73 +1023,23 @@ int pt_setup_irq(struct pt_core_platform_data *pdata, int on,
 		}
 		if (cd->irq < 0)
 			return -EINVAL;
-
 		cd->irq_enabled = true;
-
 		pt_debug(dev, DL_INFO, "%s: initialize threaded irq=%d\n",
 			__func__, cd->irq);
-
 		if (pdata->level_irq_udelay > 0)
-#ifdef PT_PTSBC_SUPPORT
 			/* use level triggered interrupts */
-			irq_flags = TRIG_LEVL_LOW;
+			irq_flags = IRQF_TRIGGER_LOW;
 		else
 			/* use edge triggered interrupts */
-			irq_flags = TRIG_EDGE_NEGATIVE;
-#else
-			/* use level triggered interrupts */
-			irq_flags = IRQF_TRIGGER_LOW | IRQF_ONESHOT;
-		else
-			/* use edge triggered interrupts */
-			irq_flags = IRQF_TRIGGER_FALLING | IRQF_ONESHOT;
-#endif /* PT_PTSBC_SUPPORT */
-
-#ifdef PT_PTSBC_SUPPORT
-		/* Adding new work queue to cd struct */
-		INIT_WORK(&cd->irq_work, pt_irq_work_function);
-
-		parade_wq = create_singlethread_workqueue("parade_wq");
-		if (!parade_wq)
-			pt_debug(dev, DL_ERROR, "%s Create workqueue failed.\n",
-				__func__);
-
-		int_handle = sw_gpio_irq_request(pdata->irq_gpio, irq_flags,
-				(peint_handle)pt_irq_wrapper, cd);
-		if (!int_handle) {
-			pt_debug(dev, DL_ERROR,
-				"%s: PARADE could not request irq\n", __func__);
-			rc = -1;
-		} else {
-			rc = 0;
-			/* clk=0: 32Khz; clk=1: 24Mhz*/
-			ctp_set_int_port_rate(pdata->irq_gpio, 1);
-			/*
-			 * Debounce INT Line by clock divider: 2^n. E.g. The
-			 * para:0x03 means the period of interrupt controller is
-			 * 0.33 us = (2^3)/24. It has ability to measure the
-			 * high/low width of the pulse bigger than 1 us.
-			 */
-			ctp_set_int_port_deb(pdata->irq_gpio, 0x03);
-			pt_debug(cd->dev, DL_INFO,
-				"%s: Parade sw_gpio_irq_request SUCCESS\n",
-				__func__);
-		}
-#else
+			irq_flags = IRQF_TRIGGER_FALLING;
 		rc = request_threaded_irq(cd->irq, NULL, pt_irq,
-			irq_flags, dev_name(dev), cd);
+			irq_flags | IRQF_ONESHOT, dev_name(dev), cd);
 		if (rc < 0)
 			pt_debug(dev, DL_ERROR,
 				"%s: Error, could not request irq\n", __func__);
-#endif /* PT_PTSBC_SUPPORT */
 	} else {
 		disable_irq_nosync(cd->irq);
-#ifndef PT_PTSBC_SUPPORT
 		free_irq(cd->irq, cd);
-#else
-		sw_gpio_irq_free(int_handle);
-		cancel_work_sync(&cd->irq_work);
-		destroy_workqueue(parade_wq);
-#endif /* PT_PTSBC_SUPPORT */
 	}
 	return rc;
 }
