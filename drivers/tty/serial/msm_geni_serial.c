@@ -27,6 +27,7 @@
 #include <linux/dma-mapping.h>
 #include <uapi/linux/msm_geni_serial.h>
 #include <soc/qcom/boot_stats.h>
+#include <linux/suspend.h>
 
 /* UART specific GENI registers */
 #define SE_UART_LOOPBACK_CFG		(0x22C)
@@ -3715,23 +3716,6 @@ static int msm_geni_serial_sys_suspend(struct device *dev)
 	return 0;
 }
 
-static int msm_geni_serial_sys_resume(struct device *dev)
-{
-	struct platform_device *pdev = to_platform_device(dev);
-	struct msm_geni_serial_port *port = platform_get_drvdata(pdev);
-	struct uart_port *uport = &port->uport;
-
-	if ((uart_console(uport) &&
-	    console_suspend_enabled && uport->suspended) ||
-		port->pm_auto_suspend_disable) {
-		IPC_LOG_MSG(port->console_log, "%s start\n", __func__);
-		uart_resume_port((struct uart_driver *)uport->private_data,
-									uport);
-		IPC_LOG_MSG(port->console_log, "%s\n", __func__);
-	}
-	return 0;
-}
-
 static int msm_geni_serial_sys_hib_resume(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
@@ -3755,6 +3739,30 @@ static int msm_geni_serial_sys_hib_resume(struct device *dev)
 		 * open the port during hibernation.
 		 */
 		port->port_setup = false;
+	}
+	return 0;
+}
+
+static int msm_geni_serial_sys_resume(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct msm_geni_serial_port *port = platform_get_drvdata(pdev);
+	struct uart_port *uport = &port->uport;
+
+#ifdef CONFIG_DEEPSLEEP
+	if (mem_sleep_current == PM_SUSPEND_MEM) {
+		IPC_LOG_MSG(port->ipc_log_pwr, "deepsleep: %s\n",
+			    __func__);
+		return msm_geni_serial_sys_hib_resume(dev);
+	}
+#endif
+	if ((uart_console(uport) &&
+	    console_suspend_enabled && uport->suspended) ||
+		port->pm_auto_suspend_disable) {
+		IPC_LOG_MSG(port->console_log, "%s start\n", __func__);
+		uart_resume_port((struct uart_driver *)uport->private_data,
+									uport);
+		IPC_LOG_MSG(port->console_log, "%s End\n", __func__);
 	}
 	return 0;
 }
