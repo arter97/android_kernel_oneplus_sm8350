@@ -6160,6 +6160,7 @@ static int __qseecom_generate_and_save_key(struct qseecom_dev_handle *data,
 	if (ret)
 		return ret;
 
+	resp.result = QSEOS_RESULT_INCOMPLETE;
 	ret = qseecom_scm_call(SCM_SVC_TZSCHEDULER, 1,
 				ireq, sizeof(struct qseecom_key_generate_ireq),
 				&resp, sizeof(resp));
@@ -6220,6 +6221,7 @@ static int __qseecom_delete_saved_key(struct qseecom_dev_handle *data,
 	if (ret)
 		return ret;
 
+	resp.result = QSEOS_RESULT_INCOMPLETE;
 	ret = qseecom_scm_call(SCM_SVC_TZSCHEDULER, 1,
 				ireq, sizeof(struct qseecom_key_delete_ireq),
 				&resp, sizeof(struct qseecom_command_scm_resp));
@@ -6287,6 +6289,7 @@ static int __qseecom_set_clear_ce_key(struct qseecom_dev_handle *data,
 			return ret;
 	}
 
+	resp.result = QSEOS_RESULT_INCOMPLETE;
 	ret = qseecom_scm_call(SCM_SVC_TZSCHEDULER, 1,
 				ireq, sizeof(struct qseecom_key_select_ireq),
 				&resp, sizeof(struct qseecom_command_scm_resp));
@@ -6364,6 +6367,7 @@ static int __qseecom_update_current_key_user_info(
 	if (ret)
 		return ret;
 
+	resp.result = QSEOS_RESULT_INCOMPLETE;
 	ret = qseecom_scm_call(SCM_SVC_TZSCHEDULER, 1,
 		ireq, sizeof(struct qseecom_key_userinfo_update_ireq),
 		&resp, sizeof(struct qseecom_command_scm_resp));
