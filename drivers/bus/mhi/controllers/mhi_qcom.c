@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.*/
+/* Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.*/
 
 #include <asm/arch_timer.h>
 #include <linux/debugfs.h>
@@ -577,13 +577,15 @@ static void mhi_status_cb(struct mhi_controller *mhi_cntrl,
 		 * we need to force a suspend so device can switch to
 		 * mission mode pcie phy settings.
 		 */
-		pm_runtime_get(dev);
-		ret = mhi_force_suspend(mhi_cntrl);
-		if (!ret) {
-			MHI_CNTRL_LOG("Attempt resume after forced suspend\n");
-			mhi_runtime_resume(dev);
+		if (!mhi_dev->skip_forced_suspend) {
+			pm_runtime_get(dev);
+			ret = mhi_force_suspend(mhi_cntrl);
+			if (!ret) {
+				MHI_CNTRL_LOG("Resume after forced suspend\n");
+				mhi_runtime_resume(dev);
+			}
+			pm_runtime_put(dev);
 		}
-		pm_runtime_put(dev);
 		mhi_arch_mission_mode_enter(mhi_cntrl);
 		break;
 	case MHI_CB_FATAL_ERROR:
@@ -598,7 +600,7 @@ static void mhi_status_cb(struct mhi_controller *mhi_cntrl,
 /* capture host SoC XO time in ticks */
 static u64 mhi_time_get(struct mhi_controller *mhi_cntrl, void *priv)
 {
-	return arch_counter_get_cntvct();
+	return __arch_counter_get_cntvct();
 }
 
 static ssize_t timeout_ms_show(struct device *dev,
@@ -721,6 +723,14 @@ static struct mhi_controller *mhi_register_controller(struct pci_dev *pci_dev)
 
 	mhi_cntrl->iova_start = memblock_start_of_DRAM();
 	mhi_cntrl->iova_stop = memblock_end_of_DRAM();
+
+	/*
+	 * Certain devices do not require a forced suspend/resume cycle at
+	 * mission mode entry after boot as they do not need to switch to
+	 * separate phy settings in order to enable low power modes
+	 */
+	mhi_dev->skip_forced_suspend = of_property_read_bool(of_node,
+							"mhi,skip-forced-suspend");
 
 	of_node = of_parse_phandle(mhi_cntrl->of_node, "qcom,iommu-group", 0);
 	if (of_node) {
