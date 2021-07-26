@@ -27,7 +27,7 @@ struct event {
 #define	SEB_GLINK_INTENT_SIZE	0x04
 #define	SEB_MSG_SIZE			0x08
 #define	TIMEOUT_MS				2000
-#define	SEB_SLATEWEAR_SUBSYS "slate-wear"
+#define	SEB_SLATEWEAR_SUBSYS "slatefw"
 #define	HED_EVENT_DATA_TIME_LEN 0x04
 
 enum seb_state {
@@ -49,21 +49,12 @@ struct seb_notif_info {
 };
 
 struct gmi_header {
-	uint8_t version;
-	uint8_t reserved;
-	uint16_t opcode;
+	uint32_t opcode;
 	uint32_t payload_size;
 };
 
-enum WearManagerGlinkOpcode {
-	GMI_SLATE_EVENT_QBG = 1,
-	GMI_SLATE_EVENT_RSB  = 2,
-	GMI_SLATE_EVENT_BUTTON = 3,
-	GMI_SLATE_EVENT_TOUCH = 4,
-};
-
 static LIST_HEAD(seb_notify_list);
-static DEFINE_MUTEX(notif_lock);
+static DEFINE_SPINLOCK(notif_lock);
 static DEFINE_MUTEX(notif_add_lock);
 
 struct seb_priv {
@@ -154,6 +145,7 @@ void seb_send_input(struct event *evnt)
 static void seb_slateup_work(struct work_struct *work)
 {
 	int ret = 0;
+	struct seb_notif_info *seb_notify = NULL;
 	struct seb_priv *dev =
 			container_of(work, struct seb_priv, slate_up_work);
 
@@ -171,14 +163,24 @@ static void seb_slateup_work(struct work_struct *work)
 	pr_debug("seb-rpmsg is probed\n");
 	dev->seb_current_state = SEB_STATE_GLINK_OPEN;
 
+	list_for_each_entry(seb_notify, &seb_notify_list, list) {
+		srcu_notifier_call_chain(&seb_notify->seb_notif_rcvr_list,
+					 GLINK_CHANNEL_STATE_UP, NULL);
+	}
+
+	goto unlock;
+
 glink_err:
 	dev->seb_current_state = SEB_STATE_INIT;
+
+unlock:
 	mutex_unlock(&dev->seb_state_mutex);
 }
 
 
 static void seb_slatedown_work(struct work_struct *work)
 {
+	struct seb_notif_info *seb_notify = NULL;
 	struct seb_priv *dev = container_of(work, struct seb_priv,
 								slate_down_work);
 
@@ -187,6 +189,10 @@ static void seb_slatedown_work(struct work_struct *work)
 	pr_debug("SEB current state is : %d\n", dev->seb_current_state);
 
 	dev->seb_current_state = SEB_STATE_SLATE_SSR;
+	list_for_each_entry(seb_notify, &seb_notify_list, list) {
+		srcu_notifier_call_chain(&seb_notify->seb_notif_rcvr_list,
+					 GLINK_CHANNEL_STATE_DOWN, NULL);
+	}
 
 	mutex_unlock(&dev->seb_state_mutex);
 }
@@ -302,14 +308,15 @@ static struct seb_notif_info *_notif_find_group(
 					const enum event_group_type event_group)
 {
 	struct seb_notif_info *seb_notify;
+	unsigned long flags;
 
-	mutex_lock(&notif_lock);
+	spin_lock_irqsave(&notif_lock, flags);
 	list_for_each_entry(seb_notify, &seb_notify_list, list)
-		if (seb_notify->event_group != event_group) {
-			mutex_unlock(&notif_lock);
+		if (seb_notify->event_group == event_group) {
+			spin_unlock_irqrestore(&notif_lock, flags);
 			return seb_notify;
 		}
-	mutex_unlock(&notif_lock);
+	spin_unlock_irqrestore(&notif_lock, flags);
 
 	return NULL;
 }
@@ -317,6 +324,7 @@ static struct seb_notif_info *_notif_find_group(
 void *seb_notif_add_group(const enum event_group_type event_group)
 {
 	struct seb_notif_info *seb_notif = NULL;
+	unsigned long flags;
 
 	mutex_lock(&notif_add_lock);
 
@@ -340,9 +348,9 @@ void *seb_notif_add_group(const enum event_group_type event_group)
 
 	INIT_LIST_HEAD(&seb_notif->list);
 
-	mutex_lock(&notif_lock);
+	spin_lock_irqsave(&notif_lock, flags);
 	list_add_tail(&seb_notif->list, &seb_notify_list);
-	mutex_unlock(&notif_lock);
+	spin_unlock_irqrestore(&notif_lock, flags);
 
 	#if defined(SEB_DEBUG)
 	seb_notif_event_test_notifier(seb_notif->event_group);
@@ -442,7 +450,7 @@ void seb_rx_msg(void *data, int len)
 		memcpy(dev->rx_buf, data, len);
 	} else {
 		/* Handle the event received from Slate */
-		rx_event_buf = kmalloc(len, GFP_KERNEL);
+		rx_event_buf = kmalloc(len, GFP_ATOMIC);
 		if (rx_event_buf) {
 			memcpy(rx_event_buf, data, len);
 			handle_rx_event(dev, rx_event_buf, len);
@@ -604,8 +612,8 @@ static int seb_remove(struct platform_device *pdev)
 }
 
 static const struct of_device_id seb_of_match[] = {
-	{ .compatible = "qcom,slate-events-bridge", },
-	{ }
+	{ .compatible = "qcom,slate-events-bridge" },
+	{ },
 };
 
 static struct platform_driver seb_driver = {

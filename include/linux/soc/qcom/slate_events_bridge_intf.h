@@ -9,11 +9,14 @@
 #include <linux/notifier.h>
 
 enum event_group_type {
-	SEB_BUTTON,
-	SEB_QBG,
-	SEB_RSB,
-	SEB_TOUCH,
-	SEB_MAX
+	GMI_SLATE_EVENT_QBG     = 0x01,
+	GMI_SLATE_EVENT_RSB     = 0x02,
+	GMI_SLATE_EVENT_BUTTON  = 0x03,
+	GMI_SLATE_EVENT_TOUCH   = 0x04,
+
+	GLINK_CHANNEL_STATE_UP   = 0xfd,
+	GLINK_CHANNEL_STATE_DOWN = 0xfe,
+	GMI_SLATE_EVENT_MAX      = 0xff,
 };
 
 /* Use the seb_register_for_slate_event API to register for events for
