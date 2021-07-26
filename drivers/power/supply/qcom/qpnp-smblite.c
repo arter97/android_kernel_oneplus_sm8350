@@ -674,6 +674,7 @@ static int smblite_batt_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_TIME_TO_FULL_NOW:
 		rc = smblite_lib_get_prop_from_bms(chg,
 				SMB5_QG_TIME_TO_FULL_NOW, &val->intval);
+		break;
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
 		/* For battery, INPUT_CURRENT_LIMIT equates to INPUT_SUSPEND */
 		rc = smblite_lib_get_prop_input_suspend(chg, &val->intval);
