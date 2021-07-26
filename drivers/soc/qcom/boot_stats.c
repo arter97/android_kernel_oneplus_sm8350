@@ -166,6 +166,7 @@ static void _destroy_boot_marker(const char *name)
 			list) {
 		if (strnstr(marker->marker_name, name,
 			 strlen(marker->marker_name))) {
+			num_markers--;
 			hash_del(&marker->hash);
 			list_del(&marker->list);
 			kfree(marker);
