@@ -5985,6 +5985,12 @@ static int cnss_pci_probe(struct pci_dev *pci_dev,
 	cnss_pr_dbg("PCI is probing, vendor ID: 0x%x, device ID: 0x%x\n",
 		    id->vendor, pci_dev->device);
 
+	if (!plat_priv) {
+		cnss_pr_err("Find match plat_priv with rc number failure\n");
+		ret = -ENODEV;
+		goto out;
+	}
+
 	pci_priv = devm_kzalloc(dev, sizeof(*pci_priv), GFP_KERNEL);
 	if (!pci_priv) {
 		ret = -ENOMEM;
