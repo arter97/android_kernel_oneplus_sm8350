@@ -386,24 +386,9 @@ static void __init get_fs_names(char *page)
 static int __init do_mount_root(char *name, char *fs, int flags, void *data)
 {
 	struct super_block *s;
-	char *data_page = NULL;
-	struct page *p = NULL;
-	int ret;
-
-	if (data) {
-		/* do_mount() requires a full page as fifth argument */
-		p = alloc_page(GFP_KERNEL);
-		if (!p)
-			return -ENOMEM;
-
-		data_page = page_address(p);
-		/* zero-pad. do_mount() will make sure it's terminated */
-		strscpy(data_page, data, PAGE_SIZE);
-	}
-
-	ret = ksys_mount(name, "/root", fs, flags, data_page);
-	if (ret)
-		goto out;
+	int err = ksys_mount(name, "/root", fs, flags, data);
+	if (err)
+		return err;
 
 	ksys_chdir("/root");
 	s = current->fs->pwd.dentry->d_sb;
@@ -413,11 +398,7 @@ static int __init do_mount_root(char *name, char *fs, int flags, void *data)
 	       s->s_type->name,
 	       sb_rdonly(s) ? " readonly" : "",
 	       MAJOR(ROOT_DEV), MINOR(ROOT_DEV));
-
-out:
-	if (p)
-		put_page(p);
-	return ret;
+	return 0;
 }
 
 void __init mount_block_root(char *name, int flags)
