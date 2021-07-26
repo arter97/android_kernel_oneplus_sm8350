@@ -80,6 +80,15 @@ config HIBERNATION
 config ARCH_SAVE_PAGE_KEYS
 	bool
 
+config PM_SILENT_MODE
+	bool "Silent Mode PM operations"
+	default n
+	help
+	  This feature is enabled when silent mode is needed in the system.
+	  PM sysfs nodes under:
+	  /sys/power/pm_kernelsilentmode is used to indicate the state of the
+	  commandline value parsed and set as part of startup.
+
 config PM_STD_PARTITION
 	string "Default resume partition"
 	depends on HIBERNATION
