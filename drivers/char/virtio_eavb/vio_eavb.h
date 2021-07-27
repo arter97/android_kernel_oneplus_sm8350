@@ -10,7 +10,7 @@
 #define MAX_STREAM_NUM          8
 #define MAX_CONFIG_FILE_PATH    512
 
-#define VERSION_MAJOR           0
+#define VERSION_MAJOR           1
 #define VERSION_MINOR           1
 
 #define VIRTIO_EAVB_T_CREATE_STREAM     0
@@ -260,6 +260,7 @@ struct vio_transmit_msg {
 	struct vio_msg_hdr mhdr;
 	struct eavb_buf_data data; /* IN/OUT */
 	int32_t written;
+	uint32_t mapping_size;
 } __packed;
 
 

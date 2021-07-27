@@ -1263,6 +1263,7 @@ static int qavb_transmit(struct eavb_file *fl, void __user *buf)
 	ASSERT(sizeof(vmsg->data) == sizeof(transmit.data));
 	memcpy(&vmsg->data, &transmit.data, sizeof(vmsg->data));
 
+	vmsg->mapping_size = mapping->size;
 	vmsg->data.gpa = get_mapping_phyaddr(mapping, transmit.data.pbuf);
 	LOG_EAVB(LEVEL_DEBUG, "pass phy address 0x%llx\n", vmsg->data.gpa);
 	LOG_EAVB(LEVEL_DEBUG, "stream%d (ctx 0x%llx, idx %d)\n",
