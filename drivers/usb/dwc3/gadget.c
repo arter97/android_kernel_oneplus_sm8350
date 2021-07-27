@@ -970,8 +970,8 @@ static int dwc3_gadget_ep_disable(struct usb_ep *ep)
 	ret = __dwc3_gadget_ep_disable(dep);
 	dbg_event(dep->number, "DISABLE", ret);
 	spin_unlock_irqrestore(&dwc->lock, flags);
-	pm_runtime_mark_last_busy(dwc->dev);
-	pm_runtime_put_autosuspend(dwc->dev);
+	pm_runtime_mark_last_busy(dwc->sysdev);
+	pm_runtime_put_autosuspend(dwc->sysdev);
 
 	return ret;
 }
