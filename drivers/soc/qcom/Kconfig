@@ -1402,6 +1402,16 @@ config MSM_PIL_SSR_SLATE
 	  via pair of IPC GPIOs for inward and outward signals between MSM
 	  and SLATE SOC.
 
+config AUTO_EARLY_LAUNCH
+	tristate "Auto Early Service Launch Driver"
+	depends on DEVTMPFS_MOUNT
+	help
+	 This driver is used to launch early services from kernel using
+	 call_usermodehelper(). Executing early services binary placed in
+	 ramdisk.
+	 early_init user space executable file will be copied into
+	 ramdisk/early_services directory during build.
+
 source "drivers/soc/qcom/icnss2/Kconfig"
 
 source "drivers/soc/qcom/gnsssirf/Kconfig"
