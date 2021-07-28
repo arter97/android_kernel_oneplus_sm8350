@@ -868,6 +868,10 @@ int slatecom_resume(void *handle)
 		goto unlock;
 	enable_irq(slate_irq);
 	do {
+		if (!(g_slav_status_reg & BIT(31))) {
+			pr_err("Slate boot is not complete, skip SPI resume\n");
+			return 0;
+		}
 		if (is_slate_resume(handle)) {
 			slate_spi->slate_state = SLATECOM_STATE_ACTIVE;
 			break;
@@ -1101,6 +1105,11 @@ static int slatecom_pm_suspend(struct device *dev)
 	if (slate_spi->slate_state == SLATECOM_STATE_SUSPEND)
 		return 0;
 
+	if (!(g_slav_status_reg & BIT(31))) {
+		pr_err("Slate boot is not complete, skip SPI suspend\n");
+		return 0;
+	}
+
 	cmnd_reg |= BIT(31);
 	ret = read_slate_locl(SLATECOM_WRITE_REG, 1, &cmnd_reg);
 	if (ret == 0) {
@@ -1119,6 +1128,10 @@ static int slatecom_pm_resume(struct device *dev)
 	struct slate_spi_priv *spi =
 		container_of(slate_com_drv, struct slate_spi_priv, lhandle);
 
+	if (!(g_slav_status_reg & BIT(31))) {
+		pr_err("Slate boot is not complete, skip SPI resume\n");
+		return 0;
+	}
 	clnt_handle.slate_spi = spi;
 	atomic_set(&slate_is_spi_active, 1);
 	ret = slatecom_resume(&clnt_handle);
