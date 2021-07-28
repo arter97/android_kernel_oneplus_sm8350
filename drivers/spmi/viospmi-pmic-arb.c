@@ -90,8 +90,8 @@ struct virtio_spmi {
 	struct virtio_device	*vdev;
 	struct virtqueue		*txq;
 	struct virtqueue		*rxq;
-	spinlock_t              txlock;
-	spinlock_t              rxlock;
+	raw_spinlock_t          txlock;
+	raw_spinlock_t          rxlock;
 	struct spmi_pmic_arb    *pa;
 	struct virtio_spmi_config config;
 	struct virtio_spmi_msg txmsg;
@@ -145,12 +145,10 @@ vspmi_pmic_arb_xfer(struct spmi_pmic_arb *pa)
 
 	struct scatterlist sg[1];
 	unsigned int len;
-	unsigned long flags;
 	int rc = 0;
 
 	sg_init_one(sg, msg, sizeof(*msg));
 
-	spin_lock_irqsave(&vs->txlock, flags);
 	rc = virtqueue_add_outbuf(vs->txq, sg, 1, msg, GFP_ATOMIC);
 	if (rc) {
 		dev_err(&vs->vdev->dev, "fail to add output buffer\n");
@@ -164,7 +162,6 @@ vspmi_pmic_arb_xfer(struct spmi_pmic_arb *pa)
 	rc = virtio32_to_cpu(vs->vdev, rsp->res);
 
 out:
-	spin_unlock_irqrestore(&vs->txlock, flags);
 	return rc;
 }
 
@@ -205,14 +202,14 @@ static void vspmi_fill_rxmsgs(struct virtio_spmi *vs)
 	unsigned long flags;
 	int i, size;
 
-	spin_lock_irqsave(&vs->rxlock, flags);
+	raw_spin_lock_irqsave(&vs->rxlock, flags);
 	size = virtqueue_get_vring_size(vs->rxq);
 	if (size > ARRAY_SIZE(vs->rxmsgs))
 		size = ARRAY_SIZE(vs->rxmsgs);
 	for (i = 0; i < size; i++)
 		vspmi_queue_rxmsg(vs, &vs->rxmsgs[i]);
 	virtqueue_kick(vs->rxq);
-	spin_unlock_irqrestore(&vs->rxlock, flags);
+	raw_spin_unlock_irqrestore(&vs->rxlock, flags);
 }
 
 static int pmic_arb_read_cmd(struct spmi_controller *ctrl, u8 opc, u8 sid,
@@ -224,6 +221,7 @@ static int pmic_arb_read_cmd(struct spmi_controller *ctrl, u8 opc, u8 sid,
 	u8 bc = len - 1;
 	u32 data, cmd;
 	int rc;
+	unsigned long flags;
 
 	if (bc >= PMIC_ARB_MAX_TRANS_BYTES) {
 		dev_err(&ctrl->dev,
@@ -243,7 +241,7 @@ static int pmic_arb_read_cmd(struct spmi_controller *ctrl, u8 opc, u8 sid,
 		return -EINVAL;
 
 	cmd = pa->ver_ops->fmt_cmd(opc, sid, addr, bc);
-
+	raw_spin_lock_irqsave(&vs->txlock, flags);
 	msg = vspmi_fill_txmsg(pa, VIO_SPMI_BUS_READ, cmd, 0, 0);
 	rc = vspmi_pmic_arb_xfer(pa);
 	if (rc)
@@ -260,6 +258,7 @@ static int pmic_arb_read_cmd(struct spmi_controller *ctrl, u8 opc, u8 sid,
 	}
 
 out:
+	raw_spin_unlock_irqrestore(&vs->txlock, flags);
 	if (rc == EPERM) {
 		/* spmi bus driver try to read disallowd gpio in probe
 		 * give correct type and subtype and ignore other read command
@@ -288,6 +287,7 @@ static int pmic_arb_write_cmd(struct spmi_controller *ctrl, u8 opc,
 	u8 bc = len - 1;
 	u32 data, cmd;
 	int rc;
+	unsigned long flags;
 
 	if (bc >= PMIC_ARB_MAX_TRANS_BYTES) {
 		dev_err(&ctrl->dev,
@@ -309,6 +309,7 @@ static int pmic_arb_write_cmd(struct spmi_controller *ctrl, u8 opc,
 		return -EINVAL;
 
 	cmd = pa->ver_ops->fmt_cmd(opc, sid, addr, bc);
+	raw_spin_lock_irqsave(&vs->txlock, flags);
 	msg = vspmi_fill_txmsg(pa, VIO_SPMI_BUS_WRITE, cmd, 0, 0);
 
 	memcpy(&data, buf, (bc & 3) + 1);
@@ -320,7 +321,7 @@ static int pmic_arb_write_cmd(struct spmi_controller *ctrl, u8 opc,
 	}
 
 	rc = vspmi_pmic_arb_xfer(pa);
-
+	raw_spin_unlock_irqrestore(&vs->txlock, flags);
 	return rc;
 }
 
@@ -407,9 +408,12 @@ static void qpnpint_irq_ack(struct irq_data *d)
 	u16 apid = hwirq_to_apid(d->hwirq);
 	u16 ppid = pa->apid_data[apid].ppid;
 	u8 data;
+	unsigned long flags;
 
+	raw_spin_lock_irqsave(&pa->vs->txlock, flags);
 	vspmi_fill_txmsg(pa, VIO_IRQ_CLEAR, 0, ppid, BIT(irq));
 	vspmi_pmic_arb_xfer(pa);
+	raw_spin_unlock_irqrestore(&pa->vs->txlock, flags);
 
 	data = BIT(irq);
 	qpnpint_spmi_write(d, QPNPINT_REG_LATCHED_CLR, &data, 1);
@@ -431,12 +435,15 @@ static void qpnpint_irq_unmask(struct irq_data *d)
 	u16 ppid = pa->apid_data[apid].ppid;
 	struct apid_data *apidd = pa->apid_data;
 	u8 buf[2];
+	unsigned long flags;
 
 	apidd[apid].desc = irq_data_to_desc(d);
 
+	raw_spin_lock_irqsave(&pa->vs->txlock, flags);
 	vspmi_fill_txmsg(pa, VIO_ACC_ENABLE_WR, 0,
 			ppid, SPMI_PIC_ACC_ENABLE_BIT);
 	vspmi_pmic_arb_xfer(pa);
+	raw_spin_unlock_irqrestore(&pa->vs->txlock, flags);
 
 	qpnpint_spmi_read(d, QPNPINT_REG_EN_SET, &buf[0], 1);
 	if (!(buf[0] & BIT(irq))) {
@@ -691,16 +698,16 @@ static void viospmi_rx_isr(struct virtqueue *vq)
 	unsigned long flags;
 	unsigned int len;
 
-	spin_lock_irqsave(&vs->rxlock, flags);
+	raw_spin_lock_irqsave(&vs->rxlock, flags);
 	while ((msg = virtqueue_get_buf(vs->rxq, &len)) != NULL) {
-		spin_unlock_irqrestore(&vs->rxlock, flags);
+		raw_spin_unlock_irqrestore(&vs->rxlock, flags);
 		pmic_arb_chained_irq(vs, msg);
-		spin_lock_irqsave(&vs->rxlock, flags);
+		raw_spin_lock_irqsave(&vs->rxlock, flags);
 		vspmi_queue_rxmsg(vs, msg);
 	}
 
 	virtqueue_kick(vs->rxq);
-	spin_unlock_irqrestore(&vs->rxlock, flags);
+	raw_spin_unlock_irqrestore(&vs->rxlock, flags);
 }
 
 static int virtio_spmi_init_vqs(struct virtio_spmi *vspmi)
@@ -745,8 +752,8 @@ static int virtio_spmi_probe(struct virtio_device *vdev)
 
 	vdev->priv = vs;
 	vs->vdev = vdev;
-	spin_lock_init(&vs->txlock);
-	spin_lock_init(&vs->rxlock);
+	raw_spin_lock_init(&vs->txlock);
+	raw_spin_lock_init(&vs->rxlock);
 
 	ret = virtio_spmi_init_vqs(vs);
 	if (ret)
