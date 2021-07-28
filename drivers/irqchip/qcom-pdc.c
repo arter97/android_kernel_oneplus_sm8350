@@ -3,6 +3,7 @@
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  */
 
+#include <linux/delay.h>
 #include <linux/err.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
@@ -354,7 +355,9 @@ static int __init pdc_init_syscore(void)
 	register_syscore_ops(&pdc_syscore_ops);
 	return 0;
 }
+#ifndef MODULE
 arch_initcall(pdc_init_syscore);
+#endif
 #endif
 
 
@@ -599,6 +602,9 @@ static int qcom_pdc_init(struct device_node *node, struct device_node *parent)
 	irq_domain_update_bus_token(pdc_gpio_domain, DOMAIN_BUS_WAKEUP);
 #ifdef MODULE
 	qcom_pdc_early_init();
+#ifdef CONFIG_QTI_PDC_SAVE_RESTORE
+	pdc_init_syscore();
+#endif
 #endif
 
 	return 0;
