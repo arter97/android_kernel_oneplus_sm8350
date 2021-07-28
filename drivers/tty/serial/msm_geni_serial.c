@@ -2381,7 +2381,9 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 
 	UART_LOG_DBG(msm_port->ipc_log_misc, uport->dev, "%s:\n", __func__);
 
-	if (!uart_console(uport)) {
+	if (uart_console(uport))
+		disable_irq(uport->irq);
+	else {
 		msm_geni_serial_power_on(uport);
 		ret = wait_for_transfers_inflight(uport);
 		if (ret)
