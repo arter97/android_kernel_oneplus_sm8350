@@ -1222,9 +1222,7 @@ static int hgsl_context_create(struct file *filep, unsigned long arg)
 
 	hgsl->contexts[param.context_id] = ctxt;
 
-	priv->pid = task_pid_nr(current);
-
-	hgsl->contexts[param.context_id]->pid = priv->pid;
+	hgsl->contexts[param.context_id]->priv = priv;
 	hgsl->contexts[param.context_id]->dbq_assigned = true;
 
 	kref_init(&ctxt->kref);
@@ -1285,8 +1283,8 @@ static int hgsl_context_destroy(struct file *filep, unsigned long arg,
 	if (hgsl->contexts[context_id] == NULL) {
 		write_unlock(&hgsl->ctxt_lock);
 		dev_err(hgsl->dev,
-			"context id %d is not created\n",
-			context_id);
+			"%s: context id %d is not created\n",
+			__func__, context_id);
 		return -EINVAL;
 	}
 
@@ -1342,8 +1340,8 @@ static int hgsl_wait_timestamp(struct file *filep, unsigned long arg)
 	read_unlock(&hgsl->ctxt_lock);
 	if (ctxt == NULL) {
 		dev_err(hgsl->dev,
-			"context id %d is not created\n",
-			param.context_id);
+			"%s: context id %d is not created\n",
+			__func__, param.context_id);
 		return -EINVAL;
 	}
 
@@ -1454,7 +1452,7 @@ static int hgsl_release(struct inode *inodep, struct file *filep)
 	for (i = 0; i < HGSL_CONTEXT_NUM; i++) {
 		if ((hgsl->contexts != NULL) &&
 			(hgsl->contexts[i] != NULL) &&
-			(priv->pid == hgsl->contexts[i]->pid)) {
+			(priv == hgsl->contexts[i]->priv)) {
 			rel_info.ctxt_id = hgsl->contexts[i]->context_id;
 			if (hgsl->contexts[i]->dbq_assigned)
 				hgsl_dbq_release(filep,
@@ -1520,8 +1518,8 @@ static int hgsl_ioctl_hsync_fence_create(struct file *filep,
 
 	if (ctxt == NULL) {
 		dev_err(hgsl->dev,
-			"context id %d is not created\n",
-			param.context_id);
+			"%s: context id %d is not created\n",
+			__func__, param.context_id);
 		return -EINVAL;
 	}
 
