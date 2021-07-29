@@ -140,6 +140,10 @@ enum {
 #define USBIN_COLLAPSE_RT_STS_BIT		BIT(1)
 #define USBIN_PLUGIN_RT_STS_BIT			BIT(0)
 
+#define USBIN_QC23_EN_REG(base)			(base.usbin_base + 0x48)
+#define HVDCP_EN_BIT				BIT(2)
+#define HVDCP_NO_AUTH_QC3_CFG_BIT		BIT(0)
+
 #define USBIN_ICL_OPTIONS_REG(base)			(base.usbin_base + 0x50)
 #define USBIN_MODE_CHG_BIT			BIT(2)
 #define USB51_MODE_BIT				BIT(1)
@@ -192,8 +196,6 @@ enum {
 #define CMD_HVDCP_REG(base)			(base.usbin_base + 0x4a)
 #define SINGLE_INCREMENT_BIT			BIT(5)
 #define SINGLE_DECREMENT_BIT			BIT(4)
-#define FORCE_12V_BIT				BIT(3)
-#define FORCE_9V_BIT				BIT(2)
 #define FORCE_5V_BIT				BIT(1)
 #define IDLE_BIT				BIT(0)
 
