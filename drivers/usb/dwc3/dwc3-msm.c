@@ -2909,7 +2909,7 @@ hs_prepare_suspend:
 				break;
 		}
 		if (!(reg & PWR_EVNT_LPM_IN_L2_MASK))
-			dev_err(mdwc->dev, "could not transition HS PHY to L2\n");
+			dev_err(mdwc->dev, "could not transition HS%d PHY to L2\n", i);
 
 		/* Clear L2 event bit */
 		dwc3_msm_write_reg(mdwc->base, PWR_EVNT_IRQ_STAT_REG[i],
@@ -4838,11 +4838,26 @@ static int dwc3_msm_probe(struct platform_device *pdev)
 	mdwc->num_hsphy = dwc->num_hsphy;
 	mdwc->num_ssphy = dwc->num_ssphy;
 
+	if (mdwc->num_hsphy > ARRAY_SIZE(PWR_EVNT_IRQ_STAT_REG) ||
+			mdwc->num_ssphy > ARRAY_SIZE(PWR_EVNT_IRQ_STAT_REG)) {
+		dev_err(&pdev->dev, "num_hsphy or num_ssphy is more than PWR_EVNT_IRQ_STAT_REG size\n");
+		ret = -EINVAL;
+		goto put_dwc3;
+	}
+
 	mdwc->hs_phy = devm_kzalloc(&mdwc->dwc3->dev,
 		sizeof(*mdwc->hs_phy) * mdwc->num_hsphy, GFP_KERNEL);
+	if (!mdwc->hs_phy) {
+		ret = -ENOMEM;
+		goto put_dwc3;
+	}
 
 	mdwc->ss_phy = devm_kzalloc(&mdwc->dwc3->dev,
 		sizeof(*mdwc->ss_phy) * mdwc->num_ssphy, GFP_KERNEL);
+	if (!mdwc->ss_phy) {
+		ret = -ENOMEM;
+		goto put_dwc3;
+	}
 
 	for (i = 0; i < mdwc->num_hsphy; i++) {
 		mdwc->hs_phy[i] = devm_usb_get_phy_by_phandle(&mdwc->dwc3->dev,
