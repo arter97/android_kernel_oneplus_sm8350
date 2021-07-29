@@ -367,6 +367,7 @@ static int hgsl_isync_timeline_destruct(struct hgsl_priv *priv,
 	spin_lock(&timeline->lock);
 	list_for_each_entry_safe(cur, next, &timeline->fence_list,
 				 child_list) {
+		dma_fence_get(&cur->fence);
 		list_del_init(&cur->child_list);
 		list_add(&cur->free_list, &flist);
 	}
@@ -375,6 +376,7 @@ static int hgsl_isync_timeline_destruct(struct hgsl_priv *priv,
 	list_for_each_entry_safe(cur, next, &flist, free_list) {
 		list_del(&cur->free_list);
 		dma_fence_signal(&cur->fence);
+		dma_fence_put(&cur->fence);
 	}
 
 	hgsl_isync_timeline_put(timeline);
@@ -497,6 +499,7 @@ int hgsl_isync_forward(struct hgsl_priv *priv, uint32_t timeline_id,
 	list_for_each_entry_safe(cur, next, &timeline->fence_list,
 				 child_list) {
 		if (hgsl_ts_ge(ts, cur->ts)) {
+			dma_fence_get(&cur->fence);
 			list_del_init(&cur->child_list);
 			list_add(&cur->free_list, &flist);
 		}
@@ -506,6 +509,7 @@ int hgsl_isync_forward(struct hgsl_priv *priv, uint32_t timeline_id,
 	list_for_each_entry_safe(cur, next, &flist, free_list) {
 		list_del(&cur->free_list);
 		dma_fence_signal(&cur->fence);
+		dma_fence_put(&cur->fence);
 	}
 
 out:
