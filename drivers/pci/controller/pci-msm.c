@@ -7495,7 +7495,8 @@ static int msm_pcie_pm_suspend(struct pci_dev *dev,
 	spin_unlock_irqrestore(&pcie_dev->cfg_lock,
 				pcie_dev->irqsave_flags);
 
-	msm_msi_config_access(dev_get_msi_domain(&pcie_dev->dev->dev), false);
+	if (!pcie_dev->lpi_enable)
+		msm_msi_config_access(dev_get_msi_domain(&pcie_dev->dev->dev), false);
 
 	writel_relaxed(BIT(4), pcie_dev->elbi + PCIE20_ELBI_SYS_CTRL);
 	wmb(); /* ensure changes propagated to the hardware */
@@ -7630,7 +7631,8 @@ static int msm_pcie_pm_resume(struct pci_dev *dev,
 			pcie_dev->rc_idx);
 	}
 
-	msm_msi_config_access(dev_get_msi_domain(&pcie_dev->dev->dev), true);
+	if (!pcie_dev->lpi_enable)
+		msm_msi_config_access(dev_get_msi_domain(&pcie_dev->dev->dev), true);
 
 	PCIE_DBG(pcie_dev, "RC%d: exit\n", pcie_dev->rc_idx);
 
