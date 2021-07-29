@@ -468,9 +468,10 @@ static int ssr_slate_cb(struct notifier_block *this,
 		slatee.e_type = SLATE_BEFORE_POWER_UP;
 		slatecom_slatedown_handler();
 		send_uevent(&slatee);
-	break;
+		break;
 	case SUBSYS_AFTER_POWERUP:
 		pr_debug("Slate after powerup\n");
+		slatee.e_type = SLATE_AFTER_POWER_UP;
 		slatecom_set_spi_state(SLATECOM_SPI_FREE);
 		send_uevent(&slatee);
 		break;
