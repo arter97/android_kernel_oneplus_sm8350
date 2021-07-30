@@ -19,6 +19,7 @@
 #include <linux/kthread.h>
 #include <linux/dma-mapping.h>
 #include <linux/pm_runtime.h>
+#include <linux/suspend.h>
 #include "slatecom.h"
 #include "slatecom_interface.h"
 
@@ -40,6 +41,9 @@
 #define HED_EVENT_SIZE_LEN (0x02)
 #define HED_EVENT_DATA_STRT_LEN (0x05)
 #define CMA_BFFR_POOL_SIZE (128*1024)
+
+#define SLATE_OK_SLP_RBSC      BIT(30)
+#define SLATE_OK_SLP_S2R       BIT(31)
 
 #define MAX_RETRY 100
 
@@ -1110,7 +1114,11 @@ static int slatecom_pm_suspend(struct device *dev)
 		return 0;
 	}
 
-	cmnd_reg |= BIT(31);
+	if (mem_sleep_current == PM_SUSPEND_MEM)
+		cmnd_reg |= SLATE_OK_SLP_S2R;
+	else
+		cmnd_reg |= SLATE_OK_SLP_RBSC;
+
 	ret = read_slate_locl(SLATECOM_WRITE_REG, 1, &cmnd_reg);
 	if (ret == 0) {
 		slate_spi->slate_state = SLATECOM_STATE_SUSPEND;
