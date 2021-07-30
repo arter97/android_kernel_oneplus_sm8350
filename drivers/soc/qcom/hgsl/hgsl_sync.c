@@ -13,6 +13,9 @@
 
 #include "hgsl.h"
 
+#define HGSL_HSYNC_FINI_RETRY_COUNT 50
+#define HGSL_HSYNC_FINI_RETRY_TIME_SLICE 10
+
 static const struct dma_fence_ops hgsl_hsync_fence_ops;
 static const struct dma_fence_ops hgsl_isync_fence_ops;
 
@@ -85,8 +88,10 @@ void hgsl_hsync_timeline_signal(struct hgsl_hsync_timeline *timeline,
 	if (!kref_get_unless_zero(&timeline->kref))
 		return;
 
-	if (hgsl_ts_ge(timeline->last_ts, ts))
+	if (hgsl_ts_ge(timeline->last_ts, ts)) {
+		hgsl_hsync_timeline_put(timeline);
 		return;
+	}
 
 	spin_lock_irqsave(&timeline->lock, flags);
 	timeline->last_ts = ts;
@@ -135,6 +140,36 @@ void hgsl_hsync_timeline_put(struct hgsl_hsync_timeline *timeline)
 {
 	if (timeline)
 		kref_put(&timeline->kref, hgsl_hsync_timeline_destroy);
+}
+
+void hgsl_hsync_timeline_fini(struct hgsl_context *context)
+{
+	struct hgsl_hsync_timeline *timeline = context->timeline;
+	struct hgsl_hsync_fence *fence;
+	int retry_count = HGSL_HSYNC_FINI_RETRY_COUNT;
+	unsigned int max_ts = 0;
+	unsigned long flags;
+
+	if (!kref_get_unless_zero(&timeline->kref))
+		return;
+
+	spin_lock_irqsave(&timeline->lock, flags);
+	while ((retry_count >= 0) && (!list_empty(&timeline->fence_list))) {
+		spin_unlock_irqrestore(&timeline->lock, flags);
+		msleep(HGSL_HSYNC_FINI_RETRY_TIME_SLICE);
+		retry_count--;
+		spin_lock_irqsave(&timeline->lock, flags);
+	}
+
+	list_for_each_entry(fence, &timeline->fence_list, child_list)
+		if (max_ts < fence->ts)
+			max_ts = fence->ts;
+	spin_unlock_irqrestore(&timeline->lock, flags);
+
+	hgsl_hsync_timeline_signal(timeline, max_ts);
+	context->last_ts = max_ts;
+
+	hgsl_hsync_timeline_put(timeline);
 }
 
 static const char *hgsl_hsync_get_driver_name(struct dma_fence *base)

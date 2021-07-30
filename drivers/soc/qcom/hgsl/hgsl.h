@@ -125,6 +125,7 @@ int hgsl_hsync_timeline_create(struct hgsl_context *context);
 void hgsl_hsync_timeline_signal(struct hgsl_hsync_timeline *timeline,
 						unsigned int ts);
 void hgsl_hsync_timeline_put(struct hgsl_hsync_timeline *timeline);
+void hgsl_hsync_timeline_fini(struct hgsl_context *context);
 
 /* Fence for process sync. */
 int hgsl_isync_timeline_create(struct hgsl_priv *priv,
