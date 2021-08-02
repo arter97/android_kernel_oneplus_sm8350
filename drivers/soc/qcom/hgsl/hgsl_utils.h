@@ -10,7 +10,7 @@
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/sched/signal.h>
-#include <stdarg.h>
+#include <linux/stdarg.h>
 
 enum {
 	LOG_LEVEL_ERROR,
