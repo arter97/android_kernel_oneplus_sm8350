@@ -111,6 +111,7 @@ uint32_t hab_pipe_read(struct hab_pipe_endpoint *ep,
 	uint32_t avail = sh_buf->wr_count - sh_buf->rd_count;
 	uint32_t count1, count2, to_read;
 	uint32_t index_saved = ep->rx_info.index; /* store original for retry */
+	static uint8_t signature_mismatch;
 
 	if (!p || avail == 0 || size == 0)
 		return 0;
@@ -157,12 +158,13 @@ retry:
 					retry_cnt);
 				if (retry_cnt++ <= 1000) {
 					memcpy(p, &sh_buf->data[index_saved],
-						count1);
+						   count1);
 					if (count2)
 						memcpy(&p[count1],
-				&sh_buf->data[ep->rx_info.index - count2],
+						&sh_buf->data[ep->rx_info.index - count2],
 						count2);
-					goto retry;
+					if (!signature_mismatch)
+						goto retry;
 				} else
 					pr_err("quit retry after %d time may fail %X %X %X %X rd %d wr %d index %X\n",
 						retry_cnt, head->id_type_size,
@@ -172,13 +174,29 @@ retry:
 						sh_buf->rd_count,
 						sh_buf->wr_count,
 						ep->rx_info.index);
-			}
+
+				signature_mismatch = 1;
+			} else
+				signature_mismatch = 0;
+
+		}
+
+		/* If the signature has mismatched,
+		 * don't increment the shared buffer index.
+		 */
+		if (signature_mismatch) {
+			ep->rx_info.index = index_saved + 1;
+			if (ep->rx_info.index >= sh_buf->size)
+				ep->rx_info.index = 0;
+
+			to_read = (retry_cnt < 1000) ? 0xFFFFFFFE : 0xFFFFFFFF;
 		}
 
 		/*Must commit data before incremeting count*/
 		asm volatile("dmb ish" ::: "memory");
-		sh_buf->rd_count += count1 + count2;
+		sh_buf->rd_count += (signature_mismatch) ? 1 : count1 + count2;
 	}
+
 	return to_read;
 }
 
