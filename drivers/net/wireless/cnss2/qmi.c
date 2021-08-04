@@ -621,7 +621,7 @@ int cnss_wlfw_bdf_dnld_send_sync(struct cnss_plat_data *plat_priv,
 	struct wlfw_bdf_download_req_msg_v01 *req;
 	struct wlfw_bdf_download_resp_msg_v01 *resp;
 	struct qmi_txn txn;
-	char filename[MAX_FIRMWARE_NAME_LEN];
+	char filename[MAX_FIRMWARE_NAME_LEN] = {0};
 	const struct firmware *fw_entry = NULL;
 	const u8 *temp;
 	u32 remaining;
@@ -1045,7 +1045,7 @@ int cnss_wlfw_qdss_dnld_send_sync(struct cnss_plat_data *plat_priv)
 	struct qmi_txn txn;
 	const struct firmware *fw_entry = NULL;
 	const u8 *temp;
-	char qdss_cfg_filename[MAX_FIRMWARE_NAME_LEN];
+	char qdss_cfg_filename[MAX_FIRMWARE_NAME_LEN] = {0};
 	u32 remaining;
 	int ret = 0;
 
