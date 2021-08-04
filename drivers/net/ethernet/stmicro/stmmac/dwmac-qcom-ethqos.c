@@ -115,12 +115,17 @@
 
 void *ipc_emac_log_ctxt;
 
-struct emac_emb_smmu_cb_ctx emac_emb_smmu_ctx = {0};
-struct qcom_ethqos *pethqos;
+static struct emac_emb_smmu_cb_ctx emac_emb_smmu_ctx = {0};
+static struct qcom_ethqos *pethqos;
 
 static unsigned char dev_addr[ETH_ALEN] = {
 	0, 0x55, 0x7b, 0xb5, 0x7d, 0xf7};
 static struct ip_params pparams = {"", "", "", ""};
+
+struct qcom_ethqos *get_pethqos(void)
+{
+	return pethqos;
+}
 
 static inline unsigned int dwmac_qcom_get_eth_type(unsigned char *buf)
 {
@@ -251,7 +256,7 @@ unsigned int dwmac_qcom_get_plat_tx_coal_frames(struct sk_buff *skb)
 	return DEFAULT_INT_MOD;
 }
 
-int ethqos_handle_prv_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
+static int ethqos_handle_prv_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 {
 	struct stmmac_priv *pdata = netdev_priv(dev);
 	struct ifr_data_struct req;

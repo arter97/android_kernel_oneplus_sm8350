@@ -174,7 +174,7 @@ void ethqos_free_gpios(struct qcom_ethqos *ethqos)
 	ethqos->gpio_phy_intr_redirect = -1;
 }
 
-int ethqos_init_pinctrl(struct device *dev)
+static int ethqos_init_pinctrl(struct device *dev)
 {
 	struct pinctrl *pinctrl;
 	struct pinctrl_state *pinctrl_state;

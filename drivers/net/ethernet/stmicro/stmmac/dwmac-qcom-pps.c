@@ -22,8 +22,6 @@
 #include "stmmac_ptp.h"
 #include "dwmac-qcom-ethqos.h"
 
-extern struct qcom_ethqos *pethqos;
-
 static bool avb_class_a_msg_wq_flag;
 static bool avb_class_b_msg_wq_flag;
 
@@ -106,7 +104,7 @@ static u32 pps_config_sub_second_increment(void __iomem *ioaddr,
 	return data;
 }
 
-int ppsout_stop(struct stmmac_priv *priv, struct pps_cfg *eth_pps_cfg)
+static int ppsout_stop(struct stmmac_priv *priv, struct pps_cfg *eth_pps_cfg)
 {
 	u32 val;
 	void __iomem *ioaddr = priv->ioaddr;
@@ -291,6 +289,7 @@ static ssize_t pps_fops_read(struct file *filp, char __user *buf,
 	char *temp_buf;
 	ssize_t ret_cnt = 0;
 	struct pps_info *info;
+	struct qcom_ethqos *pethqos = get_pethqos();
 
 	info = filp->private_data;
 
@@ -334,9 +333,9 @@ static ssize_t pps_fops_read(struct file *filp, char __user *buf,
 	return ret_cnt;
 }
 
-static unsigned int pps_fops_poll(struct file *file, poll_table *wait)
+static __poll_t pps_fops_poll(struct file *file, poll_table *wait)
 {
-	unsigned int mask = 0;
+	__poll_t mask = 0;
 	struct pps_info *info;
 
 	info = file->private_data;
@@ -347,14 +346,14 @@ static unsigned int pps_fops_poll(struct file *file, poll_table *wait)
 
 		if (avb_class_a_msg_wq_flag) {
 			//Sending read mask
-			mask |= POLLIN | POLLRDNORM;
+			mask |= EPOLLIN | EPOLLRDNORM;
 		}
 	} else if (info->channel_no == AVB_CLASS_B_CHANNEL_NUM) {
 		poll_wait(file, &avb_class_b_msg_wq, wait);
 
 		if (avb_class_b_msg_wq_flag) {
 			//Sending read mask
-			mask |= POLLIN | POLLRDNORM;
+			mask |= EPOLLIN | EPOLLRDNORM;
 		}
 	} else {
 		ETHQOSERR("invalid channel %d\n", info->channel_no);
