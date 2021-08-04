@@ -467,20 +467,20 @@ static long slate_com_ioctl(struct file *filp,
 		slate_app_running = true;
 		ret = 0;
 		break;
-	case SLATE_WEAR_LOAD:
+	case SLATE_LOAD:
 		ret = 0;
 		if (dev->pil_h) {
-			pr_err("slate-wear is already loaded\n");
+			pr_err("slate is already loaded\n");
 			ret = -EFAULT;
 			break;
 		}
 		dev->pil_h = subsystem_get_with_fwname("slatefw", "slatefw");
 		if (!dev->pil_h) {
-			pr_err("failed to load slate-wear\n");
+			pr_err("failed to load slate\n");
 			ret = -EFAULT;
 		}
 		break;
-	case SLATE_WEAR_UNLOAD:
+	case SLATE_UNLOAD:
 		if (dev->pil_h) {
 			subsystem_put(dev->pil_h);
 			dev->pil_h = NULL;
