@@ -1105,6 +1105,7 @@ static void __wlan_hdd_sap_pre_cac_success(struct hdd_adapter *adapter)
 	struct hdd_adapter *ap_adapter;
 	int i;
 	struct hdd_context *hdd_ctx;
+	enum phy_ch_width pre_cac_ch_width;
 
 	hdd_enter();
 
@@ -1113,6 +1114,9 @@ static void __wlan_hdd_sap_pre_cac_success(struct hdd_adapter *adapter)
 		hdd_err("HDD context is null");
 		return;
 	}
+
+	pre_cac_ch_width = wlansap_get_chan_width(
+				WLAN_HDD_GET_SAP_CTX_PTR(adapter));
 
 	hdd_stop_adapter(hdd_ctx, adapter);
 
@@ -1133,7 +1137,7 @@ static void __wlan_hdd_sap_pre_cac_success(struct hdd_adapter *adapter)
 				    CSA_REASON_PRE_CAC_SUCCESS);
 	i = hdd_softap_set_channel_change(ap_adapter->dev,
 					  ap_adapter->pre_cac_freq,
-			CH_WIDTH_MAX, false);
+					  pre_cac_ch_width, false);
 	if (0 != i) {
 		hdd_err("failed to change channel");
 		wlan_hdd_set_pre_cac_complete_status(ap_adapter, false);
@@ -4874,6 +4878,10 @@ static struct ieee80211_channel *wlan_hdd_get_wiphy_channel(
 	struct ieee80211_channel *wiphy_channel = NULL;
 
 	for (band_num = 0; band_num < HDD_NUM_NL80211_BANDS; band_num++) {
+		if (!wiphy->bands[band_num]) {
+			hdd_debug("Band %d not part of wiphy", band_num);
+			continue;
+		}
 		for (channel_num = 0; channel_num <
 				wiphy->bands[band_num]->n_channels;
 				channel_num++) {

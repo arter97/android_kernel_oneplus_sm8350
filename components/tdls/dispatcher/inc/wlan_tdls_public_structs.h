@@ -88,6 +88,11 @@
 
 #define INVALID_TDLS_PEER_INDEX 0xFF
 
+#ifdef WLAN_FEATURE_11AX
+#define MIN_TDLS_HE_CAP_LEN 17
+#define MAX_TDLS_HE_CAP_LEN 29
+#endif
+
 /**
  * enum tdls_add_oper - add peer type
  * @TDLS_OPER_NONE: none
@@ -782,6 +787,15 @@ struct hecap {
 		uint16_t tx_he_mcs_map_80_80;
 	} he_cap_mcs_info;
 } qdf_packed;
+
+struct hecap_6ghz {
+	/* Minimum MPDU Start Spacing B0..B2
+	 * Maximum A-MPDU Length Exponent B3..B5
+	 * Maximum MPDU Length B6..B7 */
+	uint8_t a_mpdu_params; /* B0..B7 */
+	uint8_t info; /* B8..B15 */
+};
+
 #endif
 
 struct tdls_update_peer_params {
@@ -799,6 +813,7 @@ struct tdls_update_peer_params {
 #ifdef WLAN_FEATURE_11AX
 	uint8_t he_cap_len;
 	struct hecap he_cap;
+	struct hecap_6ghz he_6ghz_cap;
 #endif
 	uint8_t uapsd_queues;
 	uint8_t max_sp;
@@ -1346,6 +1361,7 @@ struct tdls_add_sta_req {
 #ifdef WLAN_FEATURE_11AX
 	uint8_t he_cap_len;
 	struct hecap he_cap;
+	struct hecap_6ghz he_6ghz_cap;
 #endif
 	uint8_t uapsd_queues;
 	uint8_t max_sp;
