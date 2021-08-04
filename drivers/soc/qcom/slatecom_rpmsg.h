@@ -8,7 +8,7 @@
 #include <linux/rpmsg.h>
 #include "slatecom_interface.h"
 
-#define TIMEOUT_MS 2000
+#define TIMEOUT_MS 5000
 
 struct slatecom_rpmsg_dev {
 	struct rpmsg_endpoint *channel;

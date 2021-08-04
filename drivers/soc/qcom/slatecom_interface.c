@@ -89,9 +89,15 @@ enum {
 	SSR_DOMAIN_MAX,
 };
 
+enum slatecom_state {
+	SLATECOM_STATE_UNKNOWN,
+	SLATECOM_STATE_INIT,
+	SLATECOM_STATE_GLINK_OPEN,
+	SLATECOM_STATE_SLATE_SSR
+};
+
 struct slatedaemon_priv {
 	void *pil_h;
-	struct qseecom_handle *qseecom_handle;
 	int app_status;
 	unsigned long attrs;
 	u32 cmd_status;
@@ -101,8 +107,15 @@ struct slatedaemon_priv {
 	void *lhndl;
 	wait_queue_head_t link_state_wait;
 	char rx_buf[20];
+	struct work_struct slatecom_up_work;
+	struct work_struct slatecom_down_work;
 	struct mutex glink_mutex;
+	struct mutex slatecom_state_mutex;
+	enum slatecom_state slatecom_current_state;
+	struct workqueue_struct *slatecom_wq;
+	struct wakeup_source *slatecom_ws;
 };
+
 static void *slatecom_intf_drv;
 
 struct slate_event {
@@ -242,7 +255,7 @@ static int slatecom_tx_msg(struct slatedaemon_priv *dev, void  *msg, size_t len)
 	dev->slate_resp_cmplt = false;
 	/* check SLATE response */
 	resp = *(uint8_t *)dev->rx_buf;
-	if (!(resp == 0x01)) {
+	if (resp == 0x01) {
 		pr_err("Bad SLATE response\n");
 		rc = -EINVAL;
 		goto err_ret;
@@ -414,11 +427,36 @@ static int adsp_down2_slate(void)
 	return 0;
 }
 
+static int send_time_sync(struct slate_ui_data *tui_obj_msg)
+{
+	int ret = 0;
+	void *write_buf;
+
+	write_buf = kmalloc_array(tui_obj_msg->num_of_words, sizeof(uint32_t),
+							GFP_KERNEL);
+	if (write_buf == NULL)
+		return -ENOMEM;
+	write_buf = memdup_user(tui_obj_msg->buffer,
+					tui_obj_msg->num_of_words * sizeof(uint32_t));
+	if (IS_ERR(write_buf)) {
+		ret = PTR_ERR(write_buf);
+		kfree(write_buf);
+		return ret;
+	}
+	ret = slatecom_tx_msg(dev, write_buf, tui_obj_msg->num_of_words*4);
+	if (ret < 0)
+		pr_err("send_time_data cmd failed\n");
+return ret;
+}
+
 static long slate_com_ioctl(struct file *filp,
 		unsigned int ui_slatecom_cmd, unsigned long arg)
 {
 	int ret;
 	struct slate_ui_data ui_obj_msg;
+
+	if (filp == NULL)
+		return -EINVAL;
 
 	switch (ui_slatecom_cmd) {
 	case REG_READ:
@@ -489,9 +527,13 @@ static long slate_com_ioctl(struct file *filp,
 		ret = 0;
 		break;
 	case DEVICE_STATE_TRANSITION:
+		if (dev->slatecom_current_state != SLATECOM_STATE_GLINK_OPEN) {
+			pr_err("driver not ready, glink is not open\n");
+			return -ENODEV;
+		}
 		if (copy_from_user(&ui_obj_msg, (void __user *)arg,
 					sizeof(ui_obj_msg))) {
-			pr_err("The copy from user failed for state transition cmd\n");
+			pr_err("The copy from user failed-state transition\n");
 			ret = -EFAULT;
 		}
 		ret = send_state_change_cmd(&ui_obj_msg);
@@ -499,12 +541,17 @@ static long slate_com_ioctl(struct file *filp,
 			pr_err("device_state_transition cmd failed\n");
 		break;
 	case SEND_TIME_DATA:
+		if (dev->slatecom_current_state != SLATECOM_STATE_GLINK_OPEN) {
+			pr_err("%s: driver not ready, current state: %d\n",
+			__func__, dev->slatecom_current_state);
+			return -ENODEV;
+		}
 		if (copy_from_user(&ui_obj_msg, (void __user *) arg,
 					sizeof(ui_obj_msg))) {
 			pr_err("The copy from user failed for time data\n");
 			ret = -EFAULT;
 		}
-		ret = slatecom_tx_msg(dev, &ui_obj_msg.buffer, sizeof(ui_obj_msg.buffer));
+		ret = send_time_sync(&ui_obj_msg);
 		if (ret < 0)
 			pr_err("send_time_data cmd failed\n");
 		break;
@@ -527,16 +574,86 @@ static int slatecom_char_close(struct inode *inode, struct file *file)
 	return ret;
 }
 
+static void slatecom_slateup_work(struct work_struct *work)
+{
+	int ret = 0;
+	struct slatedaemon_priv *dev =
+			container_of(work, struct slatedaemon_priv, slatecom_up_work);
+
+	mutex_lock(&dev->slatecom_state_mutex);
+	if (!dev->slatecom_rpmsg)
+		pr_err("slatecom-rpmsg is not probed yet\n");
+	ret = wait_event_timeout(dev->link_state_wait,
+				dev->slatecom_rpmsg, msecs_to_jiffies(TIMEOUT_MS));
+	if (ret == 0) {
+		pr_err("channel connection time out %d\n", ret);
+		goto glink_err;
+	}
+	dev->slatecom_current_state = SLATECOM_STATE_GLINK_OPEN;
+	goto unlock;
+
+glink_err:
+	dev->slatecom_current_state = SLATECOM_STATE_INIT;
+unlock:
+	mutex_unlock(&dev->slatecom_state_mutex);
+}
+
+
+static void slatecom_slatedown_work(struct work_struct *work)
+{
+	struct slatedaemon_priv *dev = container_of(work, struct slatedaemon_priv,
+								slatecom_down_work);
+
+	mutex_lock(&dev->slatecom_state_mutex);
+
+	pr_debug("Slatecom current state is : %d\n", dev->slatecom_current_state);
+
+	dev->slatecom_current_state = SLATECOM_STATE_SLATE_SSR;
+
+	mutex_unlock(&dev->slatecom_state_mutex);
+}
+
+static int slatecom_rpmsg_init(struct slatedaemon_priv *dev)
+{
+	slatecom_intf_drv = &dev->lhndl;
+	mutex_init(&dev->glink_mutex);
+	mutex_init(&dev->slatecom_state_mutex);
+
+	dev->slatecom_wq =
+		create_singlethread_workqueue("slatecom-work-queue");
+	if (!dev->slatecom_wq) {
+		pr_err("Failed to init Slatecom work-queue\n");
+		return -ENOMEM;
+	}
+
+	init_waitqueue_head(&dev->link_state_wait);
+
+	/* set default slatecom state */
+	dev->slatecom_current_state = SLATECOM_STATE_INIT;
+
+	/* Init all works */
+	INIT_WORK(&dev->slatecom_up_work, slatecom_slateup_work);
+	INIT_WORK(&dev->slatecom_down_work, slatecom_slatedown_work);
+
+	return 0;
+}
+
 static int slate_daemon_probe(struct platform_device *pdev)
 {
 	struct device_node *node;
+	int rc = 0;
 
 	node = pdev->dev.of_node;
 
 	dev = kzalloc(sizeof(struct slatedaemon_priv), GFP_KERNEL);
 	if (!dev)
 		return -ENOMEM;
-
+	/* Add wake lock for PM suspend */
+	dev->slatecom_ws = wakeup_source_register(&pdev->dev, "Slatcom_wake_lock");
+	dev->slatecom_current_state = SLATECOM_STATE_UNKNOWN;
+	rc = slatecom_rpmsg_init(dev);
+	if (rc)
+		return -ENODEV;
 	dev->platform_dev = &pdev->dev;
 	pr_info("%s success\n", __func__);
 
@@ -574,6 +691,8 @@ static int ssr_slate_cb(struct notifier_block *this,
 		unsigned long opcode, void *data)
 {
 	struct slate_event slatee;
+	struct slatedaemon_priv *dev = container_of(slatecom_intf_drv,
+						struct slatedaemon_priv, lhndl);
 
 	switch (opcode) {
 	case SUBSYS_BEFORE_SHUTDOWN:
@@ -582,6 +701,7 @@ static int ssr_slate_cb(struct notifier_block *this,
 		slatecom_slatedown_handler();
 		slatecom_set_spi_state(SLATECOM_SPI_BUSY);
 		send_uevent(&slatee);
+		queue_work(dev->slatecom_wq, &dev->slatecom_down_work);
 		break;
 	case SUBSYS_AFTER_SHUTDOWN:
 		pr_debug("Slate after shutdown\n");
@@ -600,6 +720,8 @@ static int ssr_slate_cb(struct notifier_block *this,
 		slatee.e_type = SLATE_AFTER_POWER_UP;
 		slatecom_set_spi_state(SLATECOM_SPI_FREE);
 		send_uevent(&slatee);
+		if (dev->slatecom_current_state == SLATECOM_STATE_INIT)
+			queue_work(dev->slatecom_wq, &dev->slatecom_up_work);
 		break;
 	}
 	return NOTIFY_DONE;

@@ -15,7 +15,7 @@ int slatecom_rpmsg_tx_msg(void  *msg, size_t len)
 	int ret = 0;
 
 	if (pdev == NULL || !pdev->chnl_state)
-		pr_err("pmsg_device is null, channel is closed\n");
+		pr_err("rpmsg_device is null, channel is closed\n");
 
 	pdev->message = msg;
 	pdev->message_length = len;
@@ -75,7 +75,7 @@ static int slatecom_rpmsg_cb(struct rpmsg_device *rpdev,
 }
 
 static const struct rpmsg_device_id rpmsg_driver_slatecom_id_table[] = {
-	{ "SLATECOM_CTRL" },
+	{ "slate-ctrl" },
 	{},
 };
 MODULE_DEVICE_TABLE(rpmsg, rpmsg_driver_slatecom_id_table);
