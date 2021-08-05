@@ -493,6 +493,7 @@ struct mhi_dev_channel {
 	uint32_t			pend_wr_count;
 	uint32_t			msi_cnt;
 	uint32_t			flush_req_cnt;
+	uint32_t			pend_flush_cnt;
 	bool				skip_td;
 };
 
