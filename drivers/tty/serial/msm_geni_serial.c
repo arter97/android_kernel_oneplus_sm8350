@@ -3592,15 +3592,21 @@ static int msm_geni_serial_runtime_suspend(struct device *dev)
 							SE_GENI_STATUS);
 
 	UART_LOG_DBG(port->ipc_log_pwr, dev, "%s: Start\n", __func__);
-	/* Flow off from UART */
-	msm_geni_serial_set_manual_flow(false, port);
+	/* Flow off from UART only for In band sleep(IBS)
+	 * Avoid manual RFR FLOW ON for Out of band sleep(OBS).
+	 */
+	if (port->wakeup_byte && port->wakeup_irq)
+		msm_geni_serial_set_manual_flow(false, port);
 	ret = wait_for_transfers_inflight(&port->uport);
 	if (ret) {
 		IPC_LOG_MSG(port->ipc_log_pwr,
 			     "%s: wait_for_transfer_inflight return ret:%d\n",
 			     __func__, ret);
-		/* Flow on from UART */
-		msm_geni_serial_allow_rx(port);
+		/* Flow on from UART only for In band sleep(IBS)
+		 * Avoid manual RFR FLOW ON for Out of band sleep(OBS)
+		 */
+		if (port->wakeup_byte && port->wakeup_irq)
+			msm_geni_serial_allow_rx(port);
 		return -EBUSY;
 	}
 	/*
@@ -3612,8 +3618,11 @@ static int msm_geni_serial_runtime_suspend(struct device *dev)
 	if (ret) {
 		UART_LOG_DBG(port->ipc_log_pwr, dev, "%s: stop rx failed %d\n",
 							__func__, ret);
-		/* Flow on from UART */
-		msm_geni_serial_allow_rx(port);
+		/* Flow on from UART only for In band sleep(IBS)
+		 * Avoid manual RFR FLOW ON for Out of band sleep(OBS)
+		 */
+		if (port->wakeup_byte && port->wakeup_irq)
+			msm_geni_serial_allow_rx(port);
 		return -EBUSY;
 	}
 
@@ -3624,11 +3633,13 @@ static int msm_geni_serial_runtime_suspend(struct device *dev)
 	disable_irq(port->uport.irq);
 
 	/*
-	 * Flow on from UART
+	 * Flow on from UART only for In band sleep(IBS)
+	 * Avoid manual RFR FLOW ON for Out of band sleep(OBS).
 	 * Above before stop_rx disabled the flow so we need to enable it here
 	 * Make sure wake up interrupt is enabled before RFR is made low
 	 */
-	msm_geni_serial_allow_rx(port);
+	if (port->wakeup_byte && port->wakeup_irq)
+		msm_geni_serial_allow_rx(port);
 
 	ret = se_geni_resources_off(&port->serial_rsc);
 	if (ret) {
