@@ -550,10 +550,17 @@ void a6xx_rgmu_snapshot(struct adreno_device *adreno_dev,
 
 static void a6xx_rgmu_suspend(struct adreno_device *adreno_dev)
 {
+	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
+	struct a6xx_rgmu_device *rgmu = to_a6xx_rgmu(adreno_dev);
+
 	a6xx_rgmu_irq_disable(adreno_dev);
 
 	a6xx_rgmu_disable_clks(adreno_dev);
 	a6xx_rgmu_disable_gdsc(adreno_dev);
+
+	dev_err(&rgmu->pdev->dev, "Suspended rgmu\n");
+
+	device->state = KGSL_STATE_NONE;
 }
 
 static int a6xx_rgmu_enable_clks(struct adreno_device *adreno_dev)
@@ -712,6 +719,8 @@ static void a6xx_rgmu_power_off(struct adreno_device *adreno_dev)
 	a6xx_rgmu_disable_gdsc(adreno_dev);
 
 	kgsl_pwrctrl_clear_l3_vote(device);
+
+	device->state = KGSL_STATE_NONE;
 }
 
 static int a6xx_rgmu_clock_set(struct adreno_device *adreno_dev,
