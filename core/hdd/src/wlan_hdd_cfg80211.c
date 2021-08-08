@@ -10825,6 +10825,11 @@ static int __wlan_hdd_cfg80211_wifi_logger_get_ring_data(struct wiphy *wiphy,
 			hdd_err("Failed to trigger bug report");
 			return -EINVAL;
 		}
+		status = wlan_logging_wait_for_flush_log_completion();
+		if (!QDF_IS_STATUS_SUCCESS(status)) {
+			hdd_err("wait for flush log timed out");
+			return qdf_status_to_os_return(status);
+		}
 	} else {
 		wlan_report_log_completion(WLAN_LOG_TYPE_NON_FATAL,
 					   WLAN_LOG_INDICATOR_FRAMEWORK,
@@ -22247,10 +22252,12 @@ static QDF_STATUS wlan_hdd_set_pmksa_cache(struct hdd_adapter *adapter,
 		qdf_mem_free(pmksa);
 	}
 
-	if (result == QDF_STATUS_SUCCESS && pmk_cache->pmk_len)
+	if (result == QDF_STATUS_SUCCESS && pmk_cache->pmk_len) {
 		sme_roam_set_psk_pmk(mac_handle, adapter->vdev_id,
 				     pmk_cache->pmk, pmk_cache->pmk_len,
 				     false);
+		sme_set_pmk_cache_ft(mac_handle, adapter->vdev_id, pmk_cache);
+	}
 	hdd_objmgr_put_vdev(vdev);
 
 	return result;

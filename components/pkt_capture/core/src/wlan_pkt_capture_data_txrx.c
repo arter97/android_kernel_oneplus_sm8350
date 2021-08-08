@@ -188,9 +188,13 @@ static void pkt_capture_tx_get_phy_info(
 		tx_status->he_flags = 1;
 		tx_status->he_data1 |=
 			IEEE80211_RADIOTAP_HE_DATA1_DATA_MCS_KNOWN |
-			IEEE80211_RADIOTAP_HE_DATA1_BW_RU_ALLOC_KNOWN;
+			IEEE80211_RADIOTAP_HE_DATA1_BW_RU_ALLOC_KNOWN |
+			IEEE80211_RADIOTAP_HE_DATA1_CODING_KNOWN |
+			IEEE80211_RADIOTAP_HE_DATA1_STBC_KNOWN;
 		tx_status->he_data2 |= IEEE80211_RADIOTAP_HE_DATA2_GI_KNOWN;
-		tx_status->he_data3 |= pktcapture_hdr->mcs << 0x8;
+		tx_status->he_data3 |= (pktcapture_hdr->mcs << 0x8) |
+					(pktcapture_hdr->ldpc << 0xd) |
+					(pktcapture_hdr->stbc << 0xf);
 		tx_status->he_data5 |=
 			(pktcapture_hdr->bw | (pktcapture_hdr->sgi << 0x4));
 		tx_status->he_data6 |= pktcapture_hdr->nss;
@@ -414,6 +418,7 @@ pkt_capture_rx_convert8023to80211(hal_soc_handle_t hal_soc_hdl,
 	uint8_t *pwh;
 	uint8_t hdsize, new_hdsize;
 	struct ieee80211_qoscntl *qos_cntl;
+	static uint8_t first_msdu_hdr[sizeof(struct ieee80211_frame)];
 	uint8_t localbuf[sizeof(struct ieee80211_qosframe_htc_addr4) +
 			sizeof(struct llc_snap_hdr_t)];
 	const uint8_t ethernet_II_llc_snap_header_prefix[] = {
@@ -424,13 +429,29 @@ pkt_capture_rx_convert8023to80211(hal_soc_handle_t hal_soc_hdl,
 
 	eth_hdr = (struct ethernet_hdr_t *)qdf_nbuf_data(msdu);
 	hdsize = sizeof(struct ethernet_hdr_t);
-	pwh = HAL_RX_DESC_GET_80211_HDR(desc);
 
 	wh = (struct ieee80211_frame *)localbuf;
 
 	new_hdsize = sizeof(struct ieee80211_frame);
 
-	qdf_mem_copy(localbuf, pwh, new_hdsize);
+	/*
+	 * Only first msdu in mpdu has rx_tlv_hdr(802.11 hdr) filled by HW, so
+	 * copy the 802.11 hdr to all other msdu's which are received in
+	 * single mpdu from first msdu.
+	 */
+	if (qdf_nbuf_is_rx_chfrag_start(msdu)) {
+		pwh = HAL_RX_DESC_GET_80211_HDR(desc);
+		qdf_mem_copy(first_msdu_hdr, pwh,
+			     sizeof(struct ieee80211_frame));
+	}
+
+	qdf_mem_copy(localbuf, first_msdu_hdr, new_hdsize);
+
+	/* Flush the cached 802.11 hdr once last msdu in mpdu is received */
+	if (qdf_nbuf_is_rx_chfrag_end(msdu))
+		qdf_mem_zero(first_msdu_hdr, sizeof(struct ieee80211_frame));
+
+	wh->i_fc[0] |= IEEE80211_FC0_TYPE_DATA;
 	wh->i_fc[1] &= ~IEEE80211_FC1_WEP;
 
 	if (wh->i_fc[0] & QDF_IEEE80211_FC0_SUBTYPE_QOS) {
