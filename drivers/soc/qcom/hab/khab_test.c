@@ -309,18 +309,18 @@ static ssize_t expimp_store(struct kobject *kobj, struct kobj_attribute *attr,
 	char str[36] = {0};
 	unsigned long temp;
 
-	ret = sscanf(buf, "%s", str);
-	if (ret < 1)
-		pr_err("failed to read anything from input %d\n", ret);
-
-	if (strnlen(str, strlen("dump_pipe")) == strlen("dump_pipe") &&
-		strcmp(str, "dump_pipe") == 0) {
-		/* string terminator is ignored */
-		dump_hab();
-		return strlen("dump_pipe");
-	}
-
 	if (buf) {
+		ret = sscanf(buf, "%s", str);
+		if (ret < 1)
+			pr_err("failed to read anything from input %d\n", ret);
+
+		if (strnlen(str, strlen("dump_pipe")) == strlen("dump_pipe") &&
+			strcmp(str, "dump_pipe") == 0) {
+			/* string terminator is ignored */
+			dump_hab();
+			return strlen("dump_pipe");
+		}
+
 		ret = kstrtol(buf, 10, &temp);
 		pid_stat = temp;
 
