@@ -44,16 +44,16 @@ struct soc_sleep_stats_data {
 };
 
 struct entry {
-	__le32 stat_type;
-	__le32 count;
-	__le64 last_entered_at;
-	__le64 last_exited_at;
-	__le64 accumulated;
+	u32 stat_type;
+	u32 count;
+	u64 last_entered_at;
+	u64 last_exited_at;
+	u64 accumulated;
 };
 
 struct appended_entry {
-	__le32 client_votes;
-	__le32 reserved[3];
+	u32 client_votes;
+	u32 reserved[3];
 };
 
 struct stats_entry {
@@ -151,7 +151,6 @@ static ssize_t stats_show(struct kobject *obj, struct kobj_attribute *attr,
 			  char *buf)
 {
 	int i;
-	uint32_t offset;
 	ssize_t length = 0, op_length;
 	struct stats_entry data;
 	struct entry *e = &data.entry;
@@ -161,20 +160,7 @@ static ssize_t stats_show(struct kobject *obj, struct kobj_attribute *attr,
 	void __iomem *reg = drv->reg;
 
 	for (i = 0; i < drv->config->num_records; i++) {
-		offset = offsetof(struct entry, stat_type);
-		e->stat_type = le32_to_cpu(readl_relaxed(reg + offset));
-
-		offset = offsetof(struct entry, count);
-		e->count = le32_to_cpu(readl_relaxed(reg + offset));
-
-		offset = offsetof(struct entry, last_entered_at);
-		e->last_entered_at = le64_to_cpu(readq_relaxed(reg + offset));
-
-		offset = offsetof(struct entry, last_exited_at);
-		e->last_exited_at = le64_to_cpu(readq_relaxed(reg + offset));
-
-		offset = offsetof(struct entry, accumulated);
-		e->accumulated = le64_to_cpu(readq_relaxed(reg + offset));
+		memcpy_fromio(e, reg, sizeof(struct entry));
 
 		e->last_entered_at = get_time_in_sec(e->last_entered_at);
 		e->last_exited_at = get_time_in_sec(e->last_exited_at);
@@ -183,9 +169,7 @@ static ssize_t stats_show(struct kobject *obj, struct kobj_attribute *attr,
 		reg += sizeof(struct entry);
 
 		if (drv->config->appended_stats_avail) {
-			offset = offsetof(struct appended_entry, client_votes);
-			ae->client_votes = le32_to_cpu(readl_relaxed(reg +
-								     offset));
+			memcpy_fromio(ae, reg, sizeof(struct appended_entry));
 
 			reg += sizeof(struct appended_entry);
 		} else {
