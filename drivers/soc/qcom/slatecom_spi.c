@@ -45,6 +45,14 @@
 #define SLATE_OK_SLP_RBSC      BIT(30)
 #define SLATE_OK_SLP_S2R       BIT(31)
 
+#define WR_PROTOCOL_OVERHEAD              (5)
+#define WR_PROTOCOL_OVERHEAD_IN_WORDS     (2)
+
+#define WR_BUF_SIZE_IN_BYTES	CMA_BFFR_POOL_SIZE
+#define WR_BUF_SIZE_IN_WORDS	(CMA_BFFR_POOL_SIZE / sizeof(uint32_t))
+#define WR_BUF_SIZE_IN_WORDS_FOR_USE   \
+		(WR_BUF_SIZE_IN_WORDS - WR_PROTOCOL_OVERHEAD_IN_WORDS)
+
 #define MAX_RETRY 100
 
 enum slatecom_state {
@@ -116,14 +124,6 @@ static int slate_irq;
 
 static uint8_t *fxd_mem_buffer;
 static struct mutex cma_buffer_lock;
-
-static struct spi_device *get_spi_device(void)
-{
-	struct slate_spi_priv *slate_spi = container_of(slate_com_drv,
-						struct slate_spi_priv, lhandle);
-	struct spi_device *spi = slate_spi->spi;
-	return spi;
-}
 
 static void augmnt_fifo(uint8_t *data, int pos)
 {
@@ -554,15 +554,14 @@ EXPORT_SYMBOL(slatecom_ahb_read);
 int slatecom_ahb_write(void *handle, uint32_t ahb_start_addr,
 	uint32_t num_words, void *write_buf)
 {
-	dma_addr_t dma_hndl;
 	uint32_t txn_len;
 	uint8_t *tx_buf;
 	uint32_t size;
 	int ret;
-	bool is_cma_used = false;
 	uint8_t cmnd = 0;
 	uint32_t ahb_addr = 0;
-	struct spi_device *spi = get_spi_device();
+	uint32_t curr_num_words;
+	uint32_t curr_num_bytes;
 
 	if (!handle || !write_buf || num_words == 0
 		|| num_words > SLATE_SPI_MAX_WORDS) {
@@ -583,34 +582,36 @@ int slatecom_ahb_write(void *handle, uint32_t ahb_start_addr,
 		return -EBUSY;
 	}
 
+	ahb_addr = ahb_start_addr;
+
 	mutex_lock(&cma_buffer_lock);
 	size = num_words*SLATE_SPI_WORD_SIZE;
-	txn_len = SLATE_SPI_AHB_CMD_LEN + size;
-	if (fxd_mem_buffer != NULL && txn_len <= CMA_BFFR_POOL_SIZE) {
+	while (num_words) {
+		curr_num_words = (num_words < WR_BUF_SIZE_IN_WORDS_FOR_USE) ?
+						num_words : WR_BUF_SIZE_IN_WORDS_FOR_USE;
+		curr_num_bytes = curr_num_words * SLATE_SPI_WORD_SIZE;
+
+		txn_len = SLATE_SPI_AHB_CMD_LEN + curr_num_bytes;
 		memset(fxd_mem_buffer, 0, txn_len);
 		tx_buf = fxd_mem_buffer;
-		is_cma_used = true;
-	} else {
-		pr_info("DMA memory used for size[%d]\n", txn_len);
-		tx_buf = dma_alloc_coherent(&spi->dev, txn_len,
-						&dma_hndl, GFP_KERNEL);
+
+		cmnd |= SLATE_SPI_AHB_WRITE_CMD;
+
+		memcpy(tx_buf, &cmnd, sizeof(cmnd));
+		memcpy(tx_buf+sizeof(cmnd), &ahb_addr, sizeof(ahb_addr));
+		memcpy(tx_buf+SLATE_SPI_AHB_CMD_LEN, write_buf, curr_num_bytes);
+
+		ret = slatecom_transfer(handle, tx_buf, NULL, txn_len);
+		if (ret) {
+			pr_err("slatecom_transfer fail with error %d\n", ret);
+			goto error;
+		}
+		write_buf += curr_num_bytes;
+		ahb_addr += curr_num_bytes;
+		num_words -= curr_num_words;
 	}
 
-	if (!tx_buf) {
-		mutex_unlock(&cma_buffer_lock);
-		return -ENOMEM;
-	}
-
-	cmnd |= SLATE_SPI_AHB_WRITE_CMD;
-	ahb_addr |= ahb_start_addr;
-
-	memcpy(tx_buf, &cmnd, sizeof(cmnd));
-	memcpy(tx_buf+sizeof(cmnd), &ahb_addr, sizeof(ahb_addr));
-	memcpy(tx_buf+SLATE_SPI_AHB_CMD_LEN, write_buf, size);
-
-	ret = slatecom_transfer(handle, tx_buf, NULL, txn_len);
-	if (!is_cma_used)
-		dma_free_coherent(&spi->dev, txn_len, tx_buf, dma_hndl);
+error:
 	mutex_unlock(&cma_buffer_lock);
 	return ret;
 }
