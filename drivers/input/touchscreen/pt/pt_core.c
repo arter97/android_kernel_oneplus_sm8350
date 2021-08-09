@@ -10290,6 +10290,117 @@ static void pt_enum_work_function(struct work_struct *work)
 			__func__, rc);
 }
 
+static int pt_get_regulator(struct pt_core_data *cd, bool get)
+{
+	int rc;
+
+	if (!get) {
+		rc = 0;
+		goto regulator_put;
+	}
+
+	cd->vdd = regulator_get(cd->dev, "vdd");
+	if (IS_ERR(cd->vdd)) {
+		rc = PTR_ERR(cd->vdd);
+		dev_err(cd->dev,
+			"Regulator get failed vdd rc=%d\n", rc);
+		goto regulator_put;
+	}
+
+	cd->vcc_i2c = regulator_get(cd->dev, "vcc_i2c");
+	if (IS_ERR(cd->vcc_i2c)) {
+		rc = PTR_ERR(cd->vcc_i2c);
+		dev_err(cd->dev,
+			"Regulator get failed vcc_i2c rc=%d\n", rc);
+		goto regulator_put;
+	}
+
+	return 0;
+
+regulator_put:
+	if (cd->vdd) {
+		regulator_put(cd->vdd);
+		cd->vdd = NULL;
+	}
+
+	if (cd->vcc_i2c) {
+		regulator_put(cd->vcc_i2c);
+		cd->vcc_i2c = NULL;
+	}
+
+	return rc;
+}
+
+static int pt_enable_regulator(struct pt_core_data *cd, bool en)
+{
+	int rc;
+
+	if (!en) {
+		rc = 0;
+		goto disable_vcc_i2c_reg;
+	}
+
+	if (cd->vdd) {
+		if (regulator_count_voltages(cd->vdd) > 0) {
+			rc = regulator_set_voltage(cd->vdd, FT_VTG_MIN_UV,
+						FT_VTG_MAX_UV);
+			if (rc) {
+				dev_err(cd->dev,
+					"Regulator set_vtg failed vdd rc=%d\n", rc);
+				goto exit;
+			}
+		}
+
+		rc = regulator_enable(cd->vdd);
+		if (rc) {
+			dev_err(cd->dev,
+				"Regulator vdd enable failed rc=%d\n", rc);
+			goto exit;
+		}
+	}
+
+	if (cd->vcc_i2c) {
+		if (regulator_count_voltages(cd->vcc_i2c) > 0) {
+			rc = regulator_set_voltage(cd->vcc_i2c, FT_I2C_VTG_MIN_UV,
+							FT_I2C_VTG_MAX_UV);
+			if (rc) {
+				dev_err(cd->dev,
+					"Regulator set_vtg failed vcc_i2c rc=%d\n", rc);
+				goto disable_vdd_reg;
+			}
+		}
+
+		rc = regulator_enable(cd->vcc_i2c);
+		if (rc) {
+			dev_err(cd->dev,
+				"Regulator vcc_i2c enable failed rc=%d\n", rc);
+			goto disable_vdd_reg;
+		}
+	}
+
+	return 0;
+
+disable_vcc_i2c_reg:
+	if (cd->vcc_i2c) {
+		if (regulator_count_voltages(cd->vcc_i2c) > 0)
+			regulator_set_voltage(cd->vcc_i2c, 0, FT_I2C_VTG_MAX_UV);
+
+		regulator_disable(cd->vcc_i2c);
+	}
+
+disable_vdd_reg:
+	if (cd->vdd) {
+		if (regulator_count_voltages(cd->vdd) > 0)
+			regulator_set_voltage(cd->vdd, 0, FT_VTG_MAX_UV);
+
+		regulator_disable(cd->vdd);
+	}
+
+exit:
+	return rc;
+}
+
+
 #if (KERNEL_VERSION(3, 19, 0) <= LINUX_VERSION_CODE)
 #define KERNEL_VER_GT_3_19
 #endif
@@ -16664,71 +16775,6 @@ static void remove_sysfs_and_modules(struct device *dev)
 	remove_sysfs_interfaces(dev);
 }
 
-static int pt_power_init(struct pt_core_data *cd, bool on)
-{
-	int rc;
-
-	if (!on)
-		goto pwr_deinit;
-
-	cd->vdd = regulator_get(cd->dev, "vdd");
-	if (IS_ERR(cd->vdd)) {
-		rc = PTR_ERR(cd->vdd);
-		dev_err(cd->dev,
-			"Regulator get failed vdd rc=%d\n", rc);
-		return rc;
-	}
-	if (regulator_count_voltages(cd->vdd) > 0) {
-		rc = regulator_set_voltage(cd->vdd, FT_VTG_MIN_UV,
-					FT_VTG_MAX_UV);
-		if (rc) {
-			dev_err(cd->dev,
-				"Regulator set_vtg failed vdd rc=%d\n", rc);
-			goto reg_vdd_put;
-		}
-	}
-
-	cd->vcc_i2c = regulator_get(cd->dev, "vcc_i2c");
-	if (IS_ERR(cd->vcc_i2c)) {
-		rc = PTR_ERR(cd->vcc_i2c);
-		dev_err(cd->dev,
-			"Regulator get failed vcc_i2c rc=%d\n", rc);
-		goto reg_vdd_set_vtg;
-	}
-	if (regulator_count_voltages(cd->vcc_i2c) > 0) {
-		rc = regulator_set_voltage(cd->vcc_i2c, FT_I2C_VTG_MIN_UV,
-					FT_I2C_VTG_MAX_UV);
-		if (rc) {
-			dev_err(cd->dev,
-			"Regulator set_vtg failed vcc_i2c rc=%d\n", rc);
-			goto reg_vcc_i2c_put;
-		}
-	}
-
-	return 0;
-
-reg_vcc_i2c_put:
-	regulator_put(cd->vcc_i2c);
-reg_vdd_set_vtg:
-	if (regulator_count_voltages(cd->vdd) > 0)
-		regulator_set_voltage(cd->vdd, 0, FT_VTG_MAX_UV);
-reg_vdd_put:
-	regulator_put(cd->vdd);
-	return rc;
-
-pwr_deinit:
-	if (regulator_count_voltages(cd->vdd) > 0)
-		regulator_set_voltage(cd->vdd, 0, FT_VTG_MAX_UV);
-
-	regulator_put(cd->vdd);
-
-	if (regulator_count_voltages(cd->vcc_i2c) > 0)
-		regulator_set_voltage(cd->vcc_i2c, 0, FT_I2C_VTG_MAX_UV);
-
-	regulator_put(cd->vcc_i2c);
-	return 0;
-}
-
 static int pt_ts_pinctrl_init(struct pt_core_data *cd)
 {
 	int retval;
@@ -16837,7 +16883,7 @@ int pt_probe(const struct pt_bus_ops *ops, struct device *dev,
 	cd = kzalloc(sizeof(*cd), GFP_KERNEL);
 	if (!cd) {
 		rc = -ENOMEM;
-		goto error_alloc_data;
+		goto error_no_pdata;
 	}
 	/* Initialize device info */
 	cd->dev                        = dev;
@@ -16942,20 +16988,16 @@ int pt_probe(const struct pt_bus_ops *ops, struct device *dev,
 		if (rc < 0)
 			dev_err(&client->dev, "failed to select pin to active state\n");
 	}
-	rc = pt_power_init(cd, true);
-	if (rc < 0)
-		dev_err(&client->dev, "failed to cyttsp5_power_init\n");
-
-	rc = regulator_enable(cd->vdd);
+	rc = pt_get_regulator(cd, true);
 	if (rc) {
-		dev_err(dev, "Regulator vdd enable failed rc=%d\n", rc);
-		goto error_power;
+		dev_err(&client->dev, "Failed to get voltage regulators\n");
+		goto error_alloc_data;
 	}
-	rc = regulator_enable(cd->vcc_i2c);
+
+	rc = pt_enable_regulator(cd, true);
 	if (rc) {
-		dev_err(dev, "Regulator vcc_i2c enable failed rc=%d\n", rc);
-		regulator_disable(cd->vdd);
-		goto error_power;
+		dev_err(dev, "Failed to enable regulators: rc=%d\n", rc);
+		goto error_get_regulator;
 	}
 
 	/* Initialize works */
@@ -16991,10 +17033,11 @@ int pt_probe(const struct pt_bus_ops *ops, struct device *dev,
 	pt_add_core(dev);
 
 	rc = sysfs_create_group(&dev->kobj, &early_attr_group);
-	if (rc)
+	if (rc) {
 		pt_debug(cd->dev, DL_ERROR, "%s:create early attrs failed\n",
 			__func__);
-
+		goto error_enable_regulator;
+	}
 	/*
 	 * Save the pointer to a global value, which will be used
 	 * in ttdl_restart function
@@ -17255,11 +17298,13 @@ error_detect:
 	if (cd->cpdata->setup_power)
 		cd->cpdata->setup_power(cd->cpdata, PT_MT_POWER_OFF, dev);
 	sysfs_remove_group(&dev->kobj, &early_attr_group);
+	kfree(cd);
+error_enable_regulator:
 	pt_del_core(dev);
 	dev_set_drvdata(dev, NULL);
-error_power:
-	pt_power_init(cd, false);
-	kfree(cd);
+	pt_enable_regulator(cd, false);
+error_get_regulator:
+	pt_get_regulator(cd, false);
 error_alloc_data:
 error_no_pdata:
 	pr_err("%s failed.\n", __func__);
@@ -17351,6 +17396,8 @@ int pt_release(struct pt_core_data *cd)
 		cd->cpdata->setup_power(cd->cpdata, PT_MT_POWER_OFF, dev);
 	dev_set_drvdata(dev, NULL);
 	pt_del_core(dev);
+	pt_enable_regulator(cd, false);
+	pt_get_regulator(cd, false);
 	pt_free_si_ptrs(cd);
 	kfree(cd);
 	return 0;
