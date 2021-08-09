@@ -26,7 +26,6 @@
 
 static int asm330_check_regulator;
 
-
 static const struct st_asm330lhh_odr_table_entry st_asm330lhh_odr_table[] = {
 	[ST_ASM330LHH_ID_ACC] = {
 		.size = 7,
@@ -1019,11 +1018,26 @@ static int st_asm330lhh_regulator_init(struct st_asm330lhh_hw *hw)
 
 static int st_asm330lhh_regulator_power_up(struct st_asm330lhh_hw *hw)
 {
-	u32 vdd_voltage[2] = {3000000, 3600000};
-	u32 vio_voltage[2] = {1620000, 3600000};
+	struct device_node *np;
+	u32 vdd_voltage[2];
+	u32 vio_voltage[2];
 	u32 vdd_current = 30000;
 	u32 vio_current = 30000;
 	int err = 0;
+
+	np = hw->dev->of_node;
+
+	if (of_property_read_u32(np, "vio-min-voltage", &vio_voltage[0]))
+		vio_voltage[0] = 1620000;
+
+	if (of_property_read_u32(np, "vio-max-voltage", &vio_voltage[1]))
+		vio_voltage[1] = 3600000;
+
+	if (of_property_read_u32(np, "vdd-min-voltage", &vdd_voltage[0]))
+		vdd_voltage[0] = 3000000;
+
+	if (of_property_read_u32(np, "vdd-max-voltage", &vdd_voltage[1]))
+		vdd_voltage[1] = 3600000;
 
 	/* Enable VDD for ASM330 */
 	if (vdd_voltage[0] > 0 && vdd_voltage[0] <= vdd_voltage[1]) {
