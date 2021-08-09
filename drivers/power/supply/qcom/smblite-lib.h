@@ -83,8 +83,7 @@ enum print_reason {
 /* Max supported voltage 6V */
 #define HVDCP3_STEP_SIZE_UV		200000
 #define PM5100_MAX_HVDCP3_PULSES	5
-#define PM5100_HVDCP3_MAX_VOLTAGE_UV	(PM5100_MAX_HVDCP3_PULSES * \
-						HVDCP3_STEP_SIZE_UV)
+#define PM5100_HVDCP3_MAX_VOLTAGE_UV	6000000
 
 enum smb_mode {
 	PARALLEL_MASTER = 0,
@@ -380,6 +379,7 @@ struct smb_charger {
 	bool			concurrent_mode_supported;
 	bool			concurrent_mode_status;
 	u8			float_cfg;
+	bool			is_debug_batt;
 
 	/* workaround flag */
 	u32			wa_flags;
