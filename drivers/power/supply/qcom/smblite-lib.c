@@ -2609,10 +2609,32 @@ static void smblite_lib_micro_usb_plugin(struct smb_charger *chg,
 			smblite_lib_dbg(chg, PR_MISC,
 				"charger_en_status=%x, Charging disable by boost\n", stat);
 		}
+
+	if (chg->wa_flags & HDC_ICL_REDUCTION_WA) {
+		rc = smblite_lib_masked_write(chg, BATIF_PULLDOWN_VPH_CONTROL(chg->base),
+				BATIF_PULLDOWN_VPH_SEL_MASK,
+				(PULLDOWN_VPH_SW_EN_BIT | PULLDOWN_VPH_HW_EN_BIT));
+		if (rc < 0)
+			smblite_lib_err(chg, "Couldn't set BATIF_PULLDOWN_VPH_CONTROL rc=%d\n", rc);
+
+		rc = smblite_lib_run_aicl(chg, RERUN_AICL);
+		if (rc < 0)
+			smblite_lib_err(chg, "Couldn't rerun AICL rc=%d\n", rc);
+	}
+
 	} else {
 		smblite_lib_notify_device_mode(chg, false);
 		smblite_lib_uusb_removal(chg);
 		typec_partner_unregister(chg);
+
+		if (chg->wa_flags & HDC_ICL_REDUCTION_WA) {
+			rc = smblite_lib_masked_write(chg, BATIF_PULLDOWN_VPH_CONTROL(chg->base),
+					BATIF_PULLDOWN_VPH_SEL_MASK,
+					PULLDOWN_VPH_HW_EN_BIT);
+			if (rc < 0)
+				smblite_lib_err(chg,
+					"Couldn't set BATIF_PULLDOWN_VPH_CONTROL rc=%d\n", rc);
+		}
 	}
 }
 

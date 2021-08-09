@@ -13,6 +13,7 @@
 #define PERPH_SUBTYPE_OFFSET	0x05
 #define SUBTYPE_MASK		GENMASK(7, 0)
 #define INT_RT_STS_OFFSET	0x10
+#define REVID_REVISION4		0x103
 
 /********************************
  *  CHGR Peripheral Registers  *
@@ -127,6 +128,10 @@ enum {
 #define CHGR_JEITA_COOL_THRESHOLD_REG(base)		(base.batif_base + 0x88)
 #define CHGR_JEITA_COLD_THRESHOLD_REG(base)		(base.batif_base + 0x8A)
 
+#define BATIF_PULLDOWN_VPH_CONTROL(base)		(base.batif_base + 0x55)
+#define PULLDOWN_VPH_SW_EN_BIT			BIT(1)
+#define PULLDOWN_VPH_HW_EN_BIT			BIT(0)
+#define BATIF_PULLDOWN_VPH_SEL_MASK		GENMASK(1, 0)
 
 /********************************
  *  USBIN Peripheral Registers  *
