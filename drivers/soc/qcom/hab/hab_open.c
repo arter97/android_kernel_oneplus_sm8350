@@ -184,7 +184,7 @@ int hab_open_receive_cancel(struct physical_channel *pchan,
 		size_t sizebytes)
 {
 	struct hab_device *dev = pchan->habdev;
-	struct hab_open_send_data data;
+	struct hab_open_send_data data = {0};
 	struct hab_open_request *request;
 	struct hab_open_node *node, *tmp;
 	int bfound = 0;
