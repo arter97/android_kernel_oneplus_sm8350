@@ -1577,7 +1577,7 @@ static int dwc3_extract_num_phys(struct dwc3 *dwc)
 {
 	struct device_node *phy_node;
 	int i;
-	u32 num_phy;
+	int num_phy;
 
 	/*
 	 * Extract the number of PHYs in a controller by counting the number
@@ -1589,9 +1589,19 @@ static int dwc3_extract_num_phys(struct dwc3 *dwc)
 	 * as this driver also sets the type to "USB_PHY_TYPE_USB2".
 	 */
 	num_phy = of_count_phandle_with_args(dwc->dev->of_node, "usb-phy", NULL);
+	if (num_phy <= 0 || num_phy % 2) {
+		dev_err(dwc->dev, "Unable to extract num_phy or odd number of usb phandles defined\n");
+		return -EINVAL;
+	}
+
 	dwc->num_hsphy = num_phy / 2;
 	for (i = 0; i < num_phy; i++) {
 		phy_node = of_parse_phandle(dwc->dev->of_node, "usb-phy", i);
+		if (!phy_node) {
+			dev_err(dwc->dev, "Unable to parse usb phy_node%d\n", i);
+			return -EINVAL;
+		}
+
 		if ((i % 2) && strcmp(phy_node->name, "usb_nop_phy"))
 			dwc->num_ssphy++;
 		else if (!(i % 2) && !strcmp(phy_node->name, "usb_nop_phy")) {
