@@ -496,8 +496,18 @@ static long slate_com_ioctl(struct file *filp,
 		}
 		ret = send_state_change_cmd(&ui_obj_msg);
 		if (ret < 0)
-			pr_err("device state transition cmd failed\n");
+			pr_err("device_state_transition cmd failed\n");
 		break;
+	case SEND_TIME_DATA:
+		if (copy_from_user(&ui_obj_msg, (void __user *) arg,
+					sizeof(ui_obj_msg))) {
+			pr_err("The copy from user failed for time data\n");
+			ret = -EFAULT;
+		}
+		ret = slatecom_tx_msg(dev, &ui_obj_msg.buffer, sizeof(ui_obj_msg.buffer));
+		if (ret < 0)
+			pr_err("send_time_data cmd failed\n");
+
 	default:
 		ret = -ENOIOCTLCMD;
 		break;

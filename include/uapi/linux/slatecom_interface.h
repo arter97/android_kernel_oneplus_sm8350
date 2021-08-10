@@ -21,6 +21,7 @@
 #define SLATECOM_SLATE_WEAR_LOAD 11
 #define SLATECOM_SLATE_WEAR_UNLOAD 12
 #define SLATECOM_DEVICE_STATE_TRANSITION 13
+#define SLATE_SEND_TIME_DATA 14
 #define EXCHANGE_CODE  'V'
 
 struct slate_ui_data {
@@ -99,6 +100,8 @@ enum device_state_transition {
 #define DEVICE_STATE_TRANSITION \
 	_IOWR(EXCHANGE_CODE, SLATECOM_DEVICE_STATE_TRANSITION, \
 	struct slate_ui_data)
-
+#define SEND_TIME_DATA \
+	_IOWR(EXCHANGE_CODE, SLATE_SEND_TIME_DATA, \
+	struct slate_ui_data)
 #endif /* LINUX_SLATECOM_INTERFACE_H */
 
