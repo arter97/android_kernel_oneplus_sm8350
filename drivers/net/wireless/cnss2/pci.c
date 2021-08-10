@@ -4975,7 +4975,7 @@ static void cnss_pci_remove_dump_seg(struct cnss_pci_data *pci_priv,
 {
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	struct device *dev = &pci_priv->pci_dev->dev;
-	phys_addr_t pa;
+	phys_addr_t pa = 0;
 
 	cnss_va_to_pa(dev, size, va, dma, &pa, DMA_ATTR_FORCE_CONTIGUOUS);
 	cnss_minidump_remove_region(plat_priv, type, seg_no, va, pa, size);
