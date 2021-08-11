@@ -1019,10 +1019,16 @@ static irqreturn_t ETHQOS_PHY_ISR(int irq, void *dev_data)
 	return IRQ_HANDLED;
 }
 
-static int ethqos_phy_intr_enable(struct qcom_ethqos *ethqos)
+static int ethqos_phy_intr_enable(void *priv_n)
 {
 	int ret = 0;
-	struct stmmac_priv *priv = qcom_ethqos_get_priv(ethqos);
+	struct stmmac_priv *priv = priv_n;
+	struct qcom_ethqos *ethqos = priv->plat->bsp_priv;
+
+	if (ethqos_phy_intr_config(ethqos)) {
+		ret = 1;
+		return ret;
+	}
 
 	INIT_WORK(&ethqos->emac_phy_work, ethqos_defer_phy_isr_work);
 	init_completion(&ethqos->clk_enable_done);
@@ -1714,6 +1720,7 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	plat_dat->handle_prv_ioctl = ethqos_handle_prv_ioctl;
 	plat_dat->request_phy_wol = qcom_ethqos_request_phy_wol;
 	plat_dat->init_pps = ethqos_init_pps;
+	plat_dat->phy_intr_enable = ethqos_phy_intr_enable;
 
 	/* Get rgmii interface speed for mac2c from device tree */
 	if (of_property_read_u32(np, "mac2mac-rgmii-speed",
@@ -1766,12 +1773,6 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	ndev = dev_get_drvdata(&ethqos->pdev->dev);
 	priv = netdev_priv(ndev);
 
-	if (!priv->plat->mac2mac_en) {
-		if (!ethqos_phy_intr_config(ethqos))
-			ethqos_phy_intr_enable(ethqos);
-		else
-			ETHQOSERR("Phy interrupt configuration failed");
-	}
 	rgmii_dump(ethqos);
 
 	if (ethqos->emac_ver == EMAC_HW_v2_3_2_RG || ethqos->emac_ver == EMAC_HW_v2_3_1) {

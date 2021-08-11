@@ -208,5 +208,7 @@ struct plat_stmmacenet_data {
 				int cmd);
 	void (*request_phy_wol)(void *plat);
 	int (*init_pps)(void *priv);
+	bool phy_intr_en;
+	int (*phy_intr_enable)(void *priv);
 };
 #endif

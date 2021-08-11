@@ -1093,6 +1093,19 @@ static int stmmac_init_phy(struct net_device *dev)
 			return -ENODEV;
 		}
 		ret = phylink_connect_phy(priv->phylink, priv->phydev);
+
+		if (!priv->plat->mac2mac_en) {
+			if (((priv->phydev->phy_id &
+			    priv->phydev->drv->phy_id_mask) == MICREL_PHY_ID) &&
+				!priv->plat->phy_intr_en) {
+				ret = priv->plat->phy_intr_enable(priv);
+				if (ret)
+					pr_alert("qcom-ethqos: Unable to enable PHY interrupt\n");
+				else
+					priv->plat->phy_intr_en = true;
+			}
+		}
+
 		if (priv->plat->phy_intr_en_extn_stm) {
 			priv->phydev->irq = PHY_IGNORE_INTERRUPT;
 			priv->phydev->interrupts =  PHY_INTERRUPT_ENABLED;
