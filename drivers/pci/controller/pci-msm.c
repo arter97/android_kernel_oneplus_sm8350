@@ -698,6 +698,11 @@ struct msm_pcie_drv_info {
 	struct completion completion;
 };
 
+struct pcie_i2c_reg_update {
+	u32 offset;
+	u32 val;
+};
+
 /* i2c control interface for a i2c client device */
 struct pcie_i2c_ctrl {
 	struct i2c_client *client;
@@ -708,6 +713,8 @@ struct pcie_i2c_ctrl {
 	u32 ep_reset_gpio_mask;
 	u32 *dump_regs;
 	u32 dump_reg_count;
+	struct pcie_i2c_reg_update *reg_update;
+	u32 reg_update_count;
 
 	/* client specific callbacks */
 	int (*client_i2c_read)(struct i2c_client *client, u32 reg_addr,
@@ -716,6 +723,7 @@ struct pcie_i2c_ctrl {
 				u32 val);
 	int (*client_i2c_reset)(struct pcie_i2c_ctrl *i2c_ctrl, bool reset);
 	void (*client_i2c_dump_regs)(struct pcie_i2c_ctrl *i2c_ctrl);
+	void (*client_i2c_de_emphasis_wa)(struct pcie_i2c_ctrl *i2c_ctrl);
 };
 
 enum i2c_client_id {
@@ -871,6 +879,8 @@ struct msm_pcie_dev_t {
 	struct pinctrl *pinctrl;
 	struct pinctrl_state *pins_default;
 	struct pinctrl_state *pins_sleep;
+	bool config_recovery;
+	struct work_struct link_recover_wq;
 
 	struct msm_pcie_drv_info *drv_info;
 	struct work_struct drv_enable_pc_work;
@@ -2961,6 +2971,17 @@ static int msm_pcie_oper_conf(struct pci_bus *bus, u32 devfn, int oper,
 			wr_val, rd_val, *val);
 	}
 
+	if (rd_val == PCIE_LINK_DOWN &&
+	   (readl_relaxed(config_base) == PCIE_LINK_DOWN)) {
+		if (dev->config_recovery) {
+			PCIE_ERR(dev,
+				"RC%d link recovery schedule\n",
+				rc_idx);
+			dev->cfg_access = false;
+			schedule_work(&dev->link_recover_wq);
+		}
+	}
+
 unlock:
 	spin_unlock_irqrestore(&dev->cfg_lock, dev->irqsave_flags);
 out:
@@ -4496,6 +4517,28 @@ static void ntn3_dump_regs(struct pcie_i2c_ctrl *i2c_ctrl)
 	}
 }
 
+static void ntn3_de_emphasis_wa(struct pcie_i2c_ctrl *i2c_ctrl)
+{
+	int i, val;
+	struct msm_pcie_dev_t *pcie_dev = container_of(i2c_ctrl,
+						       struct msm_pcie_dev_t,
+						       i2c_ctrl);
+
+	PCIE_DBG(pcie_dev, "PCIe: RC%d: NTN3 reg update\n", pcie_dev->rc_idx);
+
+	for (i = 0; i < i2c_ctrl->reg_update_count; i++) {
+		i2c_ctrl->client_i2c_write(i2c_ctrl->client, i2c_ctrl->reg_update[i].offset,
+					   i2c_ctrl->reg_update[i].val);
+		/*Read to make sure writes are completed*/
+		i2c_ctrl->client_i2c_read(i2c_ctrl->client, i2c_ctrl->reg_update[i].offset,
+					   &val);
+		PCIE_DBG(pcie_dev, "PCIe: RC%d: NTN3 reg off:0x%x wr_val:0x%x rd_val:0x%x\n",
+			pcie_dev->rc_idx, i2c_ctrl->reg_update[i].offset,
+			i2c_ctrl->reg_update[i].val, val);
+	}
+
+}
+
 static int msm_pcie_enable(struct msm_pcie_dev_t *dev)
 {
 	int ret = 0;
@@ -4608,6 +4651,9 @@ static int msm_pcie_enable(struct msm_pcie_dev_t *dev)
 	usleep_range(dev->perst_delay_us_min, dev->perst_delay_us_max);
 
 	ep_up_timeout = jiffies + usecs_to_jiffies(EP_UP_TIMEOUT_US);
+
+	if (dev->i2c_ctrl.client && dev->i2c_ctrl.client_i2c_de_emphasis_wa)
+		dev->i2c_ctrl.client_i2c_de_emphasis_wa(&dev->i2c_ctrl);
 
 	msm_pcie_config_sid(dev);
 	msm_pcie_config_controller(dev);
@@ -5062,6 +5108,16 @@ static struct pci_dev *find_pci_dev_from_bdf(u16 bdf, int domain)
 		return NULL;
 
 	return pci_get_slot(bus, devfn);
+
+}
+
+static void handle_link_recover(struct work_struct *work)
+{
+	struct msm_pcie_dev_t *dev = container_of(work, struct msm_pcie_dev_t,
+					link_recover_wq);
+	PCIE_DBG(dev, "PCIe: link recover start for RC%d\n", dev->rc_idx);
+
+	msm_pcie_notify_client(dev, MSM_PCIE_EVENT_LINK_RECOVER);
 }
 
 static irqreturn_t handle_aer_irq(int irq, void *data)
@@ -5909,6 +5965,23 @@ static int msm_pcie_i2c_ctrl_init(struct msm_pcie_dev_t *pcie_dev)
 			i2c_ctrl->dump_reg_count = 0;
 	}
 
+	of_get_property(i2c_client_node, "reg_update", &size);
+
+	if (size) {
+		i2c_ctrl->reg_update = devm_kzalloc(dev, size, GFP_KERNEL);
+		if (!i2c_ctrl->reg_update)
+			return -ENOMEM;
+
+		i2c_ctrl->reg_update_count = size / sizeof(*i2c_ctrl->reg_update);
+
+		ret = of_property_read_u32_array(i2c_client_node,
+						"reg_update",
+						(unsigned int *)i2c_ctrl->reg_update,
+						size/sizeof(i2c_ctrl->reg_update->offset));
+		if (ret)
+			i2c_ctrl->reg_update_count = 0;
+	}
+
 	return 0;
 }
 
@@ -6191,6 +6264,15 @@ static int msm_pcie_probe(struct platform_device *pdev)
 		msm_pcie_release_resources(pcie_dev);
 		msm_pcie_gpio_deinit(pcie_dev);
 		goto decrease_rc_num;
+	}
+
+	pcie_dev->config_recovery = of_property_read_bool(of_node,
+					 "qcom,config-recovery");
+	if (pcie_dev->config_recovery) {
+		PCIE_DUMP(pcie_dev,
+			"PCIe RC%d config space recovery enabled\n",
+			pcie_dev->rc_idx);
+		INIT_WORK(&pcie_dev->link_recover_wq, handle_link_recover);
 	}
 
 	pcie_dev->drv_supported = of_property_read_bool(of_node,
@@ -6982,6 +7064,7 @@ static int pcie_i2c_ctrl_probe(struct i2c_client *client,
 		i2c_ctrl->client_i2c_write = ntn3_i2c_write;
 		i2c_ctrl->client_i2c_reset = ntn3_ep_reset_ctrl;
 		i2c_ctrl->client_i2c_dump_regs = ntn3_dump_regs;
+		i2c_ctrl->client_i2c_de_emphasis_wa = ntn3_de_emphasis_wa;
 	} else {
 		dev_err(&client->dev, "invalid client id %d\n", client_id);
 	}
@@ -7174,6 +7257,15 @@ static int msm_pcie_pm_suspend(struct pci_dev *dev,
 	pcie_dev->suspending = true;
 	spin_unlock_irqrestore(&pcie_dev->irq_lock, irqsave_flags);
 
+	if (pcie_dev->config_recovery) {
+		if (work_pending(&pcie_dev->link_recover_wq)) {
+			PCIE_DBG(pcie_dev,
+				"RC%d: cancel link_recover_wq at pm suspend\n",
+				pcie_dev->rc_idx);
+			cancel_work_sync(&pcie_dev->link_recover_wq);
+		}
+	}
+
 	if (!pcie_dev->power_on) {
 		PCIE_DBG(pcie_dev,
 			"PCIe: power of RC%d has been turned off.\n",
@@ -7183,24 +7275,37 @@ static int msm_pcie_pm_suspend(struct pci_dev *dev,
 
 	if (dev) {
 		if (msm_pcie_confirm_linkup(pcie_dev, true, true, dev)) {
+			PCIE_DBG(pcie_dev, "PCIe: RC%d: save config space\n",
+					 pcie_dev->rc_idx);
 			ret = pci_save_state(dev);
 			if (ret) {
 				PCIE_ERR(pcie_dev,
-					 "PCIe: RC%d: fail to save state of RC%d:%d.\n",
+					 "PCIe: RC%d: fail to save state:%d.\n",
 					 pcie_dev->rc_idx, ret);
 				pcie_dev->suspending = false;
 				return ret;
 			}
 
-			pcie_dev->saved_state = pci_store_saved_state(dev);
 		} else {
-			pci_load_and_free_saved_state(dev,
-						      &pcie_dev->saved_state);
-			pcie_dev->saved_state = pcie_dev->default_state;
+			kfree(pcie_dev->saved_state);
+			pcie_dev->saved_state = NULL;
+
 			PCIE_DBG(pcie_dev,
-				 "PCIe: RC%d: saved default config space\n",
+				 "PCIe: RC%d: load default config space\n",
 				 pcie_dev->rc_idx);
+			ret = pci_load_saved_state(dev, pcie_dev->default_state);
+			if (ret) {
+				PCIE_ERR(pcie_dev,
+					 "PCIe: RC%d: fail to load default state:%d.\n",
+					 pcie_dev->rc_idx, ret);
+				pcie_dev->suspending = false;
+				return ret;
+			}
 		}
+
+		PCIE_DBG(pcie_dev, "PCIe: RC%d: store saved state\n",
+							 pcie_dev->rc_idx);
+		pcie_dev->saved_state = pci_store_saved_state(dev);
 	}
 
 	spin_lock_irqsave(&pcie_dev->cfg_lock,
