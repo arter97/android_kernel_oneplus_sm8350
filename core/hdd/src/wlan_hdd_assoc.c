@@ -83,6 +83,7 @@
 #include "wlan_roam_debug.h"
 
 #include "wlan_hdd_twt.h"
+#include "wma_api.h"
 
 /* These are needed to recognize WPA and RSN suite types */
 #define HDD_WPA_OUI_SIZE 4
@@ -2042,6 +2043,14 @@ static QDF_STATUS hdd_dis_connect_handler(struct hdd_adapter *adapter,
 
 	/* Clear saved connection information in HDD */
 	hdd_conn_remove_connect_info(sta_ctx);
+
+	/* Setting the RTS profile to original value */
+	if (sme_cli_set_command(adapter->vdev_id, WMI_VDEV_PARAM_ENABLE_RTSCTS,
+				cfg_get(hdd_ctx->psoc,
+					CFG_ENABLE_FW_RTS_PROFILE),
+				VDEV_CMD))
+		hdd_debug("Failed to set RTS_PROFILE");
+
 	/*
 	* eConnectionState_Connecting state mean that connection is in
 	* progress so no need to set state to eConnectionState_NotConnected
@@ -2654,6 +2663,15 @@ static int hdd_change_sta_state_authenticated(struct hdd_adapter *adapter,
 
 	mac_addr = hddstactx->conn_info.bssid.bytes;
 
+	if (ucfg_ipa_is_enabled() && !hddstactx->conn_info.is_authenticated &&
+	    adapter->device_mode == QDF_STA_MODE &&
+	    hddstactx->conn_info.auth_type != eCSR_AUTH_TYPE_NONE &&
+	    hddstactx->conn_info.auth_type != eCSR_AUTH_TYPE_OPEN_SYSTEM &&
+	    hddstactx->conn_info.auth_type != eCSR_AUTH_TYPE_SHARED_KEY)
+		ucfg_ipa_wlan_evt(adapter->hdd_ctx->pdev, adapter->dev,
+				  adapter->device_mode, adapter->vdev_id,
+				  WLAN_IPA_STA_CONNECT, mac_addr);
+
 	hdd_debug("Changing Peer state to AUTHENTICATED for Sta = "
 		  QDF_MAC_ADDR_FMT, QDF_MAC_ADDR_REF(mac_addr));
 
@@ -2672,15 +2690,6 @@ static int hdd_change_sta_state_authenticated(struct hdd_adapter *adapter,
 					    adapter->vdev_id,
 					    timeout);
 	}
-
-	if (ucfg_ipa_is_enabled() && !hddstactx->conn_info.is_authenticated &&
-	    adapter->device_mode == QDF_STA_MODE &&
-	    hddstactx->conn_info.auth_type != eCSR_AUTH_TYPE_NONE &&
-	    hddstactx->conn_info.auth_type != eCSR_AUTH_TYPE_OPEN_SYSTEM &&
-	    hddstactx->conn_info.auth_type != eCSR_AUTH_TYPE_SHARED_KEY)
-		ucfg_ipa_wlan_evt(adapter->hdd_ctx->pdev, adapter->dev,
-				  adapter->device_mode, adapter->vdev_id,
-				  WLAN_IPA_STA_CONNECT, mac_addr);
 
 	return qdf_status_to_os_return(status);
 }

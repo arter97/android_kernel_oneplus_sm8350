@@ -1676,6 +1676,27 @@ hdd_intersect_igmp_offload_setting(struct wlan_objmgr_psoc *psoc,
 {}
 #endif
 
+#ifdef FEATURE_WLAN_TDLS
+#ifdef WLAN_FEATURE_11AX
+static void hdd_update_fw_tdls_11ax_capability(struct hdd_context *hdd_ctx,
+					       struct wma_tgt_services *cfg)
+{
+	ucfg_tdls_update_fw_11ax_capability(hdd_ctx->psoc,
+					    cfg->en_tdls_11ax_support);
+}
+#else
+static inline
+void hdd_update_fw_tdls_11ax_capability(struct hdd_context *hdd_ctx,
+					struct wma_tgt_services *cfg)
+{}
+#endif
+#else
+static inline
+void hdd_update_fw_tdls_11ax_capability(struct hdd_context *hdd_ctx,
+					struct wma_tgt_services *cfg)
+{}
+#endif
+
 static void hdd_update_tgt_services(struct hdd_context *hdd_ctx,
 				    struct wma_tgt_services *cfg)
 {
@@ -1758,6 +1779,7 @@ static void hdd_update_tgt_services(struct hdd_context *hdd_ctx,
 					cfg->ll_stats_per_chan_rx_tx_time;
 
 	hdd_update_feature_cfg_club_get_sta_in_ll_stats_req(hdd_ctx, cfg);
+	hdd_update_fw_tdls_11ax_capability(hdd_ctx, cfg);
 }
 
 /**
@@ -6330,6 +6352,16 @@ static int hdd_send_coex_config_params(struct hdd_context *hdd_ctx,
 	coex_cfg_params.config_type =
 				WMI_COEX_CONFIG_BT_SCO_ALLOW_WLAN_2G_SCAN;
 	coex_cfg_params.config_arg1 = config.bt_sco_allow_wlan_2g_scan;
+
+	status = sme_send_coex_config_cmd(&coex_cfg_params);
+	if (QDF_IS_STATUS_ERROR(status)) {
+		hdd_err("Failed to send coex BLE scan policy");
+		goto err;
+	}
+
+	coex_cfg_params.config_type =
+				WMI_COEX_CONFIG_LE_SCAN_POLICY;
+	coex_cfg_params.config_arg1 = config.ble_scan_coex_policy;
 
 	status = sme_send_coex_config_cmd(&coex_cfg_params);
 	if (QDF_IS_STATUS_ERROR(status)) {
@@ -12545,6 +12577,8 @@ struct hdd_context *hdd_context_create(struct device *dev)
 	if (QDF_IS_STATUS_ERROR(status)) {
 		hdd_err("Failed to parse cfg %s; status:%d\n",
 			WLAN_INI_FILE, status);
+		/* Assert if failed to parse at least one INI parameter */
+		QDF_BUG(status != QDF_STATUS_E_INVAL);
 		ret = qdf_status_to_os_return(status);
 		goto err_free_config;
 	}
@@ -15907,12 +15941,17 @@ void hdd_bus_bw_compute_timer_try_start(struct hdd_context *hdd_ctx)
 
 static void __hdd_bus_bw_compute_timer_stop(struct hdd_context *hdd_ctx)
 {
+	bool is_any_adapter_conn = hdd_is_any_adapter_connected(hdd_ctx);
+
 	if (!qdf_periodic_work_stop_sync(&hdd_ctx->bus_bw_work))
 		goto exit;
 
 	ucfg_ipa_set_perf_level(hdd_ctx->pdev, 0, 0);
 	hdd_reset_tcp_delack(hdd_ctx);
-	hdd_reset_tcp_adv_win_scale(hdd_ctx);
+
+	if (!is_any_adapter_conn)
+		hdd_reset_tcp_adv_win_scale(hdd_ctx);
+
 	cdp_pdev_reset_driver_del_ack(cds_get_context(QDF_MODULE_ID_SOC),
 				      OL_TXRX_PDEV_ID);
 	cdp_pdev_reset_bundle_require_flag(cds_get_context(QDF_MODULE_ID_SOC),
@@ -15924,7 +15963,7 @@ exit:
 	 * stopped. We should remove the bus bw voting, if no adapter is
 	 * connected
 	 */
-	if (!hdd_is_any_adapter_connected(hdd_ctx)) {
+	if (!is_any_adapter_conn) {
 		qdf_atomic_set(&hdd_ctx->num_latency_critical_clients, 0);
 		hdd_ctx->cur_vote_level = PLD_BUS_WIDTH_NONE;
 		pld_request_bus_bandwidth(hdd_ctx->parent_dev,

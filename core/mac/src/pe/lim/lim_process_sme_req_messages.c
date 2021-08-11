@@ -1082,6 +1082,18 @@ static QDF_STATUS lim_send_join_req(struct pe_session *session,
 {
 	QDF_STATUS status;
 
+	/* Continue connect only if Vdev is in INIT state */
+	status = wlan_vdev_mlme_is_init_state(session->vdev);
+	if (QDF_IS_STATUS_ERROR(status)) {
+		pe_err("Vdev %d not in int state cur state %d substate %d",
+			session->vdev_id,
+			wlan_vdev_mlme_get_state(session->vdev),
+			wlan_vdev_mlme_get_substate(session->vdev));
+		qdf_trigger_self_recovery(session->mac_ctx->psoc,
+					  QDF_VDEV_SM_OUT_OF_SYNC);
+		return status;
+	}
+
 	status = mlme_set_assoc_type(session->vdev, VDEV_ASSOC);
 	if (QDF_IS_STATUS_ERROR(status))
 		return status;
@@ -1275,6 +1287,9 @@ __lim_process_sme_join_req(struct mac_context *mac_ctx, void *msg_buf)
 				session_id,
 				QDF_MAC_ADDR_REF(bss_desc->bssId),
 				session->limSmeState);
+
+			qdf_trigger_self_recovery(mac_ctx->psoc,
+						  QDF_VDEV_SM_OUT_OF_SYNC);
 
 			if (session->limSmeState == eLIM_SME_LINK_EST_STATE &&
 			    session->smeSessionId == sme_join_req->vdev_id) {
