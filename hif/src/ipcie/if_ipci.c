@@ -373,6 +373,22 @@ fail:
 
 int hif_ipci_bus_suspend_noirq(struct hif_softc *scn)
 {
+	/*
+	 * If it is system suspend case and wake-IRQ received
+	 * just before Kernel issuing suspend_noirq, that must
+	 * have scheduled CE2 tasklet, so suspend activity can
+	 * be aborted.
+	 * Similar scenario for runtime suspend case, would be
+	 * handled by hif_pm_runtime_check_and_request_resume
+	 * in hif_ce_interrupt_handler.
+	 *
+	 */
+	if (!hif_pm_runtime_get_monitor_wake_intr(GET_HIF_OPAQUE_HDL(scn)) &&
+	    hif_get_num_active_tasklets(scn)) {
+		hif_err("Tasklets are pending, abort sys suspend_noirq");
+		return -EBUSY;
+	}
+
 	return 0;
 }
 
@@ -882,16 +898,24 @@ int hif_prevent_link_low_power_states(struct hif_opaque_softc *hif)
 {
 	struct hif_softc *scn = HIF_GET_SOFTC(hif);
 	struct hif_ipci_softc *ipci_scn = HIF_GET_IPCI_SOFTC(scn);
-	uint32_t timeout = 0;
+	uint32_t start_time = 0, curr_time = 0;
+	uint32_t count = 0;
 
 	if (pld_is_pci_ep_awake(scn->qdf_dev->dev) == -ENOTSUPP)
 		return 0;
 
+	start_time = curr_time = qdf_system_ticks_to_msecs(qdf_system_ticks());
 	while (pld_is_pci_ep_awake(scn->qdf_dev->dev) &&
-	       timeout <= EP_WAKE_RESET_DELAY_TIMEOUT_US) {
-		qdf_sleep_us(EP_WAKE_RESET_DELAY_US);
-		timeout += EP_WAKE_RESET_DELAY_US;
+	       curr_time <= start_time + EP_WAKE_RESET_DELAY_TIMEOUT_MS) {
+		if (count < EP_VOTE_POLL_TIME_CNT) {
+			qdf_udelay(EP_VOTE_POLL_TIME_US);
+			count++;
+		} else {
+			qdf_sleep_us(EP_WAKE_RESET_DELAY_US);
+		}
+		curr_time = qdf_system_ticks_to_msecs(qdf_system_ticks());
 	}
+
 
 	if (pld_is_pci_ep_awake(scn->qdf_dev->dev)) {
 		hif_err_rl(" EP state reset is not done to prevent l1");
@@ -905,12 +929,19 @@ int hif_prevent_link_low_power_states(struct hif_opaque_softc *hif)
 		return 0;
 	}
 
+	count = 0;
 	ipci_scn->prevent_l1 = true;
-	timeout = 0;
+	start_time = curr_time = qdf_system_ticks_to_msecs(qdf_system_ticks());
 	while (!pld_is_pci_ep_awake(scn->qdf_dev->dev) &&
-	       timeout <= EP_WAKE_DELAY_TIMEOUT_US) {
-		qdf_sleep_us(EP_WAKE_DELAY_US);
-		timeout += EP_WAKE_DELAY_US;
+	       curr_time <= start_time + EP_WAKE_DELAY_TIMEOUT_MS) {
+		if (count < EP_VOTE_POLL_TIME_CNT) {
+			qdf_udelay(EP_WAKE_RESET_DELAY_US);
+			count++;
+		} else {
+			qdf_sleep_us(EP_WAKE_DELAY_US);
+		}
+
+		curr_time = qdf_system_ticks_to_msecs(qdf_system_ticks());
 	}
 
 	if (pld_is_pci_ep_awake(scn->qdf_dev->dev) <= 0) {
