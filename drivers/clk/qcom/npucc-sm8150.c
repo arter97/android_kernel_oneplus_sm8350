@@ -621,7 +621,7 @@ static int npu_cc_sm8150_fixup(struct platform_device *pdev,
 	return 0;
 }
 
-struct regulator *vdd_gdsc;
+static struct regulator *vdd_gdsc;
 
 static int enable_npu_crc(struct regmap *regmap)
 {
