@@ -28,7 +28,7 @@ struct event {
 #define	SEB_MSG_SIZE			0x08
 #define	TIMEOUT_MS				2000
 #define	TIMEOUT_MS_GLINK_OPEN			10000
-#define	SEB_SLATEWEAR_SUBSYS "slatefw"
+#define	SEB_SLATE_SUBSYS "slatefw"
 #define	HED_EVENT_DATA_TIME_LEN 0x04
 
 enum seb_state {
@@ -531,7 +531,7 @@ static int slate_ssr_register(struct seb_priv *dev)
 
 	nb = &ssr_slate_nb;
 	dev->slate_subsys_handle =
-			subsys_notif_register_notifier(SEB_SLATEWEAR_SUBSYS, nb);
+			subsys_notif_register_notifier(SEB_SLATE_SUBSYS, nb);
 
 	if (!dev->slate_subsys_handle) {
 		dev->slate_subsys_handle = NULL;
@@ -602,7 +602,7 @@ static int seb_probe(struct platform_device *pdev)
 	}
 	dev->input = input;
 
-	/* register device for slate-wear ssr */
+	/* register device for slate ssr */
 	rc = slate_ssr_register(dev);
 	if (rc) {
 		pr_err("Failed to register for slate ssr\n");
