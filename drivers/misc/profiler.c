@@ -46,14 +46,18 @@ static int bw_profiling_command(const void *req)
 	size_t req_size = 0, rsp_size = 0;
 	struct qtee_shm bw_shm = {0};
 
+	if (!req) {
+		pr_err("Invalid request buffer pointer\n");
+		return -EINVAL;
+	}
 	rsp = &((struct tz_bw_svc_buf *)req)->bwresp;
+	if (!rsp) {
+		pr_err("Invalid response buffer pointer\n");
+		return -EINVAL;
+	}
 	rsp_size = sizeof(struct tz_bw_svc_resp);
 	req_size = ((struct tz_bw_svc_buf *)req)->req_size;
 
-	if (!req || !rsp) {
-		pr_err("Invalid buffer pointer\n");
-		return -EINVAL;
-	}
 	qseos_cmd_id = *(uint32_t *)req;
 
 	ret = qtee_shmbridge_allocate_shm(PAGE_ALIGN(req_size + rsp_size), &bw_shm);
