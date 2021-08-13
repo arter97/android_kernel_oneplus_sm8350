@@ -84,6 +84,10 @@ static struct ion_buffer *ion_buffer_create(struct ion_heap *heap,
 	INIT_LIST_HEAD(&buffer->attachments);
 	mutex_init(&buffer->lock);
 	track_buffer_created(buffer);
+#ifdef CONFIG_DEBUG_ION_TRACK_HEAP_MEM
+	atomic_long_add(len, &heap->total_allocated);
+#endif
+
 	return buffer;
 
 err1:
@@ -242,7 +246,9 @@ int ion_buffer_destroy(struct ion_device *dev, struct ion_buffer *buffer)
 
 	heap = buffer->heap;
 	track_buffer_destroyed(buffer);
-
+#ifdef CONFIG_DEBUG_ION_TRACK_HEAP_MEM
+	atomic_long_sub(buffer->size, &heap->total_allocated);
+#endif
 	if (heap->flags & ION_HEAP_FLAG_DEFER_FREE)
 		ion_heap_freelist_add(heap, buffer);
 	else

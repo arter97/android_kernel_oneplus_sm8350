@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2019, 2021, The Linux Foundation. All rights reserved.
  */
 
 #ifndef _ION_KERNEL_H
@@ -142,6 +142,9 @@ struct ion_heap {
 
 	/* heap's debugfs root */
 	struct dentry *debugfs_dir;
+#ifdef CONFIG_DEBUG_ION_TRACK_HEAP_MEM
+	atomic_long_t total_allocated;
+#endif
 };
 
 #define ion_device_add_heap(heap) __ion_device_add_heap(heap, THIS_MODULE)
