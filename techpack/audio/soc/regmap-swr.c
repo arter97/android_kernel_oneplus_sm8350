@@ -9,8 +9,8 @@
 #include <linux/regmap.h>
 #include <linux/module.h>
 #include <linux/init.h>
-#include <soc/soundwire.h>
-#include <soc/internal.h>
+#include "soc/soundwire.h"
+#include "soc/internal.h"
 
 
 static int regmap_swr_gather_write(void *context,
