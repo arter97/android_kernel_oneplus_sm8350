@@ -5762,7 +5762,7 @@ bail:
 static int fastrpc_internal_control(struct fastrpc_file *fl,
 					struct fastrpc_ioctl_control *cp)
 {
-	int err = 0;
+	int err = 0, ret_val = 0;
 	unsigned int latency;
 	struct fastrpc_apps *me = &gfa;
 	u32 silver_core_count = me->silvercores.corecount, ii = 0, cpu;
@@ -5795,24 +5795,25 @@ static int fastrpc_internal_control(struct fastrpc_file *fl,
 		for (ii = 0; ii < silver_core_count; ii++) {
 			cpu = me->silvercores.coreno[ii];
 			if (!fl->qos_request) {
-				err = dev_pm_qos_add_request(
+				ret_val = dev_pm_qos_add_request(
 						get_cpu_device(cpu),
 						&fl->dev_pm_qos_req[ii],
 						DEV_PM_QOS_RESUME_LATENCY,
 						latency);
 			} else {
-				err = dev_pm_qos_update_request(
+				ret_val = dev_pm_qos_update_request(
 						&fl->dev_pm_qos_req[ii],
 						latency);
 			}
-			if (err < 0) {
-				pr_warn("adsprpc: %s: %s: PM voting for cpu:%d failed, err %d, QoS update %d\n",
+			if (ret_val < 0) {
+				pr_warn("adsprpc: %s: %s: PM voting for cpu:%d failed, ret_val %d, QoS update %d\n",
 					current->comm, __func__, cpu,
-					err, fl->qos_request);
+					ret_val, fl->qos_request);
+				err = ret_val;
 				break;
 			}
 		}
-		if (err >= 0)
+		if (ret_val >= 0)
 			fl->qos_request = 1;
 
 		/* Ensure CPU feature map updated to DSP for early WakeUp */
