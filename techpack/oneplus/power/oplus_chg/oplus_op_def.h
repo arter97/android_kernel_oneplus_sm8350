@@ -48,7 +48,7 @@ enum oplus_aging_type {
 
 static int is_aging_test = AGING_TEST_STATUS_DEFAULT;
 
-int __attribute__((weak)) get_eng_version()
+int __attribute__((weak)) get_eng_version(void)
 {
 	return is_aging_test;
 }
