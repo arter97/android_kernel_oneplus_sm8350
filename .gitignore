@@ -63,6 +63,13 @@ modules.order
 /Module.markers
 /modules.builtin.modinfo
 
+/*.img
+/*.zip
+/kernelzip
+
+# ramfs
+!/ramdisk/**
+
 #
 # RPM spec file (make rpm-pkg)
 #
