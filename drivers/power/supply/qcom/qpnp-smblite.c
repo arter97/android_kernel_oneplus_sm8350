@@ -181,13 +181,20 @@ static struct attribute *smblite_attrs[] = {
 };
 ATTRIBUTE_GROUPS(smblite);
 
+#define REVISION_V2	0x2
 static int smblite_chg_config_init(struct smblite *chip)
 {
 	struct smb_charger *chg = &chip->chg;
-	u8 val;
+	u8 val, rev4;
 	int rc = 0;
 
 	chg->subtype = (u8)of_device_get_match_data(chg->dev);
+
+	rc = smblite_lib_read(chg, REVID_REVISION4, &rev4);
+	if (rc < 0) {
+		pr_err("Couldn't read REVID_REVISION4 reg rc=%d\n", rc);
+		return rc;
+	}
 
 	switch (chg->subtype) {
 	case PM2250:
@@ -211,6 +218,11 @@ static int smblite_chg_config_init(struct smblite *chip)
 		chg->name = "PM5100_charger";
 		chg->connector_type = QTI_POWER_SUPPLY_CONNECTOR_MICRO_USB;
 		chg->use_extcon = true;
+
+		/* Enable HW WA for all PM5100 v1 targets. */
+		if (rev4 < REVISION_V2)
+			chg->wa_flags |= HDC_ICL_REDUCTION_WA;
+
 		break;
 	default:
 		pr_err("Unsupported PMIC subtype=%d\n", chg->subtype);

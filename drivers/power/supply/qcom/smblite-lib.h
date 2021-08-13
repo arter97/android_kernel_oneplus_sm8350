@@ -97,6 +97,7 @@ enum {
 	BOOST_BACK_WA			= BIT(0),
 	WEAK_ADAPTER_WA			= BIT(1),
 	FLASH_DIE_TEMP_DERATE_WA	= BIT(2),
+	HDC_ICL_REDUCTION_WA		= BIT(3),
 };
 
 enum jeita_cfg_stat {
