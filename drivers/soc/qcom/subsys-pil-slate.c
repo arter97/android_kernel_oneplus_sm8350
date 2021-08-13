@@ -538,6 +538,7 @@ static int slate_ramdump(int enable, const struct subsys_desc *subsys)
 
 	do_ramdump(slate_data->ramdump_dev, ramdump_segments, 1);
 	kfree(ramdump_segments);
+	qtee_shmbridge_deregister(shm_bridge_handle);
 	dma_free_attrs(desc.dev, SLATE_RAMDUMP_SZ, region,
 		       start_addr, desc.attrs);
 	return 0;
