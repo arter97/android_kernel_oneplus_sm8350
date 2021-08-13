@@ -94,16 +94,6 @@ static int __init init_device_info(void)
 	write_device_info("socinfo serial_number", oem_serialno);
 	*/
 
-	write_device_info("SMBIP", SMBIP);
-	write_device_info("RELEASE", RELEASE);
-	write_device_info("WINDOWS_RELEASE", WINDOWS_RELEASE);
-	write_device_info("CURRENT_OUT_DIRECTORY", CURRENT_OUT_DIRECTORY);
-	write_device_info("IMG_FULL_NAME", IMG_FULL_NAME);
-	write_device_info("VERSION_OUT_DIR", VERSION_OUT_DIR);
-	write_device_info("VERSION_OUT_DIR_FULL_NAME", VERSION_OUT_DIR_FULL_NAME);
-	write_device_info("VERSION_OUT_COMPILE", VERSION_OUT_COMPILE);
-	write_device_info("VERSION_OUT_ELF", VERSION_OUT_ELF);
-
 	write_device_info("kernel version", linux_banner);
 	write_device_info("boot command", saved_command_line);
 
