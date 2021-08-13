@@ -13,7 +13,7 @@
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM dfc
 #undef TRACE_INCLUDE_PATH
-#define TRACE_INCLUDE_PATH .
+#define TRACE_INCLUDE_PATH ../techpack/datarmnet/core
 #define TRACE_INCLUDE_FILE dfc
 
 #if !defined(_TRACE_DFC_H) || defined(TRACE_HEADER_MULTI_READ)

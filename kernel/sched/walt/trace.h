@@ -663,7 +663,7 @@ TRACE_EVENT(walt_window_rollover,
 #endif /* _TRACE_WALT_H */
 
 #undef TRACE_INCLUDE_PATH
-#define TRACE_INCLUDE_PATH .
+#define TRACE_INCLUDE_PATH ../kernel/sched/walt
 #define TRACE_INCLUDE_FILE trace
 
 #include <trace/define_trace.h>

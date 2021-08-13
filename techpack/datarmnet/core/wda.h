@@ -5,7 +5,7 @@
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM wda
 #undef TRACE_INCLUDE_PATH
-#define TRACE_INCLUDE_PATH .
+#define TRACE_INCLUDE_PATH ../techpack/datarmnet/core
 #define TRACE_INCLUDE_FILE wda
 
 #if !defined(_TRACE_WDA_H) || defined(TRACE_HEADER_MULTI_READ)
