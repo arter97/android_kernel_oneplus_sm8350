@@ -27,7 +27,7 @@ static struct component_info component_info_desc[COMPONENT_MAX];
 static struct kobject *project_info_kobj;
 static struct project_info *project_info_desc;
 
-int a_board_val = 0;
+extern int a_board_val;
 static struct kobject *component_info;
 static ssize_t project_info_get(struct kobject *kobj,
     struct kobj_attribute *attr, char *buf);

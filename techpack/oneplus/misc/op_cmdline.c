@@ -42,14 +42,7 @@ static char backlight_manufacture[32] = {0};
 static char lcd_version[32] = {0};
 static char backlight_version[32] = {0};
 
-char *enum_ftm_mode[] = {"normal",
-						 "fastboot",
-						 "recovery",
-						 "aging",
-						 "ftm_at",
-						 "ftm_rf",
-						 "charger"
-};
+extern char *enum_ftm_mode[];
 
 /**
  * exported functions
