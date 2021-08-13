@@ -1,0 +1,8 @@
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<factory_test_config_list>
+<factory_test_config>
+<boolean name="ddrAgingTestSwitch" value="true" />
+<boolean name="flashAgingTestSwitch" value="true" />
+<boolean name="sblAgingTestSwitch" value="true" />
+</factory_test_config>
+</factory_test_config_list>

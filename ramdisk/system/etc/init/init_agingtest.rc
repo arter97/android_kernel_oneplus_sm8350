@@ -1,0 +1,35 @@
+on early-init
+    mount debugfs debugfs /sys/kernel/debug
+
+service dramaging /system/bin/dramaging
+    disabled
+    oneshot
+    seclabel u:r:recovery:s0
+
+service flashaging /system/bin/flashaging
+    disabled
+    oneshot
+    seclabel u:r:recovery:s0
+
+service sbltest /system/bin/sbltestreport
+    disabled
+    oneshot
+    seclabel u:r:recovery:s0
+
+service vndservicemanager /system/bin/vndservicemanager /dev/vndbinder
+    disabled
+    writepid /dev/cpuset/system-background/tasks
+    seclabel u:r:recovery:s0
+
+service servicemanager /system/bin/servicemanager
+    disabled
+    seclabel u:r:recovery:s0
+
+on property:ro.oneplus.aging_daemon.started=1
+   write sys/module/defrag/parameters/disable 1
+   write /sys/class/power_supply/battery/mmi_charging_enable 1
+   write /sys/class/power_supply/battery/mmi_charging_enable 0
+   start dramaging
+   start flashaging
+   start sbltest
+
