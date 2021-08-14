@@ -4154,8 +4154,8 @@ void reg_dmav2_setup_dspp_igcv4(struct sde_hw_dspp *ctx, void *cfg)
 
 	reg = BIT(8);
 	dsi_display = get_main_display();
-	if((!strcmp(dsi_display->panel->name, "samsung amb655x fhd cmd mode dsc dsi panel")) ||
-	  (!strcmp(dsi_display->panel->name, "samsung amb670yf01 dsc cmd mode panel") && op_dither_enable)){
+	if((dsi_panel_name == DSI_PANEL_SAMSUNG_AMB655XL) ||
+	  (dsi_panel_name == DSI_PANEL_SAMSUNG_AMB670YF01 && op_dither_enable)){
 		lut_cfg->strength = 4;
 		reg |= BIT(4);
 		reg |= (lut_cfg->strength & IGC_DITHER_DATA_MASK);

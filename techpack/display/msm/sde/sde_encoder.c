@@ -86,9 +86,7 @@
 /* Maximum number of VSYNC wait attempts for RSC state transition */
 #define MAX_RSC_WAIT	5
 
-#define DSI_PANEL_SAMSUNG_S6E3HC2 0
-#define DSI_PANEL_SAMSUNG_S6E3FC2X01 1
-extern char dsi_panel_name;
+#include "op_panel.h"
 
 /**
  * enum sde_enc_rc_events - events for resource control state machine
@@ -2705,7 +2703,7 @@ static void _sde_encoder_setup_dither(struct sde_encoder_phys *phys)
 		if(hw_pp) {
 			dsi_display = get_main_display();
 			  if (len == sizeof(dither) &&
-					strcmp(dsi_display->panel->name, "samsung amb655x fhd cmd mode dsc dsi panel") == 0) {
+					dsi_panel_name == DSI_PANEL_SAMSUNG_AMB655XL) {
 				 memcpy(&dither, dither_cfg, len);
 				 dither.c0_bitdepth = 6;
 				 dither.c1_bitdepth = 6;
@@ -4137,7 +4135,7 @@ int sde_encoder_prepare_for_kickoff(struct drm_encoder *drm_enc,
 	SDE_DEBUG_ENC(sde_enc, "\n");
 	SDE_EVT32(DRMID(drm_enc));
 
-	if (sde_enc->cur_master  && (!strcmp(sde_enc->cur_master->connector->name, "DSI-1")))
+	if (sde_enc->cur_master  && (likely(!strcmp(sde_enc->cur_master->connector->name, "DSI-1"))))
 		sde_connector_update_backlight(sde_enc->cur_master->connector);
 
 	is_cmd_mode = sde_encoder_check_curr_mode(drm_enc,

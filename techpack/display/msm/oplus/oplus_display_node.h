@@ -33,14 +33,7 @@
 #include "oplus_adfr.h"
 #endif
 
-#define DSI_PANEL_SAMSUNG_S6E3HC2 0
-#define DSI_PANEL_SAMSUNG_S6E3FC2X01 1
-#define DSI_PANEL_SAMSUNG_SOFEF03F_M 2
-#define DSI_PANEL_SAMSUNG_ANA6705 3
-#define DSI_PANEL_SAMSUNG_ANA6706 4
-#define DSI_PANEL_SAMSUNG_AMB655XL 5
-#define DSI_PANEL_SAMSUNG_AMB655XL08 6
-#define DSI_PANEL_SAMSUNG_AMB670YF01 7
+#include "op_panel.h"
 
 enum {
 	/* panel:lcd doze mode */
@@ -58,8 +51,6 @@ enum {
 	DRM_PANEL_DYNAMICFPS_90 = 90,
 };
 
-
-extern char dsi_panel_name;
 extern int reg_read_len;
 
 extern int oneplus_get_panel_brightness_to_alpha(void);

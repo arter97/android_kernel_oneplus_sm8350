@@ -349,7 +349,7 @@ int dsi_panel_set_native_loading_effect_mode_nolock(struct dsi_panel *panel, int
 	}
 
 	if (level == 0) {
-		if ((strcmp(panel->name, "samsung amb670yf01 dsc cmd mode panel") == 0)
+		if ((dsi_panel_name == DSI_PANEL_SAMSUNG_AMB670YF01)
 			&& ((panel->panel_stage_info <= 0x06) || (panel->panel_stage_info == 0x15))) {
 			rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_LOADING_EFFECT_OFF_O);
 			if (rc) {
@@ -368,7 +368,7 @@ int dsi_panel_set_native_loading_effect_mode_nolock(struct dsi_panel *panel, int
 			}
 		}
 	} else if (level == 1) {
-		if ((strcmp(panel->name, "samsung amb670yf01 dsc cmd mode panel") == 0)
+		if ((dsi_panel_name == DSI_PANEL_SAMSUNG_AMB670YF01)
 			&& ((panel->panel_stage_info <= 0x06) || (panel->panel_stage_info == 0x15))) {
 			rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_LOADING_EFFECT_ON_1_O);
 			if (rc) {
@@ -387,7 +387,7 @@ int dsi_panel_set_native_loading_effect_mode_nolock(struct dsi_panel *panel, int
 			}
 		}
 	} else if (level == 2) {
-		if ((strcmp(panel->name, "samsung amb670yf01 dsc cmd mode panel") == 0)
+		if ((dsi_panel_name == DSI_PANEL_SAMSUNG_AMB670YF01)
 			&& ((panel->panel_stage_info <= 0x06) || (panel->panel_stage_info == 0x15))) {
 			rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_LOADING_EFFECT_ON_2_O);
 			if (rc) {
@@ -435,7 +435,7 @@ int dsi_panel_send_opec_command(struct dsi_panel *panel)
 		return -EINVAL;
 	}
 
-	if (strcmp(panel->name, "samsung amb670yf01 dsc cmd mode panel") == 0) {
+	if (dsi_panel_name == DSI_PANEL_SAMSUNG_AMB670YF01) {
 		if (panel->panel_stage_info == 0x07 || panel->panel_stage_info == 0x08) {
 			rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_OPEC_COMMAND_O);
 			if (rc) {
@@ -689,7 +689,7 @@ int dsi_display_get_ddic_check_info(struct drm_connector *connector)
 
 	switch (dsi_display->panel->ddic_y) {
 	case 2:
-		if((strcmp(dsi_display->panel->name, "samsung ana6705 fhd cmd mode dsc dsi panel") == 0) &&
+		if((dsi_panel_name == DSI_PANEL_SAMSUNG_ANA6705) &&
 		(ddic_x > 115) && (ddic_x < 186)) {
 			dsi_display->panel->ddic_check_info = 1;
 		} else
@@ -697,10 +697,10 @@ int dsi_display_get_ddic_check_info(struct drm_connector *connector)
 		break;
 
 	case 3:
-		if((strcmp(dsi_display->panel->name, "samsung ana6705 fhd cmd mode dsc dsi panel") == 0) &&
+		if((dsi_panel_name == DSI_PANEL_SAMSUNG_ANA6705) &&
 		(ddic_x > 56) && (ddic_x < 245)) {
 			dsi_display->panel->ddic_check_info = 1;
-		} else if(strcmp(dsi_display->panel->name, "samsung ana6706 dsc cmd mode panel") == 0) {
+		} else if(dsi_panel_name == DSI_PANEL_SAMSUNG_ANA6706) {
 			if((panel_tool == 0) && (ddic_x > 54) && (ddic_x < 140))
 				dsi_display->panel->ddic_check_info = 1;
 			if(((panel_tool == 1) || (panel_tool == 2)) && (ddic_x > 32) && (ddic_x < 154))
@@ -710,10 +710,10 @@ int dsi_display_get_ddic_check_info(struct drm_connector *connector)
 		break;
 
 	case 4:
-		if((strcmp(dsi_display->panel->name, "samsung ana6705 fhd cmd mode dsc dsi panel") == 0) &&
+		if((dsi_panel_name == DSI_PANEL_SAMSUNG_ANA6705) &&
 		(ddic_x > 40) && (ddic_x < 261)) {
 			dsi_display->panel->ddic_check_info = 1;
-		} else if(strcmp(dsi_display->panel->name, "samsung ana6706 dsc cmd mode panel") == 0) {
+		} else if(dsi_panel_name == DSI_PANEL_SAMSUNG_ANA6706) {
 			if((panel_tool == 0) && (ddic_x > 46) && (ddic_x < 140))
 				dsi_display->panel->ddic_check_info = 1;
 			if(((panel_tool == 1) || (panel_tool == 2)) && (ddic_x > 24) && (ddic_x < 162))
@@ -723,10 +723,10 @@ int dsi_display_get_ddic_check_info(struct drm_connector *connector)
 		break;
 
 	case 5:
-		if((strcmp(dsi_display->panel->name, "samsung ana6705 fhd cmd mode dsc dsi panel") == 0) &&
+		if((dsi_panel_name == DSI_PANEL_SAMSUNG_ANA6705) &&
 		(ddic_x > 33) && (ddic_x < 268)) {
 			dsi_display->panel->ddic_check_info = 1;
-		} else if(strcmp(dsi_display->panel->name, "samsung ana6706 dsc cmd mode panel") == 0) {
+		} else if(dsi_panel_name == DSI_PANEL_SAMSUNG_ANA6706) {
 			if((panel_tool == 0) && (ddic_x > 46) && (ddic_x < 140))
 				dsi_display->panel->ddic_check_info = 1;
 			if(((panel_tool == 1) || (panel_tool == 2)) && (ddic_x > 23) && (ddic_x < 163))
@@ -736,10 +736,10 @@ int dsi_display_get_ddic_check_info(struct drm_connector *connector)
 		break;
 
 	case 6:
-		if((strcmp(dsi_display->panel->name, "samsung ana6705 fhd cmd mode dsc dsi panel") == 0) &&
+		if((dsi_panel_name == DSI_PANEL_SAMSUNG_ANA6705) &&
 		(ddic_x > 41) && (ddic_x < 261)) {
 			dsi_display->panel->ddic_check_info = 1;
-		} else if(strcmp(dsi_display->panel->name, "samsung ana6706 dsc cmd mode panel") == 0) {
+		} else if(dsi_panel_name == DSI_PANEL_SAMSUNG_ANA6706) {
 			if((panel_tool == 0) && (ddic_x > 54) && (ddic_x < 132))
 				dsi_display->panel->ddic_check_info = 1;
 			if(((panel_tool == 1) || (panel_tool == 2)) && (ddic_x > 30) && (ddic_x < 156))
@@ -749,10 +749,10 @@ int dsi_display_get_ddic_check_info(struct drm_connector *connector)
 		break;
 
 	case 7:
-		if((strcmp(dsi_display->panel->name, "samsung ana6705 fhd cmd mode dsc dsi panel") == 0) &&
+		if((dsi_panel_name == DSI_PANEL_SAMSUNG_ANA6705) &&
 		(ddic_x > 57) && (ddic_x < 245)) {
 			dsi_display->panel->ddic_check_info = 1;
-		} else if(strcmp(dsi_display->panel->name, "samsung ana6706 dsc cmd mode panel") == 0) {
+		} else if(dsi_panel_name == DSI_PANEL_SAMSUNG_ANA6706) {
 			if(((panel_tool == 1) || (panel_tool == 2)) && (ddic_x > 45) && (ddic_x < 141))
 				dsi_display->panel->ddic_check_info = 1;
 		} else
@@ -760,7 +760,7 @@ int dsi_display_get_ddic_check_info(struct drm_connector *connector)
 		break;
 
 	case 8:
-		if((strcmp(dsi_display->panel->name, "samsung ana6705 fhd cmd mode dsc dsi panel") == 0) &&
+		if((dsi_panel_name == DSI_PANEL_SAMSUNG_ANA6705) &&
 		(ddic_x > 119) && (ddic_x < 183)) {
 			dsi_display->panel->ddic_check_info = 1;
 		} else
@@ -814,13 +814,13 @@ int dsi_display_read_serial_number(struct dsi_display *dsi_display,
 		}
 	}
 
-	if(strcmp(panel->name, "samsung ana6706 dsc cmd mode panel") == 0) {
+	if(dsi_panel_name == DSI_PANEL_SAMSUNG_ANA6706) {
 		dsi_display_read_panel_reg(dsi_display, 0xFA, &panel_ic_v, 1);
 		panel->panel_ic_v = panel_ic_v & 0x0f;
 	}
 
-	if ((strcmp(panel->name, "samsung ana6705 fhd cmd mode dsc dsi panel") == 0)
-		|| (strcmp(panel->name, "samsung ana6706 dsc cmd mode panel") == 0)) {
+	if ((dsi_panel_name == DSI_PANEL_SAMSUNG_ANA6705)
+		|| (dsi_panel_name == DSI_PANEL_SAMSUNG_ANA6706)) {
 		dsi_display_read_panel_reg(dsi_display, 0xD6, register_d6, 10);
 
 		memcpy(panel->buf_select, register_d6, 10);

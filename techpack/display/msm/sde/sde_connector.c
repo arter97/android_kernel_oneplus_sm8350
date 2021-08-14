@@ -767,7 +767,6 @@ extern bool finger_type;
 
 extern int op_dimlayer_bl;
 extern int op_dimlayer_bl_enabled;
-extern char dsi_panel_name;
 extern u32 mode_fps;
 int sde_connector_update_backlight(struct drm_connector *connector)
 {

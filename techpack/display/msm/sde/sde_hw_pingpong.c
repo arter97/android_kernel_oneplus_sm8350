@@ -372,7 +372,7 @@ static int sde_hw_pp_setup_dither(struct sde_hw_pingpong *pp,
 	}
 	if(panel_dither_enable) {
 		dsi_display = get_main_display();
-		if(strcmp(dsi_display->panel->name, "samsung amb655x fhd cmd mode dsc dsi panel") == 0) {
+		if(dsi_panel_name == DSI_PANEL_SAMSUNG_AMB655XL) {
 			SDE_REG_WRITE(c, base, 0x11);
 		}
 		else{

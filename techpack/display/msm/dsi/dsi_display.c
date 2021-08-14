@@ -81,7 +81,7 @@ static const struct of_device_id dsi_display_dt_match[] = {
 
 static int esd_black_count;
 static int esd_greenish_count;
-static struct dsi_display *primary_display;
+static struct dsi_display *primary_display = NULL;
 static char reg_read_value[128] = {0};
 int reg_read_len = 1;
 EXPORT_SYMBOL(reg_read_len);
@@ -316,11 +316,11 @@ int dsi_display_set_backlight(struct drm_connector *connector,
 error:
 	mutex_unlock(&panel->panel_lock);
 	if ((!strcmp(dsi_display->display_type, "primary")) && (0 == panel->panel_serial_number) &&
-  		(strcmp(dsi_display->panel->name, "samsung sofef00_m video mode dsi panel") != 0)) {
+  		(dsi_panel_name != DSI_PANEL_SAMSUNG_SOFEF00_M)) {
   		dsi_display_get_serial_number(connector);
   	}
 
-	if (strcmp(dsi_display->panel->name, "samsung amb655x fhd cmd mode dsc dsi panel") == 0) {
+	if (dsi_panel_name == DSI_PANEL_SAMSUNG_AMB655XL) {
 		if (gamma_read_flag < 1) {
 			schedule_delayed_work(&dsi_display->panel->gamma_read_work, 0);
 			gamma_read_flag++;
@@ -980,12 +980,12 @@ static int dsi_display_status_reg_read(struct dsi_display *display)
     goto exit;
   }
 
-  if ((strcmp(display->panel->name, "samsung dsc cmd mode oneplus dsi panel") == 0) ||
-      (strcmp(display->panel->name, "samsung sofef03f_m fhd cmd mode dsc dsi panel") == 0) ||
-      (strcmp(display->panel->name, "samsung ana6706 dsc cmd mode panel") == 0) ||
-      (strcmp(display->panel->name, "samsung ana6705 fhd cmd mode dsc dsi panel") == 0) ||
-      (strcmp(display->panel->name, "samsung amb655x fhd cmd mode dsc dsi panel") == 0) ||
-	  (strcmp(display->panel->name, "samsung amb670yf01 dsc cmd mode panel") == 0)) {
+  if ((dsi_panel_name == DSI_PANEL_SAMSUNG_S6E3HC2) ||
+      (dsi_panel_name == DSI_PANEL_SAMSUNG_SOFEF03F_M) ||
+      (dsi_panel_name == DSI_PANEL_SAMSUNG_ANA6706) ||
+      (dsi_panel_name == DSI_PANEL_SAMSUNG_ANA6705) ||
+      (dsi_panel_name == DSI_PANEL_SAMSUNG_AMB655XL) ||
+	  (dsi_panel_name == DSI_PANEL_SAMSUNG_AMB670YF01)) {
 
     mode = display->panel->cur_mode;
     panel = display->panel;
@@ -1001,7 +1001,7 @@ static int dsi_display_status_reg_read(struct dsi_display *display)
       }
     }
 
-    if (strcmp(panel->name, "samsung dsc cmd mode oneplus dsi panel") == 0) {
+    if (dsi_panel_name == DSI_PANEL_SAMSUNG_S6E3HC2) {
       dsi_display_read_panel_reg(display, 0x0E, register1, 1);
       dsi_display_read_panel_reg(display, 0xEA, register2, 1);
 
@@ -1010,7 +1010,7 @@ static int dsi_display_status_reg_read(struct dsi_display *display)
       } else {
         rc = 1;
       }
-    } else if (strcmp(panel->name, "samsung sofef03f_m fhd cmd mode dsc dsi panel") == 0) {
+    } else if (dsi_panel_name == DSI_PANEL_SAMSUNG_SOFEF03F_M) {
       dsi_display_read_panel_reg(display, 0x0A, register1, 1);
       dsi_display_read_panel_reg(display, 0xB6, register2, 1);
 
@@ -1027,7 +1027,7 @@ static int dsi_display_status_reg_read(struct dsi_display *display)
       else {
         rc = 1;
       }
-    } else if (strcmp(panel->name, "samsung ana6706 dsc cmd mode panel") == 0) {
+    } else if (dsi_panel_name == DSI_PANEL_SAMSUNG_ANA6706) {
       #if defined(CONFIG_PXLW_IRIS)
       if (iris_is_chip_supported() && iris_is_pt_mode(panel)) {
         rc = iris_get_status();
@@ -1077,7 +1077,7 @@ static int dsi_display_status_reg_read(struct dsi_display *display)
         } else {
           rc = 1;
         }
-      } else if (strcmp(panel->name, "samsung ana6705 fhd cmd mode dsc dsi panel") == 0) {
+      } else if (dsi_panel_name == DSI_PANEL_SAMSUNG_ANA6705) {
         rc = dsi_display_read_panel_reg(display, 0x0A, register1, 1);
         if (rc < 0)
           goto exit;
@@ -1120,7 +1120,7 @@ static int dsi_display_status_reg_read(struct dsi_display *display)
         else {
           rc = 1;
         }
-      } else if (strcmp(panel->name, "samsung amb655x fhd cmd mode dsc dsi panel") == 0) {
+      } else if (dsi_panel_name == DSI_PANEL_SAMSUNG_AMB655XL) {
         rc = dsi_display_read_panel_reg(display, 0x0A, register1, 1);
         if (rc < 0)
           goto exit;
@@ -1149,7 +1149,7 @@ static int dsi_display_status_reg_read(struct dsi_display *display)
         } else {
           rc = 1;
         }
-      }else if (strcmp(panel->name, "samsung amb670yf01 dsc cmd mode panel") == 0) {
+      }else if (dsi_panel_name == DSI_PANEL_SAMSUNG_AMB670YF01) {
 #if defined(CONFIG_PXLW_IRIS)
 		if ((iris_is_chip_supported()) && (iris_is_pt_mode(panel))) {
 			rc = iris_get_status();
@@ -1313,7 +1313,7 @@ int dsi_display_check_status(struct drm_connector *connector, void *display,
 	}
 
 	if ((dsi_display->panel->panel_switch_status == true)
-		&& (strcmp(dsi_display->panel->name, "samsung ana6706 dsc cmd mode panel") == 0)) {
+		&& (dsi_panel_name == DSI_PANEL_SAMSUNG_ANA6706)) {
 		DSI_ERR("panel_switch_status = true, skip ESD reading\n");
 		goto release_panel_lock;
 	}
@@ -4718,7 +4718,7 @@ static int dsi_display_res_init(struct dsi_display *display)
 		DSI_ERR("Failed to parse clock data, rc=%d\n", rc);
 		goto error_ctrl_put;
 	}
-  if (strcmp(display->panel->name, "samsung amb655x fhd cmd mode dsc dsi panel") == 0) {
+  if (dsi_panel_name == DSI_PANEL_SAMSUNG_AMB655XL) {
 		INIT_DELAYED_WORK(&display->panel->gamma_read_work, dsi_display_gamma_read_work);
 		DSI_ERR("INIT_DELAYED_WORK: dsi_display_gamma_read_work\n");
 	}
@@ -7593,7 +7593,7 @@ int dsi_display_get_modes(struct dsi_display *display,
 
 exit:
 	*out_modes = display->modes;
-	if (strcmp(display->panel->name, "samsung amb670yf01 dsc cmd mode panel 2nd") != 0) {
+	if (unlikely(primary_display == NULL) && (strcmp(display->panel->name, "samsung amb670yf01 dsc cmd mode panel 2nd") != 0)) {
 		primary_display = display;
 	}
 	rc = 0;
@@ -9275,7 +9275,7 @@ int dsi_display_gamma_read(struct dsi_display *dsi_display)
 
 	panel = dsi_display->panel;
 	mutex_lock(&dsi_display->display_lock);
-	if (strcmp(dsi_display->panel->name, "samsung amb655x fhd cmd mode dsc dsi panel") == 0) {
+	if (dsi_panel_name == DSI_PANEL_SAMSUNG_AMB655XL) {
 		   DSI_ERR("drm  call dsi_display_get_dimming_gamma_para\n");
 			rc = dsi_display_get_dimming_gamma_para(dsi_display, panel);
 			if (rc)
@@ -9346,7 +9346,7 @@ void dsi_display_gamma_read_work(struct work_struct *work)
 	struct dsi_display *dsi_display;
 
 	dsi_display = get_main_display();
-	if (strcmp(dsi_display->panel->name, "samsung amb655x fhd cmd mode dsc dsi panel") == 0){
+	if (dsi_panel_name == DSI_PANEL_SAMSUNG_AMB655XL){
 		dsi_display_gamma_read(dsi_display);
 		}
 }
@@ -10567,11 +10567,11 @@ int dsi_display_update_dsi_seed_command(struct drm_connector *connector, const c
 
 	set = &panel->cur_mode->priv_info->cmd_sets[DSI_CMD_SET_SEED_COMMAND];
 
-	if (strcmp(panel->name, "samsung dsc cmd mode oneplus dsi panel") == 0)
+	if (dsi_panel_name == DSI_PANEL_SAMSUNG_S6E3HC2)
 		data[0] = WU_SEED_REGISTER;
-	if ((strcmp(panel->name, "samsung sofef03f_m fhd cmd mode dsc dsi panel") == 0) ||
-	(strcmp(panel->name, "samsung ana6705 fhd cmd mode dsc dsi panel") == 0) ||
-	(strcmp(panel->name, "samsung ana6706 dsc cmd mode panel") == 0))
+	if ((dsi_panel_name == DSI_PANEL_SAMSUNG_SOFEF03F_M) ||
+	(dsi_panel_name == DSI_PANEL_SAMSUNG_ANA6705) ||
+	(dsi_panel_name == DSI_PANEL_SAMSUNG_ANA6706))
 		data[0] = UG_SEED_REGISTER;
 
 	rc = dsi_panel_update_dsi_seed_command(set->cmds, DSI_CMD_SET_SEED_COMMAND, data);
@@ -10622,10 +10622,10 @@ int dsi_display_get_dsi_seed_command(struct drm_connector *connector, char *buf)
 	if ((dsi_display == NULL) || (dsi_display->panel == NULL))
 		return 0;
 
-	if ((strcmp(dsi_display->panel->name, "samsung dsc cmd mode oneplus dsi panel") != 0) &&
-		(strcmp(dsi_display->panel->name, "samsung sofef03f_m fhd cmd mode dsc dsi panel") != 0) &&
-		(strcmp(dsi_display->panel->name, "samsung ana6705 fhd cmd mode dsc dsi panel") != 0) &&
-		(strcmp(dsi_display->panel->name, "samsung ana6706 dsc cmd mode panel") != 0)) {
+	if ((dsi_panel_name != DSI_PANEL_SAMSUNG_S6E3HC2) &&
+		(dsi_panel_name != DSI_PANEL_SAMSUNG_SOFEF03F_M) &&
+		(dsi_panel_name != DSI_PANEL_SAMSUNG_ANA6705) &&
+		(dsi_panel_name != DSI_PANEL_SAMSUNG_ANA6706)) {
 		return 0;
 	}
 

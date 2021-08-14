@@ -35,16 +35,8 @@
 /* Expand it to 2x for handling atleast 2 connectors safely */
 #define SDE_CRTC_FRAME_EVENT_SIZE	(4 * 2)
 
-#define DSI_PANEL_SAMSUNG_S6E3HC2 0
-#define DSI_PANEL_SAMSUNG_S6E3FC2X01 1
-#define DSI_PANEL_SAMSUNG_SOFEF03F_M 2
-#define DSI_PANEL_SAMSUNG_ANA6705 3
-#define DSI_PANEL_SAMSUNG_ANA6706 4
-#define DSI_PANEL_SAMSUNG_AMB655XL 5
-#define DSI_PANEL_SAMSUNG_AMB655XL08 6
-#define DSI_PANEL_SAMSUNG_AMB670YF01 7
+#include "op_panel.h"
 
-extern char dsi_panel_name;
 extern int oneplus_force_screenfp;
 extern int oneplus_panel_alpha;
 

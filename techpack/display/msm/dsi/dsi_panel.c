@@ -53,14 +53,8 @@
 #define TOPOLOGY_SET_LEN 3
 #define MAX_TOPOLOGY 5
 
-#define DSI_PANEL_SAMSUNG_S6E3HC2 0
-#define DSI_PANEL_SAMSUNG_S6E3FC2X01 1
-#define DSI_PANEL_SAMSUNG_SOFEF03F_M 2
-#define DSI_PANEL_SAMSUNG_ANA6705 3
-#define DSI_PANEL_SAMSUNG_ANA6706 4
-#define DSI_PANEL_SAMSUNG_AMB655XL 5
-#define DSI_PANEL_SAMSUNG_AMB655XL08 6
-#define DSI_PANEL_SAMSUNG_AMB670YF01 7
+#include "op_panel.h"
+
 #define DSI_PANEL_DEFAULT_LABEL  "Default dsi panel"
 
 #define DEFAULT_PANEL_JITTER_NUMERATOR		2
@@ -204,7 +198,7 @@ const char *gamma_cmd_set_map[DSI_GAMMA_CMD_SET_MAX] = {
 
 int gamma_read_flag = GAMMA_READ_SUCCESS;
 
-char dsi_panel_name = DSI_PANEL_SAMSUNG_S6E3FC2X01;
+int dsi_panel_name = DSI_PANEL_SAMSUNG_S6E3FC2X01;
 EXPORT_SYMBOL(dsi_panel_name);
 
 extern void pm_print_active_wakeup_sources_queue(bool on);
@@ -711,7 +705,7 @@ static int dsi_panel_power_off(struct dsi_panel *panel)
 		       rc);
 	}
 
-	if (strcmp(panel->name, "samsung sofef03f_m fhd cmd mode dsc dsi panel") == 0) {
+	if (dsi_panel_name == DSI_PANEL_SAMSUNG_SOFEF03F_M) {
 		msleep(10);
 	} else {
 		msleep(1);
@@ -973,7 +967,7 @@ static int dsi_panel_update_backlight(struct dsi_panel *panel,
 
 		DSI_ERR("backlight = %d\n", bl_lvl);
 
-		if (strcmp(panel->name, "samsung amb670yf01 dsc cmd mode panel") == 0) {
+		if (dsi_panel_name == DSI_PANEL_SAMSUNG_AMB670YF01) {
 			if(bl_lvl >= PANEL_MAX_NOMAL_BRIGHTNESS)
 				bl_lvl = PANEL_MAX_NOMAL_BRIGHTNESS-1;
 			bl_lvl = backlight_buf[bl_lvl];
@@ -4390,8 +4384,14 @@ struct dsi_panel *dsi_panel_get(struct device *parent,
 		dsi_panel_name = DSI_PANEL_SAMSUNG_AMB670YF01;
 		DSI_ERR("Dsi panel name is DSI_PANEL_SAMSUNG_AMB670YF01");
 	}
+	else if (strcmp(panel->name, "samsung sofef00_m video mode dsi panel") == 0) {
+		dsi_panel_name = DSI_PANEL_SAMSUNG_SOFEF00_M;
+		DSI_ERR("Dsi panel name is DSI_PANEL_SAMSUNG_SOFEF00_M");
+	}
 	else if (!panel->name)
 		panel->name = DSI_PANEL_DEFAULT_LABEL;
+
+	mb();
 
 #if defined(CONFIG_PXLW_IRIS)
 	iris_query_capability(panel);
@@ -5632,7 +5632,7 @@ int dsi_panel_switch(struct dsi_panel *panel)
 	}
 #endif
 
-	if((strcmp(panel->name, "samsung dsc cmd mode oneplus dsi panel") == 0) && (gamma_read_flag == GAMMA_READ_SUCCESS)) {
+	if((dsi_panel_name == DSI_PANEL_SAMSUNG_S6E3HC2) && (gamma_read_flag == GAMMA_READ_SUCCESS)) {
 		if (mode_fps == 90) {
 			rc = dsi_panel_tx_gamma_cmd_set(panel, DSI_GAMMA_CMD_SET_SWITCH_90HZ);
 			DSI_ERR("Send DSI_GAMMA_CMD_SET_SWITCH_90HZ cmds\n");
@@ -5715,7 +5715,7 @@ int dsi_panel_enable(struct dsi_panel *panel)
 		}
 #endif
 
-	if (strcmp(panel->name, "samsung dsc cmd mode oneplus dsi panel") == 0) {
+	if (dsi_panel_name == DSI_PANEL_SAMSUNG_S6E3HC2) {
 		if ((panel->panel_stage_info == EVT2_113MHZ_OSC) || (panel->panel_stage_info == PVT_113MHZ_OSC)
 			|| (panel->panel_stage_info == PVT_113MHZ_OSC_XTALK) || (panel->panel_code_info == 0xEE)) {
 			rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_113MHZ_OSC_ON);
@@ -5747,11 +5747,11 @@ int dsi_panel_enable(struct dsi_panel *panel)
 	}
 #endif
 
-	if (strcmp(panel->name, "samsung amb655x fhd cmd mode dsc dsi panel") == 0) {
+	if (dsi_panel_name == DSI_PANEL_SAMSUNG_AMB655XL) {
 		rc = dsi_panel_dimming_gamma_write(panel);
 	}
 
-	if ((strcmp(panel->name, "samsung dsc cmd mode oneplus dsi panel") == 0) && (gamma_read_flag == GAMMA_READ_SUCCESS)) {
+	if ((dsi_panel_name == DSI_PANEL_SAMSUNG_S6E3HC2) && (gamma_read_flag == GAMMA_READ_SUCCESS)) {
 		if (mode_fps == 60) {
 			rc = dsi_panel_tx_gamma_cmd_set(panel, DSI_GAMMA_CMD_SET_SWITCH_60HZ);
 			DSI_ERR("Send DSI_GAMMA_CMD_SET_SWITCH_60HZ cmds\n");
@@ -6182,11 +6182,9 @@ int dsi_panel_set_hbm_brightness(struct dsi_panel *panel, int level)
 		}
 	}
 	DSI_ERR("hbm backlight = %d\n", level);
-	if (strcmp(panel->name, "samsung sofef03f_m fhd cmd mode dsc dsi panel") == 0) {
+	if (dsi_panel_name == DSI_PANEL_SAMSUNG_SOFEF03F_M) {
 		level = level + 1023;
-	} else if (strcmp(panel->name, "BOE dsc cmd mode oneplus dsi panel") == 0) {
-		level = level + 3072;
-	} else if (strcmp(panel->name, "samsung amb670yf01 dsc cmd mode panel") == 0) {
+	} else if (dsi_panel_name == DSI_PANEL_SAMSUNG_AMB670YF01) {
 		if(level >= HBM_BASE_600NIT_800NIT)
 			level = HBM_BASE_600NIT_800NIT-1;
 		level = backlight_600_800nit_buf[level];
@@ -6779,7 +6777,7 @@ void dsi_panel_update_gamma_change_write(struct dsi_panel *panel)
 	int i = 0;
 
 
-	if (strcmp(panel->name, "samsung amb655x fhd cmd mode dsc dsi panel") == 0) {
+	if (dsi_panel_name == DSI_PANEL_SAMSUNG_AMB655XL) {
 	/* GAMMA change Setting (120Hz) 80-40-20-10*/
 		for (i = 0; i < 229; i++) {
 		DSI_ERR("120HZ B9_register_value[%d] = 0x%02x", i, b9_register_value_500step[i]);
@@ -7098,7 +7096,7 @@ int dsi_panel_dimming_gamma_write(struct dsi_panel *panel)
 		return -EINVAL;
 	}
 
-	if (strcmp(panel->name, "samsung amb655x fhd cmd mode dsc dsi panel") != 0) {
+	if (dsi_panel_name != DSI_PANEL_SAMSUNG_AMB655XL) {
 		return 0;
 	}
 
@@ -7111,7 +7109,7 @@ int dsi_panel_dimming_gamma_write(struct dsi_panel *panel)
 	} else {
 		cmds = mode->priv_info->cmd_sets[DSI_CMD_SET_GAMMA_CHANGE_WRITE].cmds;
 		DSI_ERR("Send GAMMA_CHANGE_WRITE cmds start\n");
-		if(strcmp(panel->name, "samsung amb655x fhd cmd mode dsc dsi panel") == 0) {
+		if(dsi_panel_name == DSI_PANEL_SAMSUNG_AMB655XL) {
 		/* GAMMA change Setting 80nit 40nit 20nit 10nit  (120Hz) */
 		payload = (u8 *)cmds[2].msg.tx_buf;
 		for (i = 1; i < 9; i++)
