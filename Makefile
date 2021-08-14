@@ -403,8 +403,8 @@ HOST_LFS_LDFLAGS := $(shell getconf LFS_LDFLAGS 2>/dev/null)
 HOST_LFS_LIBS := $(shell getconf LFS_LIBS 2>/dev/null)
 
 ifneq ($(LLVM),)
-HOSTCC	= clang
-HOSTCXX	= clang++
+HOSTCC	= $(LLVM_PATH)clang
+HOSTCXX	= $(LLVM_PATH)clang++
 else
 HOSTCC	= gcc
 HOSTCXX	= g++
@@ -419,15 +419,15 @@ KBUILD_HOSTLDLIBS   := $(HOST_LFS_LIBS) $(HOSTLDLIBS)
 # Make variables (CC, etc...)
 CPP		= $(CC) -E
 ifneq ($(LLVM),)
-CC	= clang
-LD		= ld.lld
-AR		= llvm-ar
-NM		= llvm-nm
-OBJCOPY		= llvm-objcopy
-OBJDUMP		= llvm-objdump
-READELF		= llvm-readelf
-OBJSIZE		= llvm-size
-STRIP		= llvm-strip
+CC	= $(LLVM_PATH)clang
+LD		= $(LLVM_PATH)ld.lld
+AR		= $(LLVM_PATH)llvm-ar
+NM		= $(LLVM_PATH)llvm-nm
+OBJCOPY		= $(LLVM_PATH)llvm-objcopy
+OBJDUMP		= $(LLVM_PATH)llvm-objdump
+READELF		= $(LLVM_PATH)llvm-readelf
+OBJSIZE		= $(LLVM_PATH)llvm-size
+STRIP		= $(LLVM_PATH)llvm-strip
 else
 CC		= $(CROSS_COMPILE)gcc
 LD		= $(CROSS_COMPILE)ld
@@ -704,8 +704,8 @@ export RETPOLINE_VDSO_CFLAGS
 ifdef CONFIG_LTO_CLANG
 # LTO produces LLVM IR instead of object files. Use llvm-ar and llvm-nm, so we
 # can process these.
-AR		:= llvm-ar
-LLVM_NM		:= llvm-nm
+AR		:= $(LLVM_PATH)llvm-ar
+LLVM_NM		:= $(LLVM_PATH)llvm-nm
 export LLVM_NM
 endif
 
