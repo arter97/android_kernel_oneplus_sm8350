@@ -10425,6 +10425,8 @@ static int pt_core_rt_suspend(struct device *dev)
 	struct pt_core_data *cd = dev_get_drvdata(dev);
 	int rc = 0;
 
+	dev_info(dev, "%s: Entering into runtime suspend mode:\n",
+		__func__);
 	if (cd->cpdata->flags & PT_CORE_FLAG_SKIP_RUNTIME)
 		return 0;
 
@@ -10432,6 +10434,12 @@ static int pt_core_rt_suspend(struct device *dev)
 	if (rc < 0) {
 		pt_debug(dev, DL_ERROR, "%s: Error on sleep\n", __func__);
 		return -EAGAIN;
+	}
+
+	rc = pt_enable_regulator(cd, false);
+	if (rc < 0) {
+		dev_err(dev, "%s: Failed to disable regulators: rc=%d\n",
+			__func__, rc);
 	}
 	return 0;
 }
@@ -10453,8 +10461,19 @@ static int pt_core_rt_resume(struct device *dev)
 	struct pt_core_data *cd = dev_get_drvdata(dev);
 	int rc = 0;
 
+	dev_info(dev, "%s: Entering into runtime resume mode:\n",
+		__func__);
 	if (cd->cpdata->flags & PT_CORE_FLAG_SKIP_RUNTIME)
 		return 0;
+
+	rc = pt_enable_regulator(cd, true);
+	if (rc < 0) {
+		dev_err(dev, "%s: Failed to enable regulators: rc=%d\n",
+			__func__, rc);
+	}
+
+	dev_info(dev, "%s: Runtime voltage regulator enabled: rc=%d\n",
+		__func__, rc);
 
 	rc = pt_core_wake(cd);
 	if (rc < 0) {
@@ -10483,9 +10502,22 @@ static int pt_core_rt_resume(struct device *dev)
  ******************************************************************************/
 static int pt_core_suspend_(struct device *dev)
 {
+	int rc;
 	struct pt_core_data *cd = dev_get_drvdata(dev);
 
-	pt_core_sleep(cd);
+	rc = pt_core_sleep(cd);
+	if (rc < 0) {
+		pt_debug(dev, DL_ERROR, "%s: Error on sleep\n", __func__);
+		return -EAGAIN;
+	}
+
+	rc = pt_enable_regulator(cd, false);
+	if (rc) {
+		dev_err(dev, "%s: Failed to disable regulators: rc=%d\n",
+			__func__, rc);
+	}
+	dev_info(dev, "%s: Sayantan1: Voltage regulators disabled: rc=%d\n",
+		__func__, rc);
 
 	if (!IS_EASY_WAKE_CONFIGURED(cd->easy_wakeup_gesture))
 		return 0;
@@ -10504,7 +10536,7 @@ static int pt_core_suspend_(struct device *dev)
 			__func__);
 	}
 
-	return 0;
+	return rc;
 }
 
 /*******************************************************************************
@@ -10545,7 +10577,19 @@ static int pt_core_suspend(struct device *dev)
  ******************************************************************************/
 static int pt_core_resume_(struct device *dev)
 {
+	int rc;
 	struct pt_core_data *cd = dev_get_drvdata(dev);
+
+	dev_info(dev, "%s: Entering into resume mode:\n",
+		__func__);
+	rc = pt_enable_regulator(cd, true);
+	if (rc < 0) {
+		dev_err(dev, "%s: Failed to enable regulators: rc=%d\n",
+			__func__, rc);
+	}
+	dev_info(dev, "%s: Voltage regulator enabled: rc=%d\n",
+		__func__, rc);
+
 	if (!IS_EASY_WAKE_CONFIGURED(cd->easy_wakeup_gesture))
 		goto exit;
 
