@@ -1378,14 +1378,22 @@ config MSM_SLATECOM_INTERFACE
 		from hardware. Hardware will provide access to read
 		registers and read/write AHB memory in the device.
 
-config MSM_SLATECOM_RPMSG
-	tristate "Provide support for slate GLINK channel"
-	depends on MSM_SLATECOM_INTERFACE
-	help
-	  MSM_SLATECOM_RPMSG informs SLATECOM_INTERFACE driver if GLINK channel
-	  has been opened by remote processor. It doesn't maintain state machine
-	  and is probed when Slate opens channel and removed when the channel is
-	  closed by remote processor.
+config MSM_SLATERSB
+        bool "Provide support for rsb events on Slate"
+        help
+          SLATERSB communicates to SLATE over rpmsg driver for RSB configuration
+          and enable/disable on device power state change.Add slate rsb driver
+          which is use to configure rsb on slate.Slate rsb driver uses glink
+          to communicate with slate
+
+config MSM_SLATERSB_RPMSG
+        bool "Provide support for slate events to RSB"
+        depends on MSM_SLATERSB
+        help
+          SLATERSB-RPMSG informs SLATERSB driver if GLINK channel has been
+          opened by remote processor. It doesn't maintain state machine
+          and is probed when SLATE opens channel and removed when the
+          channel is closed by remote processor.
 
 config QCOM_AOP_SET_DDR
 	tristate "Sysfs to communicate with AOP using QMP protocol"
