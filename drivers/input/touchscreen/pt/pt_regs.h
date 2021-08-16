@@ -115,6 +115,15 @@
 #define PT_MAX_ELEN 100
 #endif
 
+/* Power Management Macros Enablement */
+#ifndef CONFIG_PM_SLEEP
+#define CONFIG_PM_SLEEP
+#endif
+
+#ifndef CONFIG_PM_RUNTIME
+#define CONFIG_PM_RUNTIME
+#endif
+
 /*
  * The largest PIP message is the PIP2 FILE_WRITE which has:
  *     2 byte register
