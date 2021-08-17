@@ -82,8 +82,8 @@ struct limits_dcvs_hw {
 	struct regulator *isens_reg[2];
 };
 
-LIST_HEAD(lmh_dcvs_hw_list);
-DEFINE_MUTEX(lmh_dcvs_list_access);
+static LIST_HEAD(lmh_dcvs_hw_list);
+static DEFINE_MUTEX(lmh_dcvs_list_access);
 
 static void limits_dcvs_get_freq_limits(struct limits_dcvs_hw *hw)
 {
