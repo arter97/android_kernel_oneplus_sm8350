@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
  */
 
 #ifndef __MSM_CVP_DEBUG__
@@ -63,6 +63,7 @@ extern bool msm_cvp_cacheop_disabled;
 extern int msm_cvp_clock_voting;
 extern bool msm_cvp_syscache_disable;
 extern bool msm_cvp_dsp_disable;
+extern bool msm_cvp_dcvs_disable;
 
 #define dprintk(__level, __fmt, arg...)	\
 	do { \
