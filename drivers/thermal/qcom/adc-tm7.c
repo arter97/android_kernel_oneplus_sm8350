@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -302,7 +302,7 @@ static int32_t adc_tm7_manage_thresholds(struct adc_tm_sensor *sensor)
 }
 
 /* Used to notify non-thermal clients of threshold crossing */
-void notify_adc_tm7_fn(struct adc_tm_sensor *adc_tm)
+static void notify_adc_tm7_fn(struct adc_tm_sensor *adc_tm)
 {
 	struct adc_tm_client_info *client_info = NULL;
 	struct adc_tm_chip *chip;
