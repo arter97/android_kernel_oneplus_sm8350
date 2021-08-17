@@ -275,7 +275,7 @@ err_ret:
 static int send_state_change_cmd(struct slate_ui_data *ui_obj_msg)
 {
 	int ret = 0;
-	struct wear_header wear_header_t = {0, 0};
+	struct msg_header_t msg_header = {0, 0};
 	struct slatedaemon_priv *dev = container_of(slatecom_intf_drv,
 					struct slatedaemon_priv,
 					lhndl);
@@ -283,19 +283,19 @@ static int send_state_change_cmd(struct slate_ui_data *ui_obj_msg)
 
 	switch (state) {
 	case STATE_TWM_ENTER:
-		wear_header_t.opcode = GMI_WEAR_MGR_ENTER_TWM;
+		msg_header.opcode = GMI_MGR_ENTER_TWM;
 		break;
 	case STATE_DS_ENTER:
-		wear_header_t.opcode = GMI_WEAR_MGR_ENTER_TRACKER_DS;
+		msg_header.opcode = GMI_MGR_ENTER_TRACKER_DS;
 		break;
 	case STATE_DS_EXIT:
-		wear_header_t.opcode = GMI_WEAR_MGR_EXIT_TRACKER_DS;
+		msg_header.opcode = GMI_MGR_EXIT_TRACKER_DS;
 		break;
 	default:
 		pr_err("Invalid MSM State transtion cmd\n");
 		break;
 	}
-	ret = slatecom_tx_msg(dev, &wear_header_t.opcode, sizeof(wear_header_t.opcode));
+	ret = slatecom_tx_msg(dev, &msg_header.opcode, sizeof(msg_header.opcode));
 	if (ret < 0)
 		pr_err("MSM State transtion event cmd failed\n");
 	return ret;
@@ -736,7 +736,7 @@ static int ssr_modem_cb(struct notifier_block *this,
 		unsigned long opcode, void *data)
 {
 	struct slate_event modeme;
-	struct wear_header wear_header_t = {0, 0};
+	struct msg_header_t msg_header = {0, 0};
 	int ret;
 
 	switch (opcode) {
@@ -744,16 +744,16 @@ static int ssr_modem_cb(struct notifier_block *this,
 		modeme.e_type = MODEM_BEFORE_POWER_DOWN;
 		reinit_completion(&slate_modem_down_wait);
 		send_uevent(&modeme);
-		wear_header_t.opcode = GMI_WEAR_MGR_SSR_MPSS_DOWN_NOTIFICATION;
-		ret = slatecom_tx_msg(dev, &(wear_header_t.opcode), sizeof(wear_header_t.opcode));
+		msg_header.opcode = GMI_MGR_SSR_MPSS_DOWN_NOTIFICATION;
+		ret = slatecom_tx_msg(dev, &(msg_header.opcode), sizeof(msg_header.opcode));
 		if (ret < 0)
 			pr_err("failed to send mdsp down event to slate\n");
 		break;
 	case SUBSYS_AFTER_POWERUP:
 		modeme.e_type = MODEM_AFTER_POWER_UP;
 		send_uevent(&modeme);
-		wear_header_t.opcode = GMI_WEAR_MGR_SSR_MPSS_UP_NOTIFICATION;
-		ret = slatecom_tx_msg(dev, &(wear_header_t.opcode), sizeof(wear_header_t.opcode));
+		msg_header.opcode = GMI_MGR_SSR_MPSS_UP_NOTIFICATION;
+		ret = slatecom_tx_msg(dev, &(msg_header.opcode), sizeof(msg_header.opcode));
 		if (ret < 0)
 			pr_err("failed to send mdsp up event to slate\n");
 		break;
@@ -765,7 +765,7 @@ static int ssr_adsp_cb(struct notifier_block *this,
 		unsigned long opcode, void *data)
 {
 	struct slate_event adspe;
-	struct wear_header wear_header_t = {0, 0};
+	struct msg_header_t msg_header = {0, 0};
 	int ret;
 
 	switch (opcode) {
@@ -773,16 +773,16 @@ static int ssr_adsp_cb(struct notifier_block *this,
 		adspe.e_type = ADSP_BEFORE_POWER_DOWN;
 		reinit_completion(&slate_adsp_down_wait);
 		send_uevent(&adspe);
-		wear_header_t.opcode = GMI_WEAR_MGR_SSR_ADSP_DOWN_INDICATION;
-		ret = slatecom_tx_msg(dev, &(wear_header_t.opcode), sizeof(wear_header_t.opcode));
+		msg_header.opcode = GMI_MGR_SSR_ADSP_DOWN_INDICATION;
+		ret = slatecom_tx_msg(dev, &(msg_header.opcode), sizeof(msg_header.opcode));
 		if (ret < 0)
 			pr_err("failed to send adsp up event to slate\n");
 		break;
 	case SUBSYS_AFTER_POWERUP:
 		adspe.e_type = ADSP_AFTER_POWER_UP;
 		send_uevent(&adspe);
-		wear_header_t.opcode = GMI_WEAR_MGR_SSR_ADSP_UP_INDICATION;
-		ret = slatecom_tx_msg(dev, &(wear_header_t.opcode), sizeof(wear_header_t.opcode));
+		msg_header.opcode = GMI_MGR_SSR_ADSP_UP_INDICATION;
+		ret = slatecom_tx_msg(dev, &(msg_header.opcode), sizeof(msg_header.opcode));
 		if (ret < 0)
 			pr_err("failed to send adsp up event to slate\n");
 		break;
