@@ -22,6 +22,7 @@ enum {
 	WEST
 };
 
+#define NUM_TILES	4
 #define HMSS_WEST	0x000BB000
 #define HMSS_EAST	0x000B7000
 #define HMSS_NORTH	0x000BC000
@@ -1535,6 +1536,15 @@ static struct msm_dir_conn sm8150_dir_conn[] = {
 	  {-1, 0}, {-1, 0}, {-1, 0}, {-1, 0}
 };
 
+#ifdef CONFIG_HIBERNATION
+static u32 tile_dir_conn_addr[NUM_TILES] = {
+	[0] =   HMSS_NORTH,
+	[1] =   HMSS_SOUTH,
+	[2] =   HMSS_EAST,
+	[3] =   HMSS_WEST
+};
+#endif
+
 static struct msm_pinctrl_soc_data sm8150_pinctrl = {
 	.pins = sm8150_pins,
 	.npins = ARRAY_SIZE(sm8150_pins),
@@ -1548,6 +1558,9 @@ static struct msm_pinctrl_soc_data sm8150_pinctrl = {
 	.wakeirq_map = sm8150_pdc_map,
 	.nwakeirq_map = ARRAY_SIZE(sm8150_pdc_map),
 	.dir_conn = sm8150_dir_conn,
+#ifdef CONFIG_HIBERNATION
+	.dir_conn_addr = tile_dir_conn_addr,
+#endif
 };
 
 static int sm8150_pinctrl_gpio_irq_map_probe(struct platform_device *pdev)
