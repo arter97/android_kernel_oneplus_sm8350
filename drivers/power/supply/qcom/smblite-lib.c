@@ -1216,10 +1216,55 @@ int smblite_lib_get_prop_batt_iterm(struct smb_charger *chg,
 	temp = buf[1] | (buf[0] << 8);
 	temp = sign_extend32(temp, 15);
 
-	temp = DIV_ROUND_CLOSEST(temp * ITERM_LIMITS_MA,
-					ADC_CHG_ITERM_MASK);
+	if (chg->subtype == PM5100)
+		temp = DIV_ROUND_CLOSEST((temp * 1000), PM5100_ADC_CHG_ITERM_MULT);
+	else
+		temp = DIV_ROUND_CLOSEST(temp * ITERM_LIMITS_MA, ADC_CHG_ITERM_MASK);
 
 	val->intval = temp;
+
+	return rc;
+}
+
+int smblite_lib_set_prop_batt_iterm(struct smb_charger *chg, int iterm_ma)
+{
+	int rc;
+	s16 raw_hi_thresh;
+	u8 stat, *buf;
+
+	if (chg->subtype != PM5100)
+		return -EINVAL;
+
+	if (iterm_ma < (-1 * PM5100_MAX_LIMITS_MA)
+		|| iterm_ma > PM5100_MAX_LIMITS_MA)
+		return -EINVAL;
+
+	/* Currently, only ADC comparator-based termination is supported
+	 * and validate, hence read only the threshold corresponding to ADC
+	 * source. Proceed only if CHGR_ITERM_USE_ANALOG_BIT is 0.
+	 */
+	rc = smblite_lib_read(chg, CHGR_TERM_CFG_REG(chg->base), &stat);
+	if (rc < 0) {
+		smblite_lib_err(chg, "Couldn't read CHGR_TERM_CFG_REG rc=%d\n",
+				rc);
+		return rc;
+	}
+
+	if (stat & CHGR_ITERM_USE_ANALOG_BIT)
+		return -EINVAL;
+
+	raw_hi_thresh = PM5100_RAW_ITERM(iterm_ma);
+	raw_hi_thresh = sign_extend32(raw_hi_thresh, 15);
+	buf = (u8 *)&raw_hi_thresh;
+	raw_hi_thresh = buf[1] | (buf[0] << 8);
+
+	rc = smblite_lib_batch_write(chg, CHGR_ADC_ITERM_UP_THD_MSB_REG(chg->base),
+			(u8 *)&raw_hi_thresh, 2);
+	if (rc < 0) {
+		dev_err(chg->dev, "Couldn't configure ITERM threshold HIGH rc=%d\n",
+				rc);
+		return rc;
+	}
 
 	return rc;
 }
