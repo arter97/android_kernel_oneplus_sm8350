@@ -1674,6 +1674,13 @@ static int ethqos_cleanup_debugfs(struct qcom_ethqos *ethqos)
 	return 0;
 }
 
+static u32 l3mdev_fib_table1(const struct net_device *dev)
+{
+	return RT_TABLE_LOCAL;
+}
+
+static const struct l3mdev_ops l3mdev_op1 = {.l3mdev_fib_table = l3mdev_fib_table1};
+
 static int qcom_ethqos_probe(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
@@ -1857,6 +1864,16 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 #ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
 
 	place_marker("M - Ethernet probe end");
+#endif
+
+#ifdef CONFIG_NET_L3_MASTER_DEV
+	if (ethqos->early_eth_enabled &&
+	    (ethqos->emac_ver == EMAC_HW_v2_1_2 || ethqos->emac_ver == EMAC_HW_v2_1_1 ||
+	    ethqos->emac_ver == EMAC_HW_v2_3_1)) {
+		ETHQOSINFO("l3mdev_op1 set\n");
+		ndev->priv_flags = IFF_L3MDEV_MASTER;
+		ndev->l3mdev_ops = &l3mdev_op1;
+	}
 #endif
 
 	return ret;
