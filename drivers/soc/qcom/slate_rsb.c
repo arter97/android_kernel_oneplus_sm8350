@@ -20,7 +20,7 @@ struct slatersb_priv {
 	struct work_struct rsb_calibration_work;
 	struct work_struct bttn_configr_work;
 	struct workqueue_struct *slatersb_wq;
-	void *slatewear_subsys_handle;
+	void *slate_subsys_handle;
 	struct completion wrk_cmplt;
 	struct completion slate_lnikup_cmplt;
 	struct completion tx_done;
@@ -240,11 +240,11 @@ static int slatersb_ssr_register(struct slatersb_priv *dev)
 		return -ENODEV;
 
 	nb = &ssr_slate_nb;
-	dev->slatewear_subsys_handle =
-			subsys_notif_register_notifier(SLATERSB_SLATEWEAR_SUBSYS, nb);
+	dev->slate_subsys_handle =
+			subsys_notif_register_notifier(SLATERSB_SLATE_SUBSYS, nb);
 
-	if (!dev->slatewear_subsys_handle) {
-		dev->slatewear_subsys_handle = NULL;
+	if (!dev->slate_subsys_handle) {
+		dev->slate_subsys_handle = NULL;
 		return -ENODEV;
 	}
 	return 0;
@@ -541,7 +541,7 @@ static int slate_rsb_probe(struct platform_device *pdev)
 	rc = slatersb_init(dev);
 	if (rc)
 		pr_err("init failed\n");
-	/* register device for slate-wear ssr */
+	/* register device for slate ssr */
 	rc = slatersb_ssr_register(dev);
 	if (rc)
 		pr_err("Failed to register for slate ssr\n");
