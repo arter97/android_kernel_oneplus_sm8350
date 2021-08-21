@@ -10383,7 +10383,8 @@ static int pt_enable_regulator(struct pt_core_data *cd, bool en)
 disable_vcc_i2c_reg:
 	if (cd->vcc_i2c) {
 		if (regulator_count_voltages(cd->vcc_i2c) > 0)
-			regulator_set_voltage(cd->vcc_i2c, 0, FT_I2C_VTG_MAX_UV);
+			regulator_set_voltage(cd->vcc_i2c, FT_I2C_VTG_MIN_UV,
+						FT_I2C_VTG_MAX_UV);
 
 		regulator_disable(cd->vcc_i2c);
 	}
@@ -10391,7 +10392,8 @@ disable_vcc_i2c_reg:
 disable_vdd_reg:
 	if (cd->vdd) {
 		if (regulator_count_voltages(cd->vdd) > 0)
-			regulator_set_voltage(cd->vdd, 0, FT_VTG_MAX_UV);
+			regulator_set_voltage(cd->vdd, FT_VTG_MIN_UV,
+						FT_VTG_MAX_UV);
 
 		regulator_disable(cd->vdd);
 	}
@@ -17342,7 +17344,6 @@ error_detect:
 	if (cd->cpdata->setup_power)
 		cd->cpdata->setup_power(cd->cpdata, PT_MT_POWER_OFF, dev);
 	sysfs_remove_group(&dev->kobj, &early_attr_group);
-	kfree(cd);
 error_enable_regulator:
 	pt_del_core(dev);
 	dev_set_drvdata(dev, NULL);
@@ -17350,6 +17351,7 @@ error_enable_regulator:
 error_get_regulator:
 	pt_get_regulator(cd, false);
 error_alloc_data:
+	kfree(cd);
 error_no_pdata:
 	pr_err("%s failed.\n", __func__);
 	return rc;
