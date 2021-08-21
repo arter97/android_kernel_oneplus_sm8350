@@ -14,6 +14,7 @@
 #include <linux/string.h>
 #include <linux/errno.h>
 #include <linux/skbuff.h>
+#include <linux/netdevice.h>
 #include <net/netlink.h>
 #include <net/pkt_sched.h>
 #include <net/pkt_cls.h>
@@ -24,6 +25,7 @@ struct prio_sched_data {
 	struct tcf_block *block;
 	u8  prio2band[TC_PRIO_MAX+1];
 	struct Qdisc *queues[TCQ_PRIO_BANDS];
+	u8 enable_flow;
 };
 
 
@@ -99,6 +101,9 @@ static struct sk_buff *prio_peek(struct Qdisc *sch)
 	struct prio_sched_data *q = qdisc_priv(sch);
 	int prio;
 
+	if (!q->enable_flow)
+		return NULL;
+
 	for (prio = 0; prio < q->bands; prio++) {
 		struct Qdisc *qdisc = q->queues[prio];
 		struct sk_buff *skb = qdisc->ops->peek(qdisc);
@@ -112,6 +117,9 @@ static struct sk_buff *prio_dequeue(struct Qdisc *sch)
 {
 	struct prio_sched_data *q = qdisc_priv(sch);
 	int prio;
+
+	if (!q->enable_flow)
+		return NULL;
 
 	for (prio = 0; prio < q->bands; prio++) {
 		struct Qdisc *qdisc = q->queues[prio];
@@ -137,6 +145,7 @@ prio_reset(struct Qdisc *sch)
 		qdisc_reset(q->queues[prio]);
 	sch->qstats.backlog = 0;
 	sch->q.qlen = 0;
+	q->enable_flow = 1;
 }
 
 static int prio_offload(struct Qdisc *sch, struct tc_prio_qopt *qopt)
@@ -182,6 +191,7 @@ static int prio_tune(struct Qdisc *sch, struct nlattr *opt,
 	struct Qdisc *queues[TCQ_PRIO_BANDS];
 	int oldbands = q->bands, i;
 	struct tc_prio_qopt *qopt;
+	int flow_change = 0;
 
 	if (nla_len(opt) < sizeof(*qopt))
 		return -EINVAL;
@@ -209,6 +219,16 @@ static int prio_tune(struct Qdisc *sch, struct nlattr *opt,
 
 	prio_offload(sch, qopt);
 	sch_tree_lock(sch);
+	if (nla_len(opt) == sizeof(struct tc_prio_qopt_kerneldef)) {
+		struct tc_prio_qopt_kerneldef *qopt_s;
+
+		qopt_s = (struct tc_prio_qopt_kerneldef *)qopt;
+		/* Some user space app is using a definition with enable_flow */
+		if (q->enable_flow != qopt_s->enable_flow) {
+			q->enable_flow = qopt_s->enable_flow;
+			flow_change = 1;
+		}
+	}
 	q->bands = qopt->bands;
 	memcpy(q->prio2band, qopt->priomap, TC_PRIO_MAX+1);
 
@@ -225,6 +245,12 @@ static int prio_tune(struct Qdisc *sch, struct nlattr *opt,
 
 	for (i = q->bands; i < oldbands; i++)
 		qdisc_put(q->queues[i]);
+
+	/* Schedule qdisc when flow re-enabled */
+	if (flow_change && q->enable_flow) {
+		if (!test_bit(__QDISC_STATE_DEACTIVATED, &sch->state))
+			__netif_schedule(qdisc_root(sch));
+	}
 	return 0;
 }
 

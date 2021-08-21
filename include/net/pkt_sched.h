@@ -12,6 +12,14 @@
 
 #define DEFAULT_TX_QUEUE_LEN	1000
 
+#define TCQ_PRIO_FLOW_CONTROL 1
+
+struct tc_prio_qopt_kerneldef {
+	int     bands;			/* Number of bands */
+	__u8    priomap[TC_PRIO_MAX+1];	/* Map: logical priority -> PRIO band */
+	__u8    enable_flow;		/* Enable dequeue */
+};
+
 struct qdisc_walker {
 	int	stop;
 	int	skip;
