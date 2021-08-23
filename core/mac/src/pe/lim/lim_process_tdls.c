@@ -881,6 +881,9 @@ static void populate_dot11f_set_tdls_he_cap(struct mac_context *mac,
 		lim_tdls_set_he_chan_width(heCap, session);
 		lim_log_he_cap(mac, heCap);
 		lim_populate_tdls_setup_6g_cap(mac, hecap_6g, session);
+	} else {
+		pe_debug("Not populating he cap as SelfDot11Mode not HE %d",
+			 selfDot11Mode);
 	}
 }
 
@@ -1101,9 +1104,16 @@ static void lim_tdls_update_node_he_caps(struct mac_context *mac,
 
 	lim_log_he_cap(mac, &sta->he_config);
 
-	if (lim_is_he_6ghz_band(pe_session))
+	if (lim_is_he_6ghz_band(pe_session)) {
 		lim_tdls_populate_dot11f_6hgz_he_caps(mac, add_sta_req,
 						      &sta->he_6g_band_cap);
+		/*
+		 * In 6Ghz, vht and ht ie may not present, peer channel width
+		 * is populated while extracting HT and VHT cap itself. So,
+		 * incase of 6ghz fill the chan_width.
+		 */
+		lim_update_stads_he_6ghz_op(pe_session, sta);
+	}
 }
 
 #else
@@ -2798,7 +2808,7 @@ static void lim_tdls_update_hash_node_info(struct mac_context *mac,
 	tDot11fIEVHTCaps *pVhtCaps = NULL;
 	tDot11fIEVHTCaps *pVhtCaps_txbf = NULL;
 	tDot11fIEVHTCaps vhtCap;
-	uint8_t cbMode;
+	uint8_t cbMode, selfDot11Mode;
 
 	if (add_sta_req->tdls_oper == TDLS_OPER_ADD) {
 		populate_dot11f_ht_caps(mac, pe_session, &htCap);
@@ -2880,9 +2890,12 @@ static void lim_tdls_update_hash_node_info(struct mac_context *mac,
 		sta->vhtSupportedChannelWidthSet =
 			WNI_CFG_VHT_CHANNEL_WIDTH_20_40MHZ;
 	}
-
-	lim_tdls_update_node_he_caps(mac, add_sta_req, sta, pe_session);
-
+	selfDot11Mode = mac->mlme_cfg->dot11_mode.dot11_mode;
+	if (IS_DOT11_MODE_HE(selfDot11Mode))
+		lim_tdls_update_node_he_caps(mac, add_sta_req, sta, pe_session);
+	else
+		pe_debug("Not populating he cap as SelfDot11Mode not HE %d",
+			 selfDot11Mode);
 	/*
 	 * Calculate the Secondary Coannel Offset if our
 	 * own channel bonding state is enabled
