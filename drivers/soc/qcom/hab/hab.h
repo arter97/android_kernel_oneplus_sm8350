@@ -616,6 +616,6 @@ int dump_hab_open(void);
 void dump_hab_close(void);
 int dump_hab_buf(void *buf, int size);
 void hab_pipe_read_dump(struct physical_channel *pchan);
-void dump_hab(void);
-void dump_hab_wq(void *hyp_data);
+void dump_hab(int mmid);
+void dump_hab_wq(struct physical_channel *pchan);
 #endif /* __HAB_H */

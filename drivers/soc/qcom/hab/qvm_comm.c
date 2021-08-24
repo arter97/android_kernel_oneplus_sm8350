@@ -172,7 +172,7 @@ void physical_channel_rx_dispatch(unsigned long data)
 
 			hab_spin_unlock(&pchan->rxbuf_lock, irqs_disabled);
 			/* cannot run in elevated context */
-			dump_hab_wq(dev);
+			dump_hab_wq(pchan);
 			hab_spin_lock(&pchan->rxbuf_lock, irqs_disabled);
 
 		} else if (ret == 0xFFFFFFFE) { /* continuous signature mismatches */

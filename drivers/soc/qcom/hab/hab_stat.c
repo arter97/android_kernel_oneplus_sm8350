@@ -91,10 +91,11 @@ int hab_stat_show_ctx(struct hab_driver *driver,
 					driver->ctx_cnt);
 	list_for_each_entry(ctx, &hab_driver.uctx_list, node) {
 		ret = hab_stat_buffer_print(buf, size,
-			"ctx %d K %d close %d vc %d exp %d imp %d open %d\n",
+		"ctx %d K %d close %d vc %d exp %d imp %d open %d ref %d\n",
 			ctx->owner, ctx->kernel, ctx->closing,
 			ctx->vcnt, ctx->export_total,
-			ctx->import_total, ctx->pending_cnt);
+			ctx->import_total, ctx->pending_cnt,
+			get_refcnt(ctx->refcount));
 	}
 	spin_unlock_bh(&hab_driver.drvlock);
 
@@ -248,7 +249,7 @@ int dump_hab_buf(void *buf, int size)
 	return size;
 }
 
-void dump_hab(void)
+void dump_hab(int mmid)
 {
 	struct physical_channel *pchan = NULL;
 	int i = 0;
@@ -258,14 +259,13 @@ void dump_hab(void)
 	for (i = 0; i < hab_driver.ndevices; i++) {
 		struct hab_device *habdev = &hab_driver.devp[i];
 
-		/* only care gfx and mis */
-		if (habdev->id == MM_GFX || habdev->id == MM_MISC) {
-
+		if (habdev->id == mmid) {
 			list_for_each_entry(pchan, &habdev->pchannels, node) {
 				if (pchan->vcnt > 0) {
 					pr_info("***** dump pchan %s vcnt %d *****\n",
 						pchan->name, pchan->vcnt);
 					hab_pipe_read_dump(pchan);
+					break;
 				}
 			}
 			dump_hab_buf(str, 8); /* separator */
