@@ -995,7 +995,7 @@ static void stmmac_mac_link_up(struct phylink_config *config,
 		stmmac_set_eee_pls(priv, priv->hw, true);
 	}
 #ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
-	if ((phy && phy->link == 1) && !priv->boot_kpi) {
+	if (!priv->boot_kpi) {
 		place_marker("M - Ethernet is Ready.Link is UP");
 		priv->boot_kpi = true;
 	}
