@@ -26,6 +26,8 @@ struct qcom_icc_provider {
 	struct device *dev;
 	struct qcom_icc_bcm **bcms;
 	size_t num_bcms;
+	struct qcom_icc_node **nodes;
+	size_t num_nodes;
 	struct list_head probe_list;
 	struct regmap *regmap;
 	struct clk_bulk_data *clks;
@@ -155,4 +157,5 @@ void qcom_icc_disable_qos_deps(struct qcom_icc_provider *qp);
 int qcom_icc_rpmh_probe(struct platform_device *pdev);
 int qcom_icc_rpmh_remove(struct platform_device *pdev);
 void qcom_icc_rpmh_sync_state(struct device *dev);
+int qcom_icc_rpmh_configure_qos(struct qcom_icc_provider *qp);
 #endif

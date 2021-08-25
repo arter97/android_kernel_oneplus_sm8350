@@ -261,6 +261,33 @@ void qcom_icc_disable_qos_deps(struct qcom_icc_provider *qp)
 }
 EXPORT_SYMBOL(qcom_icc_disable_qos_deps);
 
+int qcom_icc_rpmh_configure_qos(struct qcom_icc_provider *qp)
+{
+	struct qcom_icc_node *qnode;
+	size_t i;
+	int ret;
+
+	ret = qcom_icc_enable_qos_deps(qp);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < qp->num_nodes; i++) {
+		qnode = qp->nodes[i];
+		if (!qnode)
+			continue;
+
+		if (qnode->qosbox) {
+			qnode->noc_ops->set_qos(qnode);
+			qnode->qosbox->initialized = true;
+		}
+	}
+
+	qcom_icc_disable_qos_deps(qp);
+
+	return ret;
+}
+EXPORT_SYMBOL(qcom_icc_rpmh_configure_qos);
+
 static struct regmap *qcom_icc_rpmh_map(struct platform_device *pdev,
 					const struct qcom_icc_desc *desc)
 {
@@ -317,6 +344,8 @@ int qcom_icc_rpmh_probe(struct platform_device *pdev)
 	qp->dev = &pdev->dev;
 	qp->bcms = desc->bcms;
 	qp->num_bcms = desc->num_bcms;
+	qp->nodes = desc->nodes;
+	qp->num_nodes = desc->num_nodes;
 
 	qp->num_voters = desc->num_voters;
 	qp->voters = devm_kcalloc(&pdev->dev, qp->num_voters,
@@ -345,12 +374,6 @@ int qcom_icc_rpmh_probe(struct platform_device *pdev)
 	if (qp->num_clks < 0)
 		return qp->num_clks;
 
-	ret = clk_bulk_prepare_enable(qp->num_clks, qp->clks);
-	if (ret) {
-		dev_err(&pdev->dev, "failed to enable clocks\n");
-		return ret;
-	}
-
 	for (i = 0; i < qp->num_bcms; i++)
 		qcom_icc_bcm_init(qp->bcms[i], &pdev->dev);
 
@@ -369,11 +392,6 @@ int qcom_icc_rpmh_probe(struct platform_device *pdev)
 			goto err;
 		}
 
-		if (qnodes[i]->qosbox) {
-			qnodes[i]->noc_ops->set_qos(qnodes[i]);
-			qnodes[i]->qosbox->initialized = true;
-		}
-
 		node->name = qnodes[i]->name;
 		node->data = qnodes[i];
 		icc_node_add(node, provider);
@@ -389,7 +407,9 @@ int qcom_icc_rpmh_probe(struct platform_device *pdev)
 	}
 	data->num_nodes = num_nodes;
 
-	clk_bulk_disable_unprepare(qp->num_clks, qp->clks);
+	ret = qcom_icc_rpmh_configure_qos(qp);
+	if (ret)
+		goto err;
 
 	platform_set_drvdata(pdev, qp);
 
@@ -407,7 +427,6 @@ err:
 		icc_node_destroy(node->id);
 	}
 
-	clk_bulk_disable_unprepare(qp->num_clks, qp->clks);
 	clk_bulk_put_all(qp->num_clks, qp->clks);
 
 	icc_provider_del(provider);
