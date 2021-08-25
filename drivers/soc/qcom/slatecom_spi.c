@@ -365,6 +365,7 @@ static void send_back_notification(uint32_t slav_status_reg,
 	uint16_t slave_fifo_free;
 	uint32_t *ptr;
 	int ret;
+	uint32_t oem_provisioning_status;
 	union slatecom_event_data_type event_data = { .fifo_data = {0} };
 
 	master_fifo_used = (uint16_t)fifo_fill_reg;
@@ -405,6 +406,7 @@ static void send_back_notification(uint32_t slav_status_reg,
 
 	/* check if SLATE status is changed */
 	if (g_slav_status_reg ^ slav_status_reg) {
+		pr_err("Slate status 0x%x\n", slav_status_reg);
 		if (slav_status_reg & BIT(30)) {
 			event_data.application_running = true;
 			send_event(SLATECOM_EVENT_APPLICATION_RUNNING,
@@ -444,6 +446,10 @@ static void send_back_notification(uint32_t slav_status_reg,
 			pr_debug("Slate BT UP\n", __func__);
 			set_slate_bt_state(true);
 		}
+
+		oem_provisioning_status = slav_status_reg & (BIT(23) | BIT(24));
+		oem_provisioning_status = ((oem_provisioning_status<<7)>>30);
+		pr_err("Slate OEM prov. status 0x%x\n", oem_provisioning_status);
 	}
 
 	if (master_fifo_used > 0) {
