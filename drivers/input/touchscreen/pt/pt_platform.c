@@ -541,7 +541,10 @@ static int pt_wakeup(struct pt_core_platform_data *pdata,
 	int rc = 0;
 
 #ifdef PT_PINCTRL_EN
-		pt_pinctrl_select_normal(pdata, dev);
+	rc = pt_pinctrl_select_normal(pdata, dev);
+	if (rc)
+		pr_err("%s: GPIO pins activation  error: rc=%d\n",
+			__func__, rc);
 #endif
 
 #ifdef TT7XXX_EXAMPLE
@@ -674,7 +677,10 @@ static int pt_sleep(struct pt_core_platform_data *pdata,
 	pt_debug(dev, DL_INFO, "%s: Turn off defined pwr\n", __func__);
 #endif
 #ifdef PT_PINCTRL_EN
-		pt_pinctrl_select_suspend(pdata, dev);
+	rc = pt_pinctrl_select_suspend(pdata, dev);
+	if (rc)
+		pr_err("%s: GPIO pins suspend error: rc=%d\n",
+			__func__, rc);
 #endif
 	return rc;
 }
