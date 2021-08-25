@@ -380,11 +380,18 @@ int smblite_lib_get_prop_from_bms(struct smb_charger *chg, int channel, int *val
 {
 	int rc;
 
-	if (IS_ERR_OR_NULL(chg->iio_chan_list_qg))
-		return -ENODEV;
+	if (chg->is_fg_remote) {
+		rc = remote_bms_get_prop(channel, val, BMS_GLINK);
+		if (rc < 0)
+			smblite_lib_err(chg, "Couldn't get prop from remote bms, rc = %d",
+					rc);
+	} else {
+		if (IS_ERR_OR_NULL(chg->iio_chan_list_qg))
+			return -ENODEV;
 
-	rc = iio_read_channel_processed(chg->iio_chan_list_qg[channel],
-					val);
+		rc = iio_read_channel_processed(chg->iio_chan_list_qg[channel],
+						val);
+	}
 
 	return rc < 0 ? rc : 0;
 }
@@ -607,7 +614,7 @@ void smblite_lib_suspend_on_debug_battery(struct smb_charger *chg)
 {
 	int rc, val;
 
-	if (!chg->iio_chan_list_qg)
+	if (!chg->iio_chan_list_qg && !chg->is_fg_remote)
 		return;
 
 	rc = smblite_lib_get_prop_from_bms(chg, SMB5_QG_DEBUG_BATTERY,
@@ -4028,6 +4035,7 @@ int smblite_lib_init(struct smb_charger *chg)
 {
 	int rc = 0;
 	struct iio_channel **iio_list;
+	struct smblite_remote_bms *remote_bms;
 
 	INIT_WORK(&chg->bms_update_work, bms_update_work);
 	INIT_WORK(&chg->jeita_update_work, jeita_update_work);
@@ -4072,10 +4080,24 @@ int smblite_lib_init(struct smb_charger *chg)
 			return rc;
 		}
 
-		iio_list = get_ext_channels(chg->dev, smblite_lib_qg_ext_iio_chan,
-			ARRAY_SIZE(smblite_lib_qg_ext_iio_chan));
-		if (!IS_ERR(iio_list))
-			chg->iio_chan_list_qg = iio_list;
+		if (chg->is_fg_remote) {
+			remote_bms = &chg->remote_bms;
+			remote_bms->dev = chg->dev;
+			remote_bms->iio_read = chg->chg_param.iio_read;
+			remote_bms->iio_write = chg->chg_param.iio_write;
+
+			rc = remote_bms_init(remote_bms);
+			if (rc < 0) {
+				smblite_lib_err(chg, "Couldn't initialize remote bms rc=%d\n",
+						rc);
+				return rc;
+			}
+		} else {
+			iio_list = get_ext_channels(chg->dev, smblite_lib_qg_ext_iio_chan,
+				ARRAY_SIZE(smblite_lib_qg_ext_iio_chan));
+			if (!IS_ERR(iio_list))
+				chg->iio_chan_list_qg = iio_list;
+		}
 
 		rc = smblite_lib_register_notifier(chg);
 		if (rc < 0) {
@@ -4107,6 +4129,7 @@ int smblite_lib_deinit(struct smb_charger *chg)
 		cancel_delayed_work_sync(&chg->role_reversal_check);
 		cancel_delayed_work_sync(&chg->pr_swap_detach_work);
 		power_supply_unreg_notifier(&chg->nb);
+		remote_bms_deinit();
 		smblite_lib_destroy_votables(chg);
 		qcom_step_chg_deinit();
 		qcom_batt_deinit();

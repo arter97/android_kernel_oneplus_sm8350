@@ -137,6 +137,7 @@ struct smb_dt_props {
 	int			term_current_thresh_hi_ma;
 	int			term_current_thresh_lo_ma;
 	int			disable_suspend_on_collapse;
+	bool			remote_fg;
 };
 
 struct smblite {
@@ -262,6 +263,7 @@ static int smblite_parse_dt_misc(struct smblite *chip, struct device_node *node)
 	if (rc < 0 || chip->dt.wd_bark_time < MIN_WD_BARK_TIME)
 		chip->dt.wd_bark_time = DEFAULT_WD_BARK_TIME;
 
+	chip->dt.remote_fg = of_property_read_bool(node, "qcom,remote-fg");
 
 	chip->dt.no_battery = of_property_read_bool(node,
 						"qcom,batteryless-platform");
@@ -1972,6 +1974,7 @@ static int smblite_probe(struct platform_device *pdev)
 
 	chg->chg_param.iio_read = smblite_direct_iio_read;
 	chg->chg_param.iio_write = smblite_direct_iio_write;
+	chg->is_fg_remote = chip->dt.remote_fg;
 
 	rc = smblite_lib_init(chg);
 	if (rc < 0) {
@@ -2206,22 +2209,47 @@ static int smblite_freeze(struct device *dev)
 
 static int smblite_suspend(struct device *dev)
 {
+	int rc = 0;
+	struct smblite *chip = dev_get_drvdata(dev);
+
+	if (chip->dt.remote_fg) {
+		rc = remote_bms_suspend();
+		if (rc < 0) {
+			pr_err("Couldn't suspend remote-fg, rc=%d\n", rc);
+			return rc;
+		}
+	}
+
 #ifdef CONFIG_DEEPSLEEP
 	if (mem_sleep_current == PM_SUSPEND_MEM)
 		return smblite_freeze(dev);
 #endif
 
-	return 0;
+	return rc;
 }
 
 static int smblite_resume(struct device *dev)
 {
+	int rc = 0;
+	struct smblite *chip = dev_get_drvdata(dev);
+
 #ifdef CONFIG_DEEPSLEEP
-	if (mem_sleep_current == PM_SUSPEND_MEM)
-		return smblite_restore(dev);
+	if (mem_sleep_current == PM_SUSPEND_MEM) {
+		rc = smblite_restore(dev);
+		if (rc < 0)
+			return rc;
+	}
 #endif
 
-	return 0;
+	if (chip->dt.remote_fg) {
+		rc = remote_bms_resume();
+		if (rc < 0) {
+			pr_err("Couldn't resume remote-fg, rc=%d\n", rc);
+			return rc;
+		}
+	}
+
+	return rc;
 }
 
 static const struct dev_pm_ops smblite_pm_ops = {

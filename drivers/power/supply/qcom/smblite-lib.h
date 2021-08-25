@@ -19,6 +19,7 @@
 #include <linux/qti_power_supply.h>
 #include "storm-watch.h"
 #include "battery.h"
+#include "smblite-remote-bms.h"
 
 enum print_reason {
 	PR_INTERRUPT	= BIT(0),
@@ -267,6 +268,7 @@ struct smb_charger {
 	struct iio_channel	**iio_chan_list_qg;
 	struct iio_channel	**iio_chan_list_smb_parallel;
 	struct class            qcom_class;
+	struct smblite_remote_bms	remote_bms;
 	int			*debug_mask;
 	enum smb_mode		mode;
 	u8			subtype;
@@ -384,6 +386,7 @@ struct smb_charger {
 	bool			flash_init_done;
 	bool			flash_active;
 	u32			irq_status;
+	bool			is_fg_remote;
 };
 
 int smblite_lib_read(struct smb_charger *chg, u16 addr, u8 *val);
