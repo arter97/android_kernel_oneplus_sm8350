@@ -2044,32 +2044,72 @@ int smblite_lib_set_prop_current_max(struct smb_charger *chg,
 	int rc = 0;
 
 	smblite_lib_dbg(chg, PR_MISC,
-		"Current request from USB driver current=%dmA\n", val->intval);
-	/* ignore current request from USB for charger other than SDP */
-	if (chg->real_charger_type != POWER_SUPPLY_TYPE_USB)
-		return 0;
+		"Current request from USB driver current=%dmA, charger_type=%d\n",
+			val->intval, chg->real_charger_type);
 
-	rc = vote(chg->usb_icl_votable, USB_PSY_VOTER, true, val->intval);
-	if (rc < 0) {
-		pr_err("Couldn't vote ICL USB_PSY_VOTER rc=%d\n", rc);
-		return rc;
-	}
+	if (chg->real_charger_type == QTI_POWER_SUPPLY_TYPE_USB_FLOAT) {
+		if (val->intval == -ETIMEDOUT) {
+			if ((chg->float_cfg & FLOAT_OPTIONS_MASK)
+						== FORCE_FLOAT_SDP_CFG_BIT) {
+				/*
+				 * Confiugure USB500 mode if Float charger is
+				 * configured for SDP mode.
+				 */
+				rc = vote(chg->usb_icl_votable,
+					SW_ICL_MAX_VOTER, true, USBIN_500UA);
+				if (rc < 0)
+					smblite_lib_err(chg,
+						"Couldn't set SDP ICL rc=%d\n",
+						rc);
+				return rc;
+			}
 
-	rc = vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, false, 0);
-	if (rc < 0) {
-		pr_err("Couldn't remove SW_ICL_MAX vote rc=%d\n", rc);
-		return rc;
-	}
+			/* Set ICL to 1.5A if its configured for DCP */
+			rc = vote(chg->usb_icl_votable,
+				  SW_ICL_MAX_VOTER, true, DCP_CURRENT_UA);
+			if (rc < 0)
+				return rc;
+		} else {
+			/*
+			 * FLOAT charger detected as SDP by USB driver,
+			 * charge with the requested current and update the
+			 * real_charger_type
+			 */
+			chg->real_charger_type = POWER_SUPPLY_TYPE_USB;
 
-	/* Update TypeC Rp based current */
-	if (chg->connector_type == QTI_POWER_SUPPLY_CONNECTOR_TYPEC) {
-		update_sw_icl_max(chg, chg->real_charger_type);
-	} else if (is_flashlite_active(chg) && (val->intval >=  USBIN_400UA)) {
-		/* For Uusb based SDP port */
-		vote(chg->usb_icl_votable, FLASH_ACTIVE_VOTER, true,
-				val->intval - USBIN_300UA);
-		smblite_lib_dbg(chg, PR_MISC, "flash_active = 1, ICL set to  %d\n",
-						val->intval - USBIN_300UA);
+			rc = vote(chg->usb_icl_votable, USB_PSY_VOTER,
+						true, val->intval);
+			if (rc < 0)
+				return rc;
+			rc = vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER,
+							false, 0);
+			if (rc < 0)
+				return rc;
+		}
+	} else if (chg->real_charger_type == POWER_SUPPLY_TYPE_USB) {
+
+		rc = vote(chg->usb_icl_votable, USB_PSY_VOTER, true, val->intval);
+		if (rc < 0) {
+			pr_err("Couldn't vote ICL USB_PSY_VOTER rc=%d\n", rc);
+			return rc;
+		}
+
+		rc = vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, false, 0);
+		if (rc < 0) {
+			pr_err("Couldn't remove SW_ICL_MAX vote rc=%d\n", rc);
+			return rc;
+		}
+
+		/* Update TypeC Rp based current */
+		if (chg->connector_type == QTI_POWER_SUPPLY_CONNECTOR_TYPEC) {
+			update_sw_icl_max(chg, chg->real_charger_type);
+		} else if (is_flashlite_active(chg) && (val->intval >=  USBIN_400UA)) {
+			/* For Uusb based SDP port */
+			vote(chg->usb_icl_votable, FLASH_ACTIVE_VOTER, true,
+			     val->intval - USBIN_300UA);
+			smblite_lib_dbg(chg, PR_MISC, "flash_active = 1, ICL set to  %d\n",
+					val->intval - USBIN_300UA);
+		}
 	}
 
 	return 0;
