@@ -1284,8 +1284,94 @@ static int __maybe_unused st_asm330lhh_resume(struct device *dev)
 	return err < 0 ? err : 0;
 }
 
+static int __maybe_unused st_asm330lhh_freeze(struct device *dev)
+{
+	struct st_asm330lhh_hw *hw = dev_get_drvdata(dev);
+	struct st_asm330lhh_sensor *sensor;
+	int i, err = 0;
+
+	for (i = 0; i < ST_ASM330LHH_ID_MAX; i++) {
+		if (!hw->iio_devs[i])
+			continue;
+
+		sensor = iio_priv(hw->iio_devs[i]);
+		if (!(hw->enable_mask & BIT(sensor->id)))
+			continue;
+
+		/* power off enabled sensors */
+		err = st_asm330lhh_set_odr(sensor, 0, 0);
+		if (err < 0)
+			return err;
+	}
+
+	if (st_asm330lhh_is_fifo_enabled(hw)) {
+		err = st_asm330lhh_suspend_fifo(hw);
+		if (err < 0)
+			return err;
+	}
+
+#ifdef CONFIG_IIO_ST_ASM330LHH_MAY_WAKEUP
+	if (device_may_wakeup(dev))
+		enable_irq_wake(hw->irq);
+#endif /* CONFIG_IIO_ST_ASM330LHH_MAY_WAKEUP */
+
+
+	if (asm330_check_regulator)
+		st_asm330lhh_regulator_power_down(hw);
+
+	return err < 0 ? err : 0;
+}
+
+static int __maybe_unused st_asm330lhh_restore(struct device *dev)
+{
+	struct st_asm330lhh_hw *hw = dev_get_drvdata(dev);
+	struct st_asm330lhh_sensor *sensor;
+	int i, err = 0;
+
+	if (asm330_check_regulator) {
+		err = st_asm330lhh_regulator_power_up(hw);
+		if (err < 0) {
+			dev_err(hw->dev, "regulator power up failed\n");
+			return err;
+		}
+
+		/* allow time for enabling regulators */
+		usleep_range(1000, 2000);
+	}
+
+#ifdef CONFIG_IIO_ST_ASM330LHH_MAY_WAKEUP
+	if (device_may_wakeup(dev))
+		disable_irq_wake(hw->irq);
+#endif /* CONFIG_IIO_ST_ASM330LHH_MAY_WAKEUP */
+
+	for (i = 0; i < ST_ASM330LHH_ID_MAX; i++) {
+		if (!hw->iio_devs[i])
+			continue;
+
+		sensor = iio_priv(hw->iio_devs[i]);
+		if (!(hw->enable_mask & BIT(sensor->id)))
+			continue;
+
+		err = st_asm330lhh_set_odr(sensor, sensor->odr, sensor->uodr);
+		if (err < 0)
+			return err;
+	}
+
+	err = st_asm330lhh_reset_hwts(hw);
+	if (err < 0)
+		return err;
+
+	if (st_asm330lhh_is_fifo_enabled(hw))
+		err = st_asm330lhh_set_fifo_mode(hw, ST_ASM330LHH_FIFO_CONT);
+
+	return err < 0 ? err : 0;
+}
+
 const struct dev_pm_ops st_asm330lhh_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(st_asm330lhh_suspend, st_asm330lhh_resume)
+	.suspend = st_asm330lhh_suspend,
+	.resume  = st_asm330lhh_resume,
+	.freeze  = st_asm330lhh_freeze,
+	.restore = st_asm330lhh_restore,
 };
 EXPORT_SYMBOL(st_asm330lhh_pm_ops);
 
