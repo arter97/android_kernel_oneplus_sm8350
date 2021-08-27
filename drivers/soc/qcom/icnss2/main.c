@@ -2257,17 +2257,23 @@ static int icnss_tcdev_set_cur_state(struct thermal_cooling_device *tcdev,
 	if (!penv->ops || !penv->ops->set_therm_cdev_state)
 		return 0;
 
+	if (thermal_state > icnss_tcdev->max_thermal_state)
+		return -EINVAL;
+
 	icnss_pr_vdbg("Cooling device set current state: %ld,for cdev id %d",
 		      thermal_state, icnss_tcdev->tcdev_id);
 
 	mutex_lock(&penv->tcdev_lock);
-	icnss_tcdev->curr_thermal_state = thermal_state;
 	ret = penv->ops->set_therm_cdev_state(dev, thermal_state,
 					      icnss_tcdev->tcdev_id);
+	if (!ret)
+		icnss_tcdev->curr_thermal_state = thermal_state;
 	mutex_unlock(&penv->tcdev_lock);
-	if (ret)
+	if (ret) {
 		icnss_pr_err("Setting Current Thermal State Failed: %d,for cdev id %d",
 			     ret, icnss_tcdev->tcdev_id);
+		return ret;
+	}
 
 	return 0;
 }
@@ -3346,9 +3352,12 @@ static void icnss_wpss_load(struct work_struct *wpss_load_work)
 {
 	struct icnss_priv *priv = icnss_get_plat_priv();
 
+	icnss_pr_dbg("Start WPSS Boot\n");
+
 	priv->subsys = subsystem_get("wpss");
 	if (IS_ERR_OR_NULL(priv->subsys))
-		icnss_pr_err("Failed to load wpss subsys");
+		icnss_pr_err("Failed to load wpss subsys, ret: %d",
+			     PTR_ERR(priv->subsys));
 }
 
 static inline void icnss_wpss_unload(struct icnss_priv *priv)
@@ -3384,11 +3393,33 @@ static ssize_t wpss_boot_store(struct device *dev,
 	return count;
 }
 
+static ssize_t wlan_en_delay_store(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf, size_t count)
+{
+	struct icnss_priv *priv = dev_get_drvdata(dev);
+	uint32_t wlan_en_delay  = 0;
+
+	if (priv->device_id != WCN6750_DEVICE_ID)
+		return count;
+
+	if (sscanf(buf, "%du", &wlan_en_delay) != 1) {
+		icnss_pr_err("Failed to read wlan_en_delay");
+		return -EINVAL;
+	}
+
+	icnss_pr_dbg("WLAN_EN delay: %dms", wlan_en_delay);
+	priv->wlan_en_delay_ms = wlan_en_delay;
+
+	return count;
+}
+
 static DEVICE_ATTR_WO(qdss_tr_start);
 static DEVICE_ATTR_WO(qdss_tr_stop);
 static DEVICE_ATTR_WO(qdss_conf_download);
 static DEVICE_ATTR_WO(hw_trc_override);
 static DEVICE_ATTR_WO(wpss_boot);
+static DEVICE_ATTR_WO(wlan_en_delay);
 
 static struct attribute *icnss_attrs[] = {
 	&dev_attr_qdss_tr_start.attr,
@@ -3396,6 +3427,7 @@ static struct attribute *icnss_attrs[] = {
 	&dev_attr_qdss_conf_download.attr,
 	&dev_attr_hw_trc_override.attr,
 	&dev_attr_wpss_boot.attr,
+	&dev_attr_wlan_en_delay.attr,
 	NULL,
 };
 
