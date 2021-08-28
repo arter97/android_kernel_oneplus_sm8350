@@ -53,7 +53,7 @@
 #define WR_BUF_SIZE_IN_WORDS_FOR_USE   \
 		(WR_BUF_SIZE_IN_WORDS - WR_PROTOCOL_OVERHEAD_IN_WORDS)
 
-#define MAX_RETRY 100
+#define SLATE_RESUME_IRQ_TIMEOUT 1000
 
 enum slatecom_state {
 	/*SLATECOM Staus ready*/
@@ -120,10 +120,13 @@ static DECLARE_WORK(input_work, send_input_events);
 static struct mutex slate_resume_mutex;
 
 static atomic_t  slate_is_spi_active;
+static atomic_t  ok_to_sleep;
 static int slate_irq;
 
 static uint8_t *fxd_mem_buffer;
 static struct mutex cma_buffer_lock;
+
+static DECLARE_COMPLETION(slate_resume_wait);
 
 static void augmnt_fifo(uint8_t *data, int pos)
 {
@@ -844,7 +847,7 @@ int slatecom_resume(void *handle)
 {
 	struct slate_spi_priv *slate_spi;
 	struct slate_context *cntx;
-	int retry = 0;
+	int ret = 0;
 
 	if (handle == NULL)
 		return -EINVAL;
@@ -872,32 +875,35 @@ int slatecom_resume(void *handle)
 	if (slate_spi->slate_state == SLATECOM_STATE_ACTIVE)
 		goto unlock;
 	enable_irq(slate_irq);
-	do {
-		if (!(g_slav_status_reg & BIT(31))) {
-			pr_err("Slate boot is not complete, skip SPI resume\n");
-			return 0;
+
+	if (!(g_slav_status_reg & BIT(31))) {
+		pr_err("Slate boot is not complete, skip SPI resume\n");
+		goto unlock;
+	}
+	if (is_slate_resume(handle)) {
+		if (atomic_read(&ok_to_sleep)) {
+			reinit_completion(&slate_resume_wait);
+			ret = wait_for_completion_timeout(
+				&slate_resume_wait, msecs_to_jiffies(
+					SLATE_RESUME_IRQ_TIMEOUT));
+			if (!ret) {
+				pr_err("Time out on Slate Resume\n");
+				goto error;
+			}
 		}
-		if (is_slate_resume(handle)) {
-			slate_spi->slate_state = SLATECOM_STATE_ACTIVE;
-			break;
-		}
-		udelay(1000);
-		++retry;
-	} while (retry < MAX_RETRY);
+		slate_spi->slate_state = SLATECOM_STATE_ACTIVE;
+	}
+	goto unlock;
+
+error:
+	mutex_unlock(&slate_resume_mutex);
+	/* SLATE failed to resume. Trigger watchdog. */
+		pr_err("SLATE failed to resume\n");
+		BUG();
+		return -ETIMEDOUT;
 
 unlock:
 	mutex_unlock(&slate_resume_mutex);
-	if (retry == MAX_RETRY) {
-		/* SLATE failed to resume. Trigger SLATE soft reset. */
-		pr_err("SLATE failed to resume\n");
-		pr_err("%s: gpio#95 value is: %d\n",
-				__func__, gpio_get_value(95));
-		pr_err("%s: gpio#97 value is: %d\n",
-				__func__, gpio_get_value(97));
-		BUG();
-		//bg_soft_reset();
-		return -ETIMEDOUT;
-	}
 	return 0;
 }
 EXPORT_SYMBOL(slatecom_resume);
@@ -974,6 +980,10 @@ EXPORT_SYMBOL(slatecom_close);
 static irqreturn_t slate_irq_tasklet_hndlr(int irq, void *device)
 {
 	struct slate_spi_priv *slate_spi = device;
+
+	/* Once interrupt received. Slate is OUT of sleep */
+	complete(&slate_resume_wait);
+	atomic_set(&ok_to_sleep, 0);
 
 	/* check if call-back exists */
 	if (!atomic_read(&slate_is_spi_active)) {
@@ -1124,6 +1134,7 @@ static int slatecom_pm_suspend(struct device *dev)
 	if (ret == 0) {
 		slate_spi->slate_state = SLATECOM_STATE_SUSPEND;
 		atomic_set(&slate_is_spi_active, 0);
+		atomic_set(&ok_to_sleep, 1);
 		disable_irq(slate_irq);
 	}
 	pr_info("suspended with : %d\n", ret);
