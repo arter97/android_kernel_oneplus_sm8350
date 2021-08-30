@@ -120,6 +120,7 @@ int  pm_silentmode_update(int val, struct kobject *kobj, bool us)
 	pm_silentmode_kernel_set(val ^ 1);
 	pm_silentmode_hw_state_set((val ^ 1));
 	sysfs_notify(power_kobj, NULL, "pm_silentmode_kernel_state");
+	sysfs_notify(power_kobj, NULL, "pm_silentmode_hw_state");
 	pm_silent_mode_cb_chain();
 
 	return 0;
