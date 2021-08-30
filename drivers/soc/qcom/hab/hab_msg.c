@@ -369,6 +369,13 @@ int hab_msg_recv(struct physical_channel *pchan,
 			break;
 		}
 
+		if (exp_desc->payload_count > MAX_EXP_PAYLOAD_COUNT) {
+			pr_err("payload_count out of range: %d size overflow\n",
+				exp_desc->payload_count);
+			kfree(exp_desc);
+			break;
+		}
+
 		exp_desc_size_expected += pfn_table->nregions * sizeof(struct region);
 		if (sizebytes != exp_desc_size_expected) {
 			pr_err("%s exp size not equal %zu expect %zu\n",
