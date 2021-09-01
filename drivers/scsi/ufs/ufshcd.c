@@ -7920,6 +7920,8 @@ out:
 static void ufshcd_async_scan(void *data, async_cookie_t cookie)
 {
 	struct ufs_hba *hba = (struct ufs_hba *)data;
+	struct device *dev = hba->dev;
+	struct device_node *np = dev->of_node;
 	int ret;
 
 	/* Initialize hba, detect and initialize UFS device */
@@ -7929,6 +7931,9 @@ static void ufshcd_async_scan(void *data, async_cookie_t cookie)
 
 	/* Probe and add UFS logical units  */
 	ret = ufshcd_add_lus(hba);
+
+	if (!of_property_read_bool(np, "secondary-storage"))
+		hba->primary_boot_device_probed = true;
 out:
 	/*
 	 * If we failed to initialize the device or the device is not
