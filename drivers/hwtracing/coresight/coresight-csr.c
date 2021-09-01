@@ -614,9 +614,12 @@ static int csr_probe(struct platform_device *pdev)
 	else
 		dev_dbg(dev, "perflsheot_set_support operation supported\n");
 
-	if (drvdata->perflsheot_set_support)
-		drvdata->flushperiod = FLUSHPERIOD_1;
-	else if (drvdata->usb_bam_support)
+	if (drvdata->perflsheot_set_support) {
+		ret = of_property_read_u32(pdev->dev.of_node, "qcom,flushperiod",
+						&drvdata->flushperiod);
+		if (ret)
+			drvdata->flushperiod = FLUSHPERIOD_1;
+	} else if (drvdata->usb_bam_support)
 		drvdata->flushperiod = FLUSHPERIOD_2048;
 	drvdata->msr_support = of_property_read_bool(pdev->dev.of_node,
 						"qcom,msr-support");
