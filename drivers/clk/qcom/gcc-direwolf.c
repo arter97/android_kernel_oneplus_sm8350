@@ -7947,6 +7947,8 @@ static const struct qcom_reset_map gcc_direwolf_resets[] = {
 	[GCC_USB4PHY_PHY_PRIM_BCR] = { 0x4a004 },
 	[GCC_USB_PHY_CFG_AHB2PHY_BCR] = { 0x6a000 },
 	[GCC_VIDEO_BCR] = { 0x28000 },
+	[GCC_VIDEO_AXI0_CLK_ARES] = { 0x28010, 2 },
+	[GCC_VIDEO_AXI1_CLK_ARES] = { 0x28018, 2 },
 };
 
 static const struct clk_rcg_dfs_data gcc_dfs_clocks[] = {
