@@ -210,5 +210,7 @@ struct plat_stmmacenet_data {
 	int (*init_pps)(void *priv);
 	bool phy_intr_en;
 	int (*phy_intr_enable)(void *priv);
+	void (*phy_irq_enable)(void *priv);
+	void (*phy_irq_disable)(void *priv);
 };
 #endif

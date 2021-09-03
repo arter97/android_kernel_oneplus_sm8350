@@ -1106,7 +1106,7 @@ static int stmmac_init_phy(struct net_device *dev)
 			}
 		}
 
-		if (priv->plat->phy_intr_en_extn_stm) {
+		if (priv->plat->phy_intr_en_extn_stm && priv->plat->phy_intr_en) {
 			priv->phydev->irq = PHY_IGNORE_INTERRUPT;
 			priv->phydev->interrupts =  PHY_INTERRUPT_ENABLED;
 			if (priv->phydev->drv->ack_interrupt &&
@@ -2860,6 +2860,9 @@ static int stmmac_open(struct net_device *dev)
 	if (!priv->plat->mac2mac_en)
 		phylink_start(priv->phylink);
 
+	if (!priv->phy_irq_enabled)
+		priv->plat->phy_irq_enable(priv);
+
 	/* Request the IRQ lines */
 	ret = request_irq(dev->irq, stmmac_interrupt,
 			  IRQF_SHARED, dev->name, dev);
@@ -2937,6 +2940,9 @@ static int stmmac_release(struct net_device *dev)
 {
 	struct stmmac_priv *priv = netdev_priv(dev);
 	u32 chan;
+
+	if (priv->phy_irq_enabled)
+		priv->plat->phy_irq_disable(priv);
 
 	/* Stop and disconnect the PHY */
 	if (!priv->plat->mac2mac_en) {
