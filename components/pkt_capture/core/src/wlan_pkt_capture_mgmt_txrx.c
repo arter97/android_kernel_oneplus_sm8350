@@ -329,14 +329,38 @@ void pkt_capture_mgmt_tx(struct wlan_objmgr_pdev *pdev,
 			 uint16_t chan_freq,
 			 uint8_t preamble_type)
 {
+	struct mgmt_offload_event_params params = {0};
+	tpSirMacFrameCtl pfc = (tpSirMacFrameCtl)(qdf_nbuf_data(nbuf));
+	struct pkt_psoc_priv *psoc_priv;
+	struct wlan_objmgr_psoc *psoc;
 	qdf_nbuf_t wbuf;
 	int nbuf_len;
-	struct mgmt_offload_event_params params = {0};
 
 	if (!pdev) {
 		pkt_capture_err("pdev is NULL");
 		return;
 	}
+
+	psoc = wlan_pdev_get_psoc(pdev);
+	if (!psoc) {
+		pkt_capture_err("psoc is NULL");
+		return;
+	}
+
+	psoc_priv = pkt_capture_psoc_get_priv(psoc);
+	if (!psoc_priv) {
+		pkt_capture_err("psoc priv is NULL");
+		return;
+	}
+
+	if (pfc->type == IEEE80211_FC0_TYPE_MGT &&
+	    !(psoc_priv->frame_filter.mgmt_tx_frame_filter &
+	    PKT_CAPTURE_MGMT_FRAME_TYPE_ALL))
+		return;
+
+	if (pfc->type == IEEE80211_FC0_TYPE_CTL &&
+	    !psoc_priv->frame_filter.ctrl_tx_frame_filter)
+		return;
 
 	nbuf_len = qdf_nbuf_len(nbuf);
 	wbuf = qdf_nbuf_alloc(NULL, roundup(nbuf_len + RESERVE_BYTES, 4),
@@ -380,6 +404,9 @@ pkt_capture_mgmt_tx_completion(struct wlan_objmgr_pdev *pdev,
 			       uint32_t status,
 			       struct mgmt_offload_event_params *params)
 {
+	struct pkt_psoc_priv *psoc_priv;
+	struct wlan_objmgr_psoc *psoc;
+	tpSirMacFrameCtl pfc;
 	qdf_nbuf_t wbuf, nbuf;
 	int nbuf_len;
 
@@ -388,8 +415,29 @@ pkt_capture_mgmt_tx_completion(struct wlan_objmgr_pdev *pdev,
 		return;
 	}
 
+	psoc = wlan_pdev_get_psoc(pdev);
+	if (!psoc) {
+		pkt_capture_err("psoc is NULL");
+		return;
+	}
+
+	psoc_priv = pkt_capture_psoc_get_priv(psoc);
+	if (!psoc_priv) {
+		pkt_capture_err("psoc priv is NULL");
+		return;
+	}
+
 	nbuf = mgmt_txrx_get_nbuf(pdev, desc_id);
 	if (!nbuf)
+		return;
+	pfc = (tpSirMacFrameCtl)(qdf_nbuf_data(nbuf));
+	if (pfc->type == IEEE80211_FC0_TYPE_MGT &&
+	    !(psoc_priv->frame_filter.mgmt_tx_frame_filter &
+	    PKT_CAPTURE_MGMT_FRAME_TYPE_ALL))
+		return;
+
+	if (pfc->type == IEEE80211_FC0_TYPE_CTL &&
+	    !psoc_priv->frame_filter.ctrl_tx_frame_filter)
 		return;
 
 	nbuf_len = qdf_nbuf_len(nbuf);
