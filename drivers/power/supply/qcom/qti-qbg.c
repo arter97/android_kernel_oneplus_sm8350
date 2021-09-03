@@ -1086,6 +1086,23 @@ static int qbg_get_battery_current(struct qti_qbg *chip, int *ibat_ua)
 	return 0;
 }
 
+static int qbg_get_battery_temp(struct qti_qbg *chip, int *temp)
+{
+	int rc;
+
+	if (!chip->batt_temp_chan)
+		return -EINVAL;
+
+	rc = iio_read_channel_processed(chip->batt_temp_chan, temp);
+	if (rc < 0) {
+		pr_err("Failed to read BATT_TEMP over ADC, rc=%d\n", rc);
+		return rc;
+	}
+	chip->tbat = *temp;
+
+	return 0;
+}
+
 #define TENTH_FACTOR	10
 static int qbg_get_charge_counter(struct qti_qbg *chip, int *charge_count)
 {
@@ -1332,7 +1349,7 @@ static int qbg_iio_read_raw(struct iio_dev *indio_dev,
 		rc = qbg_get_battery_capacity(chip, val1);
 		break;
 	case PSY_IIO_TEMP:
-		*val1 = chip->tbat;
+		rc = qbg_get_battery_temp(chip, val1);
 		break;
 	case PSY_IIO_VOLTAGE_MAX:
 		*val1 = chip->float_volt_uv;
