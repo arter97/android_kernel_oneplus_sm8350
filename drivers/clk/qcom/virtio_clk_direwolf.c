@@ -117,6 +117,17 @@ static const char * const direwolf_gcc_virtio_clocks[] = {
 	[GCC_AGGRE_NOC_PCIE_SOUTH_SF_AXI_CLK] = "gcc_aggre_noc_pcie_south_sf_axi_clk",
 	[GCC_CNOC_PCIE4_QX_CLK] = "gcc_cnoc_pcie4_qx_clk",
 	[GCC_PCIE_4_PIPEDIV2_CLK] = "gcc_pcie_4_pipediv2_clk",
+	[GCC_UFS_1_CARD_CLKREF_CLK] = "gcc_ufs_1_card_clkref_en",
+	[GCC_UFS_CARD_PHY_AUX_CLK] = "gcc_ufs_card_phy_aux_clk",
+	[GCC_UFS_REF_CLKREF_CLK] = "gcc_ufs_ref_clkref_en",
+	[GCC_UFS_CARD_AXI_CLK] = "gcc_ufs_card_axi_clk",
+	[GCC_AGGRE_UFS_CARD_AXI_CLK] = "gcc_aggre_ufs_card_axi_clk",
+	[GCC_UFS_CARD_AHB_CLK] = "gcc_ufs_card_ahb_clk",
+	[GCC_UFS_CARD_UNIPRO_CORE_CLK] = "gcc_ufs_card_unipro_core_clk",
+	[GCC_UFS_CARD_ICE_CORE_CLK] = "gcc_ufs_card_ice_core_clk",
+	[GCC_UFS_CARD_TX_SYMBOL_0_CLK] = "gcc_ufs_card_tx_symbol_0_clk",
+	[GCC_UFS_CARD_RX_SYMBOL_0_CLK] = "gcc_ufs_card_rx_symbol_0_clk",
+	[GCC_UFS_CARD_RX_SYMBOL_1_CLK] = "gcc_ufs_card_rx_symbol_1_clk",
 };
 
 static const char * const direwolf_gcc_virtio_resets[] = {
@@ -145,6 +156,7 @@ static const char * const direwolf_gcc_virtio_resets[] = {
 	[GCC_PCIE_4_BCR] = "gcc_pcie_4_bcr",
 	[GCC_PCIE_4_PHY_BCR] = "gcc_pcie_4_phy_bcr",
 	[GCC_PCIE_4_PHY_NOCSR_COM_PHY_BCR] = "gcc_pcie_4_phy_nocsr_com_phy_bcr",
+	[GCC_UFS_CARD_BCR] = "gcc_ufs_card_bcr",
 };
 
 const struct clk_virtio_desc clk_virtio_direwolf_gcc = {
