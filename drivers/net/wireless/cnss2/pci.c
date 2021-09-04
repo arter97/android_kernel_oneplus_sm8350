@@ -78,6 +78,8 @@ static DEFINE_SPINLOCK(time_sync_lock);
 #define FORCE_WAKE_DELAY_MAX_US			6000
 #define FORCE_WAKE_DELAY_TIMEOUT_US		60000
 
+#define REG_RETRY_MAX_TIMES		3
+
 #define LINK_TRAINING_RETRY_MAX_TIMES		3
 #define LINK_TRAINING_RETRY_DELAY_MS		500
 
@@ -1942,6 +1944,7 @@ int cnss_pci_start_mhi(struct cnss_pci_data *pci_priv)
 	int ret = 0;
 	struct cnss_plat_data *plat_priv;
 	unsigned int timeout = 0;
+	int retry = 0;
 
 	if (!pci_priv) {
 		cnss_pr_err("pci_priv is NULL\n");
@@ -1967,9 +1970,14 @@ int cnss_pci_start_mhi(struct cnss_pci_data *pci_priv)
 	else /* For perf builds the timeout is 10 (default) * 3 seconds */
 		pci_priv->mhi_ctrl->timeout_ms *= 3;
 
+retry:
 	ret = cnss_pci_store_qrtr_node_id(pci_priv);
-	if (ret)
-		return ret;
+	if (ret) {
+		if (retry++ < REG_RETRY_MAX_TIMES)
+			goto retry;
+		else
+			return ret;
+	}
 
 	/* Start the timer to dump MHI/PBL/SBL debug data periodically */
 	mod_timer(&pci_priv->boot_debug_timer,
