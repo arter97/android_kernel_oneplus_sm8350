@@ -1005,9 +1005,12 @@ static void ethqos_handle_phy_interrupt(struct qcom_ethqos *ethqos)
 	struct stmmac_priv *priv = netdev_priv(dev);
 	int micrel_intr_status = 0;
 
-	if (priv->phydev && (priv->phydev->phy_id &
-	    priv->phydev->drv->phy_id_mask)
-	    == MICREL_PHY_ID) {
+	if ((priv->phydev && (priv->phydev->phy_id &
+	     priv->phydev->drv->phy_id_mask)
+	     == MICREL_PHY_ID) ||
+	    (priv->phydev && (priv->phydev->phy_id &
+	     priv->phydev->drv->phy_id_mask)
+	     == PHY_ID_KSZ9131)) {
 		phy_intr_status = ethqos_mdio_read(priv,
 						   priv->plat->phy_addr,
 						   DWC_ETH_QOS_BASIC_STATUS);
