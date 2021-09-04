@@ -4582,7 +4582,7 @@ static struct clk_branch gcc_pcie_2a_mstr_axi_clk = {
 
 static struct clk_branch gcc_pcie_2a_pipe_clk = {
 	.halt_reg = 0x9d030,
-	.halt_check = BRANCH_HALT_VOTED,
+	.halt_check = BRANCH_HALT_SKIP,
 	.clkr = {
 		.enable_reg = 0x52010,
 		.enable_mask = BIT(14),
@@ -4600,7 +4600,7 @@ static struct clk_branch gcc_pcie_2a_pipe_clk = {
 
 static struct clk_branch gcc_pcie_2a_pipediv2_clk = {
 	.halt_reg = 0x9d038,
-	.halt_check = BRANCH_HALT_VOTED,
+	.halt_check = BRANCH_HALT_SKIP,
 	.clkr = {
 		.enable_reg = 0x52018,
 		.enable_mask = BIT(22),
@@ -4694,7 +4694,7 @@ static struct clk_branch gcc_pcie_2b_mstr_axi_clk = {
 
 static struct clk_branch gcc_pcie_2b_pipe_clk = {
 	.halt_reg = 0x9e030,
-	.halt_check = BRANCH_HALT_VOTED,
+	.halt_check = BRANCH_HALT_SKIP,
 	.clkr = {
 		.enable_reg = 0x52010,
 		.enable_mask = BIT(21),
@@ -4712,7 +4712,7 @@ static struct clk_branch gcc_pcie_2b_pipe_clk = {
 
 static struct clk_branch gcc_pcie_2b_pipediv2_clk = {
 	.halt_reg = 0x9e038,
-	.halt_check = BRANCH_HALT_VOTED,
+	.halt_check = BRANCH_HALT_SKIP,
 	.clkr = {
 		.enable_reg = 0x52018,
 		.enable_mask = BIT(23),
@@ -4819,7 +4819,7 @@ static struct clk_branch gcc_pcie_3a_mstr_axi_clk = {
 
 static struct clk_branch gcc_pcie_3a_pipe_clk = {
 	.halt_reg = 0xa0030,
-	.halt_check = BRANCH_HALT_VOTED,
+	.halt_check = BRANCH_HALT_SKIP,
 	.clkr = {
 		.enable_reg = 0x52010,
 		.enable_mask = BIT(28),
@@ -4837,7 +4837,7 @@ static struct clk_branch gcc_pcie_3a_pipe_clk = {
 
 static struct clk_branch gcc_pcie_3a_pipediv2_clk = {
 	.halt_reg = 0xa0038,
-	.halt_check = BRANCH_HALT_VOTED,
+	.halt_check = BRANCH_HALT_SKIP,
 	.clkr = {
 		.enable_reg = 0x52018,
 		.enable_mask = BIT(24),
@@ -4931,7 +4931,7 @@ static struct clk_branch gcc_pcie_3b_mstr_axi_clk = {
 
 static struct clk_branch gcc_pcie_3b_pipe_clk = {
 	.halt_reg = 0xa2030,
-	.halt_check = BRANCH_HALT_VOTED,
+	.halt_check = BRANCH_HALT_SKIP,
 	.clkr = {
 		.enable_reg = 0x52018,
 		.enable_mask = BIT(3),
@@ -4949,7 +4949,7 @@ static struct clk_branch gcc_pcie_3b_pipe_clk = {
 
 static struct clk_branch gcc_pcie_3b_pipediv2_clk = {
 	.halt_reg = 0xa2038,
-	.halt_check = BRANCH_HALT_VOTED,
+	.halt_check = BRANCH_HALT_SKIP,
 	.clkr = {
 		.enable_reg = 0x52018,
 		.enable_mask = BIT(25),
@@ -5056,7 +5056,7 @@ static struct clk_branch gcc_pcie_4_mstr_axi_clk = {
 
 static struct clk_branch gcc_pcie_4_pipe_clk = {
 	.halt_reg = 0x6b030,
-	.halt_check = BRANCH_HALT_VOTED,
+	.halt_check = BRANCH_HALT_SKIP,
 	.clkr = {
 		.enable_reg = 0x52008,
 		.enable_mask = BIT(4),
@@ -5074,7 +5074,7 @@ static struct clk_branch gcc_pcie_4_pipe_clk = {
 
 static struct clk_branch gcc_pcie_4_pipediv2_clk = {
 	.halt_reg = 0x6b038,
-	.halt_check = BRANCH_HALT_VOTED,
+	.halt_check = BRANCH_HALT_SKIP,
 	.clkr = {
 		.enable_reg = 0x52018,
 		.enable_mask = BIT(16),
