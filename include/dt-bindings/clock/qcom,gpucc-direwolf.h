@@ -26,5 +26,6 @@
 #define GPU_CC_HUB_CX_INT_CLK					16
 #define GPU_CC_HUB_CX_INT_DIV_CLK_SRC				17
 #define GPU_CC_SLEEP_CLK					18
+#define GPU_CC_HLOS1_VOTE_GPU_SMMU_CLK				19
 
 #endif
