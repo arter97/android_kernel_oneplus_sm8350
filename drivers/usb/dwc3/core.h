@@ -171,6 +171,7 @@
 #define GEN2_U3_EXIT_RSP_RX_CLK_MASK	GEN2_U3_EXIT_RSP_RX_CLK(0xff)
 #define GEN1_U3_EXIT_RSP_RX_CLK(n)	(n)
 #define GEN1_U3_EXIT_RSP_RX_CLK_MASK	GEN1_U3_EXIT_RSP_RX_CLK(0xff)
+#define DWC3_LLUCTL(n)			(0xd024 + ((n) * 0x80))
 #define DWC31_LINK_GDBGLTSSM(n)		(0xd050 + ((n) * 0x80))
 
 /* DWC 3.1 Tx De-emphasis Registers */
@@ -652,6 +653,9 @@
 
 #define DWC_CTRL_COUNT	10
 #define NUM_LOG_PAGES	12
+
+/* Force Gen1 speed on Gen2 link*/
+#define DWC3_FORCE_GEN1			BIT(10)
 
 /* Structures */
 
@@ -1169,6 +1173,7 @@ struct dwc3_scratchpad_array {
  * @is_remote_wakeup_enabled: remote wakeup status from host perspective
  * @wait_linkstate: waitqueue for waiting LINK to move into required state
  * @remote_wakeup_work: use to perform remote wakeup from this context
+ * @force_gen1: use to force gen1 speed on gen2 controller
  */
 struct dwc3 {
 	struct work_struct	drd_work;
@@ -1365,6 +1370,7 @@ struct dwc3 {
 	unsigned		tx_de_emphasis:2;
 	unsigned		err_evt_seen:1;
 	unsigned		enable_bus_suspend:1;
+	unsigned		force_gen1:1;
 
 	atomic_t		in_lpm;
 	bool			b_suspend;
