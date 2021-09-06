@@ -7564,7 +7564,7 @@ static int msm_snd_card_late_probe(struct snd_soc_card *card)
 	if (!is_wcd937x)
 		ret = wcd938x_mbhc_hs_detect(component, &wcd_mbhc_cfg);
 	else
-		ret = wcd937x_mbhc_hs_detect(component, &wcd_mbhc_cfg);
+		panic("Device is wcd937x, which is unsupported");
 	if (ret) {
 		dev_err(component->dev, "%s: mbhc hs detect failed, err:%d\n",
 			__func__, ret);
@@ -7926,20 +7926,7 @@ static int msm_rx_tx_codec_init(struct snd_soc_pcm_runtime *rtd)
 
 	if (!strncmp(component->driver->name, WCD937X_DRV_NAME,
 	    strlen(WCD937X_DRV_NAME))) {
-		wcd937x_info_create_codec_entry(pdata->codec_root, component);
-		codec_variant = wcd937x_get_codec_variant(component);
-		dev_dbg(component->dev, "%s: variant %d\n",
-			 __func__, codec_variant);
-		if (codec_variant == WCD9370_VARIANT)
-			ret = snd_soc_add_component_controls(component,
-				msm_int_wcd9370_snd_controls,
-				ARRAY_SIZE(msm_int_wcd9370_snd_controls));
-		else if (codec_variant == WCD9375_VARIANT)
-			ret = snd_soc_add_component_controls(component,
-				msm_int_wcd9375_snd_controls,
-				ARRAY_SIZE(msm_int_wcd9375_snd_controls));
-		bolero_set_port_map(bolero_component,
-			ARRAY_SIZE(sm_port_map_wcd937x), sm_port_map_wcd937x);
+		panic("Device is wcd937x, which is unsupported");
 	} else if (!strncmp(component->driver->name, WCD938X_DRV_NAME,
 		   strlen(WCD938X_DRV_NAME))) {
 		wcd938x_info_create_codec_entry(pdata->codec_root, component);
