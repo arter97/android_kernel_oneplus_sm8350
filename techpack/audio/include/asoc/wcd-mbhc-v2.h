@@ -526,6 +526,7 @@ struct wcd_mbhc_cb {
 	bool (*mbhc_get_moisture_status)(struct wcd_mbhc *mbhc);
 	void (*mbhc_moisture_polling_ctrl)(struct wcd_mbhc *mbhc, bool enable);
 	void (*mbhc_moisture_detect_en)(struct wcd_mbhc *mbhc, bool enable);
+	int (*wcd_micbias_enable)(struct wcd_mbhc *mbhc, int micb_num, bool enable);
 };
 
 struct wcd_mbhc_fn {
@@ -596,6 +597,11 @@ struct wcd_mbhc {
 	struct snd_soc_jack headset_jack;
 	struct snd_soc_jack button_jack;
 	struct mutex codec_resource_lock;
+
+	bool use_usbc_detect;
+	bool usbc_analog_status;
+	struct delayed_work mbhc_usbc_detect_dwork;
+	bool micb_disabled;
 
 	/* Holds codec specific interrupt mapping */
 	const struct wcd_mbhc_intr *intr_ids;

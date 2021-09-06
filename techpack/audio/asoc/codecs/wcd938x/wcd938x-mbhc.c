@@ -812,6 +812,38 @@ static void wcd938x_mbhc_bcs_enable(struct wcd_mbhc *mbhc,
 		wcd938x_disable_bcs_before_slow_insert(mbhc->component, true);
 }
 
+static int wcd938x_micbias_enable(struct wcd_mbhc *mbhc, int micb_num, bool enable)
+{
+	int micb_index = micb_num - 1;
+	struct wcd938x_priv *wcd938x = snd_soc_component_get_drvdata(mbhc->component);
+
+	if (micb_num != MIC_BIAS_2)
+		return -EINVAL;
+
+	mutex_lock(&wcd938x->micb_lock);
+	if (enable) {
+		if ((wcd938x->micb_ref[micb_index] > 0) &&
+		    (!wcd938x_mbhc_micb_en_status(mbhc, MIC_BIAS_2))) {
+			pr_info("%s: enable micbias2\n", __func__);
+			snd_soc_component_update_bits(mbhc->component, WCD938X_ANA_MICB2,
+							0xC0, 0x40);
+			mutex_unlock(&wcd938x->micb_lock);
+			return 0;
+		}
+	} else {
+		if ((wcd938x->micb_ref[micb_index] == 1) &&
+		    (wcd938x->pullup_ref[micb_index] == 0)) {
+			pr_info("%s: disable micbias2\n", __func__);
+			snd_soc_component_update_bits(mbhc->component, WCD938X_ANA_MICB2,
+							0xC0, 0x00);
+			mutex_unlock(&wcd938x->micb_lock);
+			return 0;
+		}
+	}
+	mutex_unlock(&wcd938x->micb_lock);
+	return -1;
+}
+
 static const struct wcd_mbhc_cb mbhc_cb = {
 	.request_irq = wcd938x_mbhc_request_irq,
 	.irq_control = wcd938x_mbhc_irq_control,
@@ -837,6 +869,7 @@ static const struct wcd_mbhc_cb mbhc_cb = {
 	.mbhc_moisture_polling_ctrl = wcd938x_mbhc_moisture_polling_ctrl,
 	.mbhc_moisture_detect_en = wcd938x_mbhc_moisture_detect_en,
 	.bcs_enable = wcd938x_mbhc_bcs_enable,
+	.wcd_micbias_enable = wcd938x_micbias_enable,
 };
 
 static int wcd938x_get_hph_type(struct snd_kcontrol *kcontrol,

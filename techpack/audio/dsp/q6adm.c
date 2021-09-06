@@ -3247,9 +3247,9 @@ int adm_open_v2(int port_id, int path, int rate, int channel_mode, int topology,
 					ec_ref_port_cfg->sampling_rate :
 					this_adm.ec_ref_rx_sampling_rate;
 
-	pr_debug("%s:port %#x path:%d rate:%d mode:%d perf_mode:%d,topo_id %d\n",
+	pr_info("%s:port %#x path:%d rate:%d mode:%d perf_mode:%d,topo_id %d app_type:%d acdb_id:%d\n",
 		 __func__, port_id, path, rate, channel_mode, perf_mode,
-		 topology);
+		 topology, app_type, acdb_id);
 
 	port_id = q6audio_convert_virtual_to_portid(port_id);
 	port_idx = adm_validate_and_get_port_index(port_id);
@@ -3382,7 +3382,7 @@ int adm_open_v2(int port_id, int path, int rate, int channel_mode, int topology,
 
 	/* Create a COPP if port id are not enabled */
 	if (atomic_read(&this_adm.copp.cnt[port_idx][copp_idx]) == 0) {
-		pr_debug("%s: open ADM: port_idx: %d, copp_idx: %d\n", __func__,
+		pr_info("%s: open ADM: port_idx: %d, copp_idx: %d\n", __func__,
 			 port_idx, copp_idx);
 		if ((topology == SRS_TRUMEDIA_TOPOLOGY_ID) &&
 		      perf_mode == LEGACY_PCM_MODE) {
@@ -4071,7 +4071,7 @@ int adm_close(int port_id, int perf_mode, int copp_idx)
 	struct audio_cal_info_audproc *audproc_cal_info = NULL;
 	int cal_index = ADM_AUDPROC_PERSISTENT_CAL;
 
-	pr_debug("%s: port_id=0x%x perf_mode: %d copp_idx: %d\n", __func__,
+	pr_info("%s: port_id=0x%x perf_mode: %d copp_idx: %d\n", __func__,
 		 port_id, perf_mode, copp_idx);
 
 	port_id = q6audio_convert_virtual_to_portid(port_id);

@@ -25,6 +25,8 @@
 #define IMAGE_UNLOAD_CMD 0
 #define MAX_FW_IMAGES 4
 
+static void adsp_loader_do(struct platform_device *pdev);
+
 static ssize_t adsp_boot_store(struct kobject *kobj,
 	struct kobj_attribute *attr,
 	const char *buf, size_t count);
@@ -110,6 +112,7 @@ static void adsp_load_fw(struct work_struct *adsp_ldr_work)
 	u32 adsp_state;
 	const char *img_name;
 	void *padsp_restart_cb = &adsp_load_state_notify_cb;
+	static int i = 0;
 
 	if (!pdev) {
 		dev_err(&pdev->dev, "%s: Platform device null\n", __func__);
@@ -193,6 +196,13 @@ load_adsp:
 			if (IS_ERR(priv->pil_h)) {
 				dev_err(&pdev->dev, "%s: pil get failed,\n",
 					__func__);
+				/*if load failed,we do retry for 10x1s times for load img timing issue*/
+				if (i < 10) {
+					i++;
+					msleep(1000);
+					pr_err("%s: going to call adsp_loader_do retry i=%d\n", __func__,i);
+					adsp_loader_do(adsp_private);
+				}
 				goto fail;
 			}
 		} else if (adsp_state == APR_SUBSYS_LOADED) {
@@ -200,7 +210,7 @@ load_adsp:
 			"%s: ADSP state = %x\n", __func__, adsp_state);
 		}
 
-		dev_dbg(&pdev->dev, "%s: Q6/ADSP image is loaded\n", __func__);
+		dev_err(&pdev->dev, "%s: Q6/ADSP image is loaded debug\n", __func__);
 		apr_register_adsp_state_cb(padsp_restart_cb, adsp_private);
 		goto success;
 	}

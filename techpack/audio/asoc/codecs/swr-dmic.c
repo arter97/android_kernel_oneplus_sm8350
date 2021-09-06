@@ -205,6 +205,7 @@ static int swr_dmic_tx_master_port_put(struct snd_kcontrol *kcontrol,
 
 	swr_dmic->tx_master_port_map[slave_port_idx] =
 			swr_master_channel_map[idx];
+
 	dev_dbg(component->dev, "%s: slv port id: %d, master_port_type: %d\n",
 		__func__, slave_port_idx,
 		swr_dmic->tx_master_port_map[slave_port_idx]);

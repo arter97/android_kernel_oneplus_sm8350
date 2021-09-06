@@ -25,6 +25,7 @@
 #include "wcd938x.h"
 #include "internal.h"
 #include "asoc/bolero-slave-internal.h"
+#include <linux/proc_fs.h>
 
 #define NUM_SWRS_DT_PARAMS 5
 #define WCD938X_VARIANT_ENTRY_SIZE 32
@@ -2892,6 +2893,7 @@ static int wcd938x_tx_master_ch_put(struct snd_kcontrol *kcontrol,
 		return -EINVAL;
 
 	wcd938x->tx_master_ch_map[slave_ch_idx] = wcd938x_slave_get_master_ch(idx);
+
 	return 0;
 }
 
@@ -3738,6 +3740,24 @@ done:
 	return rc;
 }
 
+static ssize_t wcd_codec_exist_read(struct file *p_file,
+			 char __user *puser_buf, size_t count, loff_t *p_offset)
+{
+	return 0;
+}
+
+static ssize_t wcd_codec_exist_write(struct file *p_file,
+			 const char __user *puser_buf,
+			 size_t count, loff_t *p_offset)
+{
+	return 0;
+}
+
+static const struct file_operations wcd_codec_exist_operations = {
+	.read = wcd_codec_exist_read,
+	.write = wcd_codec_exist_write,
+};
+
 static int wcd938x_soc_codec_probe(struct snd_soc_component *component)
 {
 	struct wcd938x_priv *wcd938x = snd_soc_component_get_drvdata(component);
@@ -3745,6 +3765,7 @@ static int wcd938x_soc_codec_probe(struct snd_soc_component *component)
 			snd_soc_component_get_dapm(component);
 	int variant;
 	int ret = -EINVAL;
+	u32 sts1 = 0;
 
 	dev_info(component->dev, "%s()\n", __func__);
 	wcd938x = snd_soc_component_get_drvdata(component);
@@ -3841,6 +3862,15 @@ static int wcd938x_soc_codec_probe(struct snd_soc_component *component)
 			return ret;
 		}
 	}
+
+	if (regmap_read(wcd938x->regmap, WCD938X_DIGITAL_INTR_STATUS_0, &sts1) == 0) {
+		if (!proc_create("wcd_codec_exist", 0644, NULL,
+				&wcd_codec_exist_operations)) {
+			pr_err("%s : Failed to register proc interface\n",
+				__func__);
+		}
+	}
+
 	return ret;
 
 err_hwdep:

@@ -40,6 +40,7 @@
 #include "codecs/bolero/wsa-macro.h"
 #include "lahaina-port-config.h"
 #include "msm_dailink.h"
+#include <../../oneplus/include/linux/oem/boot_mode.h>
 
 #define DRV_NAME "lahaina-asoc-snd"
 #define __CHIPSET__ "LAHAINA "
@@ -937,10 +938,17 @@ static struct wcd_mbhc_config wcd_mbhc_cfg = {
 	.mono_stero_detection = false,
 	.swap_gnd_mic = NULL,
 	.hs_ext_micbias = true,
-	.key_code[0] = KEY_MEDIA,
-	.key_code[1] = KEY_VOICECOMMAND,
-	.key_code[2] = KEY_VOLUMEUP,
-	.key_code[3] = KEY_VOLUMEDOWN,
+#if 1
+        .key_code[0] = KEY_MEDIA,
+        .key_code[1] = KEY_VOLUMEUP,
+        .key_code[2] = KEY_VOLUMEDOWN,
+        .key_code[3] = 0,
+#else
+        .key_code[0] = KEY_MEDIA,
+        .key_code[1] = KEY_VOICECOMMAND,
+        .key_code[2] = KEY_VOLUMEUP,
+        .key_code[3] = KEY_VOLUMEDOWN,
+#endif
 	.key_code[4] = 0,
 	.key_code[5] = 0,
 	.key_code[6] = 0,
@@ -5769,14 +5777,25 @@ static void *def_wcd_mbhc_cal(void)
 	btn_high = ((void *)&btn_cfg->_v_btn_low) +
 		(sizeof(btn_cfg->_v_btn_low[0]) * btn_cfg->num_btn);
 
-	btn_high[0] = 75;
-	btn_high[1] = 150;
-	btn_high[2] = 237;
-	btn_high[3] = 500;
-	btn_high[4] = 500;
-	btn_high[5] = 500;
-	btn_high[6] = 500;
-	btn_high[7] = 500;
+#if 1
+        btn_high[0] = 70;
+        btn_high[1] = 210;
+        btn_high[2] = 500;
+        btn_high[3] = 500;
+        btn_high[4] = 500;
+        btn_high[5] = 500;
+        btn_high[6] = 500;
+        btn_high[7] = 500;
+#else
+        btn_high[0] = 75;
+        btn_high[1] = 150;
+        btn_high[2] = 237;
+        btn_high[3] = 500;
+        btn_high[4] = 500;
+        btn_high[5] = 500;
+        btn_high[6] = 500;
+        btn_high[7] = 500;
+#endif
 
 	return wcd_mbhc_cal;
 }
@@ -6403,6 +6422,31 @@ static struct snd_soc_dai_link msm_common_misc_fe_dai_links[] = {
 		.ignore_suspend = 1,
 		.ignore_pmdown_time = 1,
 		SND_SOC_DAILINK_REG(display_port_hostless),
+	},
+#if IS_ENABLED(CONFIG_SND_SOC_TFA9894)
+	{/* hw:x,44 */
+		.name = "Tertiary MI2S RX_Hostless",
+		.stream_name = "Tertiary MI2S_RX Hostless Playback",
+		.dynamic = 1,
+		.dpcm_playback = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			 SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		.ignore_pmdown_time = 1,
+		SND_SOC_DAILINK_REG(tert_mi2s_rx_hostless),
+	},
+#endif
+	{/* hw:x,45 */
+		.name = "TX4_CDC_DMA Hostless",
+		.stream_name = "TX4_CDC_DMA Hostless",
+		.dynamic = 1,
+		.dpcm_capture = 1,
+		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
+			    SND_SOC_DPCM_TRIGGER_POST},
+		.no_host_mode = SND_SOC_DAI_LINK_NO_HOST,
+		.ignore_suspend = 1,
+		SND_SOC_DAILINK_REG(tx4_cdcdma_hostless),
 	},
 };
 
@@ -7598,158 +7642,182 @@ static struct snd_soc_card *populate_snd_card_dailinks(struct device *dev)
 		return NULL;
 	}
 
-	if (!strcmp(match->data, "codec")) {
-		card = &snd_soc_card_lahaina_msm;
+#if IS_ENABLED(CONFIG_OEM_BOOT_MODE)
+	if (get_small_board_1_absent() == 1) {
+		dev_err(dev, "%s: small board absent register stub_codec\n",
+			__func__);
 
-		memcpy(msm_lahaina_dai_links + total_links,
-		       msm_common_dai_links,
-		       sizeof(msm_common_dai_links));
-		total_links += ARRAY_SIZE(msm_common_dai_links);
-
-		rc = of_property_read_u32(dev->of_node,
-				"qcom,wsa-max-devs", &wsa_max_devs);
-		if (rc) {
-			dev_info(dev,
-				"%s: wsa-max-devs property missing in DT %s, ret = %d\n",
-				 __func__, dev->of_node->full_name, rc);
-			wsa_max_devs = 0;
-		}
-		if (!wsa_max_devs) {
-			memcpy(msm_lahaina_dai_links + total_links,
-				msm_bolero_fe_stub_dai_links,
-				sizeof(msm_bolero_fe_stub_dai_links));
-			total_links +=
-				ARRAY_SIZE(msm_bolero_fe_stub_dai_links);
-		} else {
-			memcpy(msm_lahaina_dai_links + total_links,
-				msm_bolero_fe_dai_links,
-				sizeof(msm_bolero_fe_dai_links));
-			total_links +=
-				ARRAY_SIZE(msm_bolero_fe_dai_links);
-		}
-		memcpy(msm_lahaina_dai_links + total_links,
-		       msm_common_misc_fe_dai_links,
-		       sizeof(msm_common_misc_fe_dai_links));
-		total_links += ARRAY_SIZE(msm_common_misc_fe_dai_links);
-
-		memcpy(msm_lahaina_dai_links + total_links,
-		       msm_common_be_dai_links,
-		       sizeof(msm_common_be_dai_links));
-		total_links += ARRAY_SIZE(msm_common_be_dai_links);
-
-		memcpy(msm_lahaina_dai_links + total_links,
-		       msm_rx_tx_cdc_dma_be_dai_links,
-		       sizeof(msm_rx_tx_cdc_dma_be_dai_links));
-		total_links +=
-			ARRAY_SIZE(msm_rx_tx_cdc_dma_be_dai_links);
-
-		if (wsa_max_devs) {
-			memcpy(msm_lahaina_dai_links + total_links,
-				msm_wsa_cdc_dma_be_dai_links,
-				sizeof(msm_wsa_cdc_dma_be_dai_links));
-			total_links +=
-				ARRAY_SIZE(msm_wsa_cdc_dma_be_dai_links);
-		}
-		memcpy(msm_lahaina_dai_links + total_links,
-		       msm_va_cdc_dma_be_dai_links,
-		       sizeof(msm_va_cdc_dma_be_dai_links));
-		total_links +=
-			ARRAY_SIZE(msm_va_cdc_dma_be_dai_links);
-
-		rc = of_property_read_u32(dev->of_node, "qcom,mi2s-audio-intf",
-					  &mi2s_audio_intf);
-		if (rc) {
-			dev_dbg(dev, "%s: No DT match MI2S audio interface\n",
-				__func__);
-		} else {
-			if (mi2s_audio_intf) {
-				memcpy(msm_lahaina_dai_links + total_links,
-					msm_mi2s_be_dai_links,
-					sizeof(msm_mi2s_be_dai_links));
-				total_links +=
-					ARRAY_SIZE(msm_mi2s_be_dai_links);
-			}
-		}
-#ifndef CONFIG_AUXPCM_DISABLE
-		rc = of_property_read_u32(dev->of_node,
-					  "qcom,auxpcm-audio-intf",
-					  &val);
-		if (rc) {
-			dev_dbg(dev, "%s: No DT match Aux PCM interface\n",
-				__func__);
-		} else {
-			if (val) {
-				memcpy(msm_lahaina_dai_links + total_links,
-					msm_auxpcm_be_dai_links,
-					sizeof(msm_auxpcm_be_dai_links));
-				total_links +=
-					ARRAY_SIZE(msm_auxpcm_be_dai_links);
-			}
-		}
-#endif
-
-#if IS_ENABLED(CONFIG_AUDIO_QGKI)
-		rc = of_property_read_u32(dev->of_node,
-					   "qcom,ext-disp-audio-rx", &val);
-		if (!rc && val) {
-			dev_dbg(dev, "%s(): ext disp audio support present\n",
-				__func__);
-			memcpy(msm_lahaina_dai_links + total_links,
-			       ext_disp_be_dai_link,
-			       sizeof(ext_disp_be_dai_link));
-			total_links += ARRAY_SIZE(ext_disp_be_dai_link);
-		}
-#endif
-
-		rc = of_property_read_u32(dev->of_node, "qcom,wcn-bt", &val);
-		if (!rc && val) {
-			dev_dbg(dev, "%s(): WCN BT support present\n",
-				__func__);
-			memcpy(msm_lahaina_dai_links + total_links,
-			       msm_wcn_be_dai_links,
-			       sizeof(msm_wcn_be_dai_links));
-			total_links += ARRAY_SIZE(msm_wcn_be_dai_links);
-		}
-
-		rc = of_property_read_u32(dev->of_node, "qcom,afe-rxtx-lb",
-				&val);
-		if (!rc && val) {
-			memcpy(msm_lahaina_dai_links + total_links,
-				msm_afe_rxtx_lb_be_dai_link,
-				sizeof(msm_afe_rxtx_lb_be_dai_link));
-			total_links +=
-				ARRAY_SIZE(msm_afe_rxtx_lb_be_dai_link);
-		}
-
-		rc = of_property_read_u32(dev->of_node, "qcom,wcn-btfm",
-					  &wcn_btfm_intf);
-		if (rc) {
-			dev_dbg(dev, "%s: No DT match wcn btfm interface\n",
-				__func__);
-		} else {
-			if (wcn_btfm_intf) {
-				memcpy(msm_lahaina_dai_links + total_links,
-					msm_wcn_btfm_be_dai_links,
-					sizeof(msm_wcn_btfm_be_dai_links));
-				total_links +=
-					ARRAY_SIZE(msm_wcn_btfm_be_dai_links);
-			}
-		}
-		dailink = msm_lahaina_dai_links;
-	} else if(!strcmp(match->data, "stub_codec")) {
 		card = &snd_soc_card_stub_msm;
 		len_1 = ARRAY_SIZE(msm_stub_fe_dai_links);
 		len_2 = len_1 + ARRAY_SIZE(msm_stub_be_dai_links);
 
 		memcpy(msm_stub_dai_links,
-		       msm_stub_fe_dai_links,
-		       sizeof(msm_stub_fe_dai_links));
+				msm_stub_fe_dai_links,
+				sizeof(msm_stub_fe_dai_links));
 		memcpy(msm_stub_dai_links + len_1,
-		       msm_stub_be_dai_links,
-		       sizeof(msm_stub_be_dai_links));
+				msm_stub_be_dai_links,
+				sizeof(msm_stub_be_dai_links));
 
 		dailink = msm_stub_dai_links;
 		total_links = len_2;
+	} else
+#endif
+	{
+		if (!strcmp(match->data, "codec")) {
+			card = &snd_soc_card_lahaina_msm;
+
+			memcpy(msm_lahaina_dai_links + total_links,
+					msm_common_dai_links,
+					sizeof(msm_common_dai_links));
+			total_links += ARRAY_SIZE(msm_common_dai_links);
+
+			rc = of_property_read_u32(dev->of_node,
+					"qcom,wsa-max-devs", &wsa_max_devs);
+			if (rc) {
+				dev_info(dev,
+					"%s: wsa-max-devs property missing in DT %s, ret = %d\n",
+					__func__, dev->of_node->full_name, rc);
+				wsa_max_devs = 0;
+			}
+			if (!wsa_max_devs) {
+				memcpy(msm_lahaina_dai_links + total_links,
+					msm_bolero_fe_stub_dai_links,
+					sizeof(msm_bolero_fe_stub_dai_links));
+				total_links +=
+					ARRAY_SIZE(msm_bolero_fe_stub_dai_links);
+			} else {
+				memcpy(msm_lahaina_dai_links + total_links,
+					msm_bolero_fe_dai_links,
+					sizeof(msm_bolero_fe_dai_links));
+				total_links +=
+					ARRAY_SIZE(msm_bolero_fe_dai_links);
+			}
+			memcpy(msm_lahaina_dai_links + total_links,
+					msm_common_misc_fe_dai_links,
+					sizeof(msm_common_misc_fe_dai_links));
+			total_links += ARRAY_SIZE(msm_common_misc_fe_dai_links);
+
+			memcpy(msm_lahaina_dai_links + total_links,
+					msm_common_be_dai_links,
+					sizeof(msm_common_be_dai_links));
+			total_links += ARRAY_SIZE(msm_common_be_dai_links);
+
+			memcpy(msm_lahaina_dai_links + total_links,
+					msm_rx_tx_cdc_dma_be_dai_links,
+					sizeof(msm_rx_tx_cdc_dma_be_dai_links));
+			total_links +=
+				ARRAY_SIZE(msm_rx_tx_cdc_dma_be_dai_links);
+
+			if (wsa_max_devs) {
+				memcpy(msm_lahaina_dai_links + total_links,
+					msm_wsa_cdc_dma_be_dai_links,
+					sizeof(msm_wsa_cdc_dma_be_dai_links));
+				total_links +=
+					ARRAY_SIZE(msm_wsa_cdc_dma_be_dai_links);
+			}
+
+			memcpy(msm_lahaina_dai_links + total_links,
+					msm_va_cdc_dma_be_dai_links,
+					sizeof(msm_va_cdc_dma_be_dai_links));
+			total_links +=
+				ARRAY_SIZE(msm_va_cdc_dma_be_dai_links);
+
+			rc = of_property_read_u32(dev->of_node, "qcom,mi2s-audio-intf",
+						&mi2s_audio_intf);
+			if (rc) {
+				dev_dbg(dev, "%s: No DT match MI2S audio interface\n",
+					__func__);
+			} else {
+				if (mi2s_audio_intf) {
+					memcpy(msm_lahaina_dai_links + total_links,
+						msm_mi2s_be_dai_links,
+						sizeof(msm_mi2s_be_dai_links));
+					total_links +=
+						ARRAY_SIZE(msm_mi2s_be_dai_links);
+				}
+			}
+
+#ifndef CONFIG_AUXPCM_DISABLE
+			rc = of_property_read_u32(dev->of_node,
+							"qcom,auxpcm-audio-intf",
+							&val);
+			if (rc) {
+				dev_dbg(dev, "%s: No DT match Aux PCM interface\n",
+					__func__);
+			} else {
+				if (val) {
+					memcpy(msm_lahaina_dai_links + total_links,
+						msm_auxpcm_be_dai_links,
+						sizeof(msm_auxpcm_be_dai_links));
+					total_links +=
+						ARRAY_SIZE(msm_auxpcm_be_dai_links);
+				}
+			}
+#endif
+
+#if IS_ENABLED(CONFIG_AUDIO_QGKI)
+			rc = of_property_read_u32(dev->of_node,
+							"qcom,ext-disp-audio-rx", &val);
+			if (!rc && val) {
+				dev_dbg(dev, "%s(): ext disp audio support present\n",
+					__func__);
+				memcpy(msm_lahaina_dai_links + total_links,
+						ext_disp_be_dai_link,
+						sizeof(ext_disp_be_dai_link));
+				total_links += ARRAY_SIZE(ext_disp_be_dai_link);
+			}
+#endif
+
+			rc = of_property_read_u32(dev->of_node, "qcom,wcn-bt", &val);
+			if (!rc && val) {
+				dev_dbg(dev, "%s(): WCN BT support present\n",
+					__func__);
+				memcpy(msm_lahaina_dai_links + total_links,
+						msm_wcn_be_dai_links,
+						sizeof(msm_wcn_be_dai_links));
+				total_links += ARRAY_SIZE(msm_wcn_be_dai_links);
+			}
+
+			rc = of_property_read_u32(dev->of_node, "qcom,afe-rxtx-lb",
+					&val);
+			if (!rc && val) {
+				memcpy(msm_lahaina_dai_links + total_links,
+					msm_afe_rxtx_lb_be_dai_link,
+					sizeof(msm_afe_rxtx_lb_be_dai_link));
+				total_links +=
+					ARRAY_SIZE(msm_afe_rxtx_lb_be_dai_link);
+			}
+
+			rc = of_property_read_u32(dev->of_node, "qcom,wcn-btfm",
+							&wcn_btfm_intf);
+			if (rc) {
+				dev_dbg(dev, "%s: No DT match wcn btfm interface\n",
+					__func__);
+			} else {
+				if (wcn_btfm_intf) {
+					memcpy(msm_lahaina_dai_links + total_links,
+						msm_wcn_btfm_be_dai_links,
+						sizeof(msm_wcn_btfm_be_dai_links));
+					total_links +=
+						ARRAY_SIZE(msm_wcn_btfm_be_dai_links);
+				}
+			}
+			dailink = msm_lahaina_dai_links;
+		} else if(!strcmp(match->data, "stub_codec")) {
+			card = &snd_soc_card_stub_msm;
+			len_1 = ARRAY_SIZE(msm_stub_fe_dai_links);
+			len_2 = len_1 + ARRAY_SIZE(msm_stub_be_dai_links);
+
+			memcpy(msm_stub_dai_links,
+					msm_stub_fe_dai_links,
+					sizeof(msm_stub_fe_dai_links));
+			memcpy(msm_stub_dai_links + len_1,
+					msm_stub_be_dai_links,
+					sizeof(msm_stub_be_dai_links));
+
+			dailink = msm_stub_dai_links;
+			total_links = len_2;
+		}
 	}
 
 	if (card) {
@@ -7879,7 +7947,7 @@ static int msm_rx_tx_codec_init(struct snd_soc_pcm_runtime *rtd)
 
 	snd_soc_dapm_ignore_suspend(dapm, "WSA_SPK1 OUT");
 	snd_soc_dapm_ignore_suspend(dapm, "WSA_SPK2 OUT");
-	snd_soc_dapm_ignore_suspend(dapm, "WSA AIF VI");
+	//snd_soc_dapm_ignore_suspend(dapm, "WSA AIF VI");
 	snd_soc_dapm_ignore_suspend(dapm, "VIINPUT_WSA");
 
 	snd_soc_dapm_sync(dapm);
@@ -8277,7 +8345,7 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 			__func__, ret);
 		goto err;
 	}
-	dev_info(&pdev->dev, "%s: Sound card %s registered\n",
+	dev_err(&pdev->dev, "%s: Sound card %s registered\n",
 		 __func__, card->name);
 
 	ret = of_property_read_u32(pdev->dev.of_node, "qcom,tdm-max-slots",
