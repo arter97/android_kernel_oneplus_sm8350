@@ -359,6 +359,11 @@ struct sde_hw_sspp_ops {
 	 */
 	void (*setup_csc)(struct sde_hw_pipe *ctx, struct sde_csc_cfg *data);
 
+#if defined(PXLW_IRIS_DUAL)
+	void (*setup_csc_v2)(struct sde_hw_pipe *ctx,
+					const struct sde_format *fmt,
+					struct sde_csc_cfg *data);
+#endif
 	/**
 	 * setup_solidfill - enable/disable colorfill
 	 * @ctx: Pointer to pipe context

@@ -245,6 +245,9 @@ struct sde_encoder_virt {
 	struct kthread_work esd_trigger_work;
 	struct input_handler *input_handler;
 	struct msm_display_topology topology;
+#if defined(CONFIG_PXLW_IRIS)
+	struct kthread_work disable_autorefresh_work;
+#endif
 	bool vblank_enabled;
 	bool idle_pc_restore;
 	enum frame_trigger_mode_type frame_trigger_mode;
@@ -261,6 +264,10 @@ struct sde_encoder_virt {
 	struct cpumask valid_cpu_mask;
 	struct msm_mode_info mode_info;
 	bool delay_kickoff;
+#ifdef CONFIG_PXLW_IRIS
+	struct hrtimer fakeframe_timer;
+	struct kthread_work fakeframe_work;
+#endif
 };
 
 #define to_sde_encoder_virt(x) container_of(x, struct sde_encoder_virt, base)
@@ -627,4 +634,10 @@ static inline bool sde_encoder_is_widebus_enabled(struct drm_encoder *drm_enc)
 	sde_enc = to_sde_encoder_virt(drm_enc);
 	return sde_enc->mode_info.wide_bus_en;
 }
+#if defined(CONFIG_PXLW_IRIS)
+void sde_encoder_rc_lock(struct drm_encoder *drm_enc);
+void sde_encoder_rc_unlock(struct drm_encoder *drm_enc);
+void sde_encoder_disable_autorefresh_handler(struct drm_encoder *drm_enc);
+bool sde_encoder_is_disabled(struct drm_encoder *drm_enc);
+#endif
 #endif /* __SDE_ENCODER_H__ */

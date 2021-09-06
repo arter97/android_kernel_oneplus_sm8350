@@ -11,6 +11,9 @@
 #include "sde_hw_pingpong.h"
 #include "sde_dbg.h"
 #include "sde_kms.h"
+#if defined(CONFIG_PXLW_IRIS)
+#include "iris/dsi_iris5_api.h"
+#endif
 
 #define PP_TEAR_CHECK_EN                0x000
 #define PP_SYNC_CONFIG_VSYNC            0x004
@@ -315,12 +318,15 @@ static int sde_hw_pp_setup_dsc(struct sde_hw_pingpong *pp)
 	return 0;
 }
 
+extern struct dsi_display *get_main_display(void);
+extern int panel_dither_enable;
 static int sde_hw_pp_setup_dither(struct sde_hw_pingpong *pp,
 					void *cfg, size_t len)
 {
 	struct sde_hw_blk_reg_map *c;
 	struct drm_msm_dither *dither = (struct drm_msm_dither *)cfg;
 	u32 base = 0, offset = 0, data = 0, i = 0;
+	struct dsi_display *dsi_display;
 
 	if (!pp)
 		return -EINVAL;
@@ -346,6 +352,9 @@ static int sde_hw_pp_setup_dither(struct sde_hw_pingpong *pp,
 		return -EINVAL;
 
 	offset += 4;
+#if defined(CONFIG_PXLW_IRIS)
+	iris_sde_update_dither_depth_map(dither_depth_map);
+#endif
 	data = dither_depth_map[dither->c0_bitdepth] & REG_MASK(2);
 	data |= (dither_depth_map[dither->c1_bitdepth] & REG_MASK(2)) << 2;
 	data |= (dither_depth_map[dither->c2_bitdepth] & REG_MASK(2)) << 4;
@@ -361,12 +370,17 @@ static int sde_hw_pp_setup_dither(struct sde_hw_pingpong *pp,
 			((dither->matrix[i + 3] & REG_MASK(4)) << 12);
 		SDE_REG_WRITE(c, base + offset, data);
 	}
-
-	if (test_bit(SDE_PINGPONG_DITHER_LUMA, &pp->caps->features)
-				&& (dither->flags & DITHER_LUMA_MODE))
-		SDE_REG_WRITE(c, base, 0x11);
-	else
-		SDE_REG_WRITE(c, base, 1);
+	if(panel_dither_enable) {
+		dsi_display = get_main_display();
+		if(strcmp(dsi_display->panel->name, "samsung amb655x fhd cmd mode dsc dsi panel") == 0) {
+			SDE_REG_WRITE(c, base, 0x11);
+		}
+		else{
+			SDE_REG_WRITE(c, base, 0);
+		}
+	} else {
+		SDE_REG_WRITE(c, base, 0);
+	}
 
 	return 0;
 }

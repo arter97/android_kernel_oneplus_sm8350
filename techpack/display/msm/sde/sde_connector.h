@@ -551,6 +551,11 @@ struct sde_connector {
 	u8 hdr_plus_app_ver;
 	u32 qsync_mode;
 	bool qsync_updated;
+#ifdef OPLUS_FEATURE_ADFR
+	u32 qsync_dynamic_min_fps;
+	u32 qsync_curr_dynamic_min_fps;
+	u32 qsync_deferred_window_status;
+#endif
 
 	bool colorspace_updated;
 
@@ -601,6 +606,11 @@ struct sde_connector {
  */
 #define sde_connector_get_qsync_mode(C) \
 	((C) ? to_sde_connector((C))->qsync_mode : 0)
+
+#ifdef OPLUS_FEATURE_ADFR
+#define sde_connector_get_qsync_dynamic_min_fps(C) \
+	((C) ? to_sde_connector((C))->qsync_dynamic_min_fps : 0)
+#endif
 
 /**
  * sde_connector_get_propinfo - get sde connector's property info pointer

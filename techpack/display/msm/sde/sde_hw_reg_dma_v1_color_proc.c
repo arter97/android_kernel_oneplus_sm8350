@@ -14,6 +14,7 @@
 #include "sde_dbg.h"
 #include "sde_hw_util.h"
 
+#include "dsi_display.h"
 /* Reserve space of 128 words for LUT dma payload set-up */
 #define REG_DMA_HEADERS_BUFFER_SZ (sizeof(u32) * 128)
 #define REG_DMA_VIG_SWI_DIFF 0x200
@@ -4058,12 +4059,15 @@ static void _dspp_igcv4_off(struct sde_hw_dspp *ctx, void *cfg)
 	_perform_sbdma_kickoff(ctx, hw_cfg, dma_ops, blk, IGC);
 }
 
+extern op_dither_enable;
+extern struct dsi_display *get_main_display(void);
 void reg_dmav2_setup_dspp_igcv4(struct sde_hw_dspp *ctx, void *cfg)
 {
 	struct drm_msm_igc_lut *lut_cfg;
 	struct sde_hw_reg_dma_ops *dma_ops;
 	struct sde_hw_cp_cfg *hw_cfg = cfg;
 	struct sde_reg_dma_setup_ops_cfg dma_write_cfg;
+	struct dsi_display *dsi_display;
 	int rc = 0, i = 0, j = 0;
 	u16 *data = NULL;
 	u32 len = 0, reg = 0, num_of_mixers = 0, blk = 0, transfer_size_bytes;
@@ -4131,9 +4135,9 @@ void reg_dmav2_setup_dspp_igcv4(struct sde_hw_dspp *ctx, void *cfg)
 		data[j++] = (u16)(lut_cfg->c0[i] << 4);
 		data[j++] = (u16)(lut_cfg->c1[i] << 4);
 	}
-	data[j++] = (4095 << 4);
-	data[j++] = (4095 << 4);
-	data[j++] = (4095 << 4);
+	data[j++] = (u16)(lut_cfg->c2_last << 4);
+	data[j++] = (u16)(lut_cfg->c0_last << 4);
+	data[j++] = (u16)(lut_cfg->c1_last << 4);
 	REG_DMA_SETUP_OPS(dma_write_cfg, 0, (u32 *)data, len,
 			REG_BLK_LUT_WRITE, 0, 0, 0);
 	/* table select is only relevant to SSPP Gamut */
@@ -4149,9 +4153,17 @@ void reg_dmav2_setup_dspp_igcv4(struct sde_hw_dspp *ctx, void *cfg)
 	}
 
 	reg = BIT(8);
-	if (lut_cfg->flags & IGC_DITHER_ENABLE) {
+	dsi_display = get_main_display();
+	if((!strcmp(dsi_display->panel->name, "samsung amb655x fhd cmd mode dsc dsi panel")) ||
+	  (!strcmp(dsi_display->panel->name, "samsung amb670yf01 dsc cmd mode panel") && op_dither_enable)){
+		lut_cfg->strength = 4;
 		reg |= BIT(4);
 		reg |= (lut_cfg->strength & IGC_DITHER_DATA_MASK);
+		} else {
+		if (lut_cfg->flags & IGC_DITHER_ENABLE) {
+			reg |= BIT(4);
+			reg |= (lut_cfg->strength & IGC_DITHER_DATA_MASK);
+		}
 	}
 
 	REG_DMA_SETUP_OPS(dma_write_cfg, ctx->cap->sblk->igc.base + 0x4,

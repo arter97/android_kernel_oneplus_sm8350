@@ -593,6 +593,13 @@ struct sde_splash_mem {
 	u32 ref_cnt;
 };
 
+struct fingerprint_dim_layer {
+	uint32_t flags;
+	uint32_t stage;
+	struct sde_mdss_color color_fill;
+	struct sde_rect rect;
+};
+
 /**
  * struct sde_sspp_index_info - Struct containing sspp identifier info
  * @sspp:	Enum value indicates sspp id

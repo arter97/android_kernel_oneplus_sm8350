@@ -19,6 +19,19 @@
 #include "sde_rm.h"
 #include "sde_vm.h"
 #include <drm/drm_probe_helper.h>
+#include "sde_trace.h"
+#ifdef CONFIG_PXLW_IRIS
+#include <linux/list.h>
+#include <linux/list_sort.h>
+#include <drm/drm_modes.h>
+#include "oplus_adfr.h"
+#endif
+#if defined(CONFIG_PXLW_IRIS)
+#include "iris/dsi_iris5_api.h"
+#elif defined(CONFIG_PXLW_SOFT_IRIS)
+#include "iris/dsi_iris5_api.h"
+#include "iris/dsi_iris5.h"
+#endif
 
 #define BL_NODE_NAME_SIZE 32
 #define HDR10_PLUS_VSIF_TYPE_CODE      0x81
@@ -31,6 +44,10 @@
 
 #define SDE_ERROR_CONN(c, fmt, ...) SDE_ERROR("conn%d " fmt,\
 		(c) ? (c)->base.base.id : -1, ##__VA_ARGS__)
+
+static u32 dither_matrix[DITHER_MATRIX_SZ] = {
+	15, 7, 13, 5, 3, 11, 1, 9, 12, 4, 14, 6, 0, 8, 2, 10
+};
 
 static const struct drm_prop_enum_list e_topology_name[] = {
 	{SDE_RM_TOPOLOGY_NONE,	"sde_none"},
@@ -211,7 +228,8 @@ static int sde_backlight_setup(struct sde_connector *c_conn,
 	props.type = BACKLIGHT_RAW;
 	props.power = FB_BLANK_UNBLANK;
 	props.max_brightness = bl_config->brightness_max_level;
-	props.brightness = bl_config->brightness_max_level;
+	props.brightness = bl_config->bl_def_val;
+	SDE_ERROR("props.brightness = %d\n",props.brightness);
 	snprintf(bl_node_name, BL_NODE_NAME_SIZE, "panel%u-backlight",
 							display_count);
 	c_conn->bl_device = backlight_device_register(bl_node_name, dev->dev,
@@ -325,12 +343,61 @@ void sde_connector_unregister_event(struct drm_connector *connector,
 	(void)sde_connector_register_event(connector, event_idx, 0, 0);
 }
 
+static int _sde_connector_get_default_dither_cfg_v1(
+		struct sde_connector *c_conn, void *cfg)
+{
+	struct drm_msm_dither *dither_cfg = (struct drm_msm_dither *)cfg;
+	enum dsi_pixel_format dst_format = DSI_PIXEL_FORMAT_MAX;
+
+	if (!c_conn || !cfg) {
+		SDE_ERROR("invalid argument(s), c_conn %pK, cfg %pK\n",
+				c_conn, cfg);
+		return -EINVAL;
+	}
+
+	if (!c_conn->ops.get_dst_format) {
+		SDE_DEBUG("get_dst_format is unavailable\n");
+		return 0;
+	}
+
+	dst_format = c_conn->ops.get_dst_format(&c_conn->base, c_conn->display);
+	switch (dst_format) {
+	case DSI_PIXEL_FORMAT_RGB888:
+		dither_cfg->c0_bitdepth = 8;
+		dither_cfg->c1_bitdepth = 8;
+		dither_cfg->c2_bitdepth = 8;
+		dither_cfg->c3_bitdepth = 8;
+		break;
+	case DSI_PIXEL_FORMAT_RGB666:
+	case DSI_PIXEL_FORMAT_RGB666_LOOSE:
+		dither_cfg->c0_bitdepth = 6;
+		dither_cfg->c1_bitdepth = 6;
+		dither_cfg->c2_bitdepth = 6;
+		dither_cfg->c3_bitdepth = 6;
+		break;
+	default:
+		SDE_DEBUG("no default dither config for dst_format %d\n",
+			dst_format);
+		return -ENODATA;
+	}
+
+	memcpy(&dither_cfg->matrix, dither_matrix,
+			sizeof(u32) * DITHER_MATRIX_SZ);
+	dither_cfg->temporal_en = 0;
+	return 0;
+}
+
 static void _sde_connector_install_dither_property(struct drm_device *dev,
 		struct sde_kms *sde_kms, struct sde_connector *c_conn)
 {
 	char prop_name[DRM_PROP_NAME_LEN];
 	struct sde_mdss_cfg *catalog = NULL;
+	struct drm_property_blob *blob_ptr;
 	u32 version = 0;
+	void *cfg;
+	int ret = 0;
+  	u32 len = 0;
+  	bool defalut_dither_needed = false;
 
 	if (!dev || !sde_kms || !c_conn) {
 		SDE_ERROR("invld args (s), dev %pK, sde_kms %pK, c_conn %pK\n",
@@ -349,11 +416,27 @@ static void _sde_connector_install_dither_property(struct drm_device *dev,
 		msm_property_install_blob(&c_conn->property_info, prop_name,
 			DRM_MODE_PROP_BLOB,
 			CONNECTOR_PROP_PP_DITHER);
+			len = sizeof(struct drm_msm_dither);
+		cfg = kzalloc(len, GFP_KERNEL);
+		if (!cfg)
+			return;
+
+		ret = _sde_connector_get_default_dither_cfg_v1(c_conn, cfg);
+		if (!ret)
+			defalut_dither_needed = true;
 		break;
 	default:
 		SDE_ERROR("unsupported dither version %d\n", version);
 		return;
 	}
+	if (defalut_dither_needed) {
+		blob_ptr = drm_property_create_blob(dev, len, cfg);
+		if (IS_ERR_OR_NULL(blob_ptr))
+			goto exit;
+		c_conn->blob_dither = blob_ptr;
+	}
+exit:
+	kfree(cfg);
 }
 
 int sde_connector_get_dither_cfg(struct drm_connector *conn,
@@ -363,39 +446,25 @@ int sde_connector_get_dither_cfg(struct drm_connector *conn,
 	struct sde_connector *c_conn = NULL;
 	struct sde_connector_state *c_state = NULL;
 	size_t dither_sz = 0;
-	bool is_dirty;
+
 	u32 *p = (u32 *)cfg;
 
 	if (!conn || !state || !p) {
 		SDE_ERROR("invalid arguments\n");
 		return -EINVAL;
 	}
-
 	c_conn = to_sde_connector(conn);
 	c_state = to_sde_connector_state(state);
 
-	is_dirty = msm_property_is_dirty(&c_conn->property_info,
-			&c_state->property_state,
-			CONNECTOR_PROP_PP_DITHER);
-
-	if (!is_dirty && !idle_pc) {
-		return -ENODATA;
-	} else if (is_dirty || idle_pc) {
-		*cfg = msm_property_get_blob(&c_conn->property_info,
-				&c_state->property_state,
-				&dither_sz,
-				CONNECTOR_PROP_PP_DITHER);
-		/*
-		 * in idle_pc use case return early,
-		 * when dither is already disabled.
-		 */
-		if (idle_pc && *cfg == NULL)
-			return -ENODATA;
-		/* disable dither based on user config data */
-		else if (*cfg == NULL)
-			return 0;
-	}
-	*len = dither_sz;
+  	*cfg = msm_property_get_blob(&c_conn->property_info,
+  					&c_state->property_state,
+  					&dither_sz,
+  					CONNECTOR_PROP_PP_DITHER);
+  	if (*cfg == NULL && c_conn->blob_dither) {
+  		*cfg = c_conn->blob_dither->data;
+  		dither_sz = c_conn->blob_dither->length;
+  	}
+  	*len = dither_sz;
 	return 0;
 }
 
@@ -541,15 +610,19 @@ int sde_connector_get_info(struct drm_connector *connector,
 	return c_conn->ops.get_info(&c_conn->base, info, c_conn->display);
 }
 
+extern void dsi_display_change_err_flag_irq_status(struct dsi_display *display,
+					bool enable);
 void sde_connector_schedule_status_work(struct drm_connector *connector,
 		bool en)
 {
 	struct sde_connector *c_conn;
 	struct msm_display_info info;
-
+	struct dsi_display *dsi_display;
 	c_conn = to_sde_connector(connector);
 	if (!c_conn)
 		return;
+
+	dsi_display = (struct dsi_display *)c_conn->display;
 
 	/* Return if there is no change in ESD status check condition */
 	if (en == c_conn->esd_status_check)
@@ -572,10 +645,12 @@ void sde_connector_schedule_status_work(struct drm_connector *connector,
 			schedule_delayed_work(&c_conn->status_work,
 				msecs_to_jiffies(interval));
 			c_conn->esd_status_check = true;
+			dsi_display_change_err_flag_irq_status(dsi_display, true);
 		} else {
 			/* Cancel any pending ESD status check */
 			cancel_delayed_work_sync(&c_conn->status_work);
 			c_conn->esd_status_check = false;
+			dsi_display_change_err_flag_irq_status(dsi_display, false);
 		}
 	}
 }
@@ -612,7 +687,7 @@ static int _sde_connector_update_power_locked(struct sde_connector *c_conn)
 	}
 
 	SDE_EVT32(connector->base.id, c_conn->dpms_mode, c_conn->lp_mode, mode);
-	SDE_DEBUG("conn %d - dpms %d, lp %d, panel %d\n", connector->base.id,
+	SDE_ERROR("conn %d - dpms %d, lp %d, panel %d\n", connector->base.id,
 			c_conn->dpms_mode, c_conn->lp_mode, mode);
 
 	if (mode != c_conn->last_panel_power_mode && c_conn->ops.set_power) {
@@ -679,6 +754,263 @@ static int _sde_connector_update_bl_scale(struct sde_connector *c_conn)
 	return rc;
 }
 
+extern bool sde_crtc_get_fingerprint_mode(struct drm_crtc_state *crtc_state);
+extern bool sde_crtc_get_fingerprint_pressed(struct drm_crtc_state *crtc_state);
+extern int dsi_display_set_hbm_mode(struct drm_connector *connector, int level);
+
+int aod_layer_hide = 0;
+extern bool HBM_flag ;
+extern int oneplus_dim_status;
+extern int oneplus_onscreenfp_status;
+extern bool aod_fod_flag;
+extern bool finger_type;
+
+extern int op_dimlayer_bl;
+extern int op_dimlayer_bl_enabled;
+extern char dsi_panel_name;
+extern u32 mode_fps;
+int sde_connector_update_backlight(struct drm_connector *connector)
+{
+	if (op_dimlayer_bl != op_dimlayer_bl_enabled) {
+		struct sde_connector *c_conn = to_sde_connector(connector);
+		if (!c_conn) {
+			SDE_ERROR("Invalid params sde_connector null\n");
+			return -EINVAL;
+			}
+		op_dimlayer_bl_enabled = op_dimlayer_bl;
+		_sde_connector_update_bl_scale(c_conn);
+	}
+
+	return 0;
+}
+extern int dsi_panel_tx_cmd_set(struct dsi_panel *panel,
+				enum dsi_cmd_set_type type);
+static int _sde_connector_update_hbm(struct sde_connector *c_conn)
+{
+	struct drm_connector *connector = &c_conn->base;
+	struct dsi_display *dsi_display;
+	struct sde_connector_state *c_state;
+	int rc = 0;
+	int fingerprint_mode = 0;
+
+	if (!c_conn) {
+		SDE_ERROR("Invalid params sde_connector null\n");
+		return -EINVAL;
+	}
+
+	if (c_conn->connector_type != DRM_MODE_CONNECTOR_DSI)
+		return 0;
+
+	c_state = to_sde_connector_state(connector->state);
+
+	dsi_display = c_conn->display;
+	if (!dsi_display || !dsi_display->panel) {
+		SDE_ERROR("Invalid params(s) dsi_display %pK, panel %pK\n",
+			dsi_display,
+			((dsi_display) ? dsi_display->panel : NULL));
+		return -EINVAL;
+	}
+
+	if (!c_conn->encoder || !c_conn->encoder->crtc ||
+	    !c_conn->encoder->crtc->state) {
+		return 0;
+	}
+    if (!finger_type) {
+        if (dsi_display->panel->aod_status==1) {
+            if (!(sde_crtc_get_fingerprint_mode(c_conn->encoder->crtc->state)))
+                fingerprint_mode = false;
+            else{
+                fingerprint_mode = sde_crtc_get_fingerprint_mode(c_conn->encoder->crtc->state);
+            }
+        }else {
+        if(!(sde_crtc_get_fingerprint_mode(c_conn->encoder->crtc->state)))
+            fingerprint_mode = false;
+        else if(oneplus_dim_status == 1)
+            fingerprint_mode = !!oneplus_dim_status;
+        else
+            fingerprint_mode = sde_crtc_get_fingerprint_mode(c_conn->encoder->crtc->state);
+        }
+    }else{
+        if (dsi_display->panel->aod_status==1) {
+            if (oneplus_dim_status==5)
+                fingerprint_mode = false;
+            else if (oneplus_dim_status==2)
+                fingerprint_mode = !!oneplus_dim_status;
+        } else {
+            return 0;
+        }
+    }
+
+	if (fingerprint_mode != dsi_display->panel->is_hbm_enabled) {
+		//struct drm_encoder *drm_enc = c_conn->encoder;
+		dsi_display->panel->is_hbm_enabled = fingerprint_mode;
+		if (fingerprint_mode) {
+			SDE_ATRACE_BEGIN("set_hbm_on");
+			HBM_flag=true;
+			mutex_lock(&dsi_display->panel->panel_lock);
+
+			if (dsi_display->panel->aod_status==1 && !finger_type) {
+				if (dsi_display->panel->aod_mode == 2) {
+					rc = dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_AOD_OFF_HBM_ON_SETTING);
+					pr_err("Send DSI_CMD_AOD_OFF_HBM_ON_SETTING cmds\n");
+				} else {
+					if (dsi_panel_name == DSI_PANEL_SAMSUNG_AMB670YF01) {
+						if (dsi_display->panel->panel_stage_info == 1) {
+							rc = dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_REAL_AOD_OFF_HBM_ON_SETTING_O1);
+							DSI_ERR("Real aod mode send DSI_CMD_REAL_AOD_OFF_HBM_ON_SETTING_O1 cmds\n");
+						} else if (dsi_display->panel->panel_stage_info >= 2 &&
+							dsi_display->panel->panel_stage_info <= 4) {
+							rc = dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_REAL_AOD_OFF_HBM_ON_SETTING_O2);
+							DSI_ERR("Real aod mode send DSI_CMD_REAL_AOD_OFF_HBM_ON_SETTING_O2 cmds\n");
+						} else {
+							rc = dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_REAL_AOD_OFF_HBM_ON_SETTING);
+							DSI_ERR("Real aod mode send DSI_CMD_REAL_AOD_OFF_HBM_ON_SETTING cmds\n");
+						}
+					} else {
+						rc = dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_REAL_AOD_OFF_HBM_ON_SETTING);
+						DSI_ERR("Real aod mode send DSI_CMD_REAL_AOD_OFF_HBM_ON_SETTING cmds\n");
+					}
+				}
+				aod_fod_flag = true;
+			}
+			else if (dsi_display->panel->aod_status == 1 && finger_type) {
+				if (dsi_panel_name == DSI_PANEL_SAMSUNG_AMB670YF01) {
+					if (dsi_display->panel->panel_stage_info == 1) {
+						rc = dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_SET_AOD_OFF_O1);
+						DSI_ERR("Real aod mode send DSI_CMD_SET_AOD_OFF_O1 cmds\n");
+					} else if (dsi_display->panel->panel_stage_info >= 2 &&
+						dsi_display->panel->panel_stage_info <= 4) {
+						rc = dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_SET_AOD_OFF_O2);
+						DSI_ERR("Real aod mode send DSI_CMD_SET_AOD_OFF_O2 cmds\n");
+					} else {
+						rc = dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_SET_AOD_OFF);
+						DSI_ERR("Real aod mode send DSI_CMD_SET_AOD_OFF cmds\n");
+					}
+				} else {
+					rc = dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_SET_AOD_OFF);
+					DSI_ERR("Real aod mode send DSI_CMD_SET_AOD_OFF cmds\n");
+				}
+#ifdef CONFIG_PXLW_IRIS
+				if (iris_is_chip_supported()) {
+					oplus_adfr_aod_fod_vsync_switch(dsi_display->panel, false);
+				}
+#endif
+				pr_err("qdt aod off\n");
+			}
+			else {
+				//sde_encoder_poll_line_counts(drm_enc);
+				rc = dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_SET_HBM_ON_5);
+				pr_err("Send DSI_CMD_SET_HBM_ON_5 cmds\n");
+			}
+			SDE_ATRACE_END("set_hbm_on");
+			mutex_unlock(&dsi_display->panel->panel_lock);
+			if (rc) {
+				pr_err("failed to send DSI_GAMMA_CMD_SET_HBM_ON cmds, rc=%d\n", rc);
+				return rc;
+			}
+		}
+		else {
+			SDE_ATRACE_BEGIN("set_hbm_off");
+			HBM_flag = false;
+			//_sde_connector_update_bl_scale(c_conn);
+			mutex_lock(&dsi_display->panel->panel_lock);
+			if (dsi_display->panel->aod_status == 1 && !finger_type) {
+				if(oneplus_dim_status == 5){
+					rc = dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_SET_HBM_OFF);
+					pr_err("Send DSI_CMD_SET_HBM_OFF cmds\n");
+#ifdef CONFIG_PXLW_IRIS
+					if (iris_is_chip_supported()) {
+						oplus_adfr_aod_fod_vsync_switch(dsi_display->panel, false);
+					}
+#endif
+					aod_fod_flag = true;
+					dsi_display->panel->aod_status = 0;
+					oneplus_dim_status = 0;
+					aod_layer_hide = 1;
+				}
+				else {
+					if (oneplus_onscreenfp_status == 4) {
+						if (dsi_display->panel->aod_mode == 5 || dsi_display->panel->aod_mode == 4) {
+							if (dsi_panel_name == DSI_PANEL_SAMSUNG_AMB670YF01) {
+								if (dsi_display->panel->panel_stage_info >= 1 &&
+									dsi_display->panel->panel_stage_info <= 4) {
+									rc = dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_SET_AOD_ON_3_O);
+									DSI_ERR("Send DSI_CMD_SET_AOD_ON_3_O cmds\n");
+								} else {
+									rc = dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_SET_AOD_ON_3);
+									DSI_ERR("Send DSI_CMD_SET_AOD_ON_3 cmds\n");
+								}
+							} else {
+								rc = dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_SET_AOD_ON_3);
+								DSI_ERR("Send DSI_CMD_SET_AOD_ON_3 cmds\n");
+							}
+						} else if (dsi_display->panel->aod_mode == 1) {
+							if (dsi_panel_name == DSI_PANEL_SAMSUNG_AMB670YF01) {
+								if (dsi_display->panel->panel_stage_info >= 1 &&
+									dsi_display->panel->panel_stage_info <= 4) {
+									rc = dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_SET_AOD_ON_1_O);
+									DSI_ERR("Send DSI_CMD_SET_AOD_ON_1_O cmds\n");
+								} else {
+									rc = dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_SET_AOD_ON_1);
+									DSI_ERR("Send DSI_CMD_SET_AOD_ON_1 cmds\n");
+								}
+							} else {
+								rc = dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_SET_AOD_ON_1);
+								DSI_ERR("Send DSI_CMD_SET_AOD_ON_1 cmds\n");
+							}
+						} else if (dsi_display->panel->aod_mode == 3) {
+							if (dsi_panel_name == DSI_PANEL_SAMSUNG_AMB670YF01) {
+								if (dsi_display->panel->panel_stage_info >= 1 &&
+									dsi_display->panel->panel_stage_info <= 4) {
+									rc = dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_SET_AOD_ON_3_O);
+									DSI_ERR("Send DSI_CMD_SET_AOD_ON_3_O cmds\n");
+								} else {
+									rc = dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_SET_AOD_ON_3);
+									DSI_ERR("Send DSI_CMD_SET_AOD_ON_3 cmds\n");
+								}
+							} else {
+								rc = dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_SET_AOD_ON_3);
+								DSI_ERR("Send DSI_CMD_SET_AOD_ON_3 cmds\n");
+							}
+						}
+					} else if (oneplus_onscreenfp_status == 0) {
+						rc = dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_HBM_OFF_AOD_ON_SETTING );
+						aod_layer_hide = 1;
+						pr_err("Send DSI_CMD_HBM_OFF_AOD_ON_SETTING  cmds\n");
+					}
+				}
+			}
+			else if (dsi_display->panel->aod_status == 1 && finger_type) {
+				if(oneplus_dim_status == 5) {
+					pr_err("qdt aod off dim 5\n");
+				} else {
+					rc = dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_SET_AOD_ON_2);
+					pr_err("qdt aod on dim 0\n");
+				}
+			}
+			else {
+				HBM_flag = false;
+				//sde_encoder_poll_line_counts(drm_enc);
+				rc = dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_SET_HBM_OFF);
+				pr_err("Send DSI_CMD_SET_HBM_OFF cmds\n");
+#ifdef CONFIG_PXLW_IRIS
+				if (iris_is_chip_supported()) {
+					oplus_adfr_aod_fod_vsync_switch(dsi_display->panel, false);
+				}
+#endif
+			}
+			SDE_ATRACE_END("set_hbm_off");
+			mutex_unlock(&dsi_display->panel->panel_lock);
+			_sde_connector_update_bl_scale(c_conn);	
+			if (rc) {
+				pr_err("failed to send DSI_CMD_HBM_OFF cmds, rc=%d\n", rc);
+				return rc;
+			}
+		}
+	}
+	return 0;
+}
+
 void sde_connector_set_colorspace(struct sde_connector *c_conn)
 {
 	int rc = 0;
@@ -713,12 +1045,55 @@ void sde_connector_set_qsync_params(struct drm_connector *connector)
 		qsync_propval = sde_connector_get_property(c_conn->base.state,
 						CONNECTOR_PROP_QSYNC_MODE);
 		if (qsync_propval != c_conn->qsync_mode) {
-			SDE_DEBUG("updated qsync mode %d -> %d\n",
+			SDE_INFO("updated qsync mode %d -> %d\n",
 					c_conn->qsync_mode, qsync_propval);
 			c_conn->qsync_updated = true;
 			c_conn->qsync_mode = qsync_propval;
+#ifdef CONFIG_PXLW_IRIS
+			if (iris_is_chip_supported()) {
+				if (c_conn->qsync_mode == SDE_RM_QSYNC_DISABLED) {
+					c_conn->qsync_curr_dynamic_min_fps = 0;
+					c_conn->qsync_deferred_window_status = SET_WINDOW_IMMEDIATELY;
+				} else {
+					c_conn->qsync_dynamic_min_fps = 0;
+				}
+			}
+#endif
 		}
 	}
+
+#ifdef CONFIG_PXLW_IRIS
+	if (iris_is_chip_supported()) {
+		/*
+		prop_dirty = msm_property_is_dirty(&c_conn->property_info,
+						&c_state->property_state,
+						CONNECTOR_PROP_QSYNC_MIN_FPS);
+		*/
+		prop_dirty = oplus_adfr_qsync_mode_minfps_is_updated();
+		if (prop_dirty) {
+			/*
+			qsync_propval = sde_connector_get_property(c_conn->base.state,
+							CONNECTOR_PROP_QSYNC_MIN_FPS);
+			*/
+			qsync_propval = oplus_adfr_get_qsync_mode_minfps();
+			if (oplus_adfr_has_auto_mode(qsync_propval)) {
+				SDE_DEBUG("kVRR updated for auto mode %08X\n", qsync_propval);
+			} else {
+				if (qsync_propval != c_conn->qsync_dynamic_min_fps) {
+					SDE_INFO("kVRR updated qsync min fps %d -> %d\n",
+							c_conn->qsync_dynamic_min_fps, qsync_propval);
+					c_conn->qsync_updated = true;
+					c_conn->qsync_curr_dynamic_min_fps = qsync_propval;
+					if (qsync_propval == 0) {
+						c_conn->qsync_deferred_window_status = SET_WINDOW_IMMEDIATELY;
+					} else {
+						c_conn->qsync_deferred_window_status = DEFERRED_WINDOW_START;
+					}
+				}
+			}
+		}
+	}
+#endif
 }
 
 void sde_connector_complete_qsync_commit(struct drm_connector *conn,
@@ -786,7 +1161,7 @@ static int _sde_connector_update_dirty_properties(
 			break;
 		case CONNECTOR_PROP_BL_SCALE:
 		case CONNECTOR_PROP_SV_BL_SCALE:
-			_sde_connector_update_bl_scale(c_conn);
+			// _sde_connector_update_bl_scale(c_conn);
 			break;
 		case CONNECTOR_PROP_HDR_METADATA:
 			_sde_connector_update_hdr_metadata(c_conn, c_state);
@@ -860,6 +1235,7 @@ int sde_connector_pre_kickoff(struct drm_connector *connector)
 	}
 
 	rc = _sde_connector_update_dirty_properties(connector);
+	rc = _sde_connector_update_hbm(c_conn);
 	if (rc) {
 		SDE_EVT32(connector->base.id, SDE_EVTLOG_ERROR);
 		goto end;
@@ -908,6 +1284,11 @@ int sde_connector_prepare_commit(struct drm_connector *connector)
 	if (c_conn->qsync_updated) {
 		params.qsync_mode = c_conn->qsync_mode;
 		params.qsync_update = true;
+#ifdef CONFIG_PXLW_IRIS
+		if (iris_is_chip_supported()) {
+			params.qsync_dynamic_min_fps = c_conn->qsync_curr_dynamic_min_fps;
+		}
+#endif
 	}
 
 	rc = c_conn->ops.prepare_commit(c_conn->display, &params);
@@ -1524,12 +1905,12 @@ static int sde_connector_atomic_set_property(struct drm_connector *connector,
 	 * atomic set property framework.
 	 */
 	case CONNECTOR_PROP_BL_SCALE:
-		c_conn->bl_scale = val;
-		c_conn->bl_scale_dirty = true;
+		// c_conn->bl_scale = val;
+		// c_conn->bl_scale_dirty = true;
 		break;
 	case CONNECTOR_PROP_SV_BL_SCALE:
-		c_conn->bl_scale_sv = val;
-		c_conn->bl_scale_dirty = true;
+		// c_conn->bl_scale_sv = val;
+		// c_conn->bl_scale_dirty = true;
 		break;
 	case CONNECTOR_PROP_HDR_METADATA:
 		rc = _sde_connector_set_ext_hdr_info(c_conn,
@@ -1541,6 +1922,23 @@ static int sde_connector_atomic_set_property(struct drm_connector *connector,
 		msm_property_set_dirty(&c_conn->property_info,
 				&c_state->property_state, idx);
 		break;
+#ifdef CONFIG_PXLW_IRIS
+	case CONNECTOR_PROP_QSYNC_MIN_FPS:
+		if (iris_is_chip_supported()) {
+			SDE_INFO("kVRR set qsync minfps dirty with %llu[%08X]\n", val, val);
+
+			if (oplus_adfr_handle_auto_mode(val)) {
+				SDE_DEBUG("kVRR updated auto mode %08X\n", val);
+			} else {
+				oplus_adfr_handle_qsync_mode_minfps(val);
+				SDE_DEBUG("kVRR updated qsync mode minfps %08X\n", val);
+			}
+
+			msm_property_set_dirty(&c_conn->property_info,
+					&c_state->property_state, idx);
+		}
+		break;
+#endif
 	default:
 		break;
 	}
@@ -2236,8 +2634,11 @@ static int sde_connector_init_debugfs(struct drm_connector *connector)
 }
 #endif
 
+extern int dsi_register_node(struct drm_connector *drm_conn_dev);
+
 static int sde_connector_late_register(struct drm_connector *connector)
 {
+	dsi_register_node(connector);
 	return sde_connector_init_debugfs(connector);
 }
 
@@ -2245,6 +2646,35 @@ static void sde_connector_early_unregister(struct drm_connector *connector)
 {
 	/* debugfs under connector->debugfs are deleted by drm_debugfs */
 }
+
+#ifdef CONFIG_PXLW_IRIS
+static int drm_mode_compare_for_adfr(void *priv, struct list_head *lh_a, struct list_head *lh_b)
+{
+	struct drm_display_mode *a = list_entry(lh_a, struct drm_display_mode, head);
+	struct drm_display_mode *b = list_entry(lh_b, struct drm_display_mode, head);
+	int diff;
+
+	diff = ((b->type & DRM_MODE_TYPE_PREFERRED) != 0) -
+		((a->type & DRM_MODE_TYPE_PREFERRED) != 0);
+	if (diff)
+		return diff;
+	diff = a->hdisplay * a->vdisplay - b->hdisplay * b->vdisplay;
+	if (diff)
+		return diff;
+
+	diff = a->vrefresh - b->vrefresh;
+	if (diff)
+		return diff;
+
+	diff = b->clock - a->clock;
+	return diff;
+}
+
+static void drm_mode_sort_for_adfr(struct list_head *mode_list)
+{
+	list_sort(NULL, mode_list, drm_mode_compare_for_adfr);
+}
+#endif
 
 static int sde_connector_fill_modes(struct drm_connector *connector,
 		uint32_t max_width, uint32_t max_height)
@@ -2260,6 +2690,9 @@ static int sde_connector_fill_modes(struct drm_connector *connector,
 
 	mode_count = drm_helper_probe_single_connector_modes(connector,
 			max_width, max_height);
+    #ifdef CONFIG_PXLW_IRIS
+    drm_mode_sort_for_adfr(&connector->modes);
+    #endif
 
 	if (sde_conn->ops.set_allowed_mode_switch)
 		sde_conn->ops.set_allowed_mode_switch(connector,
@@ -2477,6 +2910,8 @@ int sde_connector_esd_status(struct drm_connector *conn)
 	return ret;
 }
 
+struct delayed_work *sde_esk_check_delayed_work;
+EXPORT_SYMBOL(sde_esk_check_delayed_work);
 static void sde_connector_check_status_work(struct work_struct *work)
 {
 	struct sde_connector *conn;
@@ -2489,6 +2924,8 @@ static void sde_connector_check_status_work(struct work_struct *work)
 		SDE_ERROR("not able to get connector object\n");
 		return;
 	}
+
+	sde_esk_check_delayed_work = &conn->status_work;
 
 	mutex_lock(&conn->lock);
 	dev = conn->base.dev->dev;
@@ -2791,6 +3228,13 @@ static int _sde_connector_install_properties(struct drm_device *dev,
 					ARRAY_SIZE(e_qsync_mode), 0,
 					CONNECTOR_PROP_QSYNC_MODE);
 
+#ifdef CONFIG_PXLW_IRIS
+		if (sde_kms->catalog->has_qsync && iris_is_chip_supported()) {
+			msm_property_install_range(&c_conn->property_info, "qsync_min_fps",
+					0x0, 0, ~0, 0, CONNECTOR_PROP_QSYNC_MIN_FPS);
+		}
+#endif
+
 		if (display_info->capabilities & MSM_DISPLAY_CAP_CMD_MODE)
 			msm_property_install_enum(&c_conn->property_info,
 				"frame_trigger_mode", 0, 0,
@@ -2821,6 +3265,9 @@ static int _sde_connector_install_properties(struct drm_device *dev,
 	c_conn->bl_scale_dirty = false;
 	c_conn->bl_scale = MAX_BL_SCALE_LEVEL;
 	c_conn->bl_scale_sv = MAX_SV_BL_SCALE_LEVEL;
+
+	msm_property_install_range(&c_conn->property_info,"CONNECTOR_CUST",
+			0x0, 0, INT_MAX, 0, CONNECTOR_PROP_CUSTOM);
 
 	if (connector_type == DRM_MODE_CONNECTOR_DisplayPort)
 		msm_property_install_range(&c_conn->property_info,
