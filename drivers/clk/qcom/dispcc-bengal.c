@@ -22,7 +22,7 @@
 #include "clk-regmap.h"
 #include "common.h"
 #include "clk-regmap-mux.h"
-#include "vdd-level.h"
+#include "vdd-level-bengal.h"
 
 static DEFINE_VDD_REGULATORS(vdd_cx, VDD_NUM, 1, vdd_corner);
 
@@ -725,11 +725,17 @@ static int dispcc_bengal_probe(struct platform_device *pdev)
 	return 0;
 }
 
+static void disp_cc_bengal_sync_state(struct device *dev)
+{
+	qcom_cc_sync_state(dev, &disp_cc_bengal_desc);
+}
+
 static struct platform_driver dispcc_bengal_driver = {
 	.probe = dispcc_bengal_probe,
 	.driver = {
 		.name = "bengal-dispcc",
 		.of_match_table = dispcc_bengal_match_table,
+		.sync_state = disp_cc_bengal_sync_state,
 	},
 };
 
