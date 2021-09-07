@@ -143,6 +143,7 @@ struct ethqos_emac_driver_data {
 struct qcom_ethqos {
 	struct platform_device *pdev;
 	void __iomem *rgmii_base;
+	void __iomem *ioaddr;
 
 	struct msm_bus_scale_pdata *bus_scale_vec;
 	u32 bus_hdl;
@@ -150,6 +151,11 @@ struct qcom_ethqos {
 	struct clk *rgmii_clk;
 	unsigned int speed;
 	unsigned int vote_idx;
+
+	struct iommu_domain *iommu_domain;
+	unsigned int *emac_reg_base_address;
+	unsigned int *rgmii_reg_base_address;
+	u32 emac_mem_size;
 
 	int gpio_phy_intr_redirect;
 	u32 phy_intr;

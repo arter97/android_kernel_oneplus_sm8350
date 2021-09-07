@@ -22,6 +22,7 @@
 #include <linux/ip.h>
 #include <linux/ipv6.h>
 #include <linux/rtnetlink.h>
+#include <asm-generic/io.h>
 
 #include "stmmac.h"
 #include "stmmac_platform.h"
@@ -1679,6 +1680,87 @@ static u32 l3mdev_fib_table1(const struct net_device *dev)
 
 static const struct l3mdev_ops l3mdev_op1 = {.l3mdev_fib_table = l3mdev_fib_table1};
 
+static inline u32 qcom_ethqos_rgmii_io_macro_num_of_regs(u32 emac_hw_version)
+{
+	switch (emac_hw_version) {
+	case EMAC_HW_v2_1_1:
+	case EMAC_HW_v2_1_2:
+	case EMAC_HW_v2_3_1:
+		return 27;
+	case EMAC_HW_v2_3_0:
+		return 28;
+	case EMAC_HW_NONE:
+	default:
+		return 0;
+	}
+}
+
+static int qcom_ethqos_init_panic_notifier(struct qcom_ethqos *ethqos)
+{
+	u32 size_iomacro_regs;
+	int ret = 0;
+
+	if (pethqos) {
+		size_iomacro_regs =
+		qcom_ethqos_rgmii_io_macro_num_of_regs(pethqos->emac_ver) * 4;
+
+		pethqos->emac_reg_base_address =
+			kzalloc(pethqos->emac_mem_size, GFP_KERNEL);
+
+		if (!pethqos->emac_reg_base_address)
+			ret = -ENOMEM;
+
+		pethqos->rgmii_reg_base_address =
+			kzalloc(size_iomacro_regs, GFP_KERNEL);
+
+		if (!pethqos->rgmii_reg_base_address)
+			ret = -ENOMEM;
+	}
+	return ret;
+}
+
+static int qcom_ethqos_panic_notifier(struct notifier_block *this,
+				      unsigned long event, void *ptr)
+{
+	u32 size_iomacro_regs;
+	struct stmmac_priv *priv = NULL;
+
+	if (pethqos) {
+		priv = qcom_ethqos_get_priv(pethqos);
+
+		pr_info("qcom-ethqos: ethqos 0x%p\n", pethqos);
+		pr_info("qcom-ethqos: stmmac_priv 0x%p\n", priv);
+
+		pethqos->iommu_domain = priv->plat->stmmac_emb_smmu_ctx.iommu_domain;
+
+		pr_info("qcom-ethqos: emac iommu domain 0x%p\n",
+			pethqos->iommu_domain);
+		pr_info("qcom-ethqos: emac register mem 0x%p\n",
+			pethqos->emac_reg_base_address);
+
+		if (pethqos->emac_reg_base_address)
+			memcpy_fromio(pethqos->emac_reg_base_address,
+				      pethqos->ioaddr,
+				      pethqos->emac_mem_size);
+
+		pr_info("qcom-ethqos: rgmii register mem 0x%p\n",
+			pethqos->rgmii_reg_base_address);
+
+		size_iomacro_regs =
+		qcom_ethqos_rgmii_io_macro_num_of_regs(pethqos->emac_ver) * 4;
+
+		if (pethqos->rgmii_reg_base_address)
+			memcpy(pethqos->rgmii_reg_base_address,
+			       __io_virt(pethqos->rgmii_base),
+			       size_iomacro_regs);
+	}
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block qcom_ethqos_panic_blk = {
+	.notifier_call  = qcom_ethqos_panic_notifier,
+};
+
 static int qcom_ethqos_probe(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
@@ -1703,7 +1785,7 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	if (!ipc_emac_log_ctxt)
 		ETHQOSERR("Error creating logging context for emac\n");
 	else
-		ETHQOSDBG("IPC logging has been enabled for emac\n");
+		ETHQOSINFO("IPC logging has been enabled for emac\n");
 	ret = stmmac_get_platform_resources(pdev, &stmmac_res);
 	if (ret)
 		return ret;
@@ -1831,6 +1913,8 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 
 	rgmii_dump(ethqos);
 
+	ethqos->ioaddr = (&stmmac_res)->addr;
+
 	if (ethqos->emac_ver == EMAC_HW_v2_3_2_RG || ethqos->emac_ver == EMAC_HW_v2_3_1) {
 		ethqos_pps_irq_config(ethqos);
 		create_pps_interrupt_device_node(&ethqos->avb_class_a_dev_t,
@@ -1852,6 +1936,12 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 		ETHQOSINFO("using partition device MAC address %pM\n", priv->dev->dev_addr);
 	}
 
+	res = platform_get_resource(ethqos->pdev, IORESOURCE_MEM, 0);
+	if (!res)
+		ETHQOSERR("get emac-base resource failed\n");
+
+	ethqos->emac_mem_size = resource_size(res);
+
 	if (ethqos->early_eth_enabled) {
 		/* Initialize work*/
 		INIT_WORK(&ethqos->early_eth,
@@ -1864,6 +1954,10 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 
 	if (priv->plat->mac2mac_en)
 		priv->plat->mac2mac_link = -1;
+
+	if (!qcom_ethqos_init_panic_notifier(ethqos))
+		atomic_notifier_chain_register(&panic_notifier_list,
+					       &qcom_ethqos_panic_blk);
 
 #ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
 
@@ -1924,6 +2018,9 @@ static int qcom_ethqos_remove(struct platform_device *pdev)
 	ethqos_free_gpios(ethqos);
 	emac_emb_smmu_exit();
 	ethqos_disable_regulators(ethqos);
+
+	atomic_notifier_chain_unregister(&panic_notifier_list,
+					 &qcom_ethqos_panic_blk);
 
 	platform_set_drvdata(pdev, NULL);
 	of_platform_depopulate(&pdev->dev);
