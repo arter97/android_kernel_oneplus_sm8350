@@ -75,7 +75,7 @@ static void apply_need(struct cluster_data *state);
 static void wake_up_core_ctl_thread(struct cluster_data *state);
 static bool initialized;
 
-ATOMIC_NOTIFIER_HEAD(core_ctl_notifier);
+static ATOMIC_NOTIFIER_HEAD(core_ctl_notifier);
 static unsigned int last_nr_big;
 
 static unsigned int get_active_cpu_count(const struct cluster_data *cluster);

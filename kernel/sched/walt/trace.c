@@ -15,7 +15,7 @@ static inline void __window_data(u32 *dst, u32 *src)
 }
 
 struct trace_seq;
-const char *__window_print(struct trace_seq *p, const u32 *buf, int buf_len)
+static const char *__window_print(struct trace_seq *p, const u32 *buf, int buf_len)
 {
 	int i;
 	const char *ret = p->buffer + seq_buf_used(&p->seq);
