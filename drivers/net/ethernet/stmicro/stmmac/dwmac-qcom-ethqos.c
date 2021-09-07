@@ -122,7 +122,7 @@ static struct qcom_ethqos *pethqos;
 
 static unsigned char dev_addr[ETH_ALEN] = {
 	0, 0x55, 0x7b, 0xb5, 0x7d, 0xf7};
-static struct ip_params pparams = {"", "", "", ""};
+static struct ip_params pparams;
 
 struct qcom_ethqos *get_pethqos(void)
 {
@@ -1447,8 +1447,8 @@ static void ethqos_is_ipv6_NW_stack_ready(struct work_struct *work)
 }
 #endif
 
-static int ethqos_set_early_eth_param(struct stmmac_priv *priv,
-				      struct qcom_ethqos *ethqos)
+static void ethqos_set_early_eth_param(struct stmmac_priv *priv,
+				       struct qcom_ethqos *ethqos)
 {
 	int ret = 0;
 
@@ -1473,12 +1473,7 @@ static int ethqos_set_early_eth_param(struct stmmac_priv *priv,
 					      msecs_to_jiffies(1000));
 	}
 #endif
-
-	if (pparams.is_valid_mac_addr) {
-		ether_addr_copy(dev_addr, pparams.mac_addr);
-		memcpy(priv->dev->dev_addr, dev_addr, ETH_ALEN);
-	}
-	return ret;
+	return;
 }
 
 static ssize_t read_phy_reg_dump(struct file *file, char __user *user_buf,
@@ -1850,6 +1845,12 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	}
 
 	qcom_ethqos_read_iomacro_por_values(ethqos);
+
+	if (pparams.is_valid_mac_addr) {
+		ether_addr_copy(dev_addr, pparams.mac_addr);
+		memcpy(priv->dev->dev_addr, dev_addr, ETH_ALEN);
+		ETHQOSINFO("using partition device MAC address %pM\n", priv->dev->dev_addr);
+	}
 
 	if (ethqos->early_eth_enabled) {
 		/* Initialize work*/
