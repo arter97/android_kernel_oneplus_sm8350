@@ -95,6 +95,8 @@ struct qcom_icc_node {
  * @vote_scale: scaling factor for vote_x and vote_y
  * @dirty: flag used to indicate whether the bcm needs to be committed
  * @keepalive: flag used to indicate whether a keepalive is required
+ * @qos_proxy: flag used to indicate whether a proxy vote needed as part of
+ * qos configuration
  * @aux_data: auxiliary data used when calculating threshold values and
  * communicating with RPMh
  * @list: used to link to other bcms when compiling lists for commit
@@ -111,6 +113,7 @@ struct qcom_icc_bcm {
 	u64 vote_scale;
 	bool dirty;
 	bool keepalive;
+	bool qos_proxy;
 	struct bcm_db aux_data;
 	struct list_head list;
 	struct list_head ws_list;
