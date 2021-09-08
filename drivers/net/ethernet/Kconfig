@@ -194,4 +194,16 @@ config QPS615
 	  NTN3 is a PCIe switch for 2 emac interfaces to send Internet Packets
 	  to SDX65 host.
 
+config EMAC_SHIM
+	tristate "Multi-Gigabit Ethernet shim driver"
+	depends on HAS_IOMEM && HAS_DMA && QTI_QUIN_GVM
+	select PAGE_POOL
+	select CRC32
+	select RESET_CONTROLLER
+	help
+	  This is a shim layer of driver for the Ethernet IPs built around a
+	  Synopsys IP Core. It provides only one dma access to the EMAC HW.
+	  Say Y here to compile it as a static driver if you want to use
+	  the shim driver.
+
 endif # ETHERNET
