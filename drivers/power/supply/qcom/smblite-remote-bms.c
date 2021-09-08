@@ -33,6 +33,7 @@
 
 #define REMOTE_FG_VOTER			"REMOTE_FG_VOTER"
 #define REMOTE_FG_DEBUG_BATT_SOC	67
+#define REMOTE_FG_FAKE_BATT_SOC		50
 
 static struct smblite_remote_bms *the_bms;
 
@@ -138,6 +139,8 @@ int remote_bms_get_prop(int channel, int *val, int src)
 	case SMB5_QG_CAPACITY:
 		if (is_debug_batt_id(the_bms))
 			*val = REMOTE_FG_DEBUG_BATT_SOC;
+		else if (!the_bms->is_seb_up)
+			*val = REMOTE_FG_FAKE_BATT_SOC;
 		else
 			rc = bms_get_buffered_data(channel, val, src);
 		break;
