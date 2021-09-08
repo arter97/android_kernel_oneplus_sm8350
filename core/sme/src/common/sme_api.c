@@ -2450,6 +2450,10 @@ sme_process_sta_twt_del_dialog_event(
 		return;
 	}
 
+	if (!mac->usr_cfg_ps_enable &&
+	    param->status == WMI_HOST_DEL_TWT_STATUS_OK)
+		param->status = WMI_HOST_DEL_TWT_STATUS_PS_DISABLE_TEARDOWN;
+
 	callback = mac->sme.twt_del_dialog_cb;
 	if (callback)
 		callback(mac->psoc, param);
@@ -5056,6 +5060,64 @@ release_lock:
 release_ref:
 	wlan_objmgr_vdev_release_ref(vdev, WLAN_LEGACY_SME_ID);
 	return status;
+}
+
+#ifdef WLAN_FEATURE_11AX
+static void sme_update_bfer_he_cap(struct wma_tgt_cfg *cfg)
+{
+	cfg->he_cap_5g.su_beamformer = 0;
+}
+#else
+static void sme_update_bfer_he_cap(struct wma_tgt_cfg *cfg)
+{
+}
+#endif
+
+#ifdef WLAN_FEATURE_11BE
+void sme_update_bfer_eht_cap(struct wma_tgt_cfg *cfg)
+{
+	cfg->eht_cap_5g.su_beamformer = 0;
+}
+#else
+static void sme_update_bfer_eht_cap(struct wma_tgt_cfg *cfg)
+{
+}
+#endif
+
+void sme_update_bfer_caps_as_per_nss_chains(mac_handle_t mac_handle,
+					    struct wma_tgt_cfg *cfg)
+{
+	uint8_t max_supported_tx_chains = MAX_VDEV_CHAINS;
+	struct mac_context *mac_ctx = MAC_CONTEXT(mac_handle);
+	struct wlan_mlme_nss_chains *nss_chains_ini_cfg =
+					&mac_ctx->mlme_cfg->nss_chains_ini_cfg;
+	uint8_t ini_tx_chains;
+
+	ini_tx_chains = GET_VDEV_NSS_CHAIN(
+			nss_chains_ini_cfg->num_tx_chains[NSS_CHAINS_BAND_5GHZ],
+			SAP_NSS_CHAINS_SHIFT);
+
+	max_supported_tx_chains =
+			mac_ctx->fw_chain_cfg.max_tx_chains_5g;
+
+	max_supported_tx_chains = QDF_MIN(ini_tx_chains,
+					  max_supported_tx_chains);
+	if (!max_supported_tx_chains)
+		return;
+
+	if (max_supported_tx_chains == 1) {
+		sme_debug("ini support %d and firmware support %d",
+			  ini_tx_chains,
+			  mac_ctx->fw_chain_cfg.max_tx_chains_5g);
+		if (mac_ctx->fw_chain_cfg.max_tx_chains_5g == 1) {
+			cfg->vht_cap.vht_su_bformer = 0;
+			sme_update_bfer_he_cap(cfg);
+			sme_update_bfer_eht_cap(cfg);
+		}
+		mac_ctx->mlme_cfg->vht_caps.vht_cap_info.su_bformer = 0;
+		mac_ctx->mlme_cfg->vht_caps.vht_cap_info.num_soundingdim = 0;
+		mac_ctx->mlme_cfg->vht_caps.vht_cap_info.mu_bformer = 0;
+	}
 }
 
 QDF_STATUS sme_vdev_post_vdev_create_setup(mac_handle_t mac_handle,
@@ -14909,6 +14971,11 @@ QDF_STATUS sme_add_dialog_cmd(mac_handle_t mac_handle,
 	enum wlan_twt_commands active_cmd = WLAN_TWT_NONE;
 
 	SME_ENTER();
+
+	if (!mac->usr_cfg_ps_enable) {
+		sme_debug("Power save mode disable");
+		return QDF_STATUS_E_INVAL;
+	}
 
 	is_twt_notify_in_progress = mlme_is_twt_notify_in_progress(
 			mac->psoc, twt_params->vdev_id);
