@@ -9189,20 +9189,26 @@ csr_roaming_state_config_cnf_processor(struct mac_context *mac_ctx,
 	if (!scan_result) {
 		/* If we are roaming TO an Infrastructure BSS... */
 		QDF_ASSERT(scan_result);
+		csr_roam_complete(mac_ctx, eCsrJoinFailure, NULL, vdev_id);
 		return;
 	}
 
 	if (!csr_is_infra_bss_desc(bss_desc)) {
 		sme_warn("found BSSType mismatching the one in BSS descp");
-		return;
+		/* here we allow the connection even if ess is not set.
+		 * previously it return directly which cause serialization cmd
+		 * timeout.
+		 */
 	}
 
 	local_ies = (tDot11fBeaconIEs *) scan_result->Result.pvIes;
 	if (!local_ies) {
 		status = csr_get_parsed_bss_description_ies(mac_ctx, bss_desc,
 							    &local_ies);
-		if (!QDF_IS_STATUS_SUCCESS(status))
+		if (!QDF_IS_STATUS_SUCCESS(status)) {
+			csr_roam(mac_ctx, cmd, false);
 			return;
+		}
 		is_ies_malloced = true;
 	}
 
@@ -14104,24 +14110,27 @@ void csr_update_pmk_cache_ft(struct mac_context *mac, uint32_t vdev_id,
 		pmksa.mdid.mdie_present = 1;
 		pmksa.mdid.mobility_domain =
 				session->connectedProfile.mdid.mobility_domain;
-		sme_debug("copied the MDID from session to PMKSA");
+		sme_debug("Session MDID:0x%x copied to PMKSA",
+			  pmksa.mdid.mobility_domain);
 		qdf_copy_macaddr(&pmksa.bssid,
 				 &session->connectedProfile.bssid);
 
 		status = wlan_crypto_update_pmk_cache_ft(vdev, &pmksa);
-		if (status == QDF_STATUS_SUCCESS)
-			sme_debug("Updated the crypto cache table");
+		if (QDF_IS_STATUS_ERROR(status))
+			sme_debug("Failed to update the crypto table");
 	} else if (scan_res && scan_res->BssDescriptor.mdiePresent) {
 		pmksa.mdid.mdie_present = 1;
 		pmksa.mdid.mobility_domain =
 			(scan_res->BssDescriptor.mdie[0] |
 			 (scan_res->BssDescriptor.mdie[1] << 8));
-		sme_debug("copied the MDID from scan_res to PMKSA");
-		qdf_copy_macaddr(&pmksa.bssid, &pmk_cache->BSSID);
+		sme_debug("Scan_res MDID:0x%x copied to PMKSA",
+			  pmksa.mdid.mobility_domain);
+		if (pmk_cache)
+			qdf_copy_macaddr(&pmksa.bssid, &pmk_cache->BSSID);
 
 		status = wlan_crypto_update_pmk_cache_ft(vdev, &pmksa);
-		if (status == QDF_STATUS_SUCCESS)
-			sme_debug("Updated the crypto cache table");
+		if (QDF_IS_STATUS_ERROR(status))
+			sme_debug("Failed to update the crypto table");
 	}
 
 	wlan_objmgr_vdev_release_ref(vdev, WLAN_LEGACY_SME_ID);
@@ -15099,6 +15108,26 @@ QDF_STATUS csr_send_join_req_msg(struct mac_context *mac, uint32_t sessionId,
 					vendor_ap_search_attr.ie_data,
 					vendor_ap_search_attr.ie_length);
 			wlan_mlme_set_ba_2k_jump_iot_ap(vdev,
+							is_vendor_ap_present);
+
+			is_vendor_ap_present = wlan_get_vendor_ie_ptr_from_oui
+					(SIR_MAC_BAD_HTC_HE_VENDOR_OUI1,
+					 SIR_MAC_BAD_HTC_HE_VENDOR_OUI_LEN,
+					 vendor_ap_search_attr.ie_data,
+					 vendor_ap_search_attr.ie_length);
+
+			is_vendor_ap_present =
+					is_vendor_ap_present &&
+					wlan_get_vendor_ie_ptr_from_oui
+					(SIR_MAC_BAD_HTC_HE_VENDOR_OUI2,
+					 SIR_MAC_BAD_HTC_HE_VENDOR_OUI_LEN,
+					 vendor_ap_search_attr.ie_data,
+					 vendor_ap_search_attr.ie_length);
+			/*
+			 * For SAP with special OUI, if DUT STA connect with
+			 * htc he enabled, SAP can't decode data pkt from DUT.
+			 */
+			wlan_mlme_set_bad_htc_he_iot_ap(vdev,
 							is_vendor_ap_present);
 
 			wlan_objmgr_vdev_release_ref(vdev, WLAN_LEGACY_MAC_ID);
@@ -21049,7 +21078,6 @@ csr_process_roam_sync_callback(struct mac_context *mac_ctx,
 		csr_roam_invoke_timer_stop(mac_ctx, session_id);
 		csr_roam_call_callback(mac_ctx, session_id, NULL, 0,
 				eCSR_ROAM_ABORT, eCSR_ROAM_RESULT_SUCCESS);
-		vdev_roam_params->roam_invoke_in_progress = false;
 		goto end;
 	case SIR_ROAM_SYNCH_NAPI_OFF:
 		csr_roam_call_callback(mac_ctx, session_id, NULL, 0,
