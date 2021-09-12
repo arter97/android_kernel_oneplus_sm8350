@@ -1362,7 +1362,7 @@ static int64_t a6xx_read_throttling_counters(struct adreno_device *adreno_dev)
 	return adj;
 }
 #define GPU_CPR_FSM_CTL_OFFSET	 0x4
-void a6xx_gx_cpr_toggle(struct kgsl_device *device)
+static void a6xx_gx_cpr_toggle(struct kgsl_device *device)
 {
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 	const struct adreno_a6xx_core *a6xx_core = to_a6xx_core(adreno_dev);
