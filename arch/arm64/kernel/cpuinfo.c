@@ -388,7 +388,11 @@ void cpuinfo_store_cpu(void)
 
 void __init cpuinfo_store_boot_cpu(void)
 {
+#ifdef CONFIG_FIX_BOOT_CPU_LOGICAL_MAPPING
+	struct cpuinfo_arm64 *info = &per_cpu(cpu_data, logical_bootcpu_id);
+#else
 	struct cpuinfo_arm64 *info = &per_cpu(cpu_data, 0);
+#endif
 	__cpuinfo_store_cpu(info);
 
 	boot_cpu_data = *info;

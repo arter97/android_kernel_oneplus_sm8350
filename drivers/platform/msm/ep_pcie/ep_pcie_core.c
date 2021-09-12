@@ -26,8 +26,6 @@
 #include <linux/interconnect.h>
 
 #include "ep_pcie_com.h"
-#include <asm/dma-iommu.h>
-#include <linux/dma-mapping.h>
 #include <linux/platform_device.h>
 
 #define PCIE_MHI_STATUS(n)			((n) + 0x148)
@@ -657,10 +655,12 @@ static void ep_pcie_core_init(struct ep_pcie_dev_t *dev, bool configured)
 				PCIE20_LINK_CONTROL2_LINK_STATUS2,
 				0xf, dev->link_speed);
 
-		EP_PCIE_DBG2(dev, "PCIe V%d: Clear disconn_req after D3_COLD\n",
-			     dev->rev);
-		ep_pcie_write_reg_field(dev->tcsr_perst_en,
-					TCSR_PCIE_RST_SEPARATION, BIT(5), 0);
+		if (!dev->tcsr_not_supported) {
+			EP_PCIE_DBG2(dev, "PCIe V%d: Clear disconn_req after D3_COLD\n",
+					dev->rev);
+			ep_pcie_write_reg_field(dev->tcsr_perst_en,
+						TCSR_PCIE_RST_SEPARATION, BIT(5), 0);
+		}
 	}
 
 	if (dev->active_config) {
@@ -1435,14 +1435,18 @@ static int ep_pcie_core_clkreq_override(bool config)
 
 	if (config) {
 		ep_pcie_write_reg_field(dev->parf, PCIE20_PARF_CLKREQ_OVERRIDE,
-			PCIE20_PARF_CLKREQ_IN_OVERRIDE_VAL, BIT(3));
+			PCIE20_PARF_CLKREQ_IN_OVERRIDE_VAL_MASK,
+			PCIE20_PARF_CLKREQ_IN_OVERRIDE_VAL_DEASSERT);
 		ep_pcie_write_reg_field(dev->parf, PCIE20_PARF_CLKREQ_OVERRIDE,
-			PCIE20_PARF_CLKREQ_IN_OVERRIDE_ENABLE, BIT(1));
+			PCIE20_PARF_CLKREQ_IN_OVERRIDE_ENABLE_MASK,
+			PCIE20_PARF_CLKREQ_IN_OVERRIDE_ENABLE_EN);
 	} else {
 		ep_pcie_write_reg_field(dev->parf, PCIE20_PARF_CLKREQ_OVERRIDE,
-			PCIE20_PARF_CLKREQ_IN_OVERRIDE_ENABLE, 0);
+			PCIE20_PARF_CLKREQ_IN_OVERRIDE_ENABLE_MASK,
+			PCIE20_PARF_CLKREQ_IN_OVERRIDE_ENABLE_DIS);
 		ep_pcie_write_reg_field(dev->parf, PCIE20_PARF_CLKREQ_OVERRIDE,
-			PCIE20_PARF_CLKREQ_IN_OVERRIDE_VAL, 0);
+			PCIE20_PARF_CLKREQ_IN_OVERRIDE_VAL_MASK,
+			PCIE20_PARF_CLKREQ_IN_OVERRIDE_VAL_ASSERT);
 	}
 
 	return 0;
@@ -2044,10 +2048,12 @@ int ep_pcie_core_disable_endpoint(void)
 	EP_PCIE_DBG(dev, "PCIe V%d: LTSSM_STATE during disable:0x%x\n",
 		dev->rev, (val >> 0xC) & 0x3f);
 
-	EP_PCIE_DBG2(dev, "PCIe V%d: Set pcie_disconnect_req during D3_COLD\n",
-		     dev->rev);
-	ep_pcie_write_reg_field(dev->tcsr_perst_en,
-				TCSR_PCIE_RST_SEPARATION, BIT(5), 1);
+	if (!dev->tcsr_not_supported) {
+		EP_PCIE_DBG2(dev, "PCIe V%d: Set pcie_disconnect_req during D3_COLD\n",
+				dev->rev);
+		ep_pcie_write_reg_field(dev->tcsr_perst_en,
+					TCSR_PCIE_RST_SEPARATION, BIT(5), 1);
+	}
 
 	ep_pcie_pipe_clk_deinit(dev);
 	ep_pcie_clk_deinit(dev);
@@ -2270,6 +2276,14 @@ static irqreturn_t ep_pcie_handle_dstate_change_irq(int irq, void *data)
 	} else if (dstate == 0) {
 		dev->l23_ready = false;
 		dev->d0_counter++;
+		/*
+		 * When device is trasistion back to D0 from D3hot
+		 * (without D3cold), REQ_EXIT_L1 bit won't get cleared.
+		 * And L1 would get blocked till next D3cold.
+		 * So clear it explicitly during D0.
+		 */
+		ep_pcie_write_mask(dev->parf + PCIE20_PARF_PM_CTRL, BIT(1), 0);
+
 		atomic_set(&dev->host_wake_pending, 0);
 		EP_PCIE_DBG(dev,
 			"PCIe V%d: No. %ld change to D0 state, clearing wake pending:%d\n",

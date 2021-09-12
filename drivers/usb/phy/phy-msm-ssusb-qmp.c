@@ -1101,6 +1101,7 @@ static int msm_ssphy_qmp_probe(struct platform_device *pdev)
 	phy->phy.set_suspend		= msm_ssphy_qmp_set_suspend;
 	phy->phy.notify_connect		= msm_ssphy_qmp_notify_connect;
 	phy->phy.notify_disconnect	= msm_ssphy_qmp_notify_disconnect;
+	phy->phy.type			= USB_PHY_TYPE_USB3;
 
 	ret = usb_add_phy_dev(&phy->phy);
 

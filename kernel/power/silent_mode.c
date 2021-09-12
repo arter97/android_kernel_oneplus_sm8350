@@ -1,6 +1,5 @@
-/* SPDX-License-Identifier: GPL-2.0-only
- * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- */
+// SPDX-License-Identifier: GPL-2.0-only
+// Copyright (c) 2021, The Linux Foundation. All rights reserved.
 
 #include <linux/interrupt.h>
 #include <linux/module.h>
@@ -103,7 +102,8 @@ static void pm_silent_mode_cb_chain(void)
 void pm_silentmode_user_update(struct kobject *kobj, int val)
 {
 	if (kobj != NULL) {
-		atomic_set(&pm_silentmode_userspace_cntrl, USERSPACE_CONTROL_ENABLED);
+		atomic_set(&pm_silentmode_userspace_cntrl,
+						USERSPACE_CONTROL_ENABLED);
 		atomic_set(&pm_silent_mode_enable, val);
 		sysfs_notify(kobj, NULL, "pm_silentmode_kernel_state");
 	}
@@ -148,7 +148,7 @@ static int silent_mode_parse_boot_str(char *inputString)
 		return MODE_NON_SILENT;
 	}
 
-	pr_debug("%s: returned %s", __func__, match);
+	pr_debug("%s: returned %s\n", __func__, match);
 
 	if (strnstr(match, "forcednonsilent", strlen(match))) {
 		pm_silentmode_hw_state_set(MODE_GPIO_LOW);
@@ -168,25 +168,87 @@ static int silent_mode_parse_boot_str(char *inputString)
 		return MODE_SILENT;
 	}
 
-	pr_debug("silent_mode: No string found: NON_SILENT");
+	pr_debug("silent_mode: No string found: NON_SILENT\n");
 	return MODE_NON_SILENT;
 }
 
+
+#define silentmode_attr(_name) \
+static struct kobj_attribute _name##_attr = {	\
+	.attr	= {				\
+		.name = __stringify(_name),	\
+		.mode = 0666,			\
+	},					\
+	.show	= _name##_show,			\
+	.store	= _name##_store,		\
+}
+
+static ssize_t pm_silentmode_kernel_state_show(struct kobject *kobj,
+					struct kobj_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%d\n", pm_silentmode_status());
+}
+
+static ssize_t pm_silentmode_kernel_state_store(struct kobject *kobj,
+		struct kobj_attribute *attr, const char *buf, size_t n)
+{
+	unsigned long val;
+
+	if (kstrtoul(buf, 10, &val))
+		return -EINVAL;
+
+	pm_silentmode_update(val, kobj, 1);
+
+	return n;
+}
+
+silentmode_attr(pm_silentmode_kernel_state);
+
+static ssize_t pm_silentmode_hw_state_show(struct kobject *kobj,
+					struct kobj_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+					pm_silentmode_hw_state_get());
+}
+
+static ssize_t pm_silentmode_hw_state_store(struct kobject *kobj,
+		struct kobj_attribute *attr, const char *buf, size_t n)
+{
+	return -EINVAL;
+}
+silentmode_attr(pm_silentmode_hw_state);
+
+static struct attribute *g[] = {
+	&pm_silentmode_kernel_state_attr.attr,
+	&pm_silentmode_hw_state_attr.attr,
+	NULL,
+};
+
+
+static const struct attribute_group attr_group = {
+	.attrs = g,
+};
+
 static int __init pm_silentmode_init(void)
 {
-	int kernel_silent_mode;
+	int kernel_silent_mode, error;
 
-	pr_debug("%s: Silent Boot Mode Entered", __func__);
+	pr_debug("%s: Silent Boot Mode Entered\n", __func__);
 	// 1. Parse Command Line arguments
 	kernel_silent_mode = silent_mode_parse_boot_str("silent_boot_mode");
 
+	// 2. Append sysfs enteries under /sys/power/
+	error = sysfs_create_group(power_kobj, &attr_group);
+	if (error) {
+		pr_err("%s: failed to create sysfs %d\n", __func__, error);
+		return error;
+	}
 	// 2. Set the monitoring state as monitoring or Forced state
 	if (kernel_silent_mode == MODE_NON_SILENT)
-		pr_debug("%s: Silent Boot Mode disabled", __func__);
+		pr_debug("%s: Silent Boot Mode disabled\n", __func__);
 
 	return 0;
 }
-
 postcore_initcall(pm_silentmode_init);
 
 #endif

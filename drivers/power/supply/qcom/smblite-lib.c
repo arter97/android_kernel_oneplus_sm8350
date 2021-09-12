@@ -380,11 +380,18 @@ int smblite_lib_get_prop_from_bms(struct smb_charger *chg, int channel, int *val
 {
 	int rc;
 
-	if (IS_ERR_OR_NULL(chg->iio_chan_list_qg))
-		return -ENODEV;
+	if (chg->is_fg_remote) {
+		rc = remote_bms_get_prop(channel, val, BMS_GLINK);
+		if (rc < 0)
+			smblite_lib_err(chg, "Couldn't get prop from remote bms, rc = %d",
+					rc);
+	} else {
+		if (IS_ERR_OR_NULL(chg->iio_chan_list_qg))
+			return -ENODEV;
 
-	rc = iio_read_channel_processed(chg->iio_chan_list_qg[channel],
-					val);
+		rc = iio_read_channel_processed(chg->iio_chan_list_qg[channel],
+						val);
+	}
 
 	return rc < 0 ? rc : 0;
 }
@@ -460,6 +467,10 @@ const struct apsd_result *smblite_lib_get_apsd_result(struct smb_charger *chg)
 		if (smblite_apsd_results[i].bit == apsd_stat)
 			result = &smblite_apsd_results[i];
 	}
+
+	/* Report HVDCP Adapter as DCP.*/
+	if (apsd_stat & QC_3P0_BIT)
+		result = &smblite_apsd_results[DCP];
 
 	return result;
 }
@@ -603,7 +614,7 @@ void smblite_lib_suspend_on_debug_battery(struct smb_charger *chg)
 {
 	int rc, val;
 
-	if (!chg->iio_chan_list_qg)
+	if (!chg->iio_chan_list_qg && !chg->is_fg_remote)
 		return;
 
 	rc = smblite_lib_get_prop_from_bms(chg, SMB5_QG_DEBUG_BATTERY,
@@ -2605,11 +2616,82 @@ static void smblite_lib_micro_usb_plugin(struct smb_charger *chg,
 			smblite_lib_dbg(chg, PR_MISC,
 				"charger_en_status=%x, Charging disable by boost\n", stat);
 		}
+
+	if (chg->wa_flags & HDC_ICL_REDUCTION_WA) {
+		rc = smblite_lib_masked_write(chg, BATIF_PULLDOWN_VPH_CONTROL(chg->base),
+				BATIF_PULLDOWN_VPH_SEL_MASK,
+				(PULLDOWN_VPH_SW_EN_BIT | PULLDOWN_VPH_HW_EN_BIT));
+		if (rc < 0)
+			smblite_lib_err(chg, "Couldn't set BATIF_PULLDOWN_VPH_CONTROL rc=%d\n", rc);
+
+		rc = smblite_lib_run_aicl(chg, RERUN_AICL);
+		if (rc < 0)
+			smblite_lib_err(chg, "Couldn't rerun AICL rc=%d\n", rc);
+	}
+
 	} else {
 		smblite_lib_notify_device_mode(chg, false);
 		smblite_lib_uusb_removal(chg);
 		typec_partner_unregister(chg);
+
+		if (chg->wa_flags & HDC_ICL_REDUCTION_WA) {
+			rc = smblite_lib_masked_write(chg, BATIF_PULLDOWN_VPH_CONTROL(chg->base),
+					BATIF_PULLDOWN_VPH_SEL_MASK,
+					PULLDOWN_VPH_HW_EN_BIT);
+			if (rc < 0)
+				smblite_lib_err(chg,
+					"Couldn't set BATIF_PULLDOWN_VPH_CONTROL rc=%d\n", rc);
+		}
 	}
+}
+
+static int smblite_lib_request_dpdm(struct smb_charger *chg, bool enable)
+{
+	int rc = 0;
+
+	/* Enable dpdm requests only for platform with PM5100 */
+	if (chg->subtype != PM5100)
+		return 0;
+
+	/* fetch the DPDM regulator */
+	if (!chg->dpdm_reg && of_get_property(chg->dev->of_node,
+				"dpdm-supply", NULL)) {
+		chg->dpdm_reg = devm_regulator_get(chg->dev, "dpdm");
+		if (IS_ERR(chg->dpdm_reg)) {
+			rc = PTR_ERR(chg->dpdm_reg);
+			smblite_lib_err(chg, "Couldn't get dpdm regulator rc=%d\n",
+					rc);
+			chg->dpdm_reg = NULL;
+			return rc;
+		}
+	}
+	mutex_lock(&chg->dpdm_lock);
+	if (enable) {
+		if (chg->dpdm_reg && !chg->dpdm_enabled) {
+			smblite_lib_dbg(chg, PR_MISC, "enabling DPDM regulator\n");
+			rc = regulator_enable(chg->dpdm_reg);
+			if (rc < 0)
+				smblite_lib_err(chg,
+					"Couldn't enable dpdm regulator rc=%d\n",
+					rc);
+			else
+				chg->dpdm_enabled = true;
+		}
+	} else {
+		if (chg->dpdm_reg && chg->dpdm_enabled) {
+			smblite_lib_dbg(chg, PR_MISC, "disabling DPDM regulator\n");
+			rc = regulator_disable(chg->dpdm_reg);
+			if (rc < 0)
+				smblite_lib_err(chg,
+					"Couldn't disable dpdm regulator rc=%d\n",
+					rc);
+			else
+				chg->dpdm_enabled = false;
+		}
+	}
+	mutex_unlock(&chg->dpdm_lock);
+
+	return rc;
 }
 
 #define PL_DELAY_MS	30000
@@ -2635,13 +2717,16 @@ static void smblite_lib_usb_plugin_locked(struct smb_charger *chg)
 		if (chg->fcc_stepper_enable)
 			vote(chg->fcc_votable, FCC_STEPPER_VOTER, false, 0);
 
+		rc = smblite_lib_request_dpdm(chg, true);
+		if (rc < 0)
+			smblite_lib_err(chg, "Couldn't to enable DPDM rc=%d\n", rc);
+
 		/* Schedule work to enable parallel charger */
 		vote(chg->awake_votable, PL_DELAY_VOTER, true, 0);
 		schedule_delayed_work(&chg->pl_enable_work,
 					msecs_to_jiffies(PL_DELAY_MS));
 	} else {
 		smblite_lib_update_usb_type(chg, POWER_SUPPLY_TYPE_UNKNOWN);
-		/* Disable SW Thermal Regulation */
 		if (chg->wa_flags & BOOST_BACK_WA) {
 			data = chg->irq_info[SWITCHER_POWER_OK_IRQ].irq_data;
 			if (data) {
@@ -2681,6 +2766,10 @@ static void smblite_lib_usb_plugin_locked(struct smb_charger *chg)
 			vote(chg->usb_icl_votable, AICL_THRESHOLD_VOTER,
 					false, 0);
 		}
+
+		rc = smblite_lib_request_dpdm(chg, false);
+		if (rc < 0)
+			smblite_lib_err(chg, "Couldn't to disable DPDM rc=%d\n", rc);
 	}
 
 	if (chg->connector_type == QTI_POWER_SUPPLY_CONNECTOR_MICRO_USB)
@@ -2779,6 +2868,19 @@ static void update_sw_icl_max(struct smb_charger *chg,
 	}
 }
 
+void smblite_lib_hvdcp_detect_enable(struct smb_charger *chg, bool enable)
+{
+	int rc;
+	u8 mask;
+
+	mask =  HVDCP_NO_AUTH_QC3_CFG_BIT | HVDCP_EN_BIT;
+	rc = smblite_lib_masked_write(chg, USBIN_QC23_EN_REG(chg->base), mask,
+						enable ? mask : 0);
+	if (rc < 0)
+		smblite_lib_err(chg, "failed to write USBIN_QC23_EN_REG rc=%d\n",
+				rc);
+}
+
 /* triggers when HVDCP is detected */
 static void smblite_lib_handle_hvdcp_detect_done(struct smb_charger *chg,
 					    bool rising)
@@ -2797,52 +2899,6 @@ void smblite_lib_rerun_apsd(struct smb_charger *chg)
 				APSD_RERUN_BIT, APSD_RERUN_BIT);
 	if (rc < 0)
 		smblite_lib_err(chg, "Couldn't re-run APSD rc=%d\n", rc);
-}
-
-static int smblite_lib_request_dpdm(struct smb_charger *chg, bool enable)
-{
-	int rc = 0;
-
-	/* fetch the DPDM regulator */
-	if (!chg->dpdm_reg && of_get_property(chg->dev->of_node,
-				"dpdm-supply", NULL)) {
-		chg->dpdm_reg = devm_regulator_get(chg->dev, "dpdm");
-		if (IS_ERR(chg->dpdm_reg)) {
-			rc = PTR_ERR(chg->dpdm_reg);
-			smblite_lib_err(chg, "Couldn't get dpdm regulator rc=%d\n",
-					rc);
-			chg->dpdm_reg = NULL;
-			return rc;
-		}
-	}
-
-	mutex_lock(&chg->dpdm_lock);
-	if (enable) {
-		if (chg->dpdm_reg && !chg->dpdm_enabled) {
-			smblite_lib_dbg(chg, PR_MISC, "enabling DPDM regulator\n");
-			rc = regulator_enable(chg->dpdm_reg);
-			if (rc < 0)
-				smblite_lib_err(chg,
-					"Couldn't enable dpdm regulator rc=%d\n",
-					rc);
-			else
-				chg->dpdm_enabled = true;
-		}
-	} else {
-		if (chg->dpdm_reg && chg->dpdm_enabled) {
-			smblite_lib_dbg(chg, PR_MISC, "disabling DPDM regulator\n");
-			rc = regulator_disable(chg->dpdm_reg);
-			if (rc < 0)
-				smblite_lib_err(chg,
-					"Couldn't disable dpdm regulator rc=%d\n",
-					rc);
-			else
-				chg->dpdm_enabled = false;
-		}
-	}
-	mutex_unlock(&chg->dpdm_lock);
-
-	return rc;
 }
 
 static int smblite_lib_rerun_apsd_if_required(struct smb_charger *chg)
@@ -2906,7 +2962,7 @@ static void smblite_lib_handle_hvdcp_check_timeout(struct smb_charger *chg,
 	int rc = 0;
 
 	if (rising) {
-		if (qc_charger) {
+		if (qc_charger && !chg->hvdcp3_detected) {
 			/* Increase vbus to MAX(6V), if incremented HVDCP_3 is detected */
 			rc = smblite_lib_hvdcp3_force_max_vbus(chg);
 			if (rc < 0)
@@ -2916,8 +2972,9 @@ static void smblite_lib_handle_hvdcp_check_timeout(struct smb_charger *chg,
 		}
 	}
 
-	smblite_lib_dbg(chg, PR_INTERRUPT, "IRQ: %s %s\n", __func__,
-		   rising ? "rising" : "falling");
+	smblite_lib_dbg(chg, PR_INTERRUPT, "IRQ: %s %s, hvdcp3_detected=%s\n", __func__,
+			(rising ? "rising" : "falling"),
+			(chg->hvdcp3_detected ? "True" : "False"));
 }
 
 static void smblite_lib_handle_sdp_enumeration_done(struct smb_charger *chg,
@@ -3978,6 +4035,7 @@ int smblite_lib_init(struct smb_charger *chg)
 {
 	int rc = 0;
 	struct iio_channel **iio_list;
+	struct smblite_remote_bms *remote_bms;
 
 	INIT_WORK(&chg->bms_update_work, bms_update_work);
 	INIT_WORK(&chg->jeita_update_work, jeita_update_work);
@@ -4022,10 +4080,24 @@ int smblite_lib_init(struct smb_charger *chg)
 			return rc;
 		}
 
-		iio_list = get_ext_channels(chg->dev, smblite_lib_qg_ext_iio_chan,
-			ARRAY_SIZE(smblite_lib_qg_ext_iio_chan));
-		if (!IS_ERR(iio_list))
-			chg->iio_chan_list_qg = iio_list;
+		if (chg->is_fg_remote) {
+			remote_bms = &chg->remote_bms;
+			remote_bms->dev = chg->dev;
+			remote_bms->iio_read = chg->chg_param.iio_read;
+			remote_bms->iio_write = chg->chg_param.iio_write;
+
+			rc = remote_bms_init(remote_bms);
+			if (rc < 0) {
+				smblite_lib_err(chg, "Couldn't initialize remote bms rc=%d\n",
+						rc);
+				return rc;
+			}
+		} else {
+			iio_list = get_ext_channels(chg->dev, smblite_lib_qg_ext_iio_chan,
+				ARRAY_SIZE(smblite_lib_qg_ext_iio_chan));
+			if (!IS_ERR(iio_list))
+				chg->iio_chan_list_qg = iio_list;
+		}
 
 		rc = smblite_lib_register_notifier(chg);
 		if (rc < 0) {
@@ -4057,6 +4129,7 @@ int smblite_lib_deinit(struct smb_charger *chg)
 		cancel_delayed_work_sync(&chg->role_reversal_check);
 		cancel_delayed_work_sync(&chg->pr_swap_detach_work);
 		power_supply_unreg_notifier(&chg->nb);
+		remote_bms_deinit();
 		smblite_lib_destroy_votables(chg);
 		qcom_step_chg_deinit();
 		qcom_batt_deinit();

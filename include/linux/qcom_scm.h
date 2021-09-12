@@ -162,6 +162,8 @@ extern int qcom_scm_config_set_ice_key(uint32_t index, phys_addr_t paddr,
 				       unsigned int data_unit,
 				       unsigned int food);
 extern int qcom_scm_clear_ice_key(uint32_t index, unsigned int food);
+extern int qcom_scm_derive_raw_secret(phys_addr_t paddr_key, size_t key_size,
+				      phys_addr_t paddr_secret, size_t secret_size);
 extern bool qcom_scm_hdcp_available(void);
 extern int qcom_scm_hdcp_req(struct qcom_scm_hdcp_req *req, u32 req_cnt,
 			     u32 *resp);
@@ -333,6 +335,9 @@ static inline int qcom_scm_config_set_ice_key(uint32_t index, phys_addr_t paddr,
 		size_t size, uint32_t cipher, unsigned int data_unit,
 		unsigned int food) { return -ENODEV; }
 static inline int qcom_scm_clear_ice_key(uint32_t index, unsigned int food)
+		{ return -ENODEV; }
+static inline int qcom_scm_derive_raw_secret(phys_addr_t paddr_key,
+		size_t key_size, phys_addr_t paddr_secret, size_t secret_size)
 		{ return -ENODEV; }
 static inline bool qcom_scm_hdcp_available(void) { return false; }
 static inline int qcom_scm_hdcp_req(struct qcom_scm_hdcp_req *req, u32 req_cnt,

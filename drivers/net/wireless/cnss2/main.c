@@ -11,6 +11,7 @@
 #include <linux/rwsem.h>
 #include <linux/suspend.h>
 #include <linux/timer.h>
+#include <linux/firmware.h>
 #if IS_ENABLED(CONFIG_QCOM_MINIDUMP)
 #include <soc/qcom/minidump.h>
 #endif
@@ -187,6 +188,14 @@ static void cnss_get_rc_qrtr(struct cnss_plat_data *plat_priv)
 			    plat_priv->wlfw_service_instance_id);
 	}
 }
+
+static inline int
+cnss_get_pld_bus_ops_name(struct cnss_plat_data *plat_priv)
+{
+	return of_property_read_string(plat_priv->plat_dev->dev.of_node,
+				       "qcom,pld_bus_ops_name",
+				       &plat_priv->pld_bus_ops_name);
+}
 #else
 static void cnss_set_plat_priv(struct platform_device *plat_dev,
 			       struct cnss_plat_data *plat_priv)
@@ -223,6 +232,12 @@ struct cnss_plat_data *cnss_get_plat_priv_by_rc_num(int rc_num)
 
 static void cnss_get_rc_qrtr(struct cnss_plat_data *plat_priv)
 {
+}
+
+static int
+cnss_get_pld_bus_ops_name(struct cnss_plat_data *plat_priv)
+{
+	return 0;
 }
 #endif
 
@@ -2485,6 +2500,11 @@ static int cnss_register_ramdump_v2(struct cnss_plat_data *plat_priv)
 
 	cnss_pr_dbg("Ramdump size 0x%lx\n", info_v2->ramdump_size);
 
+	if (info_v2->ramdump_size == 0) {
+		cnss_pr_info("Ramdump will not be collected");
+		return 0;
+	}
+
 	info_v2->dump_data_vaddr = kzalloc(CNSS_DUMP_DESC_SIZE, GFP_KERNEL);
 	if (!info_v2->dump_data_vaddr)
 		return -ENOMEM;
@@ -3357,6 +3377,11 @@ static int cnss_probe(struct platform_device *plat_dev)
 	plat_priv->plat_dev = plat_dev;
 	plat_priv->device_id = device_id->driver_data;
 
+	ret = cnss_get_pld_bus_ops_name(plat_priv);
+	if (ret)
+		cnss_pr_err("Failed to find bus ops name, err = %d\n",
+			    ret);
+
 	cnss_get_rc_qrtr(plat_priv);
 
 	plat_priv->is_converged_dt = cnss_is_converged_dt(plat_priv);
@@ -3401,13 +3426,9 @@ static int cnss_probe(struct platform_device *plat_dev)
 	if (ret)
 		goto deinit_event_work;
 
-	ret = cnss_dms_init(plat_priv);
-	if (ret)
-		goto deinit_qmi;
-
 	ret = cnss_debugfs_create(plat_priv);
 	if (ret)
-		goto deinit_dms;
+		goto deinit_qmi;
 
 	ret = cnss_misc_init(plat_priv);
 	if (ret)
@@ -3435,6 +3456,10 @@ retry:
 		}
 	}
 
+	ret = cnss_dms_init(plat_priv);
+	if (ret)
+		goto deinit_bus;
+
 	cnss_register_coex_service(plat_priv);
 	cnss_register_ims_service(plat_priv);
 
@@ -3442,6 +3467,9 @@ retry:
 
 	return 0;
 
+deinit_bus:
+	if (!test_bit(SKIP_DEVICE_BOOT, &plat_priv->ctrl_params.quirks))
+		cnss_bus_deinit(plat_priv);
 power_off:
 	if (!test_bit(SKIP_DEVICE_BOOT, &plat_priv->ctrl_params.quirks))
 		cnss_power_off_device(plat_priv);
@@ -3449,8 +3477,6 @@ deinit_misc:
 	cnss_misc_deinit(plat_priv);
 destroy_debugfs:
 	cnss_debugfs_destroy(plat_priv);
-deinit_dms:
-	cnss_dms_deinit(plat_priv);
 deinit_qmi:
 	cnss_qmi_deinit(plat_priv);
 deinit_event_work:
@@ -3477,10 +3503,10 @@ static int cnss_remove(struct platform_device *plat_dev)
 	cnss_genl_exit();
 	cnss_unregister_ims_service(plat_priv);
 	cnss_unregister_coex_service(plat_priv);
+	cnss_dms_deinit(plat_priv);
 	cnss_bus_deinit(plat_priv);
 	cnss_misc_deinit(plat_priv);
 	cnss_debugfs_destroy(plat_priv);
-	cnss_dms_deinit(plat_priv);
 	cnss_qmi_deinit(plat_priv);
 	cnss_event_work_deinit(plat_priv);
 	cnss_remove_sysfs(plat_priv);

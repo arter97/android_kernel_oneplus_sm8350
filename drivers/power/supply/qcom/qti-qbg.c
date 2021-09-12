@@ -7,6 +7,7 @@
 
 #include <linux/cdev.h>
 #include <linux/device.h>
+#include <linux/debugfs.h>
 #include <linux/errno.h>
 #include <linux/iio/iio.h>
 #include <linux/iio/consumer.h>
@@ -932,8 +933,8 @@ static int qbg_load_battery_profile(struct qti_qbg *chip)
 
 	profile_node = of_batterydata_get_best_profile(chip->batt_node,
 			chip->batt_id_ohm / 1000, NULL);
-	if (IS_ERR(profile_node)) {
-		rc = PTR_ERR(profile_node);
+	if (IS_ERR_OR_NULL(profile_node)) {
+		rc = profile_node ? PTR_ERR(profile_node) : -EINVAL;
 		pr_err("Failed to detect valid QBG battery profile, rc=%d\n",
 			rc);
 		goto out;
@@ -1373,10 +1374,10 @@ static int qbg_iio_read_raw(struct iio_dev *indio_dev,
 		*val1 = chip->charge_cycle_count;
 		break;
 	case PSY_IIO_CHARGE_FULL:
-		*val1 = chip->learned_capacity;
+		*val1 = chip->learned_capacity * MILLI_TO_MICRO;
 		break;
 	case PSY_IIO_CHARGE_FULL_DESIGN:
-		*val1 = chip->nominal_capacity;
+		*val1 = chip->nominal_capacity * MILLI_TO_MICRO;
 		break;
 	default:
 		pr_err_ratelimited("Unsupported property %d\n", chan->channel);
@@ -1931,6 +1932,32 @@ static int qbg_register_interrupts(struct qti_qbg *chip)
 	return rc;
 }
 
+#ifdef CONFIG_DEBUG_FS
+static void qbg_create_debugfs(struct qti_qbg *chip)
+{
+	struct dentry *entry;
+
+	pr_err("%s:%u\n", __func__, __LINE__);
+	chip->dfs_root = debugfs_create_dir("qbg", NULL);
+	if (IS_ERR_OR_NULL(chip->dfs_root)) {
+		pr_err("Failed to create debugfs directory rc=%ld\n",
+				(long)chip->dfs_root);
+		return;
+	}
+
+	entry = debugfs_create_u32("debug_mask", 0600, chip->dfs_root,
+			&qbg_debug_mask);
+	if (IS_ERR_OR_NULL(entry)) {
+		pr_err("Failed to create debug_mask rc=%ld\n", (long)entry);
+		debugfs_remove_recursive(chip->dfs_root);
+	}
+}
+#else
+static void qbg_create_debugfs(struct qti_qbg *chip)
+{
+}
+#endif
+
 static int qbg_parse_sdam_dt(struct qti_qbg *chip, struct device_node *node)
 {
 	int rc;
@@ -2079,6 +2106,8 @@ static int qti_qbg_probe(struct platform_device *pdev)
 		chip->batt_temp_chan = NULL;
 		return rc;
 	}
+
+	qbg_create_debugfs(chip);
 
 	chip->rtc = rtc_class_open(CONFIG_RTC_HCTOSYS_DEVICE);
 	if (chip->rtc == NULL)

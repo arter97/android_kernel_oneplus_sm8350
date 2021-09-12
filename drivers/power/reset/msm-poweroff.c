@@ -395,6 +395,27 @@ void msm_set_restart_mode(int mode)
 }
 EXPORT_SYMBOL(msm_set_restart_mode);
 
+static u8 silent_restart(const char *cmd)
+{
+	u8 reason = PON_RESTART_REASON_NON_SILENT;
+
+	if (!strncmp(cmd, "forcedsilent", 12)) {
+		reason = PON_RESTART_REASON_FORCED_SILENT;
+		__raw_writel(0x7766550c, restart_reason);
+	} else if (!strncmp(cmd, "forcednonsilent", 15)) {
+		reason = PON_RESTART_REASON_FORCED_NON_SILENT;
+		__raw_writel(0x7766550d, restart_reason);
+	} else if (!strncmp(cmd, "nonsilent", 9)) {
+		reason = PON_RESTART_REASON_NON_SILENT;
+		__raw_writel(0x7766550b, restart_reason);
+	} else if (!strncmp(cmd, "silent", 6)) {
+		reason = PON_RESTART_REASON_SILENT;
+		__raw_writel(0x7766550a, restart_reason);
+	}
+
+	return reason;
+
+}
 
 static void msm_restart_prepare(const char *cmd)
 {
@@ -460,18 +481,8 @@ static void msm_restart_prepare(const char *cmd)
 					     restart_reason);
 		} else if (!strncmp(cmd, "edl", 3)) {
 			enable_emergency_dload_mode();
-		} else if (!strncmp(cmd, "forcedsilent", 12)) {
-			reason = PON_RESTART_REASON_FORCED_SILENT;
-			__raw_writel(0x7766550c, restart_reason);
-		} else if (!strncmp(cmd, "forcednonsilent", 15)) {
-			reason = PON_RESTART_REASON_FORCED_NON_SILENT;
-			__raw_writel(0x7766550d, restart_reason);
-		} else if (!strncmp(cmd, "nonsilent", 9)) {
-			reason = PON_RESTART_REASON_NON_SILENT;
-			__raw_writel(0x7766550b, restart_reason);
-		} else if (!strncmp(cmd, "silent", 6)) {
-			reason = PON_RESTART_REASON_SILENT;
-			__raw_writel(0x7766550a, restart_reason);
+		} else if (!strnstr(cmd, "silent", 6)) {
+			reason = silent_restart(cmd);
 		} else {
 			__raw_writel(0x77665501, restart_reason);
 		}

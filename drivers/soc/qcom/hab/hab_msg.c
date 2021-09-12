@@ -163,13 +163,16 @@ static int hab_receive_create_export_ack(struct physical_channel *pchan,
 	if (sizebytes > sizeof(ack_recvd->ack)) {
 		pr_err("pchan %s read size too large %zd %zd\n",
 			pchan->name, sizebytes, sizeof(ack_recvd->ack));
+		kfree(ack_recvd);
 		return -EINVAL;
 	}
 
 	if (physical_channel_read(pchan,
 		&ack_recvd->ack,
-		sizebytes) != sizebytes)
+		sizebytes) != sizebytes) {
+		kfree(ack_recvd);
 		return -EIO;
+	}
 
 	hab_spin_lock(&ctx->expq_lock, irqs_disabled);
 	list_add_tail(&ack_recvd->node, &ctx->exp_rxq);
@@ -222,7 +225,7 @@ int hab_msg_recv(struct physical_channel *pchan,
 			pr_err("@@ %s Invalid msg type %d vcid %x bytes %zx sn %d\n",
 				pchan->name, payload_type,
 				vchan_id, sizebytes, session_id);
-			dump_hab_wq(pchan->hyp_data);
+			dump_hab_wq(pchan);
 		}
 
 		/*
@@ -266,7 +269,7 @@ int hab_msg_recv(struct physical_channel *pchan,
 					pchan->name,
 					payload_type,
 					session_id);
-				dump_hab_wq(pchan->hyp_data);
+				dump_hab_wq(pchan);
 			}
 			return -ENODEV;
 		}

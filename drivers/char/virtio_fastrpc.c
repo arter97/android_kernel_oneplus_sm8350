@@ -22,7 +22,6 @@
 #include <linux/virtio.h>
 #include <linux/virtio_config.h>
 #include <linux/uaccess.h>
-#include <linux/suspend.h>
 #include <linux/of.h>
 #include <soc/qcom/subsystem_notif.h>
 #include <soc/qcom/subsystem_restart.h>
@@ -136,7 +135,7 @@ struct virt_fastrpc_buf {
 
 struct virt_fastrpc_dmahandle {
 	u32 fd;
-	u64 offset;
+	u32 offset;
 };
 
 struct virt_invoke_msg {
@@ -976,7 +975,7 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 			/* fill in dma handle list */
 			hlist = i - bufs;
 			handle[hlist].fd = fds[i];
-			handle[hlist].offset = (u64)lpra[i].buf.pv;
+			handle[hlist].offset = (uint32_t)(uintptr_t)lpra[i].buf.pv;
 			/* copy dma handle sglist to data area */
 			table = maps[i]->table;
 			rpra[i].pv = lpra[i].buf.len;
@@ -2506,40 +2505,6 @@ vqs_del:
 	return err;
 }
 
-/**
- ** virtio_fastrpc_pm_notifier() - PM notifier callback function.
- ** @nb:                Pointer to the notifier block.
- ** @event:        Suspend state event from PM module.
- ** @unused:        Null pointer from PM module.
- **
- ** This function is register as callback function to get notifications
- ** from the PM module on the system suspend state.
- **/
-static int virtio_fastrpc_pm_notifier(struct notifier_block *nb,
-					unsigned long event, void *unused)
-{
-	struct fastrpc_apps *me = &gfa;
-	unsigned long flags;
-	int i = 0;
-	struct virt_fastrpc_msg *msg;
-
-	if (event == PM_SUSPEND_PREPARE) {
-		spin_lock_irqsave(&me->msglock, flags);
-		for (i = 0; i < FASTRPC_MSG_MAX; i++) {
-			if (me->msgtable[i]) {
-				msg = me->msgtable[i];
-				complete(&msg->work);
-			}
-		}
-		spin_unlock_irqrestore(&me->msglock, flags);
-	}
-	return NOTIFY_DONE;
-}
-
-static struct notifier_block virtio_fastrpc_pm_nb = {
-		.notifier_call = virtio_fastrpc_pm_notifier,
-};
-
 static int virt_fastrpc_probe(struct virtio_device *vdev)
 {
 	struct fastrpc_apps *me = &gfa;
@@ -2619,12 +2584,6 @@ static int virt_fastrpc_probe(struct virtio_device *vdev)
 	if (IS_ERR_OR_NULL(secure_dev))
 		goto device_create_bail;
 
-	err = register_pm_notifier(&virtio_fastrpc_pm_nb);
-	if (err) {
-		pr_err("virtio_fastrpc: power state notifier error\n");
-		goto device_create_bail;
-	}
-
 	virtio_device_ready(vdev);
 
 	/* set up the receive buffers */
@@ -2668,7 +2627,6 @@ static void virt_fastrpc_remove(struct virtio_device *vdev)
 {
 	struct fastrpc_apps *me = &gfa;
 
-	unregister_pm_notifier(&virtio_fastrpc_pm_nb);
 	device_destroy(me->class, MKDEV(MAJOR(me->dev_no), MINOR_NUM_DEV));
 	device_destroy(me->class, MKDEV(MAJOR(me->dev_no),
 					MINOR_NUM_SECURE_DEV));
@@ -2711,7 +2669,6 @@ static int __init virtio_fastrpc_init(void)
 
 static void __exit virtio_fastrpc_exit(void)
 {
-	unregister_pm_notifier(&virtio_fastrpc_pm_nb);
 	unregister_virtio_driver(&virtio_fastrpc_driver);
 }
 module_init(virtio_fastrpc_init);

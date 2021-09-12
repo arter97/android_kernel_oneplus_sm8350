@@ -254,6 +254,11 @@ a6xx_vbif_snapshot_registers[] = {
 				ARRAY_SIZE(a6xx_vbif_ver_20xxxxxx_registers)/2},
 };
 
+static const unsigned int a6xx_cx_misc_registers[] = {
+	/* CX_MISC */
+	0, 0, 10, 14, 20, 24, 0x30, 0x49,
+};
+
 /*
  * Set of registers to dump for A6XX on snapshot.
  * Registers in pairs - first value is the start offset, second
@@ -319,6 +324,13 @@ static const unsigned int a6xx_pre_crashdumper_registers[] = {
 };
 
 static const unsigned int a6xx_gmu_wrapper_registers[] = {
+	/* GMU CX */
+	0x1f840, 0x1f840, 0x1f844, 0x1f845, 0x1f887, 0x1f889, 0x1f8d0, 0x1f8d0,
+	/* GMU AO*/
+	0x23b0C, 0x23b0E, 0x23b15, 0x23b15,
+};
+
+static const unsigned int a6xx_holi_gmu_wrapper_registers[] = {
 	/* GMU SPTPRAC */
 	0x1a880, 0x1a881,
 	/* GMU CX */
@@ -1701,6 +1713,48 @@ static size_t a6xx_snapshot_gmu_wrapper_registers(struct kgsl_device *device,
 	return (count * 8) + sizeof(*header);
 }
 
+/* Snapshot cx misc registers */
+static size_t a6xx_snapshot_cx_misc_registers(
+		struct kgsl_device *device, u8 *buf, size_t remain, void *priv)
+{
+	struct kgsl_snapshot_regs *header = (struct kgsl_snapshot_regs *)buf;
+	struct kgsl_snapshot_registers *regs = priv;
+	unsigned int *data = (unsigned int *)(buf + sizeof(*header));
+	int count = 0, j, k;
+	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
+
+	/* Figure out how many registers we are going to dump */
+	for (j = 0; j < regs->count; j++) {
+		int start = regs->regs[j * 2];
+		int end = regs->regs[j * 2 + 1];
+
+		count += (end - start + 1);
+	}
+
+	if (remain < (count * 8) + sizeof(*header)) {
+		SNAPSHOT_ERR_NOMEM(device, "CX MISC REGS");
+		return 0;
+	}
+
+	for (j = 0; j < regs->count; j++) {
+		unsigned int start = regs->regs[j * 2];
+		unsigned int end = regs->regs[j * 2 + 1];
+
+		for (k = start; k <= end; k++) {
+			unsigned int val;
+
+			adreno_cx_misc_regread(adreno_dev, k, &val);
+			*data++ = k;
+			*data++ = val;
+		}
+	}
+
+	header->count = count;
+
+	/* Return the size of the section */
+	return (count * 8) + sizeof(*header);
+}
+
 
 /* Snapshot the preemption related buffers */
 static size_t snapshot_preemption_record(struct kgsl_device *device,
@@ -1745,6 +1799,7 @@ void a6xx_snapshot(struct adreno_device *adreno_dev,
 	bool sptprac_on = true;
 	unsigned int i, roq_size;
 	u32 hi, lo;
+	struct kgsl_snapshot_registers r;
 
 	/*
 	 * Dump debugbus data here to capture it for both
@@ -1757,8 +1812,6 @@ void a6xx_snapshot(struct adreno_device *adreno_dev,
 
 	/* RSCC registers are on cx */
 	if (adreno_is_a650_family(adreno_dev)) {
-		struct kgsl_snapshot_registers r;
-
 		r.regs = a650_isense_registers;
 		r.count = ARRAY_SIZE(a650_isense_registers) / 2;
 
@@ -1767,10 +1820,8 @@ void a6xx_snapshot(struct adreno_device *adreno_dev,
 	}
 
 	if (adreno_is_a619_holi(adreno_dev)) {
-		struct kgsl_snapshot_registers r;
-
-		r.regs = a6xx_gmu_wrapper_registers;
-		r.count = ARRAY_SIZE(a6xx_gmu_wrapper_registers) / 2;
+		r.regs = a6xx_holi_gmu_wrapper_registers;
+		r.count = ARRAY_SIZE(a6xx_holi_gmu_wrapper_registers) / 2;
 
 		kgsl_snapshot_add_section(device, KGSL_SNAPSHOT_SECTION_REGS,
 			snapshot, a6xx_snapshot_gmu_wrapper_registers, &r);
@@ -1779,6 +1830,12 @@ void a6xx_snapshot(struct adreno_device *adreno_dev,
 				a6xx_gmu_wrapper_registers,
 				ARRAY_SIZE(a6xx_gmu_wrapper_registers) / 2);
 	}
+
+	r.regs = a6xx_cx_misc_registers;
+	r.count = ARRAY_SIZE(a6xx_cx_misc_registers) / 2;
+
+	kgsl_snapshot_add_section(device, KGSL_SNAPSHOT_SECTION_REGS,
+		snapshot, a6xx_snapshot_cx_misc_registers, &r);
 
 	if (gpudev->sptprac_is_on)
 		sptprac_on = gpudev->sptprac_is_on(adreno_dev);

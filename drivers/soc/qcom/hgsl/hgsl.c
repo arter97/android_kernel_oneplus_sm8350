@@ -882,6 +882,10 @@ static inline bool _timestamp_retired(struct hgsl_context *ctxt,
 }
 
 static inline void _destroy_context(struct kref *kref);
+static struct hgsl_context *hgsl_context_get(struct qcom_hgsl *hgsl,
+						uint32_t id);
+static void hgsl_context_put(struct hgsl_context *ctxt);
+
 static void _signal_contexts(struct qcom_hgsl *hgsl)
 {
 	struct hgsl_context *ctxt;
@@ -889,21 +893,16 @@ static void _signal_contexts(struct qcom_hgsl *hgsl)
 	uint32_t ts;
 
 	for (i = 0; i < HGSL_CONTEXT_NUM; i++) {
-		read_lock(&hgsl->ctxt_lock);
-		ctxt = hgsl->contexts[i];
-		read_unlock(&hgsl->ctxt_lock);
-
-		if (ctxt == NULL)
+		ctxt = hgsl_context_get(hgsl, i);
+		if (!ctxt)
 			continue;
 
-		kref_get(&ctxt->kref);
 		ts = get_context_timestamp(ctxt);
 		if (ts != ctxt->last_ts) {
 			hgsl_hsync_timeline_signal(ctxt->timeline, ts);
 			ctxt->last_ts = ts;
 		}
-		kref_put(&ctxt->kref, _destroy_context);
-
+		hgsl_context_put(ctxt);
 	}
 
 }
@@ -969,30 +968,12 @@ static int hgsl_init_global_db(struct qcom_hgsl *hgsl,
 		goto fail;
 	}
 
-	tcsr = hgsl_tcsr_request(tcsr_pdev, role, dev,
-			is_sender ? NULL : hgsl_tcsr_isr);
-	if (IS_ERR_OR_NULL(tcsr)) {
-		dev_err(dev,
-			"failed to request %s tcsr, ret %lx\n",
-			is_sender ? "sender" : "receiver", PTR_ERR(tcsr));
-		ret = tcsr ? PTR_ERR(tcsr) : -ENODEV;
-		goto fail;
-	}
-
-	ret = hgsl_tcsr_enable(tcsr);
-	if (ret) {
-		dev_err(dev,
-			"failed to enable %s tcsr, ret %d\n",
-			is_sender ? "sender" : "receiver", ret);
-		goto free_tcsr;
-	}
-
 	if (!is_sender) {
 		hgsl->contexts = kzalloc(sizeof(struct hgsl_context *) *
 					HGSL_CONTEXT_NUM, GFP_KERNEL);
 		if (!hgsl->contexts) {
 			ret = -ENOMEM;
-			goto disable_tcsr;
+			goto fail;
 		}
 
 		hgsl->wq = create_workqueue("hgsl-wq");
@@ -1006,21 +987,41 @@ static int hgsl_init_global_db(struct qcom_hgsl *hgsl,
 		INIT_LIST_HEAD(&hgsl->active_wait_list);
 		spin_lock_init(&hgsl->active_wait_lock);
 		rwlock_init(&hgsl->ctxt_lock);
+	}
 
+	tcsr = hgsl_tcsr_request(tcsr_pdev, role, dev,
+			is_sender ? NULL : hgsl_tcsr_isr);
+	if (IS_ERR_OR_NULL(tcsr)) {
+		dev_err(dev,
+			"failed to request %s tcsr, ret %lx\n",
+			is_sender ? "sender" : "receiver", PTR_ERR(tcsr));
+		ret = tcsr ? PTR_ERR(tcsr) : -ENODEV;
+		goto destroy_wq;
+	}
+
+	ret = hgsl_tcsr_enable(tcsr);
+	if (ret) {
+		dev_err(dev,
+			"failed to enable %s tcsr, ret %d\n",
+			is_sender ? "sender" : "receiver", ret);
+		goto free_tcsr;
+	}
+
+	if (!is_sender)
 		hgsl_tcsr_irq_enable(tcsr, GLB_DB_DEST_TS_RETIRE_IRQ_MASK,
 					true);
-	}
 
 	hgsl->tcsr[idx][role] = tcsr;
 	return 0;
 
+free_tcsr:
+	hgsl_tcsr_free(tcsr);
+destroy_wq:
+	if (hgsl->wq)
+		destroy_workqueue(hgsl->wq);
 free_contexts:
 	kfree(hgsl->contexts);
 	hgsl->contexts = NULL;
-disable_tcsr:
-	hgsl_tcsr_disable(tcsr);
-free_tcsr:
-	hgsl_tcsr_free(tcsr);
 fail:
 	return ret;
 }
@@ -1138,10 +1139,37 @@ static inline void _destroy_context(struct kref *kref)
 	struct hgsl_context *ctxt =
 			container_of(kref, struct hgsl_context, kref);
 
+
+	hgsl_hsync_timeline_fini(ctxt);
+	hgsl_hsync_timeline_put(ctxt->timeline);
+
 	dma_buf_vunmap(ctxt->shadow_dma, ctxt->shadow_vbase);
 	dma_buf_end_cpu_access(ctxt->shadow_dma, DMA_FROM_DEVICE);
 	dma_buf_put(ctxt->shadow_dma);
 	kfree(ctxt);
+}
+
+static struct hgsl_context *hgsl_context_get(struct qcom_hgsl *hgsl,
+						uint32_t id)
+{
+	struct hgsl_context *ctxt;
+
+	read_lock(&hgsl->ctxt_lock);
+	ctxt = hgsl->contexts[id];
+	if (ctxt == NULL)
+		goto out;
+
+	if (kref_get_unless_zero(&ctxt->kref) == 0)
+		ctxt = NULL;
+
+out:
+	read_unlock(&hgsl->ctxt_lock);
+	return ctxt;
+}
+
+static void hgsl_context_put(struct hgsl_context *ctxt)
+{
+	kref_put(&ctxt->kref, _destroy_context);
 }
 
 static int hgsl_context_create(struct file *filep, unsigned long arg)
@@ -1220,14 +1248,11 @@ static int hgsl_context_create(struct file *filep, unsigned long arg)
 
 	hgsl->contexts[param.context_id] = ctxt;
 
-	priv->pid = task_pid_nr(current);
-
-	hgsl->contexts[param.context_id]->pid = priv->pid;
+	hgsl->contexts[param.context_id]->priv = priv;
 	hgsl->contexts[param.context_id]->dbq_assigned = true;
 
 	kref_init(&ctxt->kref);
 	write_unlock(&hgsl->ctxt_lock);
-
 
 	ret = hgsl_hsync_timeline_create(ctxt);
 	if (ret < 0) {
@@ -1283,8 +1308,8 @@ static int hgsl_context_destroy(struct file *filep, unsigned long arg,
 	if (hgsl->contexts[context_id] == NULL) {
 		write_unlock(&hgsl->ctxt_lock);
 		dev_err(hgsl->dev,
-			"context id %d is not created\n",
-			context_id);
+			"%s: context id %d is not created\n",
+			__func__, context_id);
 		return -EINVAL;
 	}
 
@@ -1299,9 +1324,7 @@ static int hgsl_context_destroy(struct file *filep, unsigned long arg,
 
 	write_unlock(&hgsl->ctxt_lock);
 
-	hgsl_hsync_timeline_put(ctxt->timeline);
-
-	kref_put(&ctxt->kref, _destroy_context);
+	hgsl_context_put(ctxt);
 	return 0;
 }
 
@@ -1335,24 +1358,24 @@ static int hgsl_wait_timestamp(struct file *filep, unsigned long arg)
 
 	timestamp = param.timestamp;
 
-	read_lock(&hgsl->ctxt_lock);
-	ctxt = hgsl->contexts[param.context_id];
-	read_unlock(&hgsl->ctxt_lock);
+	ctxt = hgsl_context_get(hgsl, param.context_id);
 	if (ctxt == NULL) {
 		dev_err(hgsl->dev,
-			"context id %d is not created\n",
-			param.context_id);
+			"%s: context id %d is not created\n",
+			__func__, param.context_id);
 		return -EINVAL;
 	}
 
-	if (_timestamp_retired(ctxt, timestamp))
+	if (_timestamp_retired(ctxt, timestamp)) {
+		hgsl_context_put(ctxt);
 		return 0;
-
-	kref_get(&ctxt->kref);
+	}
 
 	wait = kzalloc(sizeof(*wait), GFP_KERNEL);
-	if (!wait)
+	if (!wait) {
+		hgsl_context_put(ctxt);
 		return -ENOMEM;
+	}
 
 	wait->ctxt = ctxt;
 	wait->timestamp = timestamp;
@@ -1379,7 +1402,7 @@ static int hgsl_wait_timestamp(struct file *filep, unsigned long arg)
 
 	kfree(wait);
 
-	kref_put(&ctxt->kref, _destroy_context);
+	hgsl_context_put(ctxt);
 
 	return ret;
 }
@@ -1449,21 +1472,25 @@ static int hgsl_release(struct inode *inodep, struct file *filep)
 	struct hgsl_dbq_release_info rel_info;
 	int i;
 
+	read_lock(&hgsl->ctxt_lock);
 	for (i = 0; i < HGSL_CONTEXT_NUM; i++) {
 		if ((hgsl->contexts != NULL) &&
 			(hgsl->contexts[i] != NULL) &&
-			(priv->pid == hgsl->contexts[i]->pid)) {
+			(priv == hgsl->contexts[i]->priv)) {
 			rel_info.ctxt_id = hgsl->contexts[i]->context_id;
 			if (hgsl->contexts[i]->dbq_assigned)
 				hgsl_dbq_release(filep,
 						(unsigned long)&rel_info,
 						true);
 
+			read_unlock(&hgsl->ctxt_lock);
 			hgsl_context_destroy(filep,
 					(unsigned long)&rel_info.ctxt_id,
 					true);
+			read_lock(&hgsl->ctxt_lock);
 		}
 	}
+	read_unlock(&hgsl->ctxt_lock);
 
 	hgsl_isync_fini(priv);
 
@@ -1512,18 +1539,13 @@ static int hgsl_ioctl_hsync_fence_create(struct file *filep,
 		(param.context_id < 0))
 		return -EINVAL;
 
-	read_lock(&hgsl->ctxt_lock);
-	ctxt = hgsl->contexts[param.context_id];
-	read_unlock(&hgsl->ctxt_lock);
-
+	ctxt = hgsl_context_get(hgsl, param.context_id);
 	if (ctxt == NULL) {
 		dev_err(hgsl->dev,
-			"context id %d is not created\n",
-			param.context_id);
+			"%s: context id %d is not created\n",
+			__func__, param.context_id);
 		return -EINVAL;
 	}
-
-	kref_get(&ctxt->kref);
 
 	param.fence_fd = hgsl_hsync_fence_create_fd(ctxt, param.timestamp);
 	if (param.fence_fd < 0) {
@@ -1531,9 +1553,9 @@ static int hgsl_ioctl_hsync_fence_create(struct file *filep,
 		goto out;
 	}
 	copy_to_user(USRPTR(arg), &param, sizeof(param));
-out:
-	kref_put(&ctxt->kref, _destroy_context);
 
+out:
+	hgsl_context_put(ctxt);
 	return ret;
 }
 

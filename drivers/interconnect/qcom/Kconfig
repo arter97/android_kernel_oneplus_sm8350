@@ -106,7 +106,7 @@ config INTERCONNECT_QCOM_SM8150
 	help
 	  This is a driver for the Qualcomm Technologies, Inc. Network-on-Chip
 	  on sm8150-based platforms. The interconnect provider collects and
-	  aggreagates the cosumer bandwidth requests to satisfy constraints
+	  aggregates the cosumer bandwidth requests to satisfy constraints
 	  placed on Network-on-Chip performance states.
 
 config INTERCONNECT_QCOM_LAHAINA
@@ -119,6 +119,15 @@ config INTERCONNECT_QCOM_LAHAINA
 	help
 	  This is a driver for the Qualcomm Technologies, Inc. Network-on-Chip
 	  on lahaina-based platforms.
+
+config INTERCONNECT_QCOM_SCUBA
+	tristate "SCUBA interconnect driver"
+	depends on INTERCONNECT_QCOM
+	help
+	  This is a driver for the Qualcomm Technologies, Inc. Network-on-Chip
+	  on scuba-based platforms. The interconnect provider collects and
+	  aggreagates the cosumer bandwidth requests to satisfy constraints
+	  placed on Network-on-Chip performance states.
 
 config INTERCONNECT_QCOM_SHIMA
 	tristate "SHIMA interconnect driver"

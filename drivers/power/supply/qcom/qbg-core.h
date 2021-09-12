@@ -79,6 +79,7 @@ enum QBG_ACCUM_INTERVAL_TYPE {
  * @qbg_cdev:		Member for QBG char device
  * @dev_no:		Device number for QBG char device
  * @batt_node:		Pointer to battery device node
+ * @dfs_root:		Pointer to QBG debug fs root directory
  * @indio_dev:		Pointer to QBG IIO device
  * @iio_chan:		Pointer to QBG IIO channels
  * @sdam:		Pointer to multiple QBG SDAMs
@@ -153,6 +154,7 @@ struct qti_qbg {
 	struct cdev		qbg_cdev;
 	dev_t			dev_no;
 	struct device_node      *batt_node;
+	struct dentry		*dfs_root;
 	struct iio_dev		*indio_dev;
 	struct iio_chan_spec	*iio_chan;
 	struct nvmem_device	**sdam;

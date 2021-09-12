@@ -13,7 +13,6 @@
 #include <linux/errno.h>
 #include <linux/string.h>
 #include <linux/slab.h>
-#include <linux/soc/qcom/smem.h>
 #include <soc/qcom/minidump.h>
 #include "minidump_private.h"
 
@@ -31,10 +30,10 @@
 struct md_table {
 	u32			revision;
 	u32                     num_regions;
-	struct md_ss_toc	*md_ss_toc;
 	struct md_global_toc	*md_gbl_toc;
 	struct md_ss_region	*md_regions;
 	struct md_region	entry[MAX_NUM_ENTRIES];
+	const struct md_ops	*ops;
 };
 
 /**
@@ -105,7 +104,7 @@ struct md_region *md_get_region(char *name)
 static inline int md_region_num(const char *name, int *seqno)
 {
 	struct md_ss_region *mde = minidump_table.md_regions;
-	int i, regno = minidump_table.md_ss_toc->ss_region_count;
+	int i, regno = minidump_table.ops->get_ss_region_count();
 	int ret = -EINVAL;
 
 	for (i = 0; i < regno; i++, mde++) {
@@ -131,14 +130,14 @@ static inline int md_entry_num(const struct md_region *entry)
 	return -EINVAL;
 }
 
-/* Update Mini dump table in SMEM */
+/* Update Mini dump table */
 static void md_update_ss_toc(const struct md_region *entry)
 {
 	struct md_ss_region *mdr;
 	struct elfhdr *hdr = minidump_elfheader.ehdr;
 	struct elf_shdr *shdr = elf_section(hdr, hdr->e_shnum++);
 	struct elf_phdr *phdr = elf_program(hdr, hdr->e_phnum++);
-	int seq = 0, reg_cnt = minidump_table.md_ss_toc->ss_region_count;
+	int seq = 0, reg_cnt = minidump_table.ops->get_ss_region_count();
 
 	mdr = &minidump_table.md_regions[reg_cnt];
 
@@ -165,7 +164,7 @@ static void md_update_ss_toc(const struct md_region *entry)
 	phdr->p_flags = PF_R | PF_W;
 	minidump_elfheader.elf_offset += shdr->sh_size;
 	mdr->md_valid = MD_REGION_VALID;
-	minidump_table.md_ss_toc->ss_region_count++;
+	minidump_table.ops->set_ss_region_count(reg_cnt + 1);
 }
 
 bool msm_minidump_enabled(void)
@@ -174,9 +173,8 @@ bool msm_minidump_enabled(void)
 	unsigned long flags;
 
 	spin_lock_irqsave(&mdt_lock, flags);
-	if (minidump_table.md_ss_toc &&
-		(minidump_table.md_ss_toc->md_ss_enable_status ==
-		 MD_SS_ENABLED))
+	if (minidump_table.ops && (minidump_table.ops->get_enable_status() ==
+				MD_SS_ENABLED))
 		ret = true;
 	spin_unlock_irqrestore(&mdt_lock, flags);
 	return ret;
@@ -274,11 +272,11 @@ int msm_minidump_add_region(const struct md_region *entry)
 	}
 
 	toc_init = 0;
-	if (minidump_table.md_ss_toc &&
-		(minidump_table.md_ss_toc->md_ss_enable_status ==
-		MD_SS_ENABLED)) {
+	if (minidump_table.ops && (minidump_table.ops->get_ss_enable_status()
+				== MD_SS_ENABLED)) {
 		toc_init = 1;
-		if (minidump_table.md_ss_toc->ss_region_count >= MAX_NUM_ENTRIES) {
+		if (minidump_table.ops->get_ss_region_count() >=
+				MAX_NUM_ENTRIES) {
 			spin_unlock_irqrestore(&mdt_lock, flags);
 			pr_err("Maximum regions in minidump table reached.\n");
 			return -ENOMEM;
@@ -385,9 +383,9 @@ int msm_minidump_remove_region(const struct md_region *entry)
 	int rcount, ecount, seq = 0, rgno, entryno, ret;
 	unsigned long flags;
 
-	if (!entry || !minidump_table.md_ss_toc ||
-		(minidump_table.md_ss_toc->md_ss_enable_status !=
-						MD_SS_ENABLED))
+	if (!entry || !minidump_table.ops ||
+			minidump_table.ops->get_ss_enable_status() !=
+			MD_SS_ENABLED)
 		return -EINVAL;
 
 	spin_lock_irqsave(&mdt_lock, flags);
@@ -402,10 +400,10 @@ int msm_minidump_remove_region(const struct md_region *entry)
 		return -EINVAL;
 	}
 	ecount = minidump_table.num_regions;
-	rcount = minidump_table.md_ss_toc->ss_region_count;
+	rcount = minidump_table.ops->get_ss_region_count();
 	if (first_removed_entry > entryno)
 		first_removed_entry = entryno;
-	minidump_table.md_ss_toc->md_ss_toc_init = 0;
+	minidump_table.ops->set_ss_toc_init(0);
 
 	/* Remove entry from: entry list, ss region list and elf header */
 	memmove(&minidump_table.entry[entryno],
@@ -425,8 +423,8 @@ int msm_minidump_remove_region(const struct md_region *entry)
 	if (ret)
 		goto out;
 
-	minidump_table.md_ss_toc->ss_region_count--;
-	minidump_table.md_ss_toc->md_ss_toc_init = 1;
+	minidump_table.ops->set_ss_region_count(rcount - 1);
+	minidump_table.ops->set_ss_toc_init(1);
 
 	minidump_table.num_regions--;
 	write_unlock(&mdt_remove_lock);
@@ -543,53 +541,53 @@ static int msm_minidump_add_header(void)
 	return 0;
 }
 
-static int __init msm_minidump_init(void)
+int msm_minidump_probe(const struct md_init_data *data)
 {
 	unsigned int i;
-	size_t size;
 	struct md_region *mdr;
 	struct md_global_toc *md_global_toc;
-	struct md_ss_toc *md_ss_toc;
 	unsigned long flags;
+	int ret = 0;
 
-	/* Get Minidump table */
-	md_global_toc = qcom_smem_get(QCOM_SMEM_HOST_ANY, SBL_MINIDUMP_SMEM_ID,
-				      &size);
-	if (IS_ERR_OR_NULL(md_global_toc)) {
-		pr_err("SMEM is not initialized.\n");
-		return -ENODEV;
-	}
+	md_global_toc = kzalloc(sizeof(struct md_global_toc), GFP_KERNEL);
+	if (!md_global_toc)
+		return -ENOMEM;
+
+	minidump_table.ops = data->ops;
 
 	/*Check global minidump support initialization */
+	md_global_toc->md_toc_init = minidump_table.ops->get_toc_init();
 	if (!md_global_toc->md_toc_init) {
 		pr_err("System Minidump TOC not initialized\n");
-		return -ENODEV;
+		ret = -ENODEV;
+		goto err_get_toc_init;
 	}
+
+	md_global_toc->md_revision = minidump_table.ops->get_revision();
+	md_global_toc->md_enable_status = minidump_table.ops->get_enable_status();
 
 	minidump_table.md_gbl_toc = md_global_toc;
 	minidump_table.revision = md_global_toc->md_revision;
-	md_ss_toc = &md_global_toc->md_ss_toc[MD_SS_HLOS_ID];
 
-	md_ss_toc->encryption_status = MD_SS_ENCR_NONE;
-	md_ss_toc->encryption_required = MD_SS_ENCR_REQ;
+	minidump_table.ops->set_ss_encryption(true, MD_SS_ENCR_NONE);
 
-	minidump_table.md_ss_toc = md_ss_toc;
 	minidump_table.md_regions = kzalloc((MAX_NUM_ENTRIES *
 				sizeof(struct md_ss_region)), GFP_KERNEL);
-	if (!minidump_table.md_regions)
-		return -ENOMEM;
+	if (!minidump_table.md_regions) {
+		ret = -ENOMEM;
+		goto err_kzalloc_md_regions;
+	}
 
-	md_ss_toc->md_ss_smem_regions_baseptr =
-				virt_to_phys(minidump_table.md_regions);
+	minidump_table.ops->set_ss_region_base(virt_to_phys(minidump_table.md_regions));
 
 	/* First entry would be ELF header */
-	md_ss_toc->ss_region_count = 1;
+	minidump_table.ops->set_ss_region_count(1);
 	msm_minidump_add_header();
 
 	/* Add pending entries to HLOS TOC */
 	spin_lock_irqsave(&mdt_lock, flags);
-	md_ss_toc->md_ss_toc_init = 1;
-	md_ss_toc->md_ss_enable_status = MD_SS_ENABLED;
+	minidump_table.ops->set_ss_toc_init(1);
+	minidump_table.ops->set_ss_enable_status(true);
 	for (i = 0; i < pendings; i++) {
 		mdr = &minidump_table.entry[i];
 		md_update_ss_toc(mdr);
@@ -604,5 +602,10 @@ static int __init msm_minidump_init(void)
 	/* All updates above should be visible, before init completes */
 	smp_store_release(&md_init_done, true);
 	return 0;
+
+err_kzalloc_md_regions:
+err_get_toc_init:
+	kfree(md_global_toc);
+	return ret;
 }
-subsys_initcall(msm_minidump_init)
+EXPORT_SYMBOL(msm_minidump_probe);

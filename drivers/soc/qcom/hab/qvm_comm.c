@@ -141,10 +141,8 @@ void physical_channel_rx_dispatch(unsigned long data)
 	struct physical_channel *pchan = (struct physical_channel *)data;
 	struct qvm_channel *dev = (struct qvm_channel *)pchan->hyp_data;
 	int irqs_disabled = irqs_disabled();
-	int i;
 
 	hab_spin_lock(&pchan->rxbuf_lock, irqs_disabled);
-	i = 0;
 	while (1) {
 		uint32_t rd, wr, idx;
 		int ret;
@@ -156,16 +154,14 @@ void physical_channel_rx_dispatch(unsigned long data)
 		/* debug */
 		pipe_read_trace(dev->pipe, dev->pipe_ep, sizeof(header), ret);
 
-		if (ret != sizeof(header))
-			break; /* no data available */
+		if (ret == 0xFFFFFFFF) { /* signature mismatched first time */
+			hab_pipe_rxinfo(dev->pipe_ep, &rd, &wr, &idx);
 
-		hab_pipe_rxinfo(dev->pipe_ep, &rd, &wr, &idx);
-		if (header.signature != HAB_HEAD_SIGNATURE) {
-			pr_err("!!!!! HAB signature mismatch expect %X received %X, id_type_size %X session %X sequence %X i %d\n",
+			pr_err("!!!!! HAB signature mismatch expect %X received %X, id_type_size %X session %X sequence %X\n",
 				HAB_HEAD_SIGNATURE, header.signature,
 				header.id_type_size,
 				header.session_id,
-				header.sequence, i);
+				header.sequence);
 
 			pr_err("!!!!! rxinfo rd %d wr %d index %X\n",
 				rd, wr, idx);
@@ -176,9 +172,13 @@ void physical_channel_rx_dispatch(unsigned long data)
 
 			hab_spin_unlock(&pchan->rxbuf_lock, irqs_disabled);
 			/* cannot run in elevated context */
-			dump_hab_wq(dev);
+			dump_hab_wq(pchan);
 			hab_spin_lock(&pchan->rxbuf_lock, irqs_disabled);
-		}
+
+		} else if (ret == 0xFFFFFFFE) { /* continuous signature mismatches */
+			continue;
+		} else if (ret != sizeof(header))
+			break; /* no data available */
 
 		pchan->sequence_rx = header.sequence;
 
@@ -186,7 +186,6 @@ void physical_channel_rx_dispatch(unsigned long data)
 		trace_hab_pchan_recv_start(pchan);
 
 		hab_msg_recv(pchan, &header);
-		i++;
 	}
 	hab_spin_unlock(&pchan->rxbuf_lock, irqs_disabled);
 }

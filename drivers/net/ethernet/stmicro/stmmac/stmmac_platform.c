@@ -441,6 +441,9 @@ stmmac_probe_config_dt(struct platform_device *pdev, const char **mac)
 	/* Default to phy auto-detection */
 	plat->phy_addr = -1;
 
+	/* Flag for mac2mac feature support*/
+	plat->mac2mac_en = of_property_read_bool(np, "mac2mac");
+
 	/* Default to get clk_csr from stmmac_clk_crs_set(),
 	 * or get clk_csr from device tree.
 	 */
@@ -454,9 +457,11 @@ stmmac_probe_config_dt(struct platform_device *pdev, const char **mac)
 		dev_warn(&pdev->dev, "snps,phy-addr property is deprecated\n");
 
 	/* To Configure PHY by using all device-tree supported properties */
-	rc = stmmac_dt_phy(plat, np, &pdev->dev);
-	if (rc)
-		return ERR_PTR(rc);
+	if (!plat->mac2mac_en) {
+		rc = stmmac_dt_phy(plat, np, &pdev->dev);
+		if (rc)
+			return ERR_PTR(rc);
+	}
 
 	of_property_read_u32(np, "tx-fifo-depth", &plat->tx_fifo_size);
 

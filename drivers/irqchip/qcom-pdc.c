@@ -3,6 +3,7 @@
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  */
 
+#include <linux/delay.h>
 #include <linux/err.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
@@ -18,16 +19,18 @@
 #include <linux/of_device.h>
 #include <linux/soc/qcom/irq.h>
 #include <linux/spinlock.h>
+#include <linux/syscore_ops.h>
 #include <linux/slab.h>
 #include <linux/types.h>
 
 #include <linux/ipc_logging.h>
 
-#define PDC_MAX_IRQS		168
 #define PDC_IPC_LOG_SZ		2
 
 #define PDC_MAX_IRQS		168
 #define PDC_MAX_GPIO_IRQS	256
+
+#define MAX_ENABLE_REGS ((PDC_MAX_IRQS/32) + 1)
 
 #define CLEAR_INTR(reg, intr)	(reg & ~(1 << intr))
 #define ENABLE_INTR(reg, intr)	(reg | (1 << intr))
@@ -36,6 +39,12 @@
 #define IRQ_i_CFG		0x110
 
 #define PDC_NO_PARENT_IRQ	~0UL
+
+struct pdc_type_info {
+	u32 type;
+	bool set;
+};
+static struct pdc_type_info pdc_type_config[PDC_MAX_IRQS];
 
 struct pdc_pin_region {
 	u32 pin_base;
@@ -255,6 +264,9 @@ static int qcom_pdc_gic_set_type(struct irq_data *d, unsigned int type)
 	ipc_log_string(pdc_ipc_log, "Set type: PIN=%d pdc_type=%d gic_type=%d",
 		       pin_out, pdc_type, type);
 
+	pdc_type_config[pin_out].type = pdc_type;
+	pdc_type_config[pin_out].set = true;
+
 	/* Additionally, configure (only) the GPIO in the f/w */
 	if (irq_domain_qcom_handle_wakeup(d->domain)) {
 		ret = spi_configure_type(parent_hwirq, type);
@@ -287,6 +299,67 @@ static struct irq_chip qcom_pdc_gic_chip = {
 	.irq_set_vcpu_affinity	= irq_chip_set_vcpu_affinity_parent,
 	.irq_set_affinity	= irq_chip_set_affinity_parent,
 };
+
+#ifdef CONFIG_QTI_PDC_SAVE_RESTORE
+static u32 pdc_enabled[MAX_ENABLE_REGS] = { 0 };
+
+static int pdc_suspend(void)
+{
+	int i, n;
+	u32 reg_index;
+
+	for (n = 0; n < pdc_region_cnt; n++) {
+		for (i = 0; i < pdc_region[n].cnt; i++) {
+			reg_index = (i + pdc_region[n].pin_base) >> 5;
+			pdc_enabled[reg_index] = pdc_reg_read(IRQ_ENABLE_BANK,
+							      reg_index);
+		}
+	}
+
+	return 0;
+}
+
+static void pdc_resume(void)
+{
+	int i;
+	u32 config;
+
+	for (i = 0; i < PDC_MAX_IRQS; i++) {
+		if (pdc_type_config[i].set) {
+			pdc_reg_write(IRQ_i_CFG, i, pdc_type_config[i].type);
+
+			do {
+				config = pdc_reg_read(IRQ_i_CFG, i);
+				if (config == pdc_type_config[i].type)
+					break;
+				udelay(5);
+			} while (1);
+		}
+	}
+
+	for (i = 0; i < MAX_ENABLE_REGS; i++) {
+		if (!pdc_enabled[i])
+			continue;
+
+		pdc_reg_write(IRQ_ENABLE_BANK, i, pdc_enabled[i]);
+	}
+}
+
+static struct syscore_ops pdc_syscore_ops = {
+	.suspend = pdc_suspend,
+	.resume = pdc_resume,
+};
+
+static int __init pdc_init_syscore(void)
+{
+	register_syscore_ops(&pdc_syscore_ops);
+	return 0;
+}
+#ifndef MODULE
+arch_initcall(pdc_init_syscore);
+#endif
+#endif
+
 
 static irq_hw_number_t get_parent_hwirq(int pin)
 {
@@ -529,6 +602,9 @@ static int qcom_pdc_init(struct device_node *node, struct device_node *parent)
 	irq_domain_update_bus_token(pdc_gpio_domain, DOMAIN_BUS_WAKEUP);
 #ifdef MODULE
 	qcom_pdc_early_init();
+#ifdef CONFIG_QTI_PDC_SAVE_RESTORE
+	pdc_init_syscore();
+#endif
 #endif
 
 	return 0;

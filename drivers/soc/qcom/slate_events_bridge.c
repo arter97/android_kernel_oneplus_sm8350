@@ -27,7 +27,8 @@ struct event {
 #define	SEB_GLINK_INTENT_SIZE	0x04
 #define	SEB_MSG_SIZE			0x08
 #define	TIMEOUT_MS				2000
-#define	SEB_SLATEWEAR_SUBSYS "slate-wear"
+#define	TIMEOUT_MS_GLINK_OPEN			10000
+#define	SEB_SLATE_SUBSYS "slatefw"
 #define	HED_EVENT_DATA_TIME_LEN 0x04
 
 enum seb_state {
@@ -49,22 +50,14 @@ struct seb_notif_info {
 };
 
 struct gmi_header {
-	uint8_t version;
-	uint8_t reserved;
-	uint16_t opcode;
+	uint32_t opcode;
 	uint32_t payload_size;
 };
 
-enum WearManagerGlinkOpcode {
-	GMI_SLATE_EVENT_QBG = 1,
-	GMI_SLATE_EVENT_RSB  = 2,
-	GMI_SLATE_EVENT_BUTTON = 3,
-	GMI_SLATE_EVENT_TOUCH = 4,
-};
-
 static LIST_HEAD(seb_notify_list);
-static DEFINE_MUTEX(notif_lock);
+static DEFINE_SPINLOCK(notif_lock);
 static DEFINE_MUTEX(notif_add_lock);
+static DEFINE_MUTEX(notifier_lock);
 
 struct seb_priv {
 	void *handle;
@@ -74,11 +67,12 @@ struct seb_priv {
 	enum seb_state seb_current_state;
 	void *lhndl;
 	char rx_buf[SEB_GLINK_INTENT_SIZE];
-	char *rx_event_buf;
+	void *rx_event_buf;
 	uint8_t rx_event_len;
 	struct work_struct slate_up_work;
 	struct work_struct slate_down_work;
 	struct work_struct glink_up_work;
+	struct work_struct slate_notify_work;
 	void *slate_subsys_handle;
 	struct completion wrk_cmplt;
 	struct completion slate_lnikup_cmplt;
@@ -95,6 +89,26 @@ struct seb_priv {
 
 static void *seb_drv;
 static struct mutex seb_api_mutex;
+
+/*
+ * Register notify cb and manage the list
+ */
+static struct seb_notif_info *_notif_find_group(
+					const enum event_group_type event_group)
+{
+	struct seb_notif_info *seb_notify;
+	unsigned long flags;
+
+	spin_lock_irqsave(&notif_lock, flags);
+	list_for_each_entry(seb_notify, &seb_notify_list, list)
+		if (seb_notify->event_group == event_group) {
+			spin_unlock_irqrestore(&notif_lock, flags);
+			return seb_notify;
+		}
+	spin_unlock_irqrestore(&notif_lock, flags);
+
+	return NULL;
+}
 
 void seb_send_input(struct event *evnt)
 {
@@ -154,6 +168,7 @@ void seb_send_input(struct event *evnt)
 static void seb_slateup_work(struct work_struct *work)
 {
 	int ret = 0;
+	struct seb_notif_info *seb_notify = NULL;
 	struct seb_priv *dev =
 			container_of(work, struct seb_priv, slate_up_work);
 
@@ -163,7 +178,7 @@ static void seb_slateup_work(struct work_struct *work)
 		pr_err("seb-rpmsg is not probed yet\n");
 
 	ret = wait_event_timeout(dev->link_state_wait,
-		dev->seb_rpmsg, msecs_to_jiffies(TIMEOUT_MS));
+		dev->seb_rpmsg, msecs_to_jiffies(TIMEOUT_MS_GLINK_OPEN));
 	if (ret == 0) {
 		pr_err("channel connection time out %d\n", ret);
 		goto glink_err;
@@ -171,14 +186,24 @@ static void seb_slateup_work(struct work_struct *work)
 	pr_debug("seb-rpmsg is probed\n");
 	dev->seb_current_state = SEB_STATE_GLINK_OPEN;
 
+	list_for_each_entry(seb_notify, &seb_notify_list, list) {
+		srcu_notifier_call_chain(&seb_notify->seb_notif_rcvr_list,
+					 GLINK_CHANNEL_STATE_UP, NULL);
+	}
+
+	goto unlock;
+
 glink_err:
 	dev->seb_current_state = SEB_STATE_INIT;
+
+unlock:
 	mutex_unlock(&dev->seb_state_mutex);
 }
 
 
 static void seb_slatedown_work(struct work_struct *work)
 {
+	struct seb_notif_info *seb_notify = NULL;
 	struct seb_priv *dev = container_of(work, struct seb_priv,
 								slate_down_work);
 
@@ -187,8 +212,31 @@ static void seb_slatedown_work(struct work_struct *work)
 	pr_debug("SEB current state is : %d\n", dev->seb_current_state);
 
 	dev->seb_current_state = SEB_STATE_SLATE_SSR;
+	list_for_each_entry(seb_notify, &seb_notify_list, list) {
+		srcu_notifier_call_chain(&seb_notify->seb_notif_rcvr_list,
+					 GLINK_CHANNEL_STATE_DOWN, NULL);
+	}
 
 	mutex_unlock(&dev->seb_state_mutex);
+}
+
+static void seb_notify_work(struct work_struct *work)
+{
+	struct seb_notif_info *seb_notify = NULL;
+	struct gmi_header *event_header = NULL;
+	struct seb_priv *dev =
+		container_of(work, struct seb_priv, slate_notify_work);
+
+	mutex_lock(&notifier_lock);
+	event_header = (struct gmi_header *)(dev->rx_event_buf);
+	seb_notify = _notif_find_group(event_header->opcode);
+	if (seb_notify) {
+		srcu_notifier_call_chain(&seb_notify->seb_notif_rcvr_list,
+					 ((struct gmi_header *)event_header)->opcode,
+					 dev->rx_event_buf + sizeof(struct gmi_header));
+	}
+	kfree(dev->rx_event_buf);
+	mutex_unlock(&notifier_lock);
 }
 
 static int seb_tx_msg(struct seb_priv *dev, void  *msg, size_t len, bool wait_for_resp)
@@ -274,7 +322,7 @@ int seb_send_event_to_slate(void *seb_handle, enum event_group_type event,
 	req_header.payload_size = buf_size;
 
 	memcpy(tx_buf, &req_header, sizeof(req_header));
-	memcpy(tx_buf+sizeof(req_header), &event_buf, buf_size);
+	memcpy(tx_buf+sizeof(req_header), event_buf, buf_size);
 
 	rc = seb_tx_msg(dev, tx_buf, txn_len, false);
 
@@ -295,28 +343,10 @@ void seb_notify_glink_channel_state(bool state)
 }
 EXPORT_SYMBOL(seb_notify_glink_channel_state);
 
-/*
- * Register notify cb and manage the list
- */
-static struct seb_notif_info *_notif_find_group(
-					const enum event_group_type event_group)
-{
-	struct seb_notif_info *seb_notify;
-
-	mutex_lock(&notif_lock);
-	list_for_each_entry(seb_notify, &seb_notify_list, list)
-		if (seb_notify->event_group != event_group) {
-			mutex_unlock(&notif_lock);
-			return seb_notify;
-		}
-	mutex_unlock(&notif_lock);
-
-	return NULL;
-}
-
 void *seb_notif_add_group(const enum event_group_type event_group)
 {
 	struct seb_notif_info *seb_notif = NULL;
+	unsigned long flags;
 
 	mutex_lock(&notif_add_lock);
 
@@ -340,9 +370,9 @@ void *seb_notif_add_group(const enum event_group_type event_group)
 
 	INIT_LIST_HEAD(&seb_notif->list);
 
-	mutex_lock(&notif_lock);
+	spin_lock_irqsave(&notif_lock, flags);
 	list_add_tail(&seb_notif->list, &seb_notify_list);
-	mutex_unlock(&notif_lock);
+	spin_unlock_irqrestore(&notif_lock, flags);
 
 	#if defined(SEB_DEBUG)
 	seb_notif_event_test_notifier(seb_notif->event_group);
@@ -424,9 +454,7 @@ void handle_rx_event(struct seb_priv *dev, void *rx_event_buf, int len)
 	seb_notif = _notif_find_group(event_header->opcode);
 
 	if (seb_notif) {
-		srcu_notifier_call_chain(&seb_notif->seb_notif_rcvr_list,
-					event_header->opcode,
-					dev->rx_event_buf + sizeof(struct gmi_header));
+		queue_work(dev->seb_wq, &dev->slate_notify_work);
 	}
 }
 
@@ -434,7 +462,6 @@ void seb_rx_msg(void *data, int len)
 {
 	struct seb_priv *dev =
 		container_of(seb_drv, struct seb_priv, lhndl);
-	void *rx_event_buf = NULL;
 
 	dev->seb_resp_cmplt = true;
 	wake_up(&dev->link_state_wait);
@@ -442,11 +469,10 @@ void seb_rx_msg(void *data, int len)
 		memcpy(dev->rx_buf, data, len);
 	} else {
 		/* Handle the event received from Slate */
-		rx_event_buf = kmalloc(len, GFP_KERNEL);
-		if (rx_event_buf) {
-			memcpy(rx_event_buf, data, len);
-			handle_rx_event(dev, rx_event_buf, len);
-			kfree(rx_event_buf);
+		dev->rx_event_buf = kmalloc(len, GFP_ATOMIC);
+		if (dev->rx_event_buf) {
+			memcpy(dev->rx_event_buf, data, len);
+			handle_rx_event(dev, dev->rx_event_buf, len);
 		}
 	}
 }
@@ -505,7 +531,7 @@ static int slate_ssr_register(struct seb_priv *dev)
 
 	nb = &ssr_slate_nb;
 	dev->slate_subsys_handle =
-			subsys_notif_register_notifier(SEB_SLATEWEAR_SUBSYS, nb);
+			subsys_notif_register_notifier(SEB_SLATE_SUBSYS, nb);
 
 	if (!dev->slate_subsys_handle) {
 		dev->slate_subsys_handle = NULL;
@@ -535,6 +561,7 @@ static int seb_init(struct seb_priv *dev)
 	/* Init all works */
 	INIT_WORK(&dev->slate_up_work, seb_slateup_work);
 	INIT_WORK(&dev->slate_down_work, seb_slatedown_work);
+	INIT_WORK(&dev->slate_notify_work, seb_notify_work);
 
 	return 0;
 }
@@ -575,7 +602,7 @@ static int seb_probe(struct platform_device *pdev)
 	}
 	dev->input = input;
 
-	/* register device for slate-wear ssr */
+	/* register device for slate ssr */
 	rc = slate_ssr_register(dev);
 	if (rc) {
 		pr_err("Failed to register for slate ssr\n");
@@ -604,8 +631,8 @@ static int seb_remove(struct platform_device *pdev)
 }
 
 static const struct of_device_id seb_of_match[] = {
-	{ .compatible = "qcom,slate-events-bridge", },
-	{ }
+	{ .compatible = "qcom,slate-events-bridge" },
+	{ },
 };
 
 static struct platform_driver seb_driver = {

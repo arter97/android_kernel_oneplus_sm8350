@@ -13,6 +13,7 @@
 #define PERPH_SUBTYPE_OFFSET	0x05
 #define SUBTYPE_MASK		GENMASK(7, 0)
 #define INT_RT_STS_OFFSET	0x10
+#define REVID_REVISION4		0x103
 
 /********************************
  *  CHGR Peripheral Registers  *
@@ -127,6 +128,10 @@ enum {
 #define CHGR_JEITA_COOL_THRESHOLD_REG(base)		(base.batif_base + 0x88)
 #define CHGR_JEITA_COLD_THRESHOLD_REG(base)		(base.batif_base + 0x8A)
 
+#define BATIF_PULLDOWN_VPH_CONTROL(base)		(base.batif_base + 0x55)
+#define PULLDOWN_VPH_SW_EN_BIT			BIT(1)
+#define PULLDOWN_VPH_HW_EN_BIT			BIT(0)
+#define BATIF_PULLDOWN_VPH_SEL_MASK		GENMASK(1, 0)
 
 /********************************
  *  USBIN Peripheral Registers  *
@@ -139,6 +144,10 @@ enum {
 #define USBIN_UV_RT_STS_BIT			BIT(2)
 #define USBIN_COLLAPSE_RT_STS_BIT		BIT(1)
 #define USBIN_PLUGIN_RT_STS_BIT			BIT(0)
+
+#define USBIN_QC23_EN_REG(base)			(base.usbin_base + 0x48)
+#define HVDCP_EN_BIT				BIT(2)
+#define HVDCP_NO_AUTH_QC3_CFG_BIT		BIT(0)
 
 #define USBIN_ICL_OPTIONS_REG(base)			(base.usbin_base + 0x50)
 #define USBIN_MODE_CHG_BIT			BIT(2)
@@ -192,8 +201,6 @@ enum {
 #define CMD_HVDCP_REG(base)			(base.usbin_base + 0x4a)
 #define SINGLE_INCREMENT_BIT			BIT(5)
 #define SINGLE_DECREMENT_BIT			BIT(4)
-#define FORCE_12V_BIT				BIT(3)
-#define FORCE_9V_BIT				BIT(2)
 #define FORCE_5V_BIT				BIT(1)
 #define IDLE_BIT				BIT(0)
 

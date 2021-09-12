@@ -92,7 +92,7 @@ static u32 a6xx_ifpc_pwrup_reglist[] = {
 	A6XX_CP_AHB_CNTL,
 };
 
-/* Applicable to a620, a642l, a650 and a660 */
+/* Applicable to a620, a642, a642l, a650 and a660 */
 static u32 a650_pwrup_reglist[] = {
 	A6XX_CP_PROTECT_REG + 47,          /* Programmed for infinite span */
 	A6XX_TPL1_BICUBIC_WEIGHTS_TABLE_0,
@@ -101,6 +101,7 @@ static u32 a650_pwrup_reglist[] = {
 	A6XX_TPL1_BICUBIC_WEIGHTS_TABLE_3,
 	A6XX_TPL1_BICUBIC_WEIGHTS_TABLE_4,
 	A6XX_UCHE_CMDQ_CONFIG,
+	A6XX_SP_DBG_ECO_CNTL,
 };
 
 static u32 a615_pwrup_reglist[] = {
@@ -175,7 +176,8 @@ int a6xx_init(struct adreno_device *adreno_dev)
 	/* If the memory type is DDR 4, override the existing configuration */
 	if (of_fdt_get_ddrtype() == 0x7) {
 		if (adreno_is_a642(adreno_dev) ||
-			adreno_is_a642l(adreno_dev))
+			adreno_is_a642l(adreno_dev) ||
+			adreno_is_a643(adreno_dev))
 			adreno_dev->highest_bank_bit = 14;
 		else if ((adreno_is_a650(adreno_dev) ||
 				adreno_is_a660(adreno_dev)))
@@ -666,6 +668,10 @@ void a6xx_start(struct adreno_device *adreno_dev)
 	kgsl_regwrite(device, A6XX_PC_DBG_ECO_CNTL,
 		a6xx_core->prim_fifo_threshold);
 
+	if (adreno_is_a642(adreno_dev) || adreno_is_a642l(adreno_dev) ||
+		adreno_is_a660v2(adreno_dev))
+		kgsl_regrmw(device, A6XX_SP_DBG_ECO_CNTL, 0x6, (0x3 << 1));
+
 	/* Set the AHB default slave response to "ERROR" */
 	kgsl_regwrite(device, A6XX_CP_AHB_CNTL, 0x1);
 
@@ -821,8 +827,12 @@ void a6xx_start(struct adreno_device *adreno_dev)
 		kgsl_regwrite(device, A6XX_CP_CHICKEN_DBG, 0x1);
 		kgsl_regwrite(device, A6XX_RBBM_GBIF_CLIENT_QOS_CNTL, 0x0);
 
-		/* Set dualQ + disable afull for A660, A642 GPU but not for A642L */
-		if (!adreno_is_a642l(adreno_dev))
+		/*
+		 * Set dualQ + disable afull for A660, A642 GPU but
+		 * not for A642L and A643
+		 */
+		if (!adreno_is_a642l(adreno_dev) ||
+			!adreno_is_a643(adreno_dev))
 			kgsl_regwrite(device, A6XX_UCHE_CMDQ_CONFIG, 0x66906);
 	}
 
@@ -1308,10 +1318,9 @@ static int64_t a6xx_read_throttling_counters(struct adreno_device *adreno_dev)
 	u32 a, b, c;
 	struct adreno_busy_data *busy = &adreno_dev->busy_data;
 
-	if (!adreno_dev->lm_enabled)
+	if (!(adreno_dev->lm_enabled || adreno_dev->bcl_enabled))
 		return 0;
 
-	/* The counters are selected in a6xx_gmu_enable_lm() */
 	a = counter_delta(device, A6XX_GMU_CX_GMU_POWER_COUNTER_XOCLK_1_L,
 		&busy->throttle_cycles[0]);
 
@@ -1321,6 +1330,10 @@ static int64_t a6xx_read_throttling_counters(struct adreno_device *adreno_dev)
 	c = counter_delta(device, A6XX_GMU_CX_GMU_POWER_COUNTER_XOCLK_3_L,
 		&busy->throttle_cycles[2]);
 
+	if (adreno_dev->bcl_enabled) {
+		trace_kgsl_bcl_clock_throttling(a, b, c);
+		return 0;
+	}
 
 	/*
 	 * The adjustment is the number of cycles lost to throttling, which

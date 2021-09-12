@@ -1938,48 +1938,13 @@ static ssize_t dcvs_mode_store(struct device *dev,
 
 	return count;
 }
-/* -------------------------------------------------------------------------
- * SysFS - npu_boot
- * -------------------------------------------------------------------------
- */
-static ssize_t boot_store(struct device *dev,
-					  struct device_attribute *attr,
-					  const char *buf, size_t count)
-{
-	struct npu_device *npu_dev = dev_get_drvdata(dev);
-	struct npu_client client;
-	struct msm_npu_property prop;
-	bool enable = false;
-	int rc;
-
-	if (strtobool(buf, &enable) < 0)
-		return -EINVAL;
-
-	client.npu_dev = npu_dev;
-	client.cid = -1;
-	prop.prop_id = MSM_NPU_PROP_ID_FW_STATE;
-	prop.num_of_params = 1;
-	prop.network_hdl = 0;
-	prop.prop_param[0] = enable ? 1 : 0;
-
-	NPU_DBG("Turn %s NPU\n", enable ? "on" : "off");
-	rc = npu_virt_set_property(&client, &prop);
-	if (rc) {
-		NPU_ERR("set fw_state to %s failed\n", enable ? "on" : "off");
-		return rc;
-	}
-
-	return count;
-}
 
 static DEVICE_ATTR_RW(perf_mode_override);
-static DEVICE_ATTR_WO(boot);
 static DEVICE_ATTR_RW(dcvs_mode);
 
 static struct attribute *npu_fs_attrs[] = {
 	&dev_attr_perf_mode_override.attr,
 	&dev_attr_dcvs_mode.attr,
-	&dev_attr_boot.attr,
 	NULL
 };
 

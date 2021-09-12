@@ -726,15 +726,45 @@ static int pil_init_entry_addr(struct pil_priv *priv, const struct pil_mdt *mdt)
 	return -EADDRNOTAVAIL;
 }
 
+/*
+ * This value is used to represent that there is a memory
+ * region for the firmware to be loaded in, it is just not
+ * mapped.
+ */
+#define PIL_DUMMY_ALLOC_VAL ((void *)0x222)
+
+
+static int pil_alloc_mem(struct pil_priv *priv, size_t aligned_size)
+{
+	struct device_node *of_node = priv->desc->dev->of_node, *mem_node;
+	struct resource res;
+	int ret;
+
+	mem_node = of_parse_phandle(of_node, "memory-region", 0);
+	if (mem_node) {
+		ret = of_address_to_resource(mem_node, 0, &res);
+		of_node_put(mem_node);
+		if (ret)
+			return ret;
+		priv->region = PIL_DUMMY_ALLOC_VAL;
+		priv->region_start = res.start;
+		return 0;
+	}
+
+	priv->region = dma_alloc_coherent(priv->desc->dev, aligned_size,
+				 &priv->region_start, GFP_KERNEL);
+	if (!priv->region)
+		return -ENOMEM;
+
+	return 0;
+}
+
 static int pil_alloc_region(struct pil_priv *priv, phys_addr_t min_addr,
 				phys_addr_t max_addr, size_t align)
 {
 	size_t size = max_addr - min_addr;
 	size_t aligned_size;
-	struct device_node *ofnode = priv->desc->dev->of_node;
-	struct device_node *mem_node;
 	int ret;
-	struct resource res;
 
 	/* Don't reallocate due to fragmentation concerns, just sanity check */
 	if (priv->is_region_allocated) {
@@ -751,34 +781,22 @@ static int pil_alloc_region(struct pil_priv *priv, phys_addr_t min_addr,
 	else
 		aligned_size = ALIGN(size, SZ_4K);
 
-	/* read memory region here */
-	mem_node = of_parse_phandle(ofnode, "memory-region", 0);
-	if (!mem_node) {
-		pil_err(priv->desc, "No memory-region associated\n");
-		ret = -ENOMEM;
-		goto err;
-	}
-
-	ret = of_address_to_resource(mem_node, 0, &res);
-	of_node_put(mem_node);
-	if (ret < 0) {
-		pil_err(priv->desc, "Failed to get the resource\n");
-		goto err;
+	ret = pil_alloc_mem(priv, aligned_size);
+	if (ret) {
+		pil_err(priv->desc, "Failed to allocate relocatable region of size %zx\n",
+					size);
+		priv->region_start = 0;
+		priv->region_end = 0;
+		return ret;
 	}
 
 	priv->is_region_allocated = true;
-	priv->region_start = res.start;
 	priv->region_end = priv->region_start + size;
 	priv->base_addr = min_addr;
 	priv->region_size = aligned_size;
 
 	return 0;
 
-err:
-	priv->region_start = 0;
-	priv->region_end = 0;
-
-	return ret;
 }
 
 static int pil_setup_region(struct pil_priv *priv, const struct pil_mdt *mdt)
@@ -948,15 +966,23 @@ static void pil_clear_segment(struct pil_desc *desc)
 }
 
 #define IOMAP_SIZE SZ_1M
-
 static void __iomem *map_fw_mem(phys_addr_t paddr, size_t size, void *data)
 {
-	return ioremap_wc(paddr, size);
+	struct pil_map_fw_info *info = data;
+
+	if (info->region == PIL_DUMMY_ALLOC_VAL)
+		return ioremap_wc(paddr, size);
+
+	/* Calculate offset into VA space */
+	return (void __iomem *)(info->region + (paddr - info->base_addr));
 }
 
 static void unmap_fw_mem(void __iomem *vaddr, size_t size, void *data)
 {
-	iounmap(vaddr);
+	struct pil_map_fw_info *info = data;
+
+	if (info->region == PIL_DUMMY_ALLOC_VAL)
+		iounmap(vaddr);
 }
 
 static int pil_load_seg(struct pil_desc *desc, struct pil_seg *seg)
@@ -969,6 +995,7 @@ static int pil_load_seg(struct pil_desc *desc, struct pil_seg *seg)
 	void __iomem *firmware_buf;
 	struct pil_map_fw_info map_fw_info = {
 		.attrs = desc->attrs,
+		.region = desc->priv->region,
 		.base_addr = desc->priv->region_start,
 		.dev = desc->dev,
 	};
@@ -1197,6 +1224,7 @@ int pil_boot(struct pil_desc *desc)
 	if (desc->shutdown_fail)
 		pil_err(desc, "Subsystem shutdown failed previously!\n");
 
+	desc->clear_fw_region = true;
 	/* Reinitialize for new image */
 	pil_release_mmap(desc);
 
@@ -1250,6 +1278,8 @@ int pil_boot(struct pil_desc *desc)
 	if (desc->ops->init_image)
 		ret = desc->ops->init_image(desc, fw->data, fw->size);
 	if (ret) {
+		/* S2 mapping not yet done */
+		desc->clear_fw_region = false;
 		pil_err(desc, "Initializing image failed(rc:%d)\n", ret);
 		goto err_boot;
 	}
@@ -1259,6 +1289,8 @@ int pil_boot(struct pil_desc *desc)
 		ret = desc->ops->mem_setup(desc, priv->region_start,
 				priv->region_end - priv->region_start);
 	if (ret) {
+		/* S2 mapping is failed */
+		desc->clear_fw_region = false;
 		pil_err(desc, "Memory setup error(rc:%d)\n", ret);
 		goto err_deinit_image;
 	}
@@ -1365,6 +1397,7 @@ out:
 			if (desc->clear_fw_region && priv->region_start)
 				pil_clear_segment(desc);
 			priv->is_region_allocated = false;
+			pil_free_memory(desc);
 		}
 		pil_release_mmap(desc);
 		pil_notify_aop(desc, "off");
@@ -1417,6 +1450,11 @@ void pil_free_memory(struct pil_desc *desc)
 			pil_assign_mem_to_linux(desc, priv->region_start,
 				(priv->region_end - priv->region_start));
 		priv->is_region_allocated = false;
+	}
+	if (priv->region && priv->region != PIL_DUMMY_ALLOC_VAL) {
+		dma_free_coherent(desc->dev, priv->region_size,
+			priv->region, priv->region_start);
+		priv->region = NULL;
 	}
 }
 EXPORT_SYMBOL(pil_free_memory);

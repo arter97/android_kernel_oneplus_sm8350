@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.*/
+/* Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.*/
 
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -685,7 +685,7 @@ static int mhi_netdev_enable_iface(struct mhi_netdev *mhi_netdev)
 	struct device_node *of_node = mhi_dev->dev.of_node;
 	struct mhi_netdev_priv *mhi_netdev_priv;
 
-	mhi_netdev->alias = of_alias_get_id(of_node, "mhi-netdev");
+	mhi_netdev->alias = of_alias_get_id(of_node, "mhi_netdev");
 	if (mhi_netdev->alias < 0)
 		return -ENODEV;
 
@@ -1123,6 +1123,8 @@ static const struct mhi_device_id mhi_netdev_match_table[] = {
 	{ .chan = "IP_HW0" },
 	{ .chan = "IP_HW_ADPL" },
 	{ .chan = "IP_HW0_RSC" },
+	{ .chan = "IP_SW0" },
+	{ .chan = "IP_HW1" },
 	{},
 };
 

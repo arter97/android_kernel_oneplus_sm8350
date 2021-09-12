@@ -1,7 +1,7 @@
-/* SPDX-License-Identifier: GPL-2.0-only
- * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- *
- * drivers/soc/qcom/silent-mode-hw-monitoring.c - Silent Mode GPIO monitoring
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ *  Copyright (c) 2021, The Linux Foundation. All rights reserved.
+ *  drivers/soc/qcom/silent-mode-hw-monitoring.c - Silent Mode HW monitoring
  */
 
 #include <linux/interrupt.h>
@@ -94,7 +94,7 @@ static int silent_mode_init_monitor(struct silent_mode_info *info)
 {
 	int result = -EINVAL;
 
-	dev_info(&info->pdev->dev, "GPIO for Silent boot: %d",
+	dev_info(&info->pdev->dev, "GPIO for Silent boot: %d\n",
 		info->sgpio);
 
 	if (!gpio_is_valid(info->sgpio)) {
@@ -176,13 +176,13 @@ static int silent_mode_probe(struct platform_device *pdev)
 		return result;
 	}
 
-	dev_err(&pdev->dev, "MODE_SILENT/MODE_NON_SILENT");
+	dev_err(&pdev->dev, "MODE_SILENT/MODE_NON_SILENT\n");
 
 	info = devm_kzalloc(&pdev->dev,
 			sizeof(struct silent_mode_info),
 			GFP_KERNEL);
 	if (!info) {
-		dev_info(&info->pdev->dev, "%s: FAILED: cannot alloc info data\n",
+		dev_info(&pdev->dev, "%s: FAILED: cannot alloc info data\n",
 			__func__);
 		result = -ENOMEM;
 		return result;
@@ -222,7 +222,7 @@ static int silent_mode_suspend_late(struct device *dev)
 	struct silent_mode_info *info = platform_get_drvdata(pdev);
 
 	ret = silent_mode_disable_monitor(info);
-	dev_info(&info->pdev->dev, "silent_mode:%s", __func__);
+	dev_info(&info->pdev->dev, "silent_mode:%s\n", __func__);
 	return ret;
 }
 
@@ -233,7 +233,7 @@ static int silent_mode_resume_early(struct device *dev)
 	struct silent_mode_info *info = platform_get_drvdata(pdev);
 
 	ret = silent_mode_enable_monitor(info);
-	dev_info(&info->pdev->dev, "silent_mode:%s", __func__);
+	dev_info(&info->pdev->dev, "silent_mode:%s\n", __func__);
 	return ret;
 }
 
@@ -245,7 +245,7 @@ static const struct dev_pm_ops silent_mode_pm_ops = {
 
 static int silent_mode_remove(struct platform_device *pdev)
 {
-	dev_info(&pdev->dev, "silent_mode: Entered %s", __func__);
+	dev_dbg(&pdev->dev, "silent_mode: Entered %s\n", __func__);
 	return 0;
 }
 
@@ -260,7 +260,9 @@ static struct platform_driver silent_mode_driver = {
 	.driver = {
 		.name = "qcom-silent-monitoring-mode",
 		.of_match_table = silent_mode_match_table,
+#ifdef CONFIG_PM
 		.pm = &silent_mode_pm_ops,
+#endif
 	},
 };
 

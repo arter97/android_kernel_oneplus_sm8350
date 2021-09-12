@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
  */
 #include "hab.h"
 #include <linux/rtc.h>
@@ -274,7 +274,7 @@ static ssize_t vchan_store(struct kobject *kobj, struct kobj_attribute *attr,
 		pr_err("failed to read anything from input %d\n", ret);
 		return 0;
 	} else
-		return vchan_stat;
+		return count;
 }
 
 static ssize_t ctx_show(struct kobject *kobj, struct kobj_attribute *attr,
@@ -293,7 +293,7 @@ static ssize_t ctx_store(struct kobject *kobj, struct kobj_attribute *attr,
 		pr_err("failed to read anything from input %d\n", ret);
 		return 0;
 	} else
-		return context_stat;
+		return count;
 }
 
 static ssize_t expimp_show(struct kobject *kobj, struct kobj_attribute *attr,
@@ -305,25 +305,41 @@ static ssize_t expimp_show(struct kobject *kobj, struct kobj_attribute *attr,
 static ssize_t expimp_store(struct kobject *kobj, struct kobj_attribute *attr,
 						const char *buf, size_t count)
 {
-	int ret;
+	int ret = -1;
 	char str[36] = {0};
+	struct uhab_context *ctx = NULL;
+	struct virtual_channel *vchan = NULL;
 
-	ret = sscanf(buf, "%35s", str);
-	if (ret < 1)
-		pr_err("failed to read anything from input %d\n", ret);
+	if (buf) {
+		ret = sscanf(buf, "%35s", str);
+		if (ret < 1) {
+			pr_err("failed to read anything from input %d\n", ret);
+			return -EINVAL;
+		}
+	} else
+		return -EINVAL;
 
 	if (strnlen(str, strlen("dump_pipe")) == strlen("dump_pipe") &&
 		strcmp(str, "dump_pipe") == 0) {
 		/* string terminator is ignored */
-		dump_hab();
-		return strlen("dump_pipe");
+		list_for_each_entry(ctx, &hab_driver.uctx_list, node) {
+			if (ctx->owner == pid_stat) {
+				vchan = list_first_entry(&ctx->vchannels,
+					struct virtual_channel, node);
+				if (vchan) {
+					dump_hab_wq(vchan->pchan); /* user context */
+					break;
+				}
+			}
+		}
+		return count;
 	}
 
 	ret = sscanf(buf, "%du", &pid_stat);
 	if (ret < 1)
 		pr_err("failed to read anything from input %d\n", ret);
 	else
-		return pid_stat; /* good result stored */
+		return count; /* good result stored */
 	return -EEXIST;
 }
 

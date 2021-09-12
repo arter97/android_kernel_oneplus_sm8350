@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
  */
 #include "hab.h"
 #include "hab_qvm.h"
@@ -49,10 +49,9 @@ static irqreturn_t shm_irq_handler(int irq, void *_pchan)
 /* debug only */
 static void work_func(struct work_struct *work)
 {
-	struct work_data *wdata = (struct work_data *) work;
+	struct qvm_channel *dev = container_of(work, struct qvm_channel, wdata.work);
 
-	dump_hab();
-	wdata->data = 1; /* done, now unblock tasklet */
+	dump_hab(dev->wdata.data);
 }
 
 int habhyp_commdev_create_dispatcher(struct physical_channel *pchan)
@@ -124,12 +123,12 @@ void hab_pipe_read_dump(struct physical_channel *pchan)
 	dump_hab_buf(dev->side_buf, dev->pipe_ep->rx_info.sh_buf->size);
 }
 
-void dump_hab_wq(void *hyp_data)
+void dump_hab_wq(struct physical_channel *pchan)
 {
-	struct qvm_channel *dev  = (struct qvm_channel *)hyp_data;
+	struct qvm_channel *dev  = pchan->hyp_data;
 
+	dev->wdata.data = pchan->habdev->id;
 	queue_work(dev->wq, &dev->wdata.work);
-	dev->wdata.data = 0; /* reset it back */
 }
 
 /* The input is already va now */

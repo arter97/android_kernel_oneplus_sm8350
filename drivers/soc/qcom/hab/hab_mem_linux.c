@@ -29,6 +29,12 @@ struct importer_context {
 	struct file *filp;
 };
 
+struct exp_platform_data {
+	void *dmabuf;
+	void *attach;
+	void *sg_table;
+};
+
 static struct dma_buf_ops dma_buf_ops;
 
 static struct pages_list *pages_list_create(
@@ -267,7 +273,10 @@ static int habmem_compress_pfns(
 		uint32_t *data_size)
 {
 	int ret = 0;
-	struct dma_buf *dmabuf = exp_super->platform_data;
+	struct exp_platform_data *platform_data =
+		(struct exp_platform_data *) exp_super->platform_data;
+	struct dma_buf *dmabuf =
+		(struct dma_buf *) platform_data->dmabuf;
 	int page_count = exp_super->exp.payload_count;
 	struct pages_list *pglist = NULL;
 	struct page **pages = NULL;
@@ -299,6 +308,9 @@ static int habmem_compress_pfns(
 			goto err;
 		}
 
+		/* Restore sg table and attach of dmabuf */
+		platform_data->attach = attach;
+		platform_data->sg_table = sg_table;
 		page_offset = exp_super->offset >> PAGE_SHIFT;
 
 		for_each_sg(sg_table->sgl, s, sg_table->nents, i) {
@@ -358,24 +370,14 @@ static int habmem_compress_pfns(
 	*data_size = sizeof(struct compressed_pfns) +
 		sizeof(struct region) * pfns->nregions;
 
+	return 0;
 err:
-	if (!IS_ERR_OR_NULL(sg_table))
-		dma_buf_unmap_attachment(attach, sg_table, DMA_TO_DEVICE);
-
-	if (!IS_ERR_OR_NULL(attach))
+	if (!IS_ERR_OR_NULL(attach)) {
+		if (!IS_ERR_OR_NULL(sg_table))
+			dma_buf_unmap_attachment(attach,
+					sg_table,
+					DMA_TO_DEVICE);
 		dma_buf_detach(dmabuf, attach);
-
-	/* TODO: This dma buffer should not be put here,
-	 * but currently display is depended on this put to do recircle,
-	 * so we just put dma buffer here to ensure there is no memleak.
-	 * we can remove this after display have a fix.
-	 */
-	if (HABMM_EXP_MEM_TYPE_DMA & exp_super->exp.readonly) {
-		if (!IS_ERR_OR_NULL(dmabuf)
-				&& dmabuf->ops != &dma_buf_ops) {
-			dma_buf_put(dmabuf);
-			exp_super->platform_data = NULL;
-		}
 	}
 
 	return ret;
@@ -392,6 +394,7 @@ static int habmem_add_export_compress(struct virtual_channel *vchan,
 	int ret = 0;
 	struct export_desc *exp = NULL;
 	struct export_desc_super *exp_super = NULL;
+	struct exp_platform_data *platform_data = NULL;
 	struct compressed_pfns *pfns = NULL;
 	uint32_t sizebytes = sizeof(*exp_super) +
 				sizeof(struct compressed_pfns) +
@@ -400,29 +403,42 @@ static int habmem_add_export_compress(struct virtual_channel *vchan,
 	exp_super = habmem_add_export(vchan,
 			sizebytes,
 			flags);
-	if (!exp_super) {
-		dma_buf_put((struct dma_buf *)buf);
+	if (IS_ERR_OR_NULL(exp_super)) {
 		ret = -ENOMEM;
-		goto err;
+		goto err_add_exp;
 	}
+	platform_data = kzalloc(
+			sizeof(struct exp_platform_data),
+			GFP_KERNEL);
+	if (!platform_data) {
+		ret = -ENOMEM;
+		goto err_alloc;
+	}
+
 	exp = &exp_super->exp;
 	exp->payload_count = page_count;
-	exp_super->platform_data = buf;
+	platform_data->dmabuf = buf;
 	exp_super->offset = offset;
+	exp_super->platform_data = (void *)platform_data;
 	kref_init(&exp_super->refcount);
 
 	pfns = (struct compressed_pfns *)&exp->payload[0];
 	ret = habmem_compress_pfns(exp_super, pfns, payload_size);
 	if (ret) {
 		pr_err("hab compressed pfns failed %d\n", ret);
-		vfree(exp_super);
-		dma_buf_put((struct dma_buf *)buf);
 		*payload_size = 0;
-		goto err;
+		goto err_compress_pfns;
 	}
 
 	*export_id = exp->export_id;
-err:
+	return 0;
+
+err_compress_pfns:
+	kfree(platform_data);
+err_alloc:
+	vfree(exp_super);
+err_add_exp:
+	dma_buf_put((struct dma_buf *)buf);
 	return ret;
 }
 
@@ -556,14 +572,28 @@ err:
 
 int habmem_exp_release(struct export_desc_super *exp_super)
 {
+	struct exp_platform_data *platform_data =
+		(struct exp_platform_data *)exp_super->platform_data;
 	struct dma_buf *dmabuf =
-			(struct dma_buf *) exp_super->platform_data;
+		(struct dma_buf *) platform_data->dmabuf;
+	struct dma_buf_attachment *attach = NULL;
+	struct sg_table *sg_table = NULL;
 
-	if (!IS_ERR_OR_NULL(dmabuf))
+	if (!IS_ERR_OR_NULL(dmabuf)) {
+		attach = (struct dma_buf_attachment *) platform_data->attach;
+		if (!IS_ERR_OR_NULL(attach)) {
+			sg_table = (struct sg_table *) platform_data->sg_table;
+			if (!IS_ERR_OR_NULL(sg_table))
+				dma_buf_unmap_attachment(attach,
+						sg_table,
+						DMA_TO_DEVICE);
+			dma_buf_detach(dmabuf, attach);
+		}
 		dma_buf_put(dmabuf);
-	else
+	} else
 		pr_debug("release failed, dmabuf is null!!!\n");
 
+	kfree(platform_data);
 	return 0;
 }
 

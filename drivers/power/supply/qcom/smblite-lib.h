@@ -19,6 +19,7 @@
 #include <linux/qti_power_supply.h>
 #include "storm-watch.h"
 #include "battery.h"
+#include "smblite-remote-bms.h"
 
 enum print_reason {
 	PR_INTERRUPT	= BIT(0),
@@ -97,6 +98,7 @@ enum {
 	BOOST_BACK_WA			= BIT(0),
 	WEAK_ADAPTER_WA			= BIT(1),
 	FLASH_DIE_TEMP_DERATE_WA	= BIT(2),
+	HDC_ICL_REDUCTION_WA		= BIT(3),
 };
 
 enum jeita_cfg_stat {
@@ -266,6 +268,7 @@ struct smb_charger {
 	struct iio_channel	**iio_chan_list_qg;
 	struct iio_channel	**iio_chan_list_smb_parallel;
 	struct class            qcom_class;
+	struct smblite_remote_bms	remote_bms;
 	int			*debug_mask;
 	enum smb_mode		mode;
 	u8			subtype;
@@ -383,6 +386,7 @@ struct smb_charger {
 	bool			flash_init_done;
 	bool			flash_active;
 	u32			irq_status;
+	bool			is_fg_remote;
 };
 
 int smblite_lib_read(struct smb_charger *chg, u16 addr, u8 *val);
@@ -510,5 +514,6 @@ int smblite_lib_get_fcc(struct smb_chg_param *param, u8 val_raw);
 int smblite_lib_set_fcc(struct smb_chg_param *param, int val_u, u8 *val_raw);
 int smblite_lib_set_concurrent_config(struct smb_charger *chg, bool enable);
 bool is_concurrent_mode_supported(struct smb_charger *chg);
+void smblite_lib_hvdcp_detect_enable(struct smb_charger *chg, bool enable);
 
 #endif /* __SMBLITE_LIB_H */

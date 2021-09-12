@@ -2135,6 +2135,9 @@ static int qg_iio_write_raw(struct iio_dev *indio_dev,
 		if (chip->sp)
 			soh_profile_update(chip->sp, chip->soh);
 		break;
+	case PSY_IIO_CLEAR_SOH:
+		chip->first_profile_load = val1;
+		break;
 	case PSY_IIO_ESR_ACTUAL:
 		chip->esr_actual = val1;
 		break;
@@ -2259,6 +2262,9 @@ static int qg_iio_read_raw(struct iio_dev *indio_dev,
 		break;
 	case PSY_IIO_SOH:
 		*val1 = chip->soh;
+		break;
+	case PSY_IIO_CLEAR_SOH:
+		*val1 = chip->first_profile_load;
 		break;
 	case PSY_IIO_CC_SOC:
 		rc = qg_get_cc_soc(chip, val1);
@@ -3067,8 +3073,8 @@ static int qg_load_battery_profile(struct qpnp_qg *chip)
 				chip->batt_id_ohm / 1000, NULL);
 	}
 
-	if (IS_ERR(profile_node)) {
-		rc = PTR_ERR(profile_node);
+	if (IS_ERR_OR_NULL(profile_node)) {
+		rc = profile_node ? PTR_ERR(profile_node) : -EINVAL;
 		pr_err("Failed to detect valid QG battery profile %d\n", rc);
 		return rc;
 	}
@@ -3470,6 +3476,7 @@ static int qg_sanitize_sdam(struct qpnp_qg *chip)
 		rc = qg_sdam_write(SDAM_MAGIC, SDAM_MAGIC_NUMBER);
 		if (!rc)
 			qg_dbg(chip, QG_DEBUG_PON, "First boot. SDAM initilized\n");
+		chip->first_profile_load = true;
 	} else {
 		/* SDAM has invalid value */
 		rc = qg_sdam_clear();
@@ -3477,6 +3484,7 @@ static int qg_sanitize_sdam(struct qpnp_qg *chip)
 			pr_err("SDAM uninitialized, SDAM reset\n");
 			rc = qg_sdam_write(SDAM_MAGIC, SDAM_MAGIC_NUMBER);
 		}
+		chip->first_profile_load = true;
 	}
 
 	if (rc < 0)
@@ -4377,7 +4385,7 @@ static int qg_parse_dt(struct qpnp_qg *chip)
 	else
 		chip->dt.esr_low_temp_threshold = (int)temp;
 
-	rc = of_property_read_u32(node, "qcom,shutdown_soc_threshold", &temp);
+	rc = of_property_read_u32(node, "qcom,shutdown-soc-threshold", &temp);
 	if (rc < 0)
 		chip->dt.shutdown_soc_threshold = -EINVAL;
 	else

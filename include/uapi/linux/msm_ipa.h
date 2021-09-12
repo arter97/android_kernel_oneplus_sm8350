@@ -264,6 +264,47 @@
 #define IPA_MAX_PDN_NUM_v4 5
 
 /**
+ * Macros duplicated from ipa_lnx_spearhead_stats.h and
+ * ipa_lnx_stats.h. All three macros should match.
+ * This needs to be updated whenever the header file structure
+ * and structure length macros are updated to match exactly
+ * the same. This is done to overcome backward and forward
+ * compatibility between userspace and driver spearhead structures.
+ */
+/* IPA Linux basic stats structure macros */
+#define IPA_LNX_PG_RECYCLE_STATS_STRUCT_LEN 32
+#define IPA_LNX_EXCEPTION_STATS_STRUCT_LEN 40
+#define IPA_LNX_ODL_EP_STATS_STRUCT_LEN 16
+#define IPA_LNX_HOLB_DISCARD_STATS_STRUCT_LEN 16
+#define IPA_LNX_HOLB_MONITOR_STATS_STRUCT_LEN 16
+#define IPA_LNX_HOLB_DROP_AND_MON_STATS_STRUCT_LEN (8 + 16 + 16)
+#define IPA_LNX_GENERIC_STATS_STRUCT_LEN (40 + 32 + 40 + 16 + 40)
+/* IPA Linux clock stats structures */
+#define IPA_LNX_PM_CLIENT_STATS_STRUCT_LEN 24
+#define IPA_LNX_CLOCK_STATS_STRUCT_LEN (24 + 24)
+/* Generic instance structures */
+#define IPA_LNX_GSI_RX_DEBUG_STATS_STRUCT_LEN 48
+#define IPA_LNX_GSI_TX_DEBUG_STATS_STRUCT_LEN 56
+#define IPA_LNX_GSI_DEBUG_STATS_STRUCT_LEN (8 + 48 + 56)
+#define IPA_LNX_PIPE_INFO_STATS_STRUCT_LEN 120
+/* IPA Linux wlan instance stats structures */
+#define IPA_LNX_WLAN_INSTANCE_INFO_STRUCT_LEN (32 + 112 + 120)
+#define IPA_LNX_WLAN_INST_STATS_STRUCT_LEN (8 + 264)
+/* IPA Linux eth instance stats structures */
+#define IPA_LNX_ETH_INSTANCE_INFO_STRUCT_LEN (16 + 112 + 120)
+#define IPA_LNX_ETH_INST_STATS_STRUCT_LEN (8 + 248)
+/* IPA Linux usb instance stats structures */
+#define IPA_LNX_USB_INSTANCE_INFO_STRUCT_LEN (16 + 112 + 120)
+#define IPA_LNX_USB_INST_STATS_STRUCT_LEN (8 + 248)
+/* IPA Linux mhip instance stats structures */
+#define IPA_LNX_MHIP_INSTANCE_INFO_STRUCT_LEN (16 + 112 + 120)
+#define IPA_LNX_MHIP_INST_STATS_STRUCT_LEN (8 + 248)
+/* IPA Linux Instance allocation info structures */
+#define IPA_LNX_EACH_INST_ALLOC_INFO_STRUCT_LEN (24 + 12 + 12 + 16)
+#define IPA_LNX_STATS_ALL_INFO_STRUCT_LEN (32 + 128 + 128 + 128)
+#define IPA_LNX_STATS_SPEARHEAD_CTX_STRUCT_LEN (8 + 4 + 416)
+
+/**
  * enum ipa_client_type - names for the various IPA "clients"
  * these are from the perspective of the clients, for e.g.
  * HSIC1_PROD means HSIC client is the producer and IPA is the
@@ -2577,13 +2618,17 @@ struct ipa_ioc_gsb_info {
 #define IPA_PCIE0_EP_ID		21
 #define IPA_PCIE1_EP_ID		22
 
+#define IPA_ETH0_EP_ID		31
+#define IPA_ETH1_EP_ID		32
+
 enum ipa_peripheral_ep_type {
 	IPA_DATA_EP_TYP_RESERVED = 0,
 	IPA_DATA_EP_TYP_HSIC = 1,
 	IPA_DATA_EP_TYP_HSUSB = 2,
 	IPA_DATA_EP_TYP_PCIE = 3,
 	IPA_DATA_EP_TYP_EMBEDDED = 4,
-	IPA_DATA_EP_TYP_BAM_DMUX,
+	IPA_DATA_EP_TYP_BAM_DMUX = 5,
+	IPA_DATA_EP_TYP_ETH,
 };
 
 struct ipa_ep_pair_info {
@@ -3165,6 +3210,7 @@ enum ipacm_hw_index_counter_virtual_type {
  * @pdn_cfg_type: type of the pdn config applied.
  * @enable: enable/disable pdn config type.
  * @u.collison_cfg.pdn_ip_addr: pdn_ip_address used in collision config.
+ * @u.collison_cfg.vlan_id; VLAN ID of the client.
  * @u.passthrough_cfg.pdn_ip_addr: pdn_ip_address used in passthrough config.
  * @u.passthrough_cfg.device_type: Device type of the client.
  * @u.passthrough_cfg.vlan_id: VLAN ID of the client.
@@ -3180,6 +3226,7 @@ struct ipa_ioc_pdn_config {
 	union {
 		struct ipa_pdn_ip_collision_cfg {
 			__u32 pdn_ip_addr;
+			__u16 vlan_id;
 		} collison_cfg;
 
 		struct ipa_pdn_ip_passthrough_cfg {

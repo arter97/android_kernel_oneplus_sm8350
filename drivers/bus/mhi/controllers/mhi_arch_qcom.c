@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.*/
+/* Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.*/
 
-#include <asm/dma-iommu.h>
 #include <linux/async.h>
 #include <linux/debugfs.h>
 #include <linux/device.h>
@@ -17,15 +16,27 @@
 #include <linux/slab.h>
 #include <linux/suspend.h>
 #include <linux/mhi.h>
+#include <linux/mhi_ssr.h>
 #include "mhi_qcom.h"
+
+/**
+ * struct mhi_bus_bw_cfg - Interconnect vote data
+ * @avg_bw: Vote for average bandwidth
+ * @peak_bw: Vote for peak bandwidth
+ */
+struct mhi_bus_bw_cfg {
+	u32 avg_bw;
+	u32 peak_bw;
+};
 
 struct arch_info {
 	struct mhi_dev *mhi_dev;
 	struct esoc_desc *esoc_client;
+	struct ssr_client_hook ssr_ops;
 	struct esoc_client_hook esoc_ops;
 	struct icc_path *icc_path;
-	u32 *icc_peak_bw;
-	u32 icc_peak_bw_len;
+	const char *icc_name;
+	struct mhi_bus_bw_cfg *bw_cfg_table;
 	struct msm_pcie_register_event pcie_reg_event;
 	struct pci_saved_state *pcie_state;
 	void *boot_ipc_log;
@@ -41,6 +52,7 @@ struct arch_info {
 #define HLOG "Host: "
 
 #define MHI_TSYNC_LOG_PAGES (2)
+#define MHI_BUS_BW_CFG_COUNT (5)
 
 #ifdef CONFIG_MHI_DEBUG
 
@@ -123,17 +135,24 @@ void mhi_arch_timesync_log(struct mhi_controller *mhi_cntrl, u64 remote_time)
 
 static int mhi_arch_set_bus_request(struct mhi_controller *mhi_cntrl, int index)
 {
+	int ret;
 	struct mhi_dev *mhi_dev = mhi_controller_get_devdata(mhi_cntrl);
 	struct arch_info *arch_info = mhi_dev->arch_info;
 
 	MHI_LOG("Setting bus request to index %d\n", index);
 
-	if (index >= arch_info->icc_peak_bw_len)
+	if (index >= MHI_BUS_BW_CFG_COUNT)
 		return -EINVAL;
 
-	if (arch_info->icc_path)
-		return icc_set_bw(arch_info->icc_path, 0,
-					arch_info->icc_peak_bw[index]);
+	ret = icc_set_bw(arch_info->icc_path,
+		arch_info->bw_cfg_table[index].avg_bw,
+		arch_info->bw_cfg_table[index].peak_bw);
+	if (ret) {
+		MHI_CNTRL_ERR("Could not set BW cfg: %d (%d %d), ret: %d\n",
+			      index, arch_info->bw_cfg_table[index].avg_bw,
+			      arch_info->bw_cfg_table[index].peak_bw, ret);
+		return ret;
+	}
 
 	/* default return success */
 	return 0;
@@ -437,15 +456,17 @@ int mhi_arch_pcie_init(struct mhi_controller *mhi_cntrl)
 	struct mhi_dev *mhi_dev = mhi_controller_get_devdata(mhi_cntrl);
 	struct arch_info *arch_info = mhi_dev->arch_info;
 	struct mhi_link_info *cur_link_info;
+	struct ssr_client_hook *ssr_ops;
 	char node[32];
 	int ret;
-	int size = 0;
 	u16 linkstat;
 
 	if (!arch_info) {
 		struct msm_pcie_register_event *reg_event;
 		struct pci_dev *root_port;
 		struct device_node *root_ofnode;
+		struct pci_dev *mhi_port;
+		struct device_node *mhi_ofnode;
 
 		arch_info = devm_kzalloc(&mhi_dev->pci_dev->dev,
 					 sizeof(*arch_info), GFP_KERNEL);
@@ -484,40 +505,51 @@ int mhi_arch_pcie_init(struct mhi_controller *mhi_cntrl)
 				of_property_read_bool(root_ofnode->parent,
 						      "qcom,drv-supported");
 
+		mhi_port = mhi_dev->pci_dev;
+		mhi_ofnode = mhi_port->dev.of_node;
+
 		/* get icc path from PCIe platform device */
-		arch_info->icc_path = of_icc_get(root_port->dev.parent->parent,
-						"ep_icc_path");
-		if (IS_ERR_OR_NULL(arch_info->icc_path)) {
-			ret = arch_info->icc_path ?
-				PTR_ERR(arch_info->icc_path) : -EINVAL;
+		ret = of_property_read_string(mhi_ofnode, "interconnect-names",
+					      &arch_info->icc_name);
+		if (ret) {
+			MHI_CNTRL_ERR("No interconnect name specified\n");
+			return -ENOENT;
+		}
+		arch_info->icc_path = of_icc_get(&mhi_port->dev,
+						arch_info->icc_name);
+		if (IS_ERR(arch_info->icc_path))  {
+			ret = PTR_ERR(arch_info->icc_path);
+			MHI_CNTRL_ERR("Interconnect path for %s not found, ret: %d\n",
+					arch_info->icc_name, ret);
 			return ret;
 		}
 
-		of_get_property(pdev->dev.of_node, "icc_peak_bw", &size);
-		if (!size)
-			return -EINVAL;
-
-		arch_info->icc_peak_bw_len = size / sizeof(u32);
-		arch_info->icc_peak_bw = devm_kcalloc(&mhi_dev->pci_dev->dev,
-						arch_info->icc_peak_bw_len,
-						sizeof(u32), GFP_KERNEL);
-		if (!arch_info->icc_peak_bw)
+		arch_info->bw_cfg_table = devm_kzalloc(&mhi_port->dev,
+						sizeof(*arch_info->bw_cfg_table)
+						* MHI_BUS_BW_CFG_COUNT,
+						GFP_KERNEL);
+		if (!arch_info->bw_cfg_table)
 			return -ENOMEM;
 
-		ret = of_property_read_u32_array(mhi_dev->pci_dev->dev.of_node,
-					"icc-peak-bw", arch_info->icc_peak_len);
-		if (ret)
-			return -EINVAL;
+		ret = of_property_read_u32_array(mhi_ofnode, "qcom,mhi-bus-bw-cfg",
+						(u32 *)arch_info->bw_cfg_table,
+						MHI_BUS_BW_CFG_COUNT * 2);
+		if (ret) {
+			MHI_CNTRL_ERR("Invalid bus BW config table\n");
+			return ret;
+		}
 
-		/* register with pcie rc for WAKE# events */
+		/* register with pcie rc for WAKE# or link state events */
 		reg_event = &arch_info->pcie_reg_event;
-		reg_event->events =
-			MSM_PCIE_EVENT_WAKEUP | MSM_PCIE_EVENT_L1SS_TIMEOUT;
+		reg_event->events = mhi_dev->allow_m1 ?
+			(MSM_PCIE_EVENT_WAKEUP) :
+			(MSM_PCIE_EVENT_WAKEUP | MSM_PCIE_EVENT_L1SS_TIMEOUT);
 
 		/* if drv supported register for drv connection events */
 		if (mhi_dev->drv_supported)
 			reg_event->events |= MSM_PCIE_EVENT_DRV_CONNECT |
 				MSM_PCIE_EVENT_DRV_DISCONNECT;
+
 		reg_event->user = mhi_dev->pci_dev;
 		reg_event->callback = mhi_arch_pci_link_state_cb;
 		reg_event->notify.data = mhi_cntrl;
@@ -542,6 +574,23 @@ int mhi_arch_pcie_init(struct mhi_controller *mhi_cntrl)
 						&mhi_dev->pci_dev->dev, "mdm");
 		if (IS_ERR_OR_NULL(arch_info->esoc_client)) {
 			MHI_CNTRL_ERR("Failed to register esoc client\n");
+
+			/*
+			 * In cases where esoc support is not present
+			 * sysfs is used for MHI SSR functionality
+			 */
+			ssr_ops = &arch_info->ssr_ops;
+			ssr_ops->name = "MHI_SSR";
+			ssr_ops->priv = mhi_cntrl;
+			ssr_ops->ssr_link_power_on =
+				mhi_arch_esoc_ops_power_on;
+			ssr_ops->ssr_link_power_off =
+				mhi_arch_esoc_ops_power_off;
+			ret = mhi_ssr_init(ssr_ops);
+
+			if (ret)
+				MHI_CNTRL_ERR("Failed to initialize SSR ops\n");
+
 		} else {
 			/* register for power on/off hooks */
 			struct esoc_client_hook *esoc_ops =
@@ -568,7 +617,9 @@ int mhi_arch_pcie_init(struct mhi_controller *mhi_cntrl)
 		 */
 		msm_pcie_pm_control(MSM_PCIE_DISABLE_PC, mhi_cntrl->bus,
 				    mhi_dev->pci_dev, NULL, 0);
+#ifdef CONFIG_PCI_QTI
 		mhi_dev->pci_dev->no_d3hot = true;
+#endif
 
 		mhi_cntrl->bw_scale = mhi_arch_bw_scale;
 
@@ -644,7 +695,8 @@ int mhi_arch_link_suspend(struct mhi_controller *mhi_cntrl)
 		TO_MHI_SUSPEND_MODE_STR(mhi_dev->suspend_mode));
 
 	/* disable inactivity timer */
-	msm_pcie_l1ss_timeout_disable(pci_dev);
+	if (!mhi_dev->allow_m1)
+		msm_pcie_l1ss_timeout_disable(pci_dev);
 
 	switch (mhi_dev->suspend_mode) {
 	case MHI_DEFAULT_SUSPEND:
@@ -676,7 +728,7 @@ int mhi_arch_link_suspend(struct mhi_controller *mhi_cntrl)
 	}
 
 exit_suspend:
-	if (ret)
+	if (ret && !mhi_dev->allow_m1)
 		msm_pcie_l1ss_timeout_enable(pci_dev);
 
 	MHI_LOG("Exited with ret:%d\n", ret);
@@ -764,7 +816,7 @@ int mhi_arch_link_resume(struct mhi_controller *mhi_cntrl)
 		break;
 	}
 
-	if (!ret)
+	if (!ret || !mhi_dev->allow_m1)
 		msm_pcie_l1ss_timeout_enable(pci_dev);
 
 	MHI_LOG("Exited with ret:%d\n", ret);

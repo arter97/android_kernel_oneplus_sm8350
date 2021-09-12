@@ -835,6 +835,14 @@ int qcom_scm_clear_ice_key(uint32_t index,  unsigned int food)
 }
 EXPORT_SYMBOL(qcom_scm_clear_ice_key);
 
+int qcom_scm_derive_raw_secret(phys_addr_t paddr_key, size_t key_size,
+			       phys_addr_t paddr_secret, size_t secret_size)
+{
+	return __qcom_scm_derive_raw_secret(__scm->dev, paddr_key, key_size,
+					    paddr_secret, secret_size);
+}
+EXPORT_SYMBOL(qcom_scm_derive_raw_secret);
+
 /**
  * qcom_scm_hdcp_available() - Check if secure environment supports HDCP.
  *

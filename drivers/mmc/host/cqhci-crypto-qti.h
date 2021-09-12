@@ -1,10 +1,10 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2020 - 2021, The Linux Foundation. All rights reserved.
  */
 
-#ifndef _UFSHCD_CRYPTO_QTI_H
-#define _UFSHCD_CRYPTO_QTI_H
+#ifndef _CQHCI_CRYPTO_QTI_H
+#define _CQHCI_CRYPTO_QTI_H
 
 #include "cqhci-crypto.h"
 
@@ -19,6 +19,12 @@ int cqhci_crypto_qti_init_crypto(struct cqhci_host *host,
 
 int cqhci_crypto_qti_debug(struct cqhci_host *host);
 
+#if IS_ENABLED(CONFIG_QTI_CRYPTO_FDE)
+int cqhci_crypto_qti_prep_desc(struct cqhci_host *host,
+				struct mmc_request *mrq,
+				u64 *ice_ctx);
+#endif
+
 #if IS_ENABLED(CONFIG_MMC_CQHCI_CRYPTO_QTI)
 void cqhci_crypto_qti_set_vops(struct cqhci_host *host);
 #else
@@ -28,4 +34,6 @@ void cqhci_crypto_qti_set_vops(struct cqhci_host *host)
 
 int cqhci_crypto_qti_resume(struct cqhci_host *host);
 
-#endif /* _UFSHCD_ICE_QTI_H */
+int cqhci_crypto_qti_recovery_finish(struct cqhci_host *host);
+
+#endif /* _CQHCI_CRYPTO_QTI_H */

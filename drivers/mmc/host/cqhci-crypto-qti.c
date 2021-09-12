@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2020, Linux Foundation. All rights reserved.
+ * Copyright (c) 2020 - 2021, Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -18,6 +18,9 @@
 #include "sdhci-pltfm.h"
 #include "cqhci-crypto-qti.h"
 #include <linux/crypto-qti-common.h>
+#if IS_ENABLED(CONFIG_QTI_CRYPTO_FDE)
+#include "../core/queue.h"
+#endif
 
 #define RAW_SECRET_SIZE 32
 #define MINIMUM_DUN_SIZE 512
@@ -29,6 +32,10 @@ static struct cqhci_host_crypto_variant_ops __maybe_unused cqhci_crypto_qti_vari
 	.disable = cqhci_crypto_qti_disable,
 	.resume = cqhci_crypto_qti_resume,
 	.debug = cqhci_crypto_qti_debug,
+	.recovery_finish = cqhci_crypto_qti_recovery_finish,
+#if IS_ENABLED(CONFIG_QTI_CRYPTO_FDE)
+	.prepare_crypto_desc = cqhci_crypto_qti_prep_desc,
+#endif
 };
 
 static bool ice_cap_idx_valid(struct cqhci_host *host,
@@ -46,7 +53,6 @@ static uint8_t get_data_unit_size_mask(unsigned int data_unit_size)
 
 	return data_unit_size / MINIMUM_DUN_SIZE;
 }
-
 
 void cqhci_crypto_qti_enable(struct cqhci_host *host)
 {
@@ -161,6 +167,7 @@ int cqhci_host_init_crypto_qti_spec(struct cqhci_host *host,
 	int err = 0;
 	unsigned int crypto_modes_supported[BLK_ENCRYPTION_MODE_MAX];
 	enum blk_crypto_mode_num blk_mode_num;
+	unsigned int num_slots = 0;
 
 	/* Default to disabling crypto */
 	host->caps &= ~CQHCI_CAP_CRYPTO_SUPPORT;
@@ -210,12 +217,17 @@ int cqhci_host_init_crypto_qti_spec(struct cqhci_host *host,
 				host->crypto_cap_array[cap_idx].sdus_mask * 512;
 	}
 
+	num_slots = cqhci_num_keyslots(host);
+
+#if IS_ENABLED(CONFIG_QTI_CRYPTO_FDE)
+	if (num_slots > 0)
+		--num_slots;
+#endif
 	host->mmc->ksm = keyslot_manager_create(host->mmc->parent,
-				       cqhci_num_keyslots(host), ksm_ops,
-				       BLK_CRYPTO_FEATURE_STANDARD_KEYS |
-				       BLK_CRYPTO_FEATURE_WRAPPED_KEYS,
-				       crypto_modes_supported,
-				       host);
+						num_slots, ksm_ops,
+						BLK_CRYPTO_FEATURE_WRAPPED_KEYS,
+						crypto_modes_supported,
+						host);
 
 	if (!host->mmc->ksm) {
 		err = -ENOMEM;
@@ -301,6 +313,63 @@ int cqhci_crypto_qti_init_crypto(struct cqhci_host *host,
 	return err;
 }
 
+#if IS_ENABLED(CONFIG_QTI_CRYPTO_FDE)
+int cqhci_crypto_qti_prep_desc(struct cqhci_host *host, struct mmc_request *mrq,
+			       u64 *ice_ctx)
+{
+	struct bio_crypt_ctx *bc;
+	struct mmc_queue_req *mqrq = container_of(mrq, struct mmc_queue_req,
+						  brq.mrq);
+	struct request *req = mmc_queue_req_to_req(mqrq);
+
+	int ret = 0;
+	struct ice_data_setting setting;
+	bool bypass = true;
+	short key_index = 0;
+	*ice_ctx = 0;
+
+	if (!req || !req->bio)
+		return ret;
+
+	if (!bio_crypt_should_process(req)) {
+		ret = crypto_qti_ice_config_start(req, &setting);
+		if (!ret) {
+			key_index = setting.crypto_data.key_index;
+			bypass = (rq_data_dir(req) == WRITE) ?
+				 setting.encr_bypass : setting.decr_bypass;
+			*ice_ctx = DATA_UNIT_NUM(req->__sector) |
+				   CRYPTO_CONFIG_INDEX(key_index) |
+				   CRYPTO_ENABLE(!bypass);
+		} else {
+			pr_err("%s crypto config failed err = %d\n", __func__,
+				ret);
+		}
+		return ret;
+	}
+
+	if (WARN_ON(!cqhci_is_crypto_enabled(host))) {
+		/*
+		 * Upper layer asked us to do inline encryption
+		 * but that isn't enabled, so we fail this request.
+		 */
+		return -EINVAL;
+	}
+
+	bc = req->bio->bi_crypt_context;
+
+	if (!cqhci_keyslot_valid(host, bc->bc_keyslot))
+		return -EINVAL;
+
+	if (ice_ctx) {
+		*ice_ctx = DATA_UNIT_NUM(bc->bc_dun[0]) |
+			   CRYPTO_CONFIG_INDEX(bc->bc_keyslot) |
+			   CRYPTO_ENABLE(true);
+	}
+
+	return 0;
+}
+#endif
+
 int cqhci_crypto_qti_debug(struct cqhci_host *host)
 {
 	return crypto_qti_debug(host->crypto_vops->priv);
@@ -315,6 +384,12 @@ EXPORT_SYMBOL(cqhci_crypto_qti_set_vops);
 int cqhci_crypto_qti_resume(struct cqhci_host *host)
 {
 	return crypto_qti_resume(host->crypto_vops->priv);
+}
+
+int cqhci_crypto_qti_recovery_finish(struct cqhci_host *host)
+{
+	keyslot_manager_reprogram_all_keys(host->mmc->ksm);
+	return 0;
 }
 
 MODULE_DESCRIPTION("Vendor specific CQHCI Crypto Engine Support");

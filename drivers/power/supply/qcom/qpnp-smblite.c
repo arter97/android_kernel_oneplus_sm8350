@@ -17,6 +17,7 @@
 #include <linux/log2.h>
 #include <linux/iio/consumer.h>
 #include <linux/pmic-voter.h>
+#include <linux/suspend.h>
 #include <linux/usb/typec.h>
 #include "smblite-reg.h"
 #include "smblite-lib.h"
@@ -136,6 +137,7 @@ struct smb_dt_props {
 	int			term_current_thresh_hi_ma;
 	int			term_current_thresh_lo_ma;
 	int			disable_suspend_on_collapse;
+	bool			remote_fg;
 };
 
 struct smblite {
@@ -180,13 +182,20 @@ static struct attribute *smblite_attrs[] = {
 };
 ATTRIBUTE_GROUPS(smblite);
 
+#define REVISION_V2	0x2
 static int smblite_chg_config_init(struct smblite *chip)
 {
 	struct smb_charger *chg = &chip->chg;
-	u8 val;
+	u8 val, rev4;
 	int rc = 0;
 
 	chg->subtype = (u8)of_device_get_match_data(chg->dev);
+
+	rc = smblite_lib_read(chg, REVID_REVISION4, &rev4);
+	if (rc < 0) {
+		pr_err("Couldn't read REVID_REVISION4 reg rc=%d\n", rc);
+		return rc;
+	}
 
 	switch (chg->subtype) {
 	case PM2250:
@@ -210,6 +219,11 @@ static int smblite_chg_config_init(struct smblite *chip)
 		chg->name = "PM5100_charger";
 		chg->connector_type = QTI_POWER_SUPPLY_CONNECTOR_MICRO_USB;
 		chg->use_extcon = true;
+
+		/* Enable HW WA for all PM5100 v1 targets. */
+		if (rev4 < REVISION_V2)
+			chg->wa_flags |= HDC_ICL_REDUCTION_WA;
+
 		break;
 	default:
 		pr_err("Unsupported PMIC subtype=%d\n", chg->subtype);
@@ -249,6 +263,7 @@ static int smblite_parse_dt_misc(struct smblite *chip, struct device_node *node)
 	if (rc < 0 || chip->dt.wd_bark_time < MIN_WD_BARK_TIME)
 		chip->dt.wd_bark_time = DEFAULT_WD_BARK_TIME;
 
+	chip->dt.remote_fg = of_property_read_bool(node, "qcom,remote-fg");
 
 	chip->dt.no_battery = of_property_read_bool(node,
 						"qcom,batteryless-platform");
@@ -307,6 +322,26 @@ static int smblite_parse_dt_misc(struct smblite *chip, struct device_node *node)
 
 	chg->concurrent_mode_supported = of_property_read_bool(node,
 					"qcom,concurrency-mode-supported");
+
+	return 0;
+}
+
+static int smblite_parse_dt_otg(struct smblite *chip, struct device_node *node)
+{
+	struct smb_charger *chg = &chip->chg;
+
+	chg->usb_id_gpio = chg->usb_id_irq = -EINVAL;
+
+	if (chg->connector_type == QTI_POWER_SUPPLY_CONNECTOR_TYPEC)
+		return 0;
+
+	if (of_find_property(node, "qcom,usb-id-gpio", NULL))
+		chg->usb_id_gpio = of_get_named_gpio(node, "qcom,usb-id-gpio", 0);
+
+	chg->usb_id_irq = of_irq_get_byname(node, "usb_id_irq");
+	if (chg->usb_id_irq < 0 || chg->usb_id_gpio < 0)
+		pr_err("OTG irq (%d) / gpio (%d) not defined\n",
+				chg->usb_id_irq, chg->usb_id_gpio);
 
 	return 0;
 }
@@ -411,6 +446,10 @@ static int smblite_parse_dt(struct smblite *chip)
 		return rc;
 
 	rc = smblite_parse_dt_adc_channels(chg);
+	if (rc < 0)
+		return rc;
+
+	rc = smblite_parse_dt_otg(chip, node);
 	if (rc < 0)
 		return rc;
 
@@ -674,6 +713,7 @@ static int smblite_batt_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_TIME_TO_FULL_NOW:
 		rc = smblite_lib_get_prop_from_bms(chg,
 				SMB5_QG_TIME_TO_FULL_NOW, &val->intval);
+		break;
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
 		/* For battery, INPUT_CURRENT_LIMIT equates to INPUT_SUSPEND */
 		rc = smblite_lib_get_prop_input_suspend(chg, &val->intval);
@@ -1057,28 +1097,6 @@ static int smblite_init_connector_type(struct smb_charger *chg)
 	return 0;
 }
 
-static int smblite_init_otg(struct smblite *chip)
-{
-	struct smb_charger *chg = &chip->chg;
-
-	chg->usb_id_gpio = chg->usb_id_irq = -EINVAL;
-
-	if (chg->connector_type == QTI_POWER_SUPPLY_CONNECTOR_TYPEC)
-		return 0;
-
-	if (of_find_property(chg->dev->of_node, "qcom,usb-id-gpio", NULL))
-		chg->usb_id_gpio = of_get_named_gpio(chg->dev->of_node,
-					"qcom,usb-id-gpio", 0);
-
-	chg->usb_id_irq = of_irq_get_byname(chg->dev->of_node,
-						"usb_id_irq");
-	if (chg->usb_id_irq < 0 || chg->usb_id_gpio < 0)
-		pr_err("OTG irq (%d) / gpio (%d) not defined\n",
-				chg->usb_id_irq, chg->usb_id_gpio);
-
-	return 0;
-}
-
 static int smblite_init_hw(struct smblite *chip)
 {
 	struct smb_charger *chg = &chip->chg;
@@ -1088,14 +1106,6 @@ static int smblite_init_hw(struct smblite *chip)
 
 	if (chip->dt.no_battery)
 		chg->fake_capacity = 50;
-
-	if (chip->dt.batt_profile_fcc_ua < 0)
-		smblite_lib_get_charge_param(chg, &chg->param.fcc,
-				&chg->batt_profile_fcc_ua);
-
-	if (chip->dt.batt_profile_fv_uv < 0)
-		smblite_lib_get_charge_param(chg, &chg->param.fv,
-				&chg->batt_profile_fv_uv);
 
 	smblite_lib_get_charge_param(chg, &chg->param.aicl_5v_threshold,
 				&chg->default_aicl_5v_threshold_mv);
@@ -1108,11 +1118,9 @@ static int smblite_init_hw(struct smblite *chip)
 		return rc;
 	}
 
-	rc = smblite_init_otg(chip);
-	if (rc < 0) {
-		dev_err(chg->dev, "Couldn't init otg rc=%d\n", rc);
-		return rc;
-	}
+	/* Enable HVDCP detection only for PM5100 targets */
+	if (chg->subtype == PM5100)
+		smblite_lib_hvdcp_detect_enable(chg, true);
 
 	rc = schgm_flashlite_init(chg);
 	if (rc < 0) {
@@ -1125,24 +1133,6 @@ static int smblite_init_hw(struct smblite *chip)
 		pr_err("Couldn't disable ICL override rc=%d\n", rc);
 		return rc;
 	}
-
-	/* vote 0mA on usb_icl for non battery platforms */
-	vote(chg->usb_icl_votable,
-		DEFAULT_VOTER, chip->dt.no_battery, 0);
-	vote(chg->fcc_votable, HW_LIMIT_VOTER,
-		chip->dt.batt_profile_fcc_ua > 0, chip->dt.batt_profile_fcc_ua);
-	vote(chg->fv_votable, HW_LIMIT_VOTER,
-		chip->dt.batt_profile_fv_uv > 0, chip->dt.batt_profile_fv_uv);
-	vote(chg->fcc_votable,
-		BATT_PROFILE_VOTER, chg->batt_profile_fcc_ua > 0,
-		chg->batt_profile_fcc_ua);
-	vote(chg->fv_votable,
-		BATT_PROFILE_VOTER, chg->batt_profile_fv_uv > 0,
-		chg->batt_profile_fv_uv);
-
-	/* Some h/w limit maximum supported ICL */
-	vote(chg->usb_icl_votable, HW_LIMIT_VOTER,
-			chip->dt.usb_icl_ua > 0, chip->dt.usb_icl_ua);
 
 	/*
 	 * AICL configuration: enable aicl and aicl rerun and based on DT
@@ -1174,13 +1164,6 @@ static int smblite_init_hw(struct smblite *chip)
 			dev_err(chg->dev, "Couldn't config AICL rc=%d\n", rc);
 			return rc;
 		}
-	}
-
-	/* enable the charging path */
-	rc = vote(chg->chg_disable_votable, DEFAULT_VOTER, false, 0);
-	if (rc < 0) {
-		dev_err(chg->dev, "Couldn't enable charging rc=%d\n", rc);
-		return rc;
 	}
 
 	/* configure VBUS for software control */
@@ -1264,6 +1247,45 @@ static int smblite_init_hw(struct smblite *chip)
 	rc = smblite_configure_recharging(chip);
 	if (rc < 0)
 		return rc;
+
+	return rc;
+}
+
+static int smblite_init_votables(struct smblite *chip)
+{
+	struct smb_charger *chg = &chip->chg;
+	int rc;
+
+	if (chip->dt.batt_profile_fcc_ua < 0)
+		smblite_lib_get_charge_param(chg, &chg->param.fcc,
+				&chg->batt_profile_fcc_ua);
+
+	if (chip->dt.batt_profile_fv_uv < 0)
+		smblite_lib_get_charge_param(chg, &chg->param.fv,
+				&chg->batt_profile_fv_uv);
+
+	/* vote 0mA on usb_icl for non battery platforms */
+	vote(chg->usb_icl_votable,
+		DEFAULT_VOTER, chip->dt.no_battery, 0);
+	vote(chg->fcc_votable, HW_LIMIT_VOTER,
+		chip->dt.batt_profile_fcc_ua > 0, chip->dt.batt_profile_fcc_ua);
+	vote(chg->fv_votable, HW_LIMIT_VOTER,
+		chip->dt.batt_profile_fv_uv > 0, chip->dt.batt_profile_fv_uv);
+	vote(chg->fcc_votable,
+		BATT_PROFILE_VOTER, chg->batt_profile_fcc_ua > 0,
+		chg->batt_profile_fcc_ua);
+	vote(chg->fv_votable,
+		BATT_PROFILE_VOTER, chg->batt_profile_fv_uv > 0,
+		chg->batt_profile_fv_uv);
+
+	/* Some h/w limit maximum supported ICL */
+	vote(chg->usb_icl_votable, HW_LIMIT_VOTER,
+			chip->dt.usb_icl_ua > 0, chip->dt.usb_icl_ua);
+
+	/* enable the charging path */
+	rc = vote(chg->chg_disable_votable, DEFAULT_VOTER, false, 0);
+	if (rc < 0)
+		dev_err(chg->dev, "Couldn't enable charging rc=%d\n", rc);
 
 	return rc;
 }
@@ -1621,6 +1643,18 @@ static void smblite_disable_interrupts(struct smb_charger *chg)
 	}
 }
 
+static void smblite_free_interrupts(struct smb_charger *chg)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(smblite_irqs); i++)
+		if (smblite_irqs[i].irq > 0)
+			devm_free_irq(chg->dev, smblite_irqs[i].irq, smblite_irqs[i].irq_data);
+
+	if (chg->usb_id_irq > 0 && chg->usb_id_gpio > 0)
+		devm_free_irq(chg->dev, chg->usb_id_irq, chg);
+}
+
 #if defined(CONFIG_DEBUG_FS)
 
 static int force_batt_psy_update_write(void *data, u64 val)
@@ -1940,6 +1974,7 @@ static int smblite_probe(struct platform_device *pdev)
 
 	chg->chg_param.iio_read = smblite_direct_iio_read;
 	chg->chg_param.iio_write = smblite_direct_iio_write;
+	chg->is_fg_remote = chip->dt.remote_fg;
 
 	rc = smblite_lib_init(chg);
 	if (rc < 0) {
@@ -1954,6 +1989,12 @@ static int smblite_probe(struct platform_device *pdev)
 	rc = smblite_init_hw(chip);
 	if (rc < 0) {
 		pr_err("Couldn't initialize hardware rc=%d\n", rc);
+		goto cleanup;
+	}
+
+	rc = smblite_init_votables(chip);
+	if (rc < 0) {
+		pr_err("Couldn't initialize votables rc=%d\n", rc);
 		goto cleanup;
 	}
 
@@ -2067,6 +2108,157 @@ static void smblite_shutdown(struct platform_device *pdev)
 				TYPEC_POWER_ROLE_CMD_MASK, EN_SNK_ONLY_BIT);
 }
 
+static int smblite_restore(struct device *dev)
+{
+	int i, rc = 0;
+	struct smblite *chip = dev_get_drvdata(dev);
+	struct smb_charger *chg = &chip->chg;
+	union power_supply_propval val;
+	int usb_present, batt_present;
+
+	rc = smblite_init_hw(chip);
+	if (rc < 0) {
+		pr_err("Couldn't initialize hardware rc=%d\n", rc);
+		return rc;
+	}
+
+	rerun_election(chg->usb_icl_votable);
+	rerun_election(chg->fcc_votable);
+	rerun_election(chg->fv_votable);
+
+	rerun_election(chg->chg_disable_votable);
+
+	rc = smblite_determine_initial_status(chip);
+	if (rc < 0) {
+		pr_err("Couldn't determine initial status rc=%d\n",
+			rc);
+		return rc;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(smblite_irqs); i++) {
+		if (smblite_irqs[i].irq <= 0)
+			continue;
+
+		rc = devm_request_threaded_irq(chg->dev, smblite_irqs[i].irq,
+						NULL, smblite_irqs[i].handler,
+						IRQF_ONESHOT,
+						smblite_irqs[i].irq_data->name,
+						smblite_irqs[i].irq_data);
+		if (rc < 0) {
+			pr_err("Couldn't request irq %d\n",
+				smblite_irqs[i].irq);
+			return rc;
+		}
+
+		if (smblite_irqs[i].wake)
+			enable_irq_wake(smblite_irqs[i].irq);
+
+		smblite_irqs[i].enabled = true;
+	}
+
+	/* register the USB-id irq */
+	if (chg->usb_id_irq > 0 && chg->usb_id_gpio > 0) {
+		rc = devm_request_threaded_irq(chg->dev,
+				chg->usb_id_irq, NULL,
+				smblite_usb_id_irq_handler,
+				IRQF_ONESHOT
+				| IRQF_TRIGGER_FALLING
+				| IRQF_TRIGGER_RISING,
+				"smblite_id_irq", chg);
+		if (rc < 0) {
+			pr_err("Failed to register id-irq rc=%d\n", rc);
+			return rc;
+		}
+		enable_irq_wake(chg->usb_id_irq);
+	}
+
+	/*
+	 * Temp change IRQ voted for disable before it is enabled.
+	 * Hence re-run election to disable it.
+	 */
+	rerun_election(chg->temp_change_irq_disable_votable);
+
+	rc = smblite_lib_get_prop_usb_present(chg, &val);
+	if (rc < 0) {
+		pr_err("Couldn't get usb present rc=%d\n", rc);
+		return rc;
+	}
+	usb_present = val.intval;
+
+	rc = smblite_lib_get_prop_batt_present(chg, &val);
+	if (rc < 0) {
+		pr_err("Couldn't get batt present rc=%d\n", rc);
+		return rc;
+	}
+	batt_present = val.intval;
+
+	pr_debug("SMBLITE: USB Present=%d Battery present=%d\n",
+		usb_present, batt_present);
+
+	return rc;
+}
+
+static int smblite_freeze(struct device *dev)
+{
+	struct smblite *chip = dev_get_drvdata(dev);
+
+	smblite_free_interrupts(&chip->chg);
+
+	return 0;
+}
+
+static int smblite_suspend(struct device *dev)
+{
+	int rc = 0;
+	struct smblite *chip = dev_get_drvdata(dev);
+
+	if (chip->dt.remote_fg) {
+		rc = remote_bms_suspend();
+		if (rc < 0) {
+			pr_err("Couldn't suspend remote-fg, rc=%d\n", rc);
+			return rc;
+		}
+	}
+
+#ifdef CONFIG_DEEPSLEEP
+	if (mem_sleep_current == PM_SUSPEND_MEM)
+		return smblite_freeze(dev);
+#endif
+
+	return rc;
+}
+
+static int smblite_resume(struct device *dev)
+{
+	int rc = 0;
+	struct smblite *chip = dev_get_drvdata(dev);
+
+#ifdef CONFIG_DEEPSLEEP
+	if (mem_sleep_current == PM_SUSPEND_MEM) {
+		rc = smblite_restore(dev);
+		if (rc < 0)
+			return rc;
+	}
+#endif
+
+	if (chip->dt.remote_fg) {
+		rc = remote_bms_resume();
+		if (rc < 0) {
+			pr_err("Couldn't resume remote-fg, rc=%d\n", rc);
+			return rc;
+		}
+	}
+
+	return rc;
+}
+
+static const struct dev_pm_ops smblite_pm_ops = {
+	.freeze = smblite_freeze,
+	.restore = smblite_restore,
+	.suspend = smblite_suspend,
+	.resume = smblite_resume,
+};
+
 static const struct of_device_id match_table[] = {
 	{
 		.compatible = "qcom,qpnp-smblite",
@@ -2083,6 +2275,7 @@ static struct platform_driver smblite_driver = {
 	.driver		= {
 		.name		= "qcom,qpnp-smblite",
 		.of_match_table	= match_table,
+		.pm = &smblite_pm_ops,
 	},
 	.probe		= smblite_probe,
 	.remove		= smblite_remove,
