@@ -228,6 +228,15 @@ static const struct freq_tbl ftbl_video_cc_mvs1_clk_src[] = {
 	{ }
 };
 
+static const struct freq_tbl ftbl_video_cc_mvs1_clk_src_direwolf_v2[] = {
+	F(840000000, P_VIDEO_PLL1_OUT_MAIN, 1, 0, 0),
+	F(1098000000, P_VIDEO_PLL1_OUT_MAIN, 1, 0, 0),
+	F(1332000000, P_VIDEO_PLL1_OUT_MAIN, 1, 0, 0),
+	F(1600000000, P_VIDEO_PLL1_OUT_MAIN, 1, 0, 0),
+	F(1800000000, P_VIDEO_PLL1_OUT_MAIN, 1, 0, 0),
+	{ }
+};
+
 static struct clk_rcg2 video_cc_mvs1_clk_src = {
 	.cmd_rcgr = 0xbb4,
 	.mnd_width = 0,
@@ -541,7 +550,7 @@ static const struct regmap_config video_cc_direwolf_regmap_config = {
 	.reg_bits = 32,
 	.reg_stride = 4,
 	.val_bits = 32,
-	.max_register = 0xf4c,
+	.max_register = 0x1008,
 	.fast_io = true,
 };
 
@@ -557,9 +566,41 @@ static struct qcom_cc_desc video_cc_direwolf_desc = {
 
 static const struct of_device_id video_cc_direwolf_match_table[] = {
 	{ .compatible = "qcom,direwolf-videocc" },
+	{ .compatible = "qcom,direwolf-videocc-v2" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, video_cc_direwolf_match_table);
+
+static void video_cc_direwolf_fixup_direwolfv2(struct regmap *regmap)
+{
+	video_cc_sleep_clk_src.cmd_rcgr = 0xf38;
+	video_cc_xo_clk_src.cmd_rcgr = 0xf14;
+
+	video_cc_sleep_clk.halt_reg = 0xf58;
+	video_cc_sleep_clk.clkr.enable_reg = 0xf58;
+
+	video_cc_xo_clk.halt_reg = 0xf34;
+	video_cc_xo_clk.clkr.enable_reg = 0xf34;
+
+	video_cc_mvs1_clk_src.freq_tbl = ftbl_video_cc_mvs1_clk_src_direwolf_v2;
+	video_cc_mvs1_clk_src.clkr.vdd_data.rate_max[VDD_HIGH] = 1600000000;
+	video_cc_mvs1_clk_src.clkr.vdd_data.rate_max[VDD_HIGH_L1] = 1800000000;
+}
+
+static int video_cc_direwolf_fixup(struct platform_device *pdev, struct regmap *regmap)
+{
+	const char *compat = NULL;
+	int compatlen;
+
+	compat = of_get_property(pdev->dev.of_node, "compatible", &compatlen);
+	if (!compat || compatlen <= 0)
+		return -EINVAL;
+
+	if (!strcmp(compat, "qcom,direwolf-videocc-v2"))
+		video_cc_direwolf_fixup_direwolfv2(regmap);
+
+	return 0;
+}
 
 static int video_cc_direwolf_probe(struct platform_device *pdev)
 {
@@ -575,6 +616,10 @@ static int video_cc_direwolf_probe(struct platform_device *pdev)
 		return ret;
 
 	ret = pm_runtime_get_sync(&pdev->dev);
+	if (ret)
+		return ret;
+
+	ret = video_cc_direwolf_fixup(pdev, regmap);
 	if (ret)
 		return ret;
 
