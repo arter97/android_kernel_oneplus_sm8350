@@ -129,6 +129,11 @@ void sdhci_dumpregs(struct sdhci_host *host)
 #endif
 
 	SDHCI_DUMP("============================================\n");
+#if defined(CONFIG_SDC_QTI)
+	/* crash the system upon setting this sysfs. */
+	if (host->mmc->crash_on_err)
+		BUG_ON(1);
+#endif
 }
 EXPORT_SYMBOL_GPL(sdhci_dumpregs);
 
