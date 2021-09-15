@@ -892,6 +892,15 @@ config SA_VIDEOCC_DIREWOLF
 	  Say Y if you want to support video devices and functionality such as
 	  video encode/decode.
 
+config SM_GCC_SCUBA
+	tristate "SCUBA Global Clock Controller"
+	depends on COMMON_CLK_QCOM
+	help
+	  Support for the global clock controller on Qualcomm Technologies, Inc.
+	  SCUBA devices.
+	  Say Y if you want to use peripheral devices such as UART, SPI, I2C,
+	  USB, UFS, SD/eMMC, video encode/decode, camera etc.
+
 endif
 
 config VIRTIO_CLK
