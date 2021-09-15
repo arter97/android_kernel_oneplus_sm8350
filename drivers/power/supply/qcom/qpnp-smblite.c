@@ -250,6 +250,7 @@ static int smblite_chg_config_init(struct smblite *chip)
 #define DEFAULT_WD_BARK_TIME		16
 #define DEFAULT_FCC_STEP_SIZE_UA	100000
 #define DEFAULT_FCC_STEP_UPDATE_DELAY_MS	1000
+#define DEFAULT_FCC_STEP_START_UA	500000
 static int smblite_parse_dt_misc(struct smblite *chip, struct device_node *node)
 {
 	int rc = 0, byte_len;
@@ -319,6 +320,11 @@ static int smblite_parse_dt_misc(struct smblite *chip, struct device_node *node)
 					&chg->chg_param.fcc_step_size_ua);
 	if (chg->chg_param.fcc_step_size_ua <= 0)
 		chg->chg_param.fcc_step_size_ua = DEFAULT_FCC_STEP_SIZE_UA;
+
+	rc = of_property_read_u32(node, "qcom,fcc-step-start-ua",
+					&chg->chg_param.fcc_step_start_ua);
+	if (rc < 0)
+		chg->chg_param.fcc_step_start_ua = DEFAULT_FCC_STEP_START_UA;
 
 	chg->concurrent_mode_supported = of_property_read_bool(node,
 					"qcom,concurrency-mode-supported");
