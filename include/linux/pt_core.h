@@ -167,6 +167,10 @@ struct pt_core_platform_data {
 	u8 panel_id_support;
 
 	struct device_node *node;
+	struct pinctrl *pinctrl;
+	struct pinctrl_state *pins_active;
+	struct pinctrl_state *pins_suspend;
+	struct pinctrl_state *pins_release;
 };
 
 struct touch_framework {

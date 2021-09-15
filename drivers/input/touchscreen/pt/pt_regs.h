@@ -120,8 +120,13 @@
 #define CONFIG_PM_SLEEP
 #endif
 
-#ifndef CONFIG_PM_RUNTIME
-#define CONFIG_PM_RUNTIME
+/* Pin Control Macro Enablement */
+#ifndef PT_PINCTRL_EN
+#define PT_PINCTRL_EN
+#endif
+
+#ifndef TT7XXX_EXAMPLE
+#define TT7XXX_EXAMPLE
 #endif
 
 /*
