@@ -14125,7 +14125,8 @@ void csr_update_pmk_cache_ft(struct mac_context *mac, uint32_t vdev_id,
 			 (scan_res->BssDescriptor.mdie[1] << 8));
 		sme_debug("Scan_res MDID:0x%x copied to PMKSA",
 			  pmksa.mdid.mobility_domain);
-		qdf_copy_macaddr(&pmksa.bssid, &pmk_cache->BSSID);
+		if (pmk_cache)
+			qdf_copy_macaddr(&pmksa.bssid, &pmk_cache->BSSID);
 
 		status = wlan_crypto_update_pmk_cache_ft(vdev, &pmksa);
 		if (QDF_IS_STATUS_ERROR(status))
@@ -21077,7 +21078,6 @@ csr_process_roam_sync_callback(struct mac_context *mac_ctx,
 		csr_roam_invoke_timer_stop(mac_ctx, session_id);
 		csr_roam_call_callback(mac_ctx, session_id, NULL, 0,
 				eCSR_ROAM_ABORT, eCSR_ROAM_RESULT_SUCCESS);
-		vdev_roam_params->roam_invoke_in_progress = false;
 		goto end;
 	case SIR_ROAM_SYNCH_NAPI_OFF:
 		csr_roam_call_callback(mac_ctx, session_id, NULL, 0,
