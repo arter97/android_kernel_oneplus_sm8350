@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2014-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2019, 2021 The Linux Foundation. All rights reserved.
  */
 #include <linux/module.h>
 #include <linux/suspend.h>
@@ -60,7 +60,7 @@ static int smp2p_sleepstate_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct device_node *node = dev->of_node;
 
-	state = qcom_smem_state_get(&pdev->dev, 0, &ret);
+	state = qcom_smem_state_get(&pdev->dev, NULL, &ret);
 	if (IS_ERR(state))
 		return PTR_ERR(state);
 	qcom_smem_state_update_bits(state, AWAKE_BIT, AWAKE_BIT);
