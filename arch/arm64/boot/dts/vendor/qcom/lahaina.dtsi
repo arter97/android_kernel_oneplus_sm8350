@@ -27,7 +27,7 @@
 / {
 	model = "Qualcomm Technologies, Inc. Lahaina";
 	compatible = "qcom,lahaina";
-	qcom,msm-id = <415 0x10000>, <456 0x10000>;
+	qcom,msm-id = <415 0x10000>, <456 0x10000>, <501 0x10000>;
 	interrupt-parent = <&intc>;
 
 	#address-cells = <2>;
@@ -51,7 +51,7 @@
 
 	aliases {
 		ufshc1 = &ufshc_mem; /* Embedded UFS Slot */
-		sdhc2 = &sdhc_2; /* SDC2 SD card slot */
+		sdhc1 = &sdhc_2; /* SDC2 SD card slot */
 		serial0 = &qupv3_se3_2uart;
 		hsuart0 = &qupv3_se18_4uart;
 		pci-domain0 = &pcie0; /* PCIe0 domain */
@@ -527,6 +527,20 @@
 	splash_memory:splash_region {
 		reg = <0x0 0xe1000000 0x0 0x02300000>;
 		label = "cont_splash_region";
+	};
+
+	/*
+	 * Demura memory regions are to be commented out if
+	 * feature not in use.
+	 */
+	demura_memory_0: demura_region_0 {
+		reg = <0x0 0x0 0x0 0x0>;
+		label = "demura hfc region 0";
+	};
+
+	demura_memory_1: demura_region_1 {
+		reg = <0x0 0x0 0x0 0x0>;
+		label = "demura hfc region 1";
 	};
 
 	dfps_data_memory: dfps_data_region {
@@ -2221,7 +2235,7 @@
 			interrupt-parent = <&ipcc_mproc>;
 			interrupts = <IPCC_CLIENT_SPSS
 				      IPCC_MPROC_SIGNAL_TZ
-				      IRQ_TYPE_EDGE_RISING>;
+				      IRQ_TYPE_LEVEL_HIGH>;
 			label = "spss";
 		};
 	};
@@ -2470,6 +2484,14 @@
 		interrupt-names = "dcvsh0_int", "dcvsh1_int", "dcvsh2_int";
 
 		#freq-domain-cells = <2>;
+	};
+
+	qcom,cpufreq-hw-debug@18591000 {
+		compatible = "qcom,cpufreq-hw-epss-debug";
+		reg = <0x18591000 0x800>;
+		reg-names = "domain-top";
+		qcom,freq-hw-domain = <&cpufreq_hw 0>, <&cpufreq_hw 1>,
+					<&cpufreq_hw 2>;
 	};
 
 	/* CAM_CC GDSCs */
@@ -4363,7 +4385,7 @@
 			interrupt-parent = <&ipcc_mproc>;
 			interrupts = <IPCC_CLIENT_SPSS
 				      IPCC_MPROC_SIGNAL_GLINK_QMP
-				      IRQ_TYPE_EDGE_RISING>;
+				      IRQ_TYPE_LEVEL_HIGH>;
 
 			reg = <0x1885008 0x8>,
 			      <0x1885010 0x4>;
@@ -4640,6 +4662,7 @@
 		qcom,use-64-bit-dma-mask;
 		qcom,ipa-endp-delay-wa;
 		qcom,lan-rx-napi;
+		qcom,lan-rx-ring-size = <224>;
 		qcom,tx-napi;
 		qcom,wan-use-skb-page;
 		qcom,rmnet-ctl-enable;
@@ -4682,7 +4705,7 @@
 		qcom,bus-vector-names = "MIN", "SVS2", "SVS", "NOMINAL",
 			"TURBO";
 		qcom,throughput-threshold = <600 2500 5000>;
-		qcom,scaling-exceptions = <>;
+		qcom,scaling-exceptions = "wdi", "100", "600", "1200";
 
 		/* smp2p information */
 		qcom,smp2p_map_ipa_1_out {
@@ -5200,6 +5223,8 @@
 	qcom,guestvm_loader {
 		compatible = "qcom,guestvm-loader";
 		image_to_be_loaded = "trustedvm";
+		qcom,reserved-cpus = <4 5>;
+		qcom,unisolate-timeout-ms = <8000>;
 	};
 
 	ssc_sensors: qcom,msm-ssc-sensors {
@@ -5243,6 +5268,9 @@
 		qcom,spcom-soc2sp-rmb-sp-ssr-bit = <0>;
 		qcom,boot-enabled;
 		status = "ok";
+
+		vreg_sp-supply = <&spss_vreg>;
+		gpio_sp-supply = <&spss_gpio_vreg>;
 	};
 
 	spss_utils: qcom,spss_utils {
@@ -5368,6 +5396,7 @@
 		reg-names = "smmu_iova_ipa", "tcs_cmd";
 		wlan-en-gpio = <&tlmm 64 0>;
 		qcom,bt-en-gpio = <&tlmm 65 0>;
+		qcom,sw-ctrl-gpio = <&tlmm 153 0>;
 		pinctrl-names = "wlan_en_active", "wlan_en_sleep";
 		pinctrl-0 = <&cnss_wlan_en_active>;
 		pinctrl-1 = <&cnss_wlan_en_sleep>;
@@ -5378,6 +5407,7 @@
 		qcom,tcs_offset_int_pow_amp_vreg = <0x4D0>;
 		use-pm-domain;
 		cnss-enable-self-recovery;
+		qcom,same-dt-multi-dev;
 
 		vdd-wlan-aon-supply = <&S2E>;
 		qcom,vdd-wlan-aon-config = <950000 952000 0 0 1>;

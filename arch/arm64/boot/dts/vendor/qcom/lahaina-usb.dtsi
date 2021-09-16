@@ -40,6 +40,7 @@
 		qcom,core-clk-rate = <200000000>;
 		qcom,core-clk-rate-hs = <66666667>;
 		qcom,num-gsi-evt-buffs = <0x3>;
+		qcom,pm-qos-latency = <44>;
 		qcom,gsi-reg-offset =
 			<0x0fc /* GSI_GENERAL_CFG */
 			0x110 /* GSI_DBL_ADDR_L */
@@ -133,8 +134,8 @@
 		resets = <&clock_gcc GCC_QUSB2PHY_PRIM_BCR>;
 		reset-names = "phy_reset";
 		qcom,param-override-seq =
-			<0x63 0x6c	/* override_x0 */
-			 0xC8 0x70	/* override_x1 */
+			<0xe6 0x6c	/* override_x0 */
+			 0x0b 0x70	/* override_x1 */
 			 0x17 0x74>;	/* override x2 */
 	};
 
@@ -235,7 +236,7 @@
 			USB3_DP_QSERDES_TXA_RCV_DETECT_LVL_2 0x12 0
 			USB3_DP_QSERDES_TXA_PI_QEC_CTRL 0x21 0
 			USB3_DP_QSERDES_RXA_UCDR_FO_GAIN 0x0A 0
-			USB3_DP_QSERDES_RXA_UCDR_SO_GAIN 0x05 0
+			USB3_DP_QSERDES_RXA_UCDR_SO_GAIN 0x03 0
 			USB3_DP_QSERDES_RXA_UCDR_FASTLOCK_FO_GAIN 0x2F 0
 			USB3_DP_QSERDES_RXA_UCDR_SO_SATURATION_AND_ENABLE 0x7F 0
 			USB3_DP_QSERDES_RXA_UCDR_FASTLOCK_COUNT_LOW 0xFF 0
@@ -281,7 +282,7 @@
 			USB3_DP_QSERDES_TXB_LANE_MODE_5 0x3F 0
 			USB3_DP_QSERDES_TXB_RCV_DETECT_LVL_2 0x12 0
 			USB3_DP_QSERDES_TXB_PI_QEC_CTRL 0x21 0
-			USB3_DP_QSERDES_RXB_UCDR_SO_GAIN 0x05 0
+			USB3_DP_QSERDES_RXB_UCDR_SO_GAIN 0x03 0
 			USB3_DP_QSERDES_RXB_UCDR_FO_GAIN 0x0A 0
 			USB3_DP_QSERDES_RXB_UCDR_FASTLOCK_FO_GAIN 0x2F 0
 			USB3_DP_QSERDES_RXB_UCDR_SO_SATURATION_AND_ENABLE 0x7F 0
