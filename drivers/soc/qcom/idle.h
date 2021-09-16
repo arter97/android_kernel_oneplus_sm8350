@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 
 /*
- * Copyright (c) 2007-2009,2012-2014, 2018-2019, 2021 The Linux Foundation.
+ * Copyright (c) 2007-2009,2012-2014, 2018-2019, 2021 The Linux Foundation. All rights reserved.
  */
 
 #ifndef _ARCH_ARM_MACH_MSM_IDLE_H_
