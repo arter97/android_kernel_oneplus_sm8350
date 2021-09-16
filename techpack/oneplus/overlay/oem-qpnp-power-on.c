@@ -4,65 +4,6 @@ static int
 qpnp_pon_masked_write(struct qpnp_pon *pon, u16 addr, u8 mask, u8 val);
 static struct qpnp_pon_config *qpnp_get_cfg(struct qpnp_pon *pon, u32 pon_type);
 
-#if IS_ENABLED(CONFIG_PARAM_READ_WRITE)
-int check_powerkey_count(int press)
-{
-	int ret = 0;
-	int param_poweroff_count = 0;
-
-	ret = get_param_by_index_and_offset(13, 0x30, &param_poweroff_count,
-	      sizeof(param_poweroff_count));
-
-	if (press)
-		param_poweroff_count++;
-	else
-		param_poweroff_count--;
-
-	ret = set_param_by_index_and_offset(13, 0x30, &param_poweroff_count,
-	      sizeof(param_poweroff_count));
-	pr_info("param_poweroff_count=%d\n", param_poweroff_count);
-	return 0;
-}
-#else
-int check_powerkey_count(int press)
-{
-	return 0;
-}
-#endif
-
-int qpnp_powerkey_state_check(struct qpnp_pon *pon, int up)
-{
-	int rc = 0;
-
-	if (get_boot_mode() !=  MSM_BOOT_MODE_NORMAL)
-		return 0;
-
-	if (up) {
-		rc = atomic_read(&pon->press_count);
-		if (rc < 1) {
-			atomic_inc(&pon->press_count);
-			check_powerkey_count(1);
-		}
-	} else {
-		rc = atomic_read(&pon->press_count);
-		if (rc > 0) {
-			atomic_dec(&pon->press_count);
-			check_powerkey_count(0);
-		}
-	}
-	return 0;
-}
-
-static void up_work_func(struct work_struct *work)
-{
-	struct qpnp_pon *pon =
-		container_of(work, struct qpnp_pon, up_work);
-
-	qpnp_powerkey_state_check(pon, 0);
-}
-
-
-
 static unsigned int pwr_dump_enabled = -1;
 static unsigned int long_pwr_dump_enabled = -1;
 

@@ -5,12 +5,9 @@
 
 #include <linux/types.h>
 
-#include <linux/pstore.h>
 #include <soc/qcom/socinfo.h>
 
-#include <linux/pstore.h>
 #include <generated/compile.h>
-#include <linux/oem/param_rw.h>
 #include <linux/oem/boot_mode.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
@@ -75,25 +72,14 @@ static int __init device_info_init(void)
 	return 1;
 }
 
-void  pstore_device_info_init(void );
-void pstore_write_device_info(const char *s, unsigned c);
 extern uint32_t socinfo_get_serial_number(void);
 
-static void write_device_info(const char *key, const char *value)
-{
-	pstore_write_device_info(key, strlen(key));
-	pstore_write_device_info(": ", 2);
-	pstore_write_device_info(value, strlen(value));
-	pstore_write_device_info("\r\n", 2);
-}
+static inline void write_device_info(const char *key, const char *value) {}
 
 static int __init init_device_info(void)
 {
 	char *ptr = NULL;
 	ptr = oem_pcba_number;
-	get_param_by_index_and_offset(0, 0x4D, ptr, 28);
-
-	pstore_device_info_init();
 
 	device_info_init();
 

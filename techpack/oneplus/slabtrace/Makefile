@@ -1,1 +1,0 @@
-obj-$(CONFIG_SLABTRACE_DEBUG) += slabtrace.o
