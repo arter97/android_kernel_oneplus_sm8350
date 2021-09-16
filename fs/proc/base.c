@@ -3236,6 +3236,69 @@ static int proc_pid_patch_state(struct seq_file *m, struct pid_namespace *ns,
 }
 #endif /* CONFIG_LIVEPATCH */
 
+static const char zerostr[] = "0\n";
+static int proc_one_zero_op(struct seq_file *m, struct pid_namespace *ns,
+				struct pid *pid, struct task_struct *task)
+{
+	seq_write(m, zerostr, sizeof(zerostr));
+	return 0;
+}
+
+static ssize_t
+null_write(struct file *file, const char __user *buf,
+	size_t count, loff_t *offset)
+{
+	return count;
+}
+
+static int null_show(struct seq_file *m, void *v)
+{
+	return 0;
+}
+
+static int null_open(struct inode *inode, struct file *filp)
+{
+	return single_open(filp, null_show, inode);
+}
+static const struct file_operations proc_null_operation = {
+	.open           = null_open,
+	.read           = seq_read,
+	.write          = null_write,
+	.llseek         = seq_lseek,
+	.release        = single_release,
+};
+
+static int zero_show(struct seq_file *m, void *v)
+{
+	seq_write(m, zerostr, sizeof(zerostr));
+	return 0;
+}
+
+static int zero_open(struct inode *inode, struct file *filp)
+{
+	return single_open(filp, zero_show, inode);
+}
+static const struct file_operations proc_zero_operation = {
+	.open           = zero_open,
+	.read           = seq_read,
+	.write          = null_write,
+	.llseek         = seq_lseek,
+	.release        = single_release,
+};
+
+// no-op
+static int va_feature;
+static int dbg_buf_store(const char *buf, const struct kernel_param *kp)
+{
+	return 0;
+}
+
+static struct kernel_param_ops module_param_ops = {
+	.set = dbg_buf_store,
+	.get = param_get_int,
+};
+module_param_cb(dbg_buf, &module_param_ops, &va_feature, 0644);
+
 #ifdef CONFIG_STACKLEAK_METRICS
 static int proc_stack_depth(struct seq_file *m, struct pid_namespace *ns,
 				struct pid *pid, struct task_struct *task)
@@ -3378,6 +3441,14 @@ static const struct pid_entry tgid_base_stuff[] = {
 #ifdef CONFIG_PROC_PID_ARCH_STATUS
 	ONE("arch_status", S_IRUGO, proc_pid_arch_status),
 #endif
+	ONE("im_flag", 0444, proc_one_zero_op),
+	REG("tb_ctl", 0666, proc_null_operation),
+	REG("stuck_info", 0666, proc_zero_operation),
+	REG("static_ux", 0666, proc_zero_operation),
+	REG("vm_fragment_gap_max", 0666, proc_zero_operation),
+	REG("va_feature", 0666, proc_zero_operation),
+	ONE("tli_info", 0444, proc_one_zero_op),
+	REG("tpd", 0666, proc_zero_operation),
 };
 
 static int proc_tgid_base_readdir(struct file *file, struct dir_context *ctx)
@@ -3775,6 +3846,11 @@ static const struct pid_entry tid_base_stuff[] = {
 #ifdef CONFIG_CPU_FREQ_TIMES
 	ONE("time_in_state", 0444, proc_time_in_state_show),
 #endif
+	REG("static_ux", 0666, proc_zero_operation),
+	ONE("im_flag", 0444, proc_one_zero_op),
+	REG("tb_ctl", 0666, proc_null_operation),
+	ONE("tli_info", 0444, proc_one_zero_op),
+	REG("tpd", 0666, proc_zero_operation),
 };
 
 static int proc_tid_base_readdir(struct file *file, struct dir_context *ctx)

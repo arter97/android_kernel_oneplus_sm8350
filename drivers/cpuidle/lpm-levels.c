@@ -1117,7 +1117,9 @@ static int cluster_configure(struct lpm_cluster *cluster, int idx,
 		 * LPMs (XO and Vmin).
 		 */
 		if (!from_idle) {
+#ifdef CONFIG_COMMON_CLK_QCOM_DEBUG
 			clock_debug_print_enabled();
+#endif
 			regulator_debug_print_enabled();
 		}
 

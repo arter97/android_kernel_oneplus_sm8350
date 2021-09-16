@@ -27,6 +27,7 @@
 #include <linux/dma-mapping.h>
 #include <uapi/linux/msm_geni_serial.h>
 #include <soc/qcom/boot_stats.h>
+#include <linux/pinctrl/devinfo.h>
 
 /* UART specific GENI registers */
 #define SE_UART_LOOPBACK_CFG		(0x22C)

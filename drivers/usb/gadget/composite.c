@@ -2407,7 +2407,6 @@ void composite_suspend(struct usb_gadget *gadget)
 	cdev->suspended = 1;
 
 	usb_gadget_set_selfpowered(gadget);
-	usb_gadget_vbus_draw(gadget, 2);
 }
 
 void composite_resume(struct usb_gadget *gadget)

@@ -22,10 +22,24 @@
 #include <linux/regmap.h>
 #include <linux/slab.h>
 #include <linux/spmi.h>
+#include <linux/kthread.h>
 #include <linux/input/qpnp-power-on.h>
 #include <linux/regulator/driver.h>
 #include <linux/regulator/machine.h>
 #include <linux/regulator/of_regulator.h>
+
+#if IS_ENABLED(CONFIG_OEM_BOOT_MODE)
+#include <linux/oem/boot_mode.h>
+#endif
+#include <linux/input/qpnp-power-on.h>
+#include <linux/power_supply.h>
+
+#include <linux/syscalls.h>
+#include <linux/atomic.h>
+#include <linux/sched/debug.h>
+
+#include <linux/msm_drm_notify.h>
+#include <soc/qcom/msm-poweroff.h>
 
 #define PMIC_VER_8941				0x01
 #define PMIC_VERSION_REG			0x0105
@@ -247,6 +261,7 @@ struct qpnp_pon {
 };
 
 static struct qpnp_pon *sys_reset_dev;
+static struct qpnp_pon *sys_key_dev;
 static struct qpnp_pon *modem_reset_dev;
 static DEFINE_SPINLOCK(spon_list_slock);
 static LIST_HEAD(spon_dev_list);
@@ -316,6 +331,8 @@ static const char * const qpnp_poff_reason[] = {
 	[38] = "Triggered from S3_RESET_PBS_NACK",
 	[39] = "Triggered from S3_RESET_KPDPWR_ANDOR_RESIN",
 };
+
+#include "oem-qpnp-power-on.c"
 
 static int qpnp_pon_store_reg(struct qpnp_pon *pon, u16 addr)
 {
@@ -1012,6 +1029,13 @@ static int qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
 		pon_rt_bit = is_pon_gen3(pon)
 				? QPNP_PON_GEN3_KPDPWR_N_SET
 				: QPNP_PON_KPDPWR_N_SET;
+
+		if ((pon_rt_sts & pon_rt_bit) == 0) {
+			pr_info("Power-Key UP\n");
+		} else {
+			pr_info("Power-Key DOWN\n");
+		}
+
 		break;
 	case PON_RESIN:
 		pon_rt_bit = is_pon_gen3(pon)
@@ -2351,7 +2375,7 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 	unsigned long flags;
 	u32 delay;
 	const __be32 *addr;
-	bool sys_reset, modem_reset;
+	bool sys_reset, modem_reset, sys_key;
 	int rc;
 
 	pon = devm_kzalloc(dev, sizeof(*pon), GFP_KERNEL);
@@ -2390,6 +2414,10 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 		dev_err(dev, "qcom,modem-reset and qcom,system-reset properties cannot be supported together for one PMIC PON device\n");
 		return -EINVAL;
 	}
+
+	sys_key = of_property_read_bool(dev->of_node, "qcom,system-key");
+	if (sys_key && sys_key_dev)
+		dev_err(dev, "qcom,system-key property cannot be supported together for PWK long Press\n");
 
 	INIT_LIST_HEAD(&pon->restore_regs);
 	mutex_init(&pon->restore_lock);
@@ -2478,10 +2506,15 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 		return rc;
 	}
 
-	if (sys_reset)
+	if (sys_reset) {
 		sys_reset_dev = pon;
+		oem_qpnp_config_init(pon);
+	}
 	if (modem_reset)
 		modem_reset_dev = pon;
+
+	if (sys_key)
+		sys_key_dev = pon;
 
 	qpnp_pon_debugfs_init(pon);
 

@@ -134,6 +134,7 @@ struct notif_data {
 
 extern int subsys_get_restart_level(struct subsys_device *dev);
 extern int subsystem_restart_dev(struct subsys_device *dev);
+extern void subsys_store_crash_reason(struct subsys_device *dev, char *reason);
 extern int subsystem_restart(const char *name);
 extern int subsystem_crashed(const char *name);
 
@@ -156,6 +157,7 @@ static inline void complete_shutdown_ack(struct subsys_desc *desc)
 	complete(&desc->shutdown_ack);
 }
 struct subsys_device *find_subsys_device(const char *str);
+extern void subsys_send_uevent_notify(struct subsys_desc *desc, int crash_count);
 #else
 
 static inline int subsys_get_restart_level(struct subsys_device *dev)
@@ -167,6 +169,8 @@ static inline int subsystem_restart_dev(struct subsys_device *dev)
 {
 	return 0;
 }
+
+static inline void subsys_store_crash_reason(struct subsys_device *dev, char *reason) { }
 
 static inline int subsystem_restart(const char *name)
 {
@@ -213,6 +217,7 @@ enum crash_status subsys_get_crash_status(struct subsys_device *dev)
 static inline void notify_proxy_vote(struct device *device) { }
 static inline void notify_proxy_unvote(struct device *device) { }
 static inline void notify_before_auth_and_reset(struct device *device) { }
+static inline void subsys_send_uevent_notify(struct subsys_desc *desc, int crash_count) { }
 #endif /* CONFIG_MSM_SUBSYSTEM_RESTART */
 
 /* Helper wrappers */

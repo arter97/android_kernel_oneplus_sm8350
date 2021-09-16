@@ -35,6 +35,7 @@
 
 #include <linux/syscore_ops.h>
 
+#include <linux/wakeup_reason.h>
 #include "irq-gic-common.h"
 
 #define GICD_INT_NMI_PRI	(GICD_INT_DEF_PRI & ~0x80)
@@ -614,6 +615,9 @@ static void gic_show_resume_irq(struct gic_chip_data *gic)
 			name = desc->action->name;
 		else if (desc->irq_data.chip && desc->irq_data.chip->name)
 			name = desc->irq_data.chip->name;
+
+		if (name != NULL)
+			log_irq_wakeup_reason(irq);
 
 		pr_warn("%s: irq:%d hwirq:%u triggered %s\n",
 			 __func__, irq, i, name);

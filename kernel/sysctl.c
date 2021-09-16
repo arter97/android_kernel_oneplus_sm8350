@@ -133,6 +133,7 @@ static unsigned long zero_ul;
 static unsigned long one_ul = 1;
 static unsigned long long_max = LONG_MAX;
 static int one_hundred = 100;
+static int two_hundred = 200;
 static int one_thousand = 1000;
 #ifdef CONFIG_QCOM_HYP_CORE_CTL
 static int five_hundred = 500;
@@ -337,6 +338,12 @@ static int min_sched_tunable_scaling = SCHED_TUNABLESCALING_NONE;
 static int max_sched_tunable_scaling = SCHED_TUNABLESCALING_END-1;
 #endif /* CONFIG_SMP */
 #endif /* CONFIG_SCHED_DEBUG */
+
+// no-op
+static int vm_direct_swapiness;
+static int sysctl_uxchain_enabled = 1;
+static int sysctl_launcher_boost_enabled;
+static int sysctl_uxchain_v2 = 1;
 
 #ifdef CONFIG_COMPACTION
 static int min_extfrag_threshold;
@@ -1618,6 +1625,27 @@ static struct ctl_table kern_table[] = {
 		.extra2		= SYSCTL_ONE,
 	},
 #endif
+	{
+		.procname	= "uxchain_enabled",
+		.data		= &sysctl_uxchain_enabled,
+		.maxlen = sizeof(int),
+		.mode		= 0666,
+		.proc_handler = proc_dointvec,
+	},
+	{
+		.procname	= "launcher_boost_enabled",
+		.data		= &sysctl_launcher_boost_enabled,
+		.maxlen = sizeof(int),
+		.mode		= 0666,
+		.proc_handler = proc_dointvec,
+	},
+	{
+		.procname	= "uxchain_v2",
+		.data		= &sysctl_uxchain_v2,
+		.maxlen = sizeof(int),
+		.mode		= 0666,
+		.proc_handler = proc_dointvec,
+	},
 	{ }
 };
 
@@ -1748,6 +1776,15 @@ static struct ctl_table vm_table[] = {
 		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= &one_hundred,
+	},
+	{
+		.procname	= "direct_swappiness",
+		.data		= &vm_direct_swapiness,
+		.maxlen		= sizeof(vm_direct_swapiness),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= &two_hundred,
 	},
 	{
 		.procname       = "want_old_faultaround_pte",

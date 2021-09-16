@@ -49,6 +49,7 @@
 #include <linux/moduleparam.h>
 #include <linux/uaccess.h>
 #include <linux/sched/isolation.h>
+#include <linux/sched/debug.h>
 #include <linux/nmi.h>
 #include <linux/kvm_para.h>
 #include <linux/bug.h>
@@ -6046,4 +6047,32 @@ int __init workqueue_init(void)
 	wq_watchdog_init();
 
 	return 0;
+}
+
+
+void dump_workqueue(void)
+{
+	int cpu, pool_id, bkt;
+	struct worker_pool *pool;
+	struct worker *worker;
+	struct work_struct *work;
+
+	pr_info("==================== WORKQUEUE STATE ====================\n");
+	for_each_possible_cpu(cpu) {
+		pr_info("CPU %d\n", cpu);
+		pool_id = 0;
+		for_each_cpu_worker_pool(pool, cpu) {
+			pr_info("pool %d\n", pool_id++);
+			hash_for_each(pool->busy_hash, bkt, worker, hentry) {
+				pr_info("BUSY Workqueue worker: %s\n", worker->task->comm);
+				sched_show_task(worker->task);
+			}
+			list_for_each_entry(worker, &pool->idle_list, entry) {
+				pr_info("IDLE Workqueue worker: %s\n", worker->task->comm);
+			}
+			list_for_each_entry(work, &pool->worklist, entry) {
+				pr_info("Pending entry: %pS\n", work->func);
+			}
+		}
+	}
 }
