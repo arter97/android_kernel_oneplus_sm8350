@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015, Sony Mobile Communications AB.
- * Copyright (c) 2012-2013, 2019-2020 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2013, 2019-2021 The Linux Foundation. All rights reserved.
  */
 
 #include <linux/hwspinlock.h>
@@ -735,7 +735,7 @@ phys_addr_t qcom_smem_virt_to_phys(void *p)
 		if ((void __iomem *)p < region->virt_base)
 			continue;
 		if ((void __iomem *)p < region->virt_base + region->size) {
-			u64 offset = p - (void *)region->virt_base;
+			u64 offset = (void __iomem *)p - region->virt_base;
 
 			return (phys_addr_t)region->aux_base + offset;
 		}
