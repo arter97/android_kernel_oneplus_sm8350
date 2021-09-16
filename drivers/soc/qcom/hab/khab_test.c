@@ -52,7 +52,7 @@ static int hab_shmm_throughput_test(void)
 		return ret;
 	}
 
-	sh_buf = dev->pipe_ep->tx_info.sh_buf;
+	sh_buf = dev->tx_buf;
 
 	/* pChannel is of 128k, we use 64k to test */
 	size = 0x10000;
