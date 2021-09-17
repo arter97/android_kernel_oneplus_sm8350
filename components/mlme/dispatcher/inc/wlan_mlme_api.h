@@ -3138,6 +3138,25 @@ bool
 wlan_mlme_is_ba_2k_jump_iot_ap(struct wlan_objmgr_vdev *vdev);
 
 /**
+ * wlan_mlme_set_bad_htc_he_iot_ap() - Set a flag if bad htc he IOT AP is found
+ * @vdev: vdev pointer
+ * @found: Carries the value true if bad htc he AP is found
+ *
+ * Return: QDF Status
+ */
+QDF_STATUS
+wlan_mlme_set_bad_htc_he_iot_ap(struct wlan_objmgr_vdev *vdev, bool found);
+
+/**
+ * wlan_mlme_is_bad_htc_he_iot_ap() - Check if bad htc he IOT AP is found
+ * @vdev: vdev pointer
+ *
+ * Return: true if bad htc he IOT AP is found
+ */
+bool
+wlan_mlme_is_bad_htc_he_iot_ap(struct wlan_objmgr_vdev *vdev);
+
+/**
  * wlan_mlme_set_last_delba_sent_time() - Cache the last delba sent ts
  * @vdev: vdev pointer
  * @delba_sent_time: Last delba sent timestamp
@@ -3156,4 +3175,23 @@ wlan_mlme_set_last_delba_sent_time(struct wlan_objmgr_vdev *vdev,
  */
 qdf_time_t
 wlan_mlme_get_last_delba_sent_time(struct wlan_objmgr_vdev *vdev);
+
+/**
+ * mlme_set_user_ps() - Set the PS user config
+ * @vdev: Vdev object pointer
+ * @ps_enable: User PS enable
+ *
+ * Return: QDF_STATUS
+ */
+QDF_STATUS mlme_set_user_ps(struct wlan_objmgr_psoc *psoc, uint8_t vdev_id,
+			    bool ps_enable);
+
+/**
+ * mlme_get_user_ps() - Set the user ps flag
+ * @psoc: Pointer to psoc object
+ * @vdev_id: vdev id
+ *
+ * Return: True if user_ps flag is set
+ */
+bool mlme_get_user_ps(struct wlan_objmgr_psoc *psoc, uint8_t vdev_id);
 #endif /* _WLAN_MLME_API_H_ */
