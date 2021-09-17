@@ -440,7 +440,7 @@ int wlfw_send_soc_wake_msg(struct icnss_priv *priv,
 	if (test_bit(ICNSS_FW_DOWN, &priv->state))
 		return -EINVAL;
 
-	icnss_pr_dbg("Sending soc wake msg, type: 0x%x\n",
+	icnss_pr_soc_wake("Sending soc wake msg, type: 0x%x\n",
 		     type);
 
 	req = kzalloc(sizeof(*req), GFP_KERNEL);
@@ -656,7 +656,9 @@ int wlfw_cap_send_sync_msg(struct icnss_priv *priv)
 		goto out;
 	}
 
-	ret = qmi_txn_wait(&txn, priv->ctrl_params.qmi_timeout);
+	ret = qmi_txn_wait(&txn,
+			   priv->ctrl_params.qmi_timeout +
+			   msecs_to_jiffies(priv->wlan_en_delay_ms));
 	if (ret < 0) {
 		icnss_qmi_fatal_err("Capability resp wait failed with ret %d\n",
 				    ret);
@@ -1409,7 +1411,9 @@ int wlfw_wlan_mode_send_sync_msg(struct icnss_priv *priv,
 		goto out;
 	}
 
-	ret = qmi_txn_wait(&txn, priv->ctrl_params.qmi_timeout);
+	ret = qmi_txn_wait(&txn,
+			   priv->ctrl_params.qmi_timeout +
+			   msecs_to_jiffies(priv->wlan_en_delay_ms));
 	if (ret < 0) {
 		icnss_qmi_fatal_err("Mode resp wait failed with ret %d\n", ret);
 		goto out;
@@ -3131,6 +3135,13 @@ int wlfw_host_cap_send_sync(struct icnss_priv *priv)
 
 	req->host_build_type_valid = 1;
 	req->host_build_type = icnss_get_host_build_type();
+
+	if (priv->wlan_en_delay_ms >= 100) {
+		icnss_pr_dbg("Setting WLAN_EN delay: %d ms\n",
+			     priv->wlan_en_delay_ms);
+		req->wlan_enable_delay_valid = 1;
+		req->wlan_enable_delay = priv->wlan_en_delay_ms;
+	}
 
 	ret = qmi_txn_init(&priv->qmi, &txn,
 			   wlfw_host_cap_resp_msg_v01_ei, resp);

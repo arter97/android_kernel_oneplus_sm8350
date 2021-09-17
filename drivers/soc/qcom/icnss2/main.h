@@ -183,6 +183,10 @@ enum icnss_smp2p_msg_id {
 	ICNSS_POWER_SAVE_ENTER = 1,
 	ICNSS_POWER_SAVE_EXIT,
 	ICNSS_TRIGGER_SSR,
+#ifdef CONFIG_ICNSS2_RESTART_LEVEL_NOTIF
+	ICNSS_ENABLE_M3_SSR,
+	ICNSS_DISABLE_M3_SSR,
+#endif
 	ICNSS_PCI_EP_POWER_SAVE_ENTER = 6,
 	ICNSS_PCI_EP_POWER_SAVE_EXIT,
 };
@@ -454,6 +458,7 @@ struct icnss_priv {
 	u32 hw_trc_override;
 	struct icnss_dms_data dms;
 	u8 use_nv_mac;
+	u32 wlan_en_delay_ms;
 };
 
 struct icnss_reg_info {

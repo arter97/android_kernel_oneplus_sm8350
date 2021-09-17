@@ -106,7 +106,7 @@
 #define STALE_TIMEOUT		(16)
 #define STALE_COUNT		(DEFAULT_BITS_PER_CHAR * STALE_TIMEOUT)
 #define SEC_TO_USEC		(1000000)
-#define SYSTEM_DELAY		(500)
+#define STALE_DELAY		(10000) //10msec
 #define DEFAULT_BITS_PER_CHAR	(10)
 #define GENI_UART_NR_PORTS	(6)
 #define GENI_UART_CONS_PORTS	(1)
@@ -1559,7 +1559,6 @@ static int stop_rx_sequencer(struct uart_port *uport)
 	struct msm_geni_serial_port *port = GET_DEV_PORT(uport);
 	unsigned long flags = 0;
 	bool is_rx_active;
-	unsigned int stale_delay;
 	u32 dma_rx_status, s_irq_status;
 	int usage_count;
 
@@ -1576,15 +1575,12 @@ static int stop_rx_sequencer(struct uart_port *uport)
 
 	if (!uart_console(uport)) {
 		/*
-		 * Wait for the stale timeout to happen if there
-		 * is any data pending in the rx fifo.
-		 * Have a safety factor of 2 to include the interrupt
-		 * and system latencies, add 500usec delay for interrupt
-		 * latency or system delay.
+		 * Wait for the stale timeout around 10msec to happen
+		 * if there is any data pending in the rx fifo.
+		 * This will help to handle incoming rx data in stop_rx_sequencer
+		 * for interrupt latency or system delay cases.
 		 */
-		stale_delay = (STALE_COUNT * SEC_TO_USEC) / port->cur_baud;
-		stale_delay = (2 * stale_delay) + SYSTEM_DELAY;
-		udelay(stale_delay);
+		udelay(STALE_DELAY);
 
 		dma_rx_status = geni_read_reg_nolog(uport->membase,
 						SE_DMA_RX_IRQ_STAT);
@@ -2104,8 +2100,9 @@ static bool handle_rx_dma_xfer(u32 s_irq_status, struct uart_port *uport)
 	bool drop_rx = false;
 	struct msm_geni_serial_port *msm_port = GET_DEV_PORT(uport);
 	u32 dma_rx_status;
+	unsigned long lock_flags;
 
-	spin_lock(&msm_port->rx_lock);
+	spin_lock_irqsave(&msm_port->rx_lock, lock_flags);
 	dma_rx_status = geni_read_reg_nolog(uport->membase,
 						SE_DMA_RX_IRQ_STAT);
 
@@ -2170,7 +2167,7 @@ static bool handle_rx_dma_xfer(u32 s_irq_status, struct uart_port *uport)
 		ret = true;
 
 exit:
-	spin_unlock(&msm_port->rx_lock);
+	spin_unlock_irqrestore(&msm_port->rx_lock, lock_flags);
 	return ret;
 }
 
@@ -3557,15 +3554,21 @@ static int msm_geni_serial_runtime_suspend(struct device *dev)
 							SE_GENI_STATUS);
 
 	IPC_LOG_MSG(port->ipc_log_pwr, "%s: Start\n", __func__);
-	/* Flow off from UART */
-	msm_geni_serial_set_manual_flow(false, port);
+	/* Flow off from UART only for In band sleep(IBS)
+	 * Avoid manual RFR FLOW ON for Out of band sleep(OBS).
+	 */
+	if (port->wakeup_byte && port->wakeup_irq)
+		msm_geni_serial_set_manual_flow(false, port);
 	ret = wait_for_transfers_inflight(&port->uport);
 	if (ret) {
 		IPC_LOG_MSG(port->ipc_log_pwr,
 			     "%s: wait_for_transfer_inflight return ret:%d\n",
 			     __func__, ret);
-		/* Flow on from UART */
-		msm_geni_serial_allow_rx(port);
+		/* Flow on from UART only for In band sleep(IBS)
+		 * Avoid manual RFR FLOW ON for Out of band sleep(OBS)
+		 */
+		if (port->wakeup_byte && port->wakeup_irq)
+			msm_geni_serial_allow_rx(port);
 		return -EBUSY;
 	}
 	/*
@@ -3577,8 +3580,11 @@ static int msm_geni_serial_runtime_suspend(struct device *dev)
 	if (ret) {
 		IPC_LOG_MSG(port->ipc_log_pwr, "%s: stop rx failed %d\n",
 							__func__, ret);
-		/* Flow on from UART */
-		msm_geni_serial_allow_rx(port);
+		/* Flow on from UART only for In band sleep(IBS)
+		 * Avoid manual RFR FLOW ON for Out of band sleep(OBS)
+		 */
+		if (port->wakeup_byte && port->wakeup_irq)
+			msm_geni_serial_allow_rx(port);
 		return -EBUSY;
 	}
 
@@ -3589,11 +3595,13 @@ static int msm_geni_serial_runtime_suspend(struct device *dev)
 	disable_irq(port->uport.irq);
 
 	/*
-	 * Flow on from UART
+	 * Flow on from UART only for In band sleep(IBS)
+	 * Avoid manual RFR FLOW ON for Out of band sleep(OBS).
 	 * Above before stop_rx disabled the flow so we need to enable it here
 	 * Make sure wake up interrupt is enabled before RFR is made low
 	 */
-	msm_geni_serial_allow_rx(port);
+	if (port->wakeup_byte && port->wakeup_irq)
+		msm_geni_serial_allow_rx(port);
 
 	ret = se_geni_resources_off(&port->serial_rsc);
 	if (ret) {
