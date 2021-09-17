@@ -147,12 +147,12 @@ enum se_protocol_types {
 static void geni_write_reg_nolog_earlycon(unsigned int value,
 						void __iomem *base, int offset)
 {
-	writel_relaxed_no_log(value, (base + offset));
+	writel_relaxed(value, (base + offset));
 }
 
 static unsigned int geni_read_reg_nolog_earlycon(void __iomem *base, int offset)
 {
-	return readl_relaxed_no_log(base + offset);
+	return readl_relaxed(base + offset);
 }
 
 static int get_se_proto_earlycon(void __iomem *base)

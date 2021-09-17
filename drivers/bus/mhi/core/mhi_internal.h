@@ -1,8 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved. */
 
-#include <linux/msm_rtb.h>
-
 #ifndef _MHI_INT_H
 #define _MHI_INT_H
 
@@ -862,8 +860,8 @@ static inline void mhi_timesync_log(struct mhi_controller *mhi_cntrl)
 
 	if (mhi_tsync && mhi_cntrl->tsync_log) {
 		time_val =
-			(u64)readl_relaxed_no_log(mhi_tsync->time_reg_hi) << 32
-			| readl_relaxed_no_log(mhi_tsync->time_reg_lo);
+			(u64)readl_relaxed(mhi_tsync->time_reg_hi) << 32
+			| readl_relaxed(mhi_tsync->time_reg_lo);
 		mhi_cntrl->tsync_log(mhi_cntrl, time_val);
 	}
 }
