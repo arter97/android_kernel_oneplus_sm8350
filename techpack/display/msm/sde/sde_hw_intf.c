@@ -181,11 +181,7 @@ static void sde_hw_intf_avr_ctrl(struct sde_hw_intf *ctx,
 static inline void _check_and_set_comp_bit(struct sde_hw_intf *ctx,
 		bool dsc_4hs_merge, bool compression_en, u32 *intf_cfg2)
 {
-	if (((SDE_HW_MAJOR(ctx->mdss->hwversion) >=
-				SDE_HW_MAJOR(SDE_HW_VER_700)) &&
-				compression_en) ||
-			(IS_SDE_MAJOR_SAME(ctx->mdss->hwversion,
-				SDE_HW_VER_600) && dsc_4hs_merge))
+	if (compression_en)
 		(*intf_cfg2) |= BIT(12);
 }
 

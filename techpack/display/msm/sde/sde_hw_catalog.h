@@ -52,31 +52,26 @@
 #define SDE_HW_VER_720	SDE_HW_VER(7, 2, 0) /* yupik */
 
 /* Avoid using below IS_XXX macros outside catalog, use feature bit instead */
-#define IS_SDE_MAJOR_SAME(rev1, rev2)   \
-		(SDE_HW_MAJOR((rev1)) == SDE_HW_MAJOR((rev2)))
-#define IS_SDE_MAJOR_MINOR_SAME(rev1, rev2)   \
-		(SDE_HW_MAJOR_MINOR((rev1)) == SDE_HW_MAJOR_MINOR((rev2)))
-
-#define IS_MSM8996_TARGET(rev) IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_VER_170)
-#define IS_MSM8998_TARGET(rev) IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_VER_300)
-#define IS_SDM845_TARGET(rev) IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_VER_400)
-#define IS_SDM670_TARGET(rev) IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_VER_410)
-#define IS_SM8150_TARGET(rev) IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_VER_500)
-#define IS_SDMSHRIKE_TARGET(rev) IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_VER_510)
-#define IS_SDMMAGPIE_TARGET(rev) IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_VER_520)
-#define IS_SM6150_TARGET(rev) IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_VER_530)
-#define IS_SDMTRINKET_TARGET(rev) IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_VER_540)
-#define IS_KONA_TARGET(rev) IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_VER_600)
-#define IS_SAIPAN_TARGET(rev) IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_VER_610)
-#define IS_BENGAL_TARGET(rev) IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_VER_630)
-#define IS_LAGOON_TARGET(rev) IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_VER_640)
-#define IS_SCUBA_TARGET(rev) IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_VER_650)
-#define IS_HOLI_TARGET(rev) IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_VER_660)
-#define IS_SHIMA_TARGET(rev) IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_VER_670)
-#define IS_MONACO_TARGET(rev) IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_VER_680)
-#define IS_BLAIR_TARGET(rev) IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_VER_690)
-#define IS_LAHAINA_TARGET(rev) IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_VER_700)
-#define IS_YUPIK_TARGET(rev) IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_VER_720)
+#define IS_MSM8996_TARGET(rev) false
+#define IS_MSM8998_TARGET(rev) false
+#define IS_SDM845_TARGET(rev) false
+#define IS_SDM670_TARGET(rev) false
+#define IS_SM8150_TARGET(rev) false
+#define IS_SDMSHRIKE_TARGET(rev) false
+#define IS_SDMMAGPIE_TARGET(rev) false
+#define IS_SM6150_TARGET(rev) false
+#define IS_SDMTRINKET_TARGET(rev) false
+#define IS_KONA_TARGET(rev) false
+#define IS_SAIPAN_TARGET(rev) false
+#define IS_BENGAL_TARGET(rev) false
+#define IS_LAGOON_TARGET(rev) false
+#define IS_SCUBA_TARGET(rev) false
+#define IS_HOLI_TARGET(rev) false
+#define IS_SHIMA_TARGET(rev) false
+#define IS_MONACO_TARGET(rev) false
+#define IS_BLAIR_TARGET(rev) false
+#define IS_LAHAINA_TARGET(rev) true
+#define IS_YUPIK_TARGET(rev) false
 
 #define SDE_HW_BLK_NAME_LEN	16
 
@@ -147,14 +142,10 @@ enum {
 	SDE_HW_UBWC_VER_30 = SDE_HW_UBWC_VER(0x300),
 	SDE_HW_UBWC_VER_40 = SDE_HW_UBWC_VER(0x400),
 };
-#define IS_UBWC_10_SUPPORTED(rev) \
-		IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_UBWC_VER_10)
-#define IS_UBWC_20_SUPPORTED(rev) \
-		IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_UBWC_VER_20)
-#define IS_UBWC_30_SUPPORTED(rev) \
-		IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_UBWC_VER_30)
-#define IS_UBWC_40_SUPPORTED(rev) \
-		IS_SDE_MAJOR_MINOR_SAME((rev), SDE_HW_UBWC_VER_40)
+#define IS_UBWC_10_SUPPORTED(rev) false
+#define IS_UBWC_20_SUPPORTED(rev) false
+#define IS_UBWC_30_SUPPORTED(rev) false
+#define IS_UBWC_40_SUPPORTED(rev) true
 
 /**
  * Supported SSPP system cache settings
