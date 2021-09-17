@@ -10,7 +10,6 @@
 #include <linux/init.h>
 #include <linux/bug.h>
 #include <linux/err.h>
-#include <linux/msm_rtb.h>
 #include <asm/io.h>
 #include <asm/page.h>
 
