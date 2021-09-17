@@ -2785,10 +2785,9 @@ static void smblite_lib_usb_plugin_locked(struct smb_charger *chg)
 			}
 		}
 
-		/* Force 1500mA FCC on removal if fcc stepper is enabled */
 		if (chg->fcc_stepper_enable)
 			vote(chg->fcc_votable, FCC_STEPPER_VOTER,
-							true, 1500000);
+					true, chg->chg_param.fcc_step_start_ua);
 
 		if (chg->wa_flags & WEAK_ADAPTER_WA) {
 			chg->aicl_5v_threshold_mv =
