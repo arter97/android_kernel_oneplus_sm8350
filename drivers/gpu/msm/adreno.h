@@ -882,13 +882,9 @@ extern unsigned int *adreno_ft_regs;
 extern unsigned int adreno_ft_regs_num;
 extern unsigned int *adreno_ft_regs_val;
 
-extern const struct adreno_gpudev adreno_a3xx_gpudev;
-extern const struct adreno_gpudev adreno_a5xx_gpudev;
 extern const struct adreno_gpudev adreno_a6xx_gpudev;
 extern const struct adreno_gpudev adreno_a6xx_gmu_gpudev;
 extern const struct adreno_gpudev adreno_a6xx_rgmu_gpudev;
-extern const struct adreno_gpudev adreno_a619_holi_gpudev;
-extern const struct adreno_gpudev adreno_a630_gpudev;
 extern const struct adreno_gpudev adreno_a6xx_hwsched_gpudev;
 
 extern int adreno_wake_nice;
@@ -999,150 +995,42 @@ int adreno_active_count_get(struct adreno_device *adreno_dev);
  */
 void adreno_active_count_put(struct adreno_device *adreno_dev);
 
-#define ADRENO_TARGET(_name, _id) \
-static inline int adreno_is_##_name(struct adreno_device *adreno_dev) \
-{ \
-	return (ADRENO_GPUREV(adreno_dev) == (_id)); \
-}
+#define adreno_is_a3xx(x) false
+#define adreno_is_a304(x) false
+#define adreno_is_a306(x) false
+#define adreno_is_a306a(x) false
+#define adreno_is_a5xx(x) false
+#define adreno_is_a505(x) false
+#define adreno_is_a506(x) false
+#define adreno_is_a508(x) false
+#define adreno_is_a510(x) false
+#define adreno_is_a512(x) false
+#define adreno_is_a530(x) false
+#define adreno_is_a530v2(x) false
+#define adreno_is_a530v3(x) false
+#define adreno_is_a540(x) false
+#define adreno_is_a505_or_a506(x) false
+#define adreno_is_a610(x) false
+#define adreno_is_a612(x) false
+#define adreno_is_a618(x) false
+#define adreno_is_a619(x) false
+#define adreno_is_a620(x) false
+#define adreno_is_a630(x) false
+#define adreno_is_a640(x) false
+#define adreno_is_a650(x) false
+#define adreno_is_a680(x) false
+#define adreno_is_a702(x) false
+#define adreno_is_a642(x) false
+#define adreno_is_a642l(x) false
+#define adreno_is_a615_family(x) false
+#define adreno_is_a640_family(x) false
+#define adreno_is_a619_holi(x) false
+#define adreno_is_a620v1(x) false
+#define adreno_is_a640v2(x) false
 
-static inline int adreno_is_a3xx(struct adreno_device *adreno_dev)
-{
-	return ((ADRENO_GPUREV(adreno_dev) >= 300) &&
-		(ADRENO_GPUREV(adreno_dev) < 400));
-}
-
-ADRENO_TARGET(a304, ADRENO_REV_A304)
-ADRENO_TARGET(a306, ADRENO_REV_A306)
-ADRENO_TARGET(a306a, ADRENO_REV_A306A)
-
-static inline int adreno_is_a5xx(struct adreno_device *adreno_dev)
-{
-	return ADRENO_GPUREV(adreno_dev) >= 500 &&
-			ADRENO_GPUREV(adreno_dev) < 600;
-}
-
-ADRENO_TARGET(a505, ADRENO_REV_A505)
-ADRENO_TARGET(a506, ADRENO_REV_A506)
-ADRENO_TARGET(a508, ADRENO_REV_A508)
-ADRENO_TARGET(a510, ADRENO_REV_A510)
-ADRENO_TARGET(a512, ADRENO_REV_A512)
-ADRENO_TARGET(a530, ADRENO_REV_A530)
-ADRENO_TARGET(a540, ADRENO_REV_A540)
-
-static inline int adreno_is_a530v2(struct adreno_device *adreno_dev)
-{
-	return (ADRENO_GPUREV(adreno_dev) == ADRENO_REV_A530) &&
-		(ADRENO_CHIPID_PATCH(adreno_dev->chipid) == 1);
-}
-
-static inline int adreno_is_a530v3(struct adreno_device *adreno_dev)
-{
-	return (ADRENO_GPUREV(adreno_dev) == ADRENO_REV_A530) &&
-		(ADRENO_CHIPID_PATCH(adreno_dev->chipid) == 2);
-}
-
-static inline int adreno_is_a505_or_a506(struct adreno_device *adreno_dev)
-{
-	return ADRENO_GPUREV(adreno_dev) >= 505 &&
-			ADRENO_GPUREV(adreno_dev) <= 506;
-}
-
-static inline int adreno_is_a6xx(struct adreno_device *adreno_dev)
-{
-	return ADRENO_GPUREV(adreno_dev) >= 600 &&
-			ADRENO_GPUREV(adreno_dev) <= 702;
-}
-
-static inline int adreno_is_a642(struct adreno_device *adreno_dev)
-{
-	return (adreno_dev->gpucore->compatible &&
-		!strcmp(adreno_dev->gpucore->compatible,
-		"qcom,adreno-gpu-a642"));
-}
-
-static inline int adreno_is_a642l(struct adreno_device *adreno_dev)
-{
-	return (adreno_dev->gpucore->compatible &&
-		!strcmp(adreno_dev->gpucore->compatible,
-		"qcom,adreno-gpu-a642l"));
-}
-
-ADRENO_TARGET(a610, ADRENO_REV_A610)
-ADRENO_TARGET(a612, ADRENO_REV_A612)
-ADRENO_TARGET(a618, ADRENO_REV_A618)
-ADRENO_TARGET(a619, ADRENO_REV_A619)
-ADRENO_TARGET(a620, ADRENO_REV_A620)
-ADRENO_TARGET(a630, ADRENO_REV_A630)
-ADRENO_TARGET(a640, ADRENO_REV_A640)
-ADRENO_TARGET(a650, ADRENO_REV_A650)
-ADRENO_TARGET(a680, ADRENO_REV_A680)
-ADRENO_TARGET(a702, ADRENO_REV_A702)
-
-/* A642 and A642L are derived from A660 and shares same logic */
-static inline int adreno_is_a660(struct adreno_device *adreno_dev)
-{
-	unsigned int rev = ADRENO_GPUREV(adreno_dev);
-
-	return (rev == ADRENO_REV_A660 || adreno_is_a642(adreno_dev) ||
-		adreno_is_a642l(adreno_dev));
-}
-
-/*
- * All the derived chipsets from A615 needs to be added to this
- * list such as A616, A618, A619 etc.
- */
-static inline int adreno_is_a615_family(struct adreno_device *adreno_dev)
-{
-	unsigned int rev = ADRENO_GPUREV(adreno_dev);
-
-	return (rev == ADRENO_REV_A615 || rev == ADRENO_REV_A616 ||
-			rev == ADRENO_REV_A618 || rev == ADRENO_REV_A619);
-}
-
-/*
- * Derived GPUs from A640 needs to be added to this list.
- * A640 and A680 belongs to this family.
- */
-static inline int adreno_is_a640_family(struct adreno_device *adreno_dev)
-{
-	unsigned int rev = ADRENO_GPUREV(adreno_dev);
-
-	return (rev == ADRENO_REV_A640 || rev == ADRENO_REV_A680);
-}
-
-/*
- * Derived GPUs from A650 needs to be added to this list.
- * A650 is derived from A640 but register specs has been
- * changed hence do not belongs to A640 family. A620, A642,
- * A642L, A660, A690 follows the register specs of A650.
- *
- */
-static inline int adreno_is_a650_family(struct adreno_device *adreno_dev)
-{
-	unsigned int rev = ADRENO_GPUREV(adreno_dev);
-
-	return (rev == ADRENO_REV_A650 || rev == ADRENO_REV_A620 ||
-		rev == ADRENO_REV_A660 || adreno_is_a642(adreno_dev) ||
-		adreno_is_a642l(adreno_dev));
-}
-
-static inline int adreno_is_a619_holi(struct adreno_device *adreno_dev)
-{
-	return of_device_is_compatible(adreno_dev->dev.pdev->dev.of_node,
-		"qcom,adreno-gpu-a619-holi");
-}
-
-static inline int adreno_is_a620v1(struct adreno_device *adreno_dev)
-{
-	return (ADRENO_GPUREV(adreno_dev) == ADRENO_REV_A620) &&
-		(ADRENO_CHIPID_PATCH(adreno_dev->chipid) == 0);
-}
-
-static inline int adreno_is_a640v2(struct adreno_device *adreno_dev)
-{
-	return (ADRENO_GPUREV(adreno_dev) == ADRENO_REV_A640) &&
-		(ADRENO_CHIPID_PATCH(adreno_dev->chipid) == 1);
-}
+#define adreno_is_a6xx(x) true
+#define adreno_is_a650_family(x) true
+#define adreno_is_a660(x) true
 
 /*
  * adreno_checkreg_off() - Checks the validity of a register enum
