@@ -395,8 +395,6 @@ struct adreno_gpu_core {
 	const struct adreno_perfcounters *perfcounters;
 	size_t gmem_size;
 	u32 bus_width;
-	/** @snapshot_size: Size of the static snapshot region in bytes */
-	u32 snapshot_size;
 };
 
 /**
@@ -466,7 +464,6 @@ struct adreno_gpu_core {
  * @lm_threshold_cross: number of current peaks exceeding threshold
  * @ifpc_count: Number of times the GPU went into IFPC
  * @highest_bank_bit: Value of the highest bank bit
- * @csdev: Pointer to a coresight device (if applicable)
  * @gpmu_throttle_counters - counteers for number of throttled clocks
  * @irq_storm_work: Worker to handle possible interrupt storms
  * @active_list: List to track active contexts
@@ -551,7 +548,6 @@ struct adreno_device {
 	unsigned int highest_bank_bit;
 	unsigned int quirks;
 
-	struct coresight_device *csdev[2];
 	uint32_t gpmu_throttle_counters[ADRENO_GPMU_THROTTLE_COUNTERS];
 	struct work_struct irq_storm_work;
 
@@ -582,8 +578,6 @@ struct adreno_device {
  * @ADRENO_DEVICE_PWRON - Set during init after a power collapse
  * @ADRENO_DEVICE_PWRON_FIXUP - Set if the target requires the shader fixup
  * after power collapse
- * @ADRENO_DEVICE_CORESIGHT - Set if the coresight (trace bus) registers should
- * be restored after power collapse
  * @ADRENO_DEVICE_STARTED - Set if the device start sequence is in progress
  * @ADRENO_DEVICE_FAULT - Set if the device is currently in fault (and shouldn't
  * send any more commands to the ringbuffer)
@@ -601,7 +595,6 @@ enum adreno_device_flags {
 	ADRENO_DEVICE_PWRON = 0,
 	ADRENO_DEVICE_PWRON_FIXUP = 1,
 	ADRENO_DEVICE_INITIALIZED = 2,
-	ADRENO_DEVICE_CORESIGHT = 3,
 	ADRENO_DEVICE_STARTED = 5,
 	ADRENO_DEVICE_FAULT = 6,
 	ADRENO_DEVICE_DRAWOBJ_PROFILE = 7,
@@ -611,7 +604,6 @@ enum adreno_device_flags {
 	ADRENO_DEVICE_GPMU_INITIALIZED = 11,
 	ADRENO_DEVICE_ISDB_ENABLED = 12,
 	ADRENO_DEVICE_CACHE_FLUSH_TS_SUSPENDED = 13,
-	ADRENO_DEVICE_CORESIGHT_CX = 14,
 };
 
 /**
@@ -711,21 +703,6 @@ enum adreno_regs {
 #define ADRENO_REG_SKIP	0xFFFFFFFE
 #define ADRENO_REG_DEFINE(_offset, _reg)[_offset] = _reg
 
-/*
- * struct adreno_vbif_snapshot_registers - Holds an array of vbif registers
- * listed for snapshot dump for a particular core
- * @version: vbif version
- * @mask: vbif revision mask
- * @registers: vbif registers listed for snapshot dump
- * @count: count of vbif registers listed for snapshot
- */
-struct adreno_vbif_snapshot_registers {
-	const unsigned int version;
-	const unsigned int mask;
-	const unsigned int *registers;
-	const int count;
-};
-
 struct adreno_irq_funcs {
 	void (*func)(struct adreno_device *adreno_dev, int mask);
 };
@@ -757,13 +734,9 @@ struct adreno_gpudev {
 	const struct adreno_ft_perf_counters *ft_perf_counters;
 	unsigned int ft_perf_counters_count;
 
-	struct adreno_coresight *coresight[2];
-
 	/* GPU specific function hooks */
 	int (*probe)(struct platform_device *pdev, u32 chipid,
 		const struct adreno_gpu_core *gpucore);
-	void (*snapshot)(struct adreno_device *adreno_dev,
-				struct kgsl_snapshot *snapshot);
 	irqreturn_t (*irq_handler)(struct adreno_device *adreno_dev);
 	int (*init)(struct adreno_device *adreno_dev);
 	void (*remove)(struct adreno_device *adreno_dev);
@@ -916,9 +889,9 @@ int adreno_set_constraint(struct kgsl_device *device,
 				struct kgsl_context *context,
 				struct kgsl_device_constraint *constraint);
 
-void adreno_snapshot(struct kgsl_device *device,
+static inline void adreno_snapshot(struct kgsl_device *device,
 		struct kgsl_snapshot *snapshot,
-		struct kgsl_context *context);
+		struct kgsl_context *context) {}
 
 int adreno_reset(struct kgsl_device *device, int fault);
 
@@ -1775,7 +1748,7 @@ void adreno_clear_dcvs_counters(struct adreno_device *adreno_dev);
  *
  * Set the gmu fault and take snapshot when we hit a gmu fault
  */
-void gmu_fault_snapshot(struct kgsl_device *device);
+static inline void gmu_fault_snapshot(struct kgsl_device *device) {}
 
 /**
  * adreno_suspend_context - Make sure device is idle

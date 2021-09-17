@@ -101,12 +101,6 @@ static int timed_poll_check_rscc(struct kgsl_device *device,
 		(value & mask) == expected_ret, 100, timeout * 1000);
 }
 
-void gmu_fault_snapshot(struct kgsl_device *device)
-{
-	device->gmu_fault = true;
-	kgsl_device_snapshot(device, NULL, true);
-}
-
 struct a6xx_gmu_device *to_a6xx_gmu(struct adreno_device *adreno_dev)
 {
 	struct a6xx_device *a6xx_dev = container_of(adreno_dev,
@@ -2045,26 +2039,6 @@ static irqreturn_t a6xx_gmu_irq_handler(int irq, void *data)
 				status & ~GMU_AO_INT_MASK);
 
 	return IRQ_HANDLED;
-}
-
-void a6xx_gmu_snapshot(struct adreno_device *adreno_dev,
-	struct kgsl_snapshot *snapshot)
-{
-	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
-
-	/* No need to nmi if it was a gpu fault */
-	if (device->gmu_fault)
-		a6xx_gmu_send_nmi(adreno_dev, false);
-
-	a6xx_gmu_device_snapshot(device, snapshot);
-
-	a6xx_snapshot(adreno_dev, snapshot);
-
-	gmu_core_regwrite(device, A6XX_GMU_GMU2HOST_INTR_CLR,
-		0xffffffff);
-	gmu_core_regwrite(device, A6XX_GMU_GMU2HOST_INTR_MASK,
-		HFI_IRQ_MASK);
-
 }
 
 void a6xx_gmu_aop_send_acd_state(struct a6xx_gmu_device *gmu, bool flag)

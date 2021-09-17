@@ -520,34 +520,6 @@ static int a6xx_rgmu_disable_gdsc(struct adreno_device *adreno_dev)
 	return -ETIMEDOUT;
 }
 
-
-static void a6xx_rgmu_halt_execution(struct kgsl_device *device);
-
-void a6xx_rgmu_snapshot(struct adreno_device *adreno_dev,
-	struct kgsl_snapshot *snapshot)
-{
-	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
-	struct a6xx_rgmu_device *rgmu = to_a6xx_rgmu(adreno_dev);
-
-	/*
-	 * Halt RGMU execution so that GX will not
-	 * be collapsed while dumping snapshot.
-	 */
-	a6xx_rgmu_halt_execution(device);
-
-	adreno_snapshot_registers(device, snapshot, a6xx_rgmu_registers,
-			ARRAY_SIZE(a6xx_rgmu_registers) / 2);
-
-	a6xx_snapshot(adreno_dev, snapshot);
-
-	gmu_core_regwrite(device, A6XX_GMU_GMU2HOST_INTR_CLR, 0xffffffff);
-	gmu_core_regwrite(device, A6XX_GMU_GMU2HOST_INTR_MASK,
-		RGMU_OOB_IRQ_MASK);
-
-	if (device->gmu_fault)
-		rgmu->fault_count++;
-}
-
 static void a6xx_rgmu_suspend(struct adreno_device *adreno_dev)
 {
 	a6xx_rgmu_irq_disable(adreno_dev);
@@ -635,6 +607,7 @@ static int a6xx_rgmu_load_firmware(struct adreno_device *adreno_dev)
 	return rgmu->fw_hostptr ? 0 : -ENOMEM;
 }
 
+#if 0
 /* Halt RGMU execution */
 static void a6xx_rgmu_halt_execution(struct kgsl_device *device)
 {
@@ -671,6 +644,7 @@ static void a6xx_rgmu_halt_execution(struct kgsl_device *device)
 	gmu_core_regwrite(device, A6XX_GMU_AO_AHB_FENCE_CTRL, 0);
 
 }
+#endif
 
 static void halt_gbif_arb(struct adreno_device *adreno_dev)
 {

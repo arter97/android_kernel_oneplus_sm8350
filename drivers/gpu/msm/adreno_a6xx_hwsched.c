@@ -16,6 +16,7 @@
 #include "kgsl_trace.h"
 #include "kgsl_util.h"
 
+#if 0
 static size_t adreno_hwsched_snapshot_rb(struct kgsl_device *device, u8 *buf,
 	size_t remain, void *priv)
 {
@@ -139,6 +140,7 @@ void a6xx_hwsched_snapshot(struct adreno_device *adreno_dev,
 
 	adreno_hwsched_parse_fault_cmdobj(adreno_dev, snapshot);
 }
+#endif
 
 static int a6xx_hwsched_gmu_first_boot(struct adreno_device *adreno_dev)
 {

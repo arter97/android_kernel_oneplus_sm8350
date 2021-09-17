@@ -1277,18 +1277,14 @@ static void reset_and_snapshot(struct adreno_device *adreno_dev)
 	if (device->state != KGSL_STATE_ACTIVE)
 		return;
 
-	if (!obj) {
-		kgsl_device_snapshot(device, NULL, false);
+	if (!obj)
 		goto done;
-	}
 
 	drawobj = DRAWOBJ(obj->cmdobj);
 
 	context = drawobj->context;
 
 	do_fault_header(adreno_dev, drawobj);
-
-	kgsl_device_snapshot(device, context, false);
 
 	force_retire_timestamp(device, drawobj);
 
@@ -1416,25 +1412,4 @@ void adreno_hwsched_mark_drawobj(struct adreno_device *adreno_dev,
 	adreno_hwsched_set_fault(adreno_dev);
 
 	mutex_unlock(&hwsched->mutex);
-}
-
-void adreno_hwsched_parse_fault_cmdobj(struct adreno_device *adreno_dev,
-	struct kgsl_snapshot *snapshot)
-{
-	struct adreno_hwsched *hwsched = to_hwsched(adreno_dev);
-	struct cmd_list_obj *obj, *tmp;
-
-	list_for_each_entry_safe(obj, tmp, &hwsched->cmd_list, node) {
-		struct kgsl_drawobj_cmd *cmdobj = obj->cmdobj;
-
-		if (test_bit(CMDOBJ_FAULT, &cmdobj->priv)) {
-			struct kgsl_memobj_node *ib;
-
-			list_for_each_entry(ib, &cmdobj->cmdlist, node) {
-				adreno_parse_ib(KGSL_DEVICE(adreno_dev),
-					snapshot, snapshot->process,
-					ib->gpuaddr, ib->size >> 2);
-			}
-		}
-	}
 }
