@@ -689,6 +689,7 @@ static void ipa3_active_clients_log_destroy(void)
 	kfree(active_clients_table_buf);
 	active_clients_table_buf = NULL;
 	kfree(ipa3_ctx->ipa3_active_clients_logging.log_buffer[0]);
+	ipa3_ctx->ipa3_active_clients_logging.log_buffer[0] = NULL;
 	ipa3_ctx->ipa3_active_clients_logging.log_head = 0;
 	ipa3_ctx->ipa3_active_clients_logging.log_tail =
 			IPA3_ACTIVE_CLIENTS_LOG_BUFFER_SIZE_LINES - 1;
@@ -1005,6 +1006,7 @@ static int ipa3_ioctl_add_rt_rule_v2(unsigned long arg)
 	u32 pyld_sz;
 	u64 uptr = 0;
 	u8 *param = NULL;
+	u8 *param2 = NULL;
 	u8 *kptr = NULL;
 
 	if (copy_from_user(header, (const void __user *)arg,
@@ -1042,6 +1044,24 @@ static int ipa3_ioctl_add_rt_rule_v2(unsigned long arg)
 	if (IS_ERR(param)) {
 		retval = -EFAULT;
 		goto free_param_kptr;
+	}
+
+	param2 = memdup_user((const void __user *)arg,
+		sizeof(struct ipa_ioc_add_rt_rule_v2));
+	if (IS_ERR(param2)) {
+		retval = -EFAULT;
+		goto free_param_kptr;
+	}
+
+
+	/* add check in case user-space module compromised */
+	if (unlikely(((struct ipa_ioc_add_rt_rule_v2 *)param2)->num_rules
+		!= pre_entry)) {
+		IPAERR_RL("current %d pre %d\n",
+			((struct ipa_ioc_add_rt_rule_v2 *)param2)->
+				num_rules, pre_entry);
+			retval = -EFAULT;
+			goto free_param_kptr;
 	}
 	/* alloc kernel pointer with actual payload size */
 	kptr = kzalloc(pyld_sz, GFP_KERNEL);
@@ -1082,6 +1102,8 @@ static int ipa3_ioctl_add_rt_rule_v2(unsigned long arg)
 free_param_kptr:
 	if (!IS_ERR(param))
 		kfree(param);
+	if (!IS_ERR(param2))
+		kfree(param2);
 	kfree(kptr);
 
 	return retval;
@@ -1097,6 +1119,7 @@ static int ipa3_ioctl_add_rt_rule_ext_v2(unsigned long arg)
 	u32 pyld_sz;
 	u64 uptr = 0;
 	u8 *param = NULL;
+	u8 *param2 = NULL;
 	u8 *kptr = NULL;
 
 	if (copy_from_user(header,
@@ -1137,6 +1160,24 @@ static int ipa3_ioctl_add_rt_rule_ext_v2(unsigned long arg)
 	if (IS_ERR(param)) {
 		retval = -EFAULT;
 		goto free_param_kptr;
+	}
+
+	param2 = memdup_user((const void __user *)arg,
+		sizeof(struct ipa_ioc_add_rt_rule_ext_v2));
+	if (IS_ERR(param2)) {
+		retval = -EFAULT;
+		goto free_param_kptr;
+	}
+
+
+	/* add check in case user-space module compromised */
+	if (unlikely(((struct ipa_ioc_add_rt_rule_ext_v2 *)param2)->num_rules
+		!= pre_entry)) {
+		IPAERR_RL("current %d pre %d\n",
+			((struct ipa_ioc_add_rt_rule_ext_v2 *)param2)->
+				num_rules, pre_entry);
+			retval = -EFAULT;
+			goto free_param_kptr;
 	}
 	/* alloc kernel pointer with actual payload size */
 	kptr = kzalloc(pyld_sz, GFP_KERNEL);
@@ -1179,6 +1220,8 @@ static int ipa3_ioctl_add_rt_rule_ext_v2(unsigned long arg)
 free_param_kptr:
 	if (!IS_ERR(param))
 		kfree(param);
+	if (!IS_ERR(param2))
+		kfree(param2);
 	kfree(kptr);
 
 	return retval;
@@ -1194,6 +1237,7 @@ static int ipa3_ioctl_add_rt_rule_after_v2(unsigned long arg)
 	u32 pyld_sz;
 	u64 uptr = 0;
 	u8 *param = NULL;
+	u8 *param2 = NULL;
 	u8 *kptr = NULL;
 
 	if (copy_from_user(header, (const void __user *)arg,
@@ -1234,6 +1278,23 @@ static int ipa3_ioctl_add_rt_rule_after_v2(unsigned long arg)
 		retval = -EFAULT;
 		goto free_param_kptr;
 	}
+
+	param2 = memdup_user((const void __user *)arg,
+		sizeof(struct ipa_ioc_add_rt_rule_after_v2));
+	if (IS_ERR(param2)) {
+		retval = -EFAULT;
+		goto free_param_kptr;
+	}
+
+	/* add check in case user-space module compromised */
+	if (unlikely(((struct ipa_ioc_add_rt_rule_after_v2 *)param2)->num_rules
+		!= pre_entry)) {
+		IPAERR_RL("current %d pre %d\n",
+			((struct ipa_ioc_add_rt_rule_after_v2 *)param2)->
+				num_rules, pre_entry);
+			retval = -EFAULT;
+			goto free_param_kptr;
+	}
 	/* alloc kernel pointer with actual payload size */
 	kptr = kzalloc(pyld_sz, GFP_KERNEL);
 	if (!kptr) {
@@ -1273,6 +1334,8 @@ static int ipa3_ioctl_add_rt_rule_after_v2(unsigned long arg)
 free_param_kptr:
 	if (!IS_ERR(param))
 		kfree(param);
+	if (!IS_ERR(param2))
+		kfree(param2);
 	kfree(kptr);
 
 	return retval;
@@ -1288,6 +1351,7 @@ static int ipa3_ioctl_mdfy_rt_rule_v2(unsigned long arg)
 	u32 pyld_sz;
 	u64 uptr = 0;
 	u8 *param = NULL;
+	u8 *param2 = NULL;
 	u8 *kptr = NULL;
 
 	if (copy_from_user(header, (const void __user *)arg,
@@ -1328,6 +1392,23 @@ static int ipa3_ioctl_mdfy_rt_rule_v2(unsigned long arg)
 		retval = -EFAULT;
 		goto free_param_kptr;
 	}
+
+	param2 = memdup_user((const void __user *)arg,
+		sizeof(struct ipa_ioc_mdfy_rt_rule_v2));
+	if (IS_ERR(param2)) {
+		retval = -EFAULT;
+		goto free_param_kptr;
+	}
+
+	/* add check in case user-space module compromised */
+	if (unlikely(((struct ipa_ioc_mdfy_rt_rule_v2 *)param2)->num_rules
+		!= pre_entry)) {
+		IPAERR_RL("current %d pre %d\n",
+			((struct ipa_ioc_mdfy_rt_rule_v2 *)param2)->
+				num_rules, pre_entry);
+			retval = -EFAULT;
+			goto free_param_kptr;
+	}
 	/* alloc kernel pointer with actual payload size */
 	kptr = kzalloc(pyld_sz, GFP_KERNEL);
 	if (!kptr) {
@@ -1367,6 +1448,8 @@ static int ipa3_ioctl_mdfy_rt_rule_v2(unsigned long arg)
 free_param_kptr:
 	if (!IS_ERR(param))
 		kfree(param);
+	if (!IS_ERR(param2))
+		kfree(param2);
 	kfree(kptr);
 
 	return retval;
@@ -1382,6 +1465,7 @@ static int ipa3_ioctl_add_flt_rule_v2(unsigned long arg)
 	u32 pyld_sz;
 	u64 uptr = 0;
 	u8 *param = NULL;
+	u8 *param2 = NULL;
 	u8 *kptr = NULL;
 
 	if (copy_from_user(header, (const void __user *)arg,
@@ -1421,6 +1505,23 @@ static int ipa3_ioctl_add_flt_rule_v2(unsigned long arg)
 		retval = -EFAULT;
 		goto free_param_kptr;
 	}
+
+	param2 = memdup_user((const void __user *)arg,
+		sizeof(struct ipa_ioc_add_flt_rule_v2));
+	if (IS_ERR(param2)) {
+		retval = -EFAULT;
+		goto free_param_kptr;
+	}
+
+	/* add check in case user-space module compromised */
+	if (unlikely(((struct ipa_ioc_add_flt_rule_v2 *)param2)->num_rules
+		!= pre_entry)) {
+		IPAERR_RL("current %d pre %d\n",
+			((struct ipa_ioc_add_flt_rule_v2 *)param2)->
+				num_rules, pre_entry);
+			retval = -EFAULT;
+			goto free_param_kptr;
+	}
 	/* alloc kernel pointer with actual payload size */
 	kptr = kzalloc(pyld_sz, GFP_KERNEL);
 	if (!kptr) {
@@ -1459,6 +1560,8 @@ static int ipa3_ioctl_add_flt_rule_v2(unsigned long arg)
 free_param_kptr:
 	if (!IS_ERR(param))
 		kfree(param);
+	if (!IS_ERR(param2))
+		kfree(param2);
 	kfree(kptr);
 
 	return retval;
@@ -1474,6 +1577,7 @@ static int ipa3_ioctl_add_flt_rule_after_v2(unsigned long arg)
 	u32 pyld_sz;
 	u64 uptr = 0;
 	u8 *param = NULL;
+	u8 *param2 = NULL;
 	u8 *kptr = NULL;
 
 	if (copy_from_user(header, (const void __user *)arg,
@@ -1514,6 +1618,23 @@ static int ipa3_ioctl_add_flt_rule_after_v2(unsigned long arg)
 		retval = -EFAULT;
 		goto free_param_kptr;
 	}
+
+	param2 = memdup_user((const void __user *)arg,
+		sizeof(struct ipa_ioc_add_flt_rule_after_v2));
+	if (IS_ERR(param2)) {
+		retval = -EFAULT;
+		goto free_param_kptr;
+	}
+
+	/* add check in case user-space module compromised */
+	if (unlikely(((struct ipa_ioc_add_flt_rule_after_v2 *)param2)->num_rules
+		!= pre_entry)) {
+		IPAERR_RL("current %d pre %d\n",
+			((struct ipa_ioc_add_flt_rule_after_v2 *)param2)->
+				num_rules, pre_entry);
+			retval = -EFAULT;
+			goto free_param_kptr;
+	}
 	/* alloc kernel pointer with actual payload size */
 	kptr = kzalloc(pyld_sz, GFP_KERNEL);
 	if (!kptr) {
@@ -1553,6 +1674,8 @@ static int ipa3_ioctl_add_flt_rule_after_v2(unsigned long arg)
 free_param_kptr:
 	if (!IS_ERR(param))
 		kfree(param);
+	if (!IS_ERR(param2))
+		kfree(param2);
 	kfree(kptr);
 
 	return retval;
@@ -1568,6 +1691,7 @@ static int ipa3_ioctl_mdfy_flt_rule_v2(unsigned long arg)
 	u32 pyld_sz;
 	u64 uptr = 0;
 	u8 *param = NULL;
+	u8 *param2 = NULL;
 	u8 *kptr = NULL;
 
 	if (copy_from_user(header, (const void __user *)arg,
@@ -1608,6 +1732,23 @@ static int ipa3_ioctl_mdfy_flt_rule_v2(unsigned long arg)
 		retval = -EFAULT;
 		goto free_param_kptr;
 	}
+
+	param2 = memdup_user((const void __user *)arg,
+		sizeof(struct ipa_ioc_mdfy_flt_rule_v2));
+	if (IS_ERR(param2)) {
+		retval = -EFAULT;
+		goto free_param_kptr;
+	}
+
+	/* add check in case user-space module compromised */
+	if (unlikely(((struct ipa_ioc_mdfy_flt_rule_v2 *)param2)->num_rules
+		!= pre_entry)) {
+		IPAERR_RL("current %d pre %d\n",
+			((struct ipa_ioc_mdfy_flt_rule_v2 *)param2)->
+				num_rules, pre_entry);
+			retval = -EFAULT;
+			goto free_param_kptr;
+	}
 	/* alloc kernel pointer with actual payload size */
 	kptr = kzalloc(pyld_sz, GFP_KERNEL);
 	if (!kptr) {
@@ -1647,6 +1788,8 @@ static int ipa3_ioctl_mdfy_flt_rule_v2(unsigned long arg)
 free_param_kptr:
 	if (!IS_ERR(param))
 		kfree(param);
+	if (!IS_ERR(param2))
+		kfree(param2);
 	kfree(kptr);
 
 	return retval;
@@ -7725,13 +7868,16 @@ fail_bus_reg:
 fail_init_mem_partition:
 fail_bind:
 	kfree(ipa3_ctx->ctrl);
+	ipa3_ctx->ctrl = NULL;
 fail_mem_ctrl:
 	kfree(ipa3_ctx->ipa_tz_unlock_reg);
+	ipa3_ctx->ipa_tz_unlock_reg = NULL;
 fail_tz_unlock_reg:
 	if (ipa3_ctx->logbuf)
 		ipc_log_context_destroy(ipa3_ctx->logbuf);
 fail_uc_file_alloc:
 	kfree(ipa3_ctx->gsi_fw_file_name);
+	ipa3_ctx->gsi_fw_file_name = NULL;
 fail_gsi_file_alloc:
 fail_mem_ctx:
 	return result;
@@ -8419,6 +8565,7 @@ static int get_ipa_dts_configuration(struct platform_device *pdev,
 			IPAERR("failed to read register addresses\n");
 			kfree(ipa_tz_unlock_reg);
 			kfree(ipa_drv_res->ipa_tz_unlock_reg);
+			ipa_drv_res->ipa_tz_unlock_reg = NULL;
 			return -EFAULT;
 		}
 
