@@ -511,29 +511,12 @@ void oplus_chg_mod_init_attrs(struct device_type *dev_type)
 		__oplus_chg_mod_attrs[i] = &oplus_chg_mod_attrs[i].attr;
 }
 
-static char *kstruprdup(const char *str, gfp_t gfp)
-{
-	char *ret, *ustr;
-
-	ustr = ret = kmalloc(strlen(str) + 1, gfp);
-
-	if (!ret)
-		return NULL;
-
-	while (*str)
-		*ustr++ = toupper(*str++);
-
-	*ustr = 0;
-
-	return ret;
-}
-
 int oplus_chg_uevent(struct device *dev, struct kobj_uevent_env *env)
 {
 	struct oplus_chg_mod *ocm = dev_get_drvdata(dev);
 	int ret = 0, j;
 	char *prop_buf;
-	char *attrname;
+	char attrname[64];
 
 	if (!ocm || !ocm->desc) {
 		pr_debug("No oplus chg mod yet\n");
@@ -550,7 +533,8 @@ int oplus_chg_uevent(struct device *dev, struct kobj_uevent_env *env)
 
 	for (j = 0; j < ocm->desc->uevent_num_properties; j++) {
 		struct device_attribute *attr;
-		char *line;
+		const char *str;
+		char *line, *ustr;
 
 		attr = &oplus_chg_mod_attrs[ocm->desc->uevent_properties[j]];
 
@@ -569,14 +553,14 @@ int oplus_chg_uevent(struct device *dev, struct kobj_uevent_env *env)
 		if (line)
 			*line = 0;
 
-		attrname = kstruprdup(attr->attr.name, GFP_KERNEL);
-		if (!attrname) {
-			ret = -ENOMEM;
-			goto out;
-		}
+		str = attr->attr.name;
+		ustr = attrname;
+		while (*str)
+			*ustr++ = toupper(*str++);
+
+		*ustr = 0;
 
 		ret = add_uevent_var(env, "OPLUS_CHG_%s=%s", attrname, prop_buf);
-		kfree(attrname);
 		if (ret)
 			goto out;
 	}
