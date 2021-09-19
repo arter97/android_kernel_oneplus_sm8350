@@ -58,7 +58,7 @@ static bool screen_on = true;
 static unsigned long long total_touch_clock;
 module_param(total_touch_clock, ullong, 0644);
 static DEFINE_MUTEX(zram_wb_wakelock_mutex);
-static struct wakeup_source zram_wb_wakelock;
+static struct wakeup_source *zram_wb_wakelock;
 
 /*
  * Blocks that hasn't been accessed in wb_start_mins
@@ -1689,7 +1689,7 @@ static void zram_wb_fb_work(struct work_struct *work)
 		return;
 
 	mutex_lock(&zram_wb_wakelock_mutex);
-	__pm_stay_awake(&zram_wb_wakelock);
+	__pm_stay_awake(zram_wb_wakelock);
 	blk_start_plug(&plug);
 	idr_for_each_entry(&zram_index_idr, zram, id) {
 		// Start marking blocks if they are old enough
@@ -1704,7 +1704,7 @@ static void zram_wb_fb_work(struct work_struct *work)
 		pr_info("do_writeback()--\n");
 	}
 	blk_finish_plug(&plug);
-	__pm_relax(&zram_wb_wakelock);
+	__pm_relax(zram_wb_wakelock);
 	mutex_unlock(&zram_wb_wakelock_mutex);
 }
 
@@ -1751,7 +1751,7 @@ static void __init init_zram_wb(void)
 	int i;
 
 	INIT_WORK(&zram_wb_fb_worker, zram_wb_fb_work);
-	wakeup_source_init(&zram_wb_wakelock, "zram_wb_wakelock");
+	zram_wb_wakelock = wakeup_source_register(NULL, "zram_wb_wakelock");
 	msm_drm_register_client(&fb_notifier_block);
 	i = input_register_handler(&zram_wb_input_handler);
 }
@@ -1760,7 +1760,7 @@ static void __exit destroy_zram_wb(void)
 {
 	input_unregister_handler(&zram_wb_input_handler);
 	msm_drm_unregister_client(&fb_notifier_block);
-	wakeup_source_trash(&zram_wb_wakelock);
+	wakeup_source_unregister(zram_wb_wakelock);
 }
 
 static void __zram_make_request(struct zram *zram, struct bio *bio)
