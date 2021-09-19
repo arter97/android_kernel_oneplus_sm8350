@@ -254,3 +254,12 @@ if [ -f /sys/devices/soc0/select_image ]; then
 fi
 
 setprop vendor.post_boot.parsed 1
+
+# UFS add component info
+UFS_PN=`cat /sys/devices/platform/soc/1d84000.ufshc/string_descriptors/product_name`
+UFS_VENDOR=`cat /sys/devices/platform/soc/1d84000.ufshc/string_descriptors/manufacturer_name`
+UFS_VERSION=`cat /sys/devices/platform/soc/1d84000.ufshc/string_descriptors/product_revision`
+UFS_INFO="UFS "`echo ${UFS_PN} | tr -d "\r"`" "`echo ${UFS_VENDOR} | tr -d "\r"`" "`echo ${UFS_VERSION} | tr -d "\r"`
+echo ${UFS_INFO}> /sys/project_info/add_component
+#liochen@SYSTEM, 2020/11/02, Add for enable ufs performance
+echo 0 > /sys/class/scsi_host/host0/../../../clkscale_enable
