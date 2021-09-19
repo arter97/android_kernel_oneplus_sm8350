@@ -234,7 +234,7 @@ do
     echo 50 > $qoslat/mem_latency/ratio_ceil
 done
 echo N > /sys/module/lpm_levels/parameters/sleep_disabled
-echo s2idle > /sys/power/mem_sleep
+echo deep > /sys/power/mem_sleep
 
 echo 0 > /proc/sys/vm/page-cluster
 echo 100 > /proc/sys/vm/swappiness
