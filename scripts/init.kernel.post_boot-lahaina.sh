@@ -271,6 +271,10 @@ echo 0 > /proc/sys/vm/page-cluster
 # Setup readahead
 find /sys/devices -name read_ahead_kb | while read node; do echo 128 > $node; done
 
+# Remove unused swapfile
+rm -f /data/vendor/swap/swapfile 2>/dev/null
+sync
+
 # Let kernel know our image version/variant/crm_version
 if [ -f /sys/devices/soc0/select_image ]; then
     image_version="10:"
