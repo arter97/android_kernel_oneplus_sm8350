@@ -236,8 +236,37 @@ done
 echo N > /sys/module/lpm_levels/parameters/sleep_disabled
 echo deep > /sys/power/mem_sleep
 
+# Setup swap
+while [ ! -e /dev/block/zram0 ]; do
+  sleep 1
+done
+if ! grep -q zram /proc/swaps; then
+  # Setup backing device
+  BDEV="/dev/block/by-name/last_parti"
+  if [ ! -e "$BDEV" ]; then
+    echo "post_boot: failed to find the backing device"
+  fi
+  echo "post_boot: using $BDEV for zram backing_dev"
+  realpath $BDEV > /sys/block/zram0/backing_dev
+  # 4GB
+  echo 4294967296 > /sys/block/zram0/disksize
+
+  # Set swappiness reflecting the device's RAM size
+  RamStr=$(cat /proc/meminfo | grep MemTotal)
+  RamMB=$((${RamStr:16:8} / 1024))
+  if [ $RamMB -le 6144 ]; then
+    echo 190 > /proc/sys/vm/rswappiness
+  elif [ $RamMB -le 8192 ]; then
+    echo 160 > /proc/sys/vm/rswappiness
+  else
+    echo 130 > /proc/sys/vm/rswappiness
+  fi
+
+  mkswap /dev/block/zram0
+  swapon /dev/block/zram0
+fi
+
 echo 0 > /proc/sys/vm/page-cluster
-echo 100 > /proc/sys/vm/swappiness
 
 # Let kernel know our image version/variant/crm_version
 if [ -f /sys/devices/soc0/select_image ]; then
