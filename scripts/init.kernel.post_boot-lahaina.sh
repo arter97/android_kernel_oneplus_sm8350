@@ -80,6 +80,8 @@ echo 325 > /proc/sys/kernel/walt_low_latency_task_threshold
 # cpuset parameters
 echo 0-3 > /dev/cpuset/background/cpus
 echo 0-3 > /dev/cpuset/system-background/cpus
+# jared.wu@OPTIMIZATION, 2020/09/22, Make foreground run on cpu 0-6
+echo 0-6 > /dev/cpuset/foreground/cpus
 
 # Turn off scheduler boost at the end
 echo 0 > /proc/sys/kernel/sched_boost
