@@ -8,6 +8,8 @@
  * Copyright (c) 2012 Greg Kroah-Hartman <gregkh@linuxfoundation.org>
  */
 
+#define USES_DEBUG_FS
+
 #include <linux/fs.h>
 #include <linux/backing-dev.h>
 #include <linux/f2fs_fs.h>
@@ -22,7 +24,7 @@
 
 static LIST_HEAD(f2fs_stat_list);
 static DEFINE_MUTEX(f2fs_stat_mutex);
-#ifdef CONFIG_DEBUG_FS
+#ifdef CONFIG_REAL_DEBUG_FS
 static struct dentry *f2fs_debugfs_root;
 #endif
 
@@ -59,7 +61,7 @@ void f2fs_update_sit_info(struct f2fs_sb_info *sbi)
 		si->avg_vblocks = 0;
 }
 
-#ifdef CONFIG_DEBUG_FS
+#ifdef CONFIG_REAL_DEBUG_FS
 static void update_general_status(struct f2fs_sb_info *sbi)
 {
 	struct f2fs_stat_info *si = F2FS_STAT(sbi);
@@ -532,7 +534,7 @@ void f2fs_destroy_stats(struct f2fs_sb_info *sbi)
 
 void __init f2fs_create_root_stats(void)
 {
-#ifdef CONFIG_DEBUG_FS
+#ifdef CONFIG_REAL_DEBUG_FS
 	f2fs_debugfs_root = debugfs_create_dir("f2fs", NULL);
 
 	debugfs_create_file("status", S_IRUGO, f2fs_debugfs_root, NULL,
@@ -542,7 +544,7 @@ void __init f2fs_create_root_stats(void)
 
 void f2fs_destroy_root_stats(void)
 {
-#ifdef CONFIG_DEBUG_FS
+#ifdef CONFIG_REAL_DEBUG_FS
 	debugfs_remove_recursive(f2fs_debugfs_root);
 	f2fs_debugfs_root = NULL;
 #endif
