@@ -46,7 +46,7 @@ static struct file *file_open(const char *path, int flags, umode_t rights)
 	mm_segment_t oldfs;
 
 	oldfs = get_fs();
-	set_fs(get_ds());
+	set_fs(KERNEL_DS);
 	filp = filp_open(path, flags, rights);
 	set_fs(oldfs);
 
