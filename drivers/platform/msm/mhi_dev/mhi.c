@@ -25,6 +25,7 @@
 #include <linux/vmalloc.h>
 #include <linux/dmaengine.h>
 #include <linux/dma-mapping.h>
+#include <linux/limits.h>
 
 #include "mhi.h"
 #include "mhi_hwio.h"
@@ -65,7 +66,7 @@
 
 #define MHI_DEV_CH_CLOSE_TIMEOUT_MIN	5000
 #define MHI_DEV_CH_CLOSE_TIMEOUT_MAX	5100
-#define MHI_DEV_CH_CLOSE_TIMEOUT_COUNT	30
+#define MHI_DEV_CH_CLOSE_TIMEOUT_COUNT	200
 
 uint32_t bhi_imgtxdb;
 enum mhi_msg_level mhi_msg_lvl = MHI_MSG_ERROR;
@@ -328,6 +329,12 @@ static void mhi_dev_event_msi_cb(void *req)
 	}
 
 	ch = ereq->context;
+	if (!ch) {
+		mhi_log(MHI_MSG_ERROR, "Invalid ereq context, return\n");
+		return;
+	}
+	if (ch->pend_flush_cnt++ >= U32_MAX)
+		ch->pend_flush_cnt = 0;
 	mhi = ch->ring->mhi_dev;
 
 	mhi_log(MHI_MSG_VERBOSE, "MSI completed for flush req %d\n",
@@ -513,18 +520,21 @@ static int mhi_dev_flush_transfer_completion_events(struct mhi_dev *mhi,
 	unsigned long flags;
 	struct event_req *flush_ereq;
 
-	/*
-	 * Channel got stopped or closed with transfers pending
-	 * Do not send completion events to host
-	 */
-	if (ch->state == MHI_DEV_CH_CLOSED ||
-		ch->state == MHI_DEV_CH_STOPPED) {
-		mhi_log(MHI_MSG_DBG, "Ch %d closed with %d writes pending\n",
-			ch->ch_id, ch->pend_wr_count + 1);
-		return -ENODEV;
-	}
-
 	do {
+
+		/*
+		 * Channel got stopped or closed with transfers pending
+		 * Do not send completion events to host
+		 */
+		if (ch->state == MHI_DEV_CH_CLOSED ||
+			ch->state == MHI_DEV_CH_STOPPED) {
+			mhi_log(MHI_MSG_DBG,
+				"Ch %d closed with %d writes pending\n",
+				ch->ch_id, ch->pend_wr_count + 1);
+			rc = -ENODEV;
+			break;
+		}
+
 		spin_lock_irqsave(&mhi->lock, flags);
 		if (list_empty(&ch->flush_event_req_buffers)) {
 			spin_unlock_irqrestore(&mhi->lock, flags);
@@ -535,10 +545,25 @@ static int mhi_dev_flush_transfer_completion_events(struct mhi_dev *mhi,
 		list_del_init(&flush_ereq->list);
 		spin_unlock_irqrestore(&mhi->lock, flags);
 
-		ch->flush_req_cnt++;
+		if (ch->flush_req_cnt++ >= U32_MAX)
+			ch->flush_req_cnt = 0;
 		flush_ereq->flush_num = ch->flush_req_cnt;
 		mhi_log(MHI_MSG_DBG, "Flush num %d called for ch %d\n",
 			ch->flush_req_cnt, ch->ch_id);
+
+		/* Check the limits of the buffer to be flushed */
+		if (flush_ereq->tr_events < ch->tr_events ||
+			(flush_ereq->tr_events + flush_ereq->num_events) >
+			(ch->tr_events + ch->evt_buf_size)) {
+			pr_err("%s: Invalid completion event buffer!\n",
+				__func__);
+			mhi_log(MHI_MSG_ERROR,
+				"Invalid cmpl evt buf - start %pK, end %pK\n",
+				flush_ereq->tr_events,
+				flush_ereq->tr_events + flush_ereq->num_events);
+			rc = -EINVAL;
+			break;
+		}
 		rc = mhi_dev_send_multiple_tr_events(mhi,
 				mhi->ch_ctx_cache[ch->ch_id].err_indx,
 				flush_ereq,
@@ -2160,9 +2185,8 @@ static int mhi_dev_abort(struct mhi_dev *mhi)
 	/* Hard stop all the channels */
 	for (ch_id = 0; ch_id < mhi->cfg.channels; ch_id++) {
 		ring = &mhi->ring[ch_id + mhi->ch_ring_start];
-		if (ring->state == RING_STATE_UINT)
+		if (!ring || ring->state == RING_STATE_UINT)
 			continue;
-
 		ch = &mhi->ch[ch_id];
 		mutex_lock(&ch->ch_lock);
 		mhi->ch[ch_id].state = MHI_DEV_CH_STOPPED;
@@ -2263,6 +2287,7 @@ static void mhi_dev_transfer_completion_cb(void *mreq)
 	/* Trigger client call back */
 	req->client_cb(req);
 
+	mutex_lock(&ch->ch_lock);
 	/* Flush read completions to host */
 	if (snd_cmpl && mhi_ctx->ch_ctx_cache[ch->ch_id].ch_type ==
 				MHI_DEV_CH_TYPE_OUTBOUND_CHANNEL) {
@@ -2273,7 +2298,7 @@ static void mhi_dev_transfer_completion_cb(void *mreq)
 				"Failed to flush read completions to host\n");
 		}
 	}
-
+	mutex_unlock(&ch->ch_lock);
 	if (ch->state == MHI_DEV_CH_PENDING_STOP) {
 		ch->state = MHI_DEV_CH_STOPPED;
 		rc = mhi_dev_process_stop_cmd(ch->ring, ch->ch_id, mhi_ctx);
@@ -2905,25 +2930,33 @@ void mhi_dev_close_channel(struct mhi_dev_client *handle)
 {
 	struct mhi_dev_channel *ch;
 	int count = 0;
-
+	int rc = 0;
 	if (!handle) {
 		mhi_log(MHI_MSG_ERROR, "Invalid channel access:%d\n", -ENODEV);
 		return;
 	}
 	ch = handle->channel;
 
+	mutex_lock(&ch->ch_lock);
+
+	rc = mhi_dev_flush_transfer_completion_events(mhi_ctx, ch);
+	if (rc) {
+		mhi_log(MHI_MSG_ERROR,
+			"Failed to flush read completions to host\n");
+	}
 	do {
-		if (ch->pend_wr_count) {
+		if (ch->flush_req_cnt != ch->pend_flush_cnt) {
 			usleep_range(MHI_DEV_CH_CLOSE_TIMEOUT_MIN,
 					MHI_DEV_CH_CLOSE_TIMEOUT_MAX);
 		} else
 			break;
 	} while (++count < MHI_DEV_CH_CLOSE_TIMEOUT_COUNT);
 
-	mutex_lock(&ch->ch_lock);
-
 	if (ch->pend_wr_count)
 		mhi_log(MHI_MSG_ERROR, "%d writes pending for channel %d\n",
+			ch->pend_wr_count, ch->ch_id);
+	if (!list_empty(&ch->event_req_buffers))
+		mhi_log(MHI_MSG_ERROR, "%d pending flush for channel %d\n",
 			ch->pend_wr_count, ch->ch_id);
 
 	if (ch->state != MHI_DEV_CH_PENDING_START)
@@ -2936,14 +2969,24 @@ void mhi_dev_close_channel(struct mhi_dev_client *handle)
 	ch->state = MHI_DEV_CH_CLOSED;
 	ch->active_client = NULL;
 	kfree(ch->ereqs);
+	mhi_log(MHI_MSG_INFO,
+		"MEM_DEALLOC:ch:%d size:%d EREQ\n",
+		ch->ch_id, ch->evt_req_size);
 	kfree(ch->tr_events);
+	mhi_log(MHI_MSG_INFO,
+		"MEM_DEALLOC:ch:%d size:%d TR_EVENTS\n",
+		ch->ch_id, ch->evt_buf_size);
 	ch->evt_buf_size = 0;
 	ch->evt_req_size = 0;
 	ch->ereqs = NULL;
 	ch->tr_events = NULL;
 	kfree(handle);
+	mhi_log(MHI_MSG_INFO,
+		"MEM_ALLOC:ch:%d size:%d CLNT_HANDLE\n",
+		ch->ch_id, sizeof(struct mhi_dev_client));
 
 	mutex_unlock(&ch->ch_lock);
+	return;
 }
 EXPORT_SYMBOL(mhi_dev_close_channel);
 
