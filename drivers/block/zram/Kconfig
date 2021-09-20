@@ -84,7 +84,7 @@ config ZRAM_WRITEBACK
 
 config ZRAM_MEMORY_TRACKING
 	bool "Track zRam block status"
-	depends on ZRAM && DEBUG_FS
+	depends on ZRAM && REAL_DEBUG_FS
 	help
 	  With this feature, admin can track the state of allocated blocks
 	  of zRAM. Admin could see the information via

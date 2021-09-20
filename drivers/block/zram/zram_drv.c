@@ -15,6 +15,8 @@
 #define KMSG_COMPONENT "zram"
 #define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
+#define USES_DEBUG_FS
+
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/bio.h>
