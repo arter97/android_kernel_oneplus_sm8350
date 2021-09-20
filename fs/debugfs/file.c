@@ -9,6 +9,8 @@
  *  See Documentation/filesystems/ for more details.
  */
 
+#define USES_DEBUG_FS
+
 #include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/seq_file.h>

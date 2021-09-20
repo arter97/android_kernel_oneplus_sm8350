@@ -12,6 +12,14 @@
 #ifndef _DEBUGFS_H_
 #define _DEBUGFS_H_
 
+// A driver must define USES_DEBUG_FS before including debugfs.h
+#ifdef CONFIG_DEBUG_FS
+#undef CONFIG_DEBUG_FS
+#endif
+#ifdef USES_DEBUG_FS
+#define CONFIG_DEBUG_FS
+#endif
+
 #include <linux/fs.h>
 #include <linux/seq_file.h>
 

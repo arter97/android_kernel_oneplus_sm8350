@@ -313,7 +313,7 @@ config READABLE_ASM
           to keep kernel developers who have to stare a lot at assembler listings
           sane.
 
-config DEBUG_FS
+config REAL_DEBUG_FS
 	bool "Debug Filesystem"
 	help
 	  debugfs is a virtual file system that kernel developers use to put

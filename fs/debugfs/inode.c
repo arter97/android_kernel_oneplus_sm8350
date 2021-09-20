@@ -12,6 +12,8 @@
 
 #define pr_fmt(fmt)	"debugfs: " fmt
 
+#define USES_DEBUG_FS
+
 #include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/mount.h>
