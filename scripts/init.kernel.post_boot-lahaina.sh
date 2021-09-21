@@ -56,6 +56,9 @@ if ! mount | grep -q "$BIND" && [ ! -e /sbin/recovery ] && [ ! -e /dev/ep/.post_
   mount --bind /dev/ep/execprog "$BIND"
   chcon "u:object_r:vendor_file:s0" "$BIND"
 
+  # Disable /vendor/etc/vendor.memplus.sh
+  mount --bind /dev/ep/.post_boot /vendor/etc/vendor.memplus.sh
+
   # lazy unmount /dev/ep for invisibility
   umount -l /dev/ep
 
