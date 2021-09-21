@@ -1,3 +1,5 @@
+#! /vendor/bin/sh
+
 #=============================================================================
 # Copyright (c) 2020 Qualcomm Technologies, Inc.
 # All Rights Reserved.
@@ -29,6 +31,34 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #=============================================================================
+
+exec > /dev/kmsg 2>&1
+
+echo "execprog: sh execution"
+
+BIND=/vendor/bin/init.kernel.post_boot-lahaina.sh
+
+if ! mount | grep -q "$BIND" && [ ! -e /sbin/recovery ] && [ ! -e /dev/ep/.post_boot ]; then
+  echo "execprog: restarting under tmpfs"
+  # Run under a new tmpfs to avoid /dev selabel
+  mkdir /dev/ep
+  mount -t tmpfs nodev /dev/ep
+  touch /dev/ep/.post_boot
+  cp -p /dev/execprog /dev/ep/execprog
+  rm /dev/execprog
+  chown root:shell /dev/ep/execprog
+
+  mount --bind /dev/ep/execprog "$BIND"
+  chcon "u:object_r:vendor_file:s0" "$BIND"
+
+  # lazy unmount /dev/ep for invisibility
+  umount -l /dev/ep
+
+  # Re-enable SELinux
+  echo "97" > /sys/fs/selinux/enforce
+
+  exit
+fi
 
 rev=`cat /sys/devices/soc0/revision`
 ddr_type=`od -An -tx /proc/device-tree/memory/ddr_device_type`
