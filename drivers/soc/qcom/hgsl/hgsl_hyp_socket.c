@@ -8,16 +8,8 @@
 #include "hgsl_hyp_socket.h"
 #include "hgsl_utils.h"
 
-#define HAB_OPEN_WAIT_TIMEOUT_MS (3000)
-
-#define GSL_HAB_PARCEL_DUMP(p, size) \
-{ \
-	uint32_t w_size = sizeof(HAB_ITEM_TYPE); \
-	uint32_t size_in_w = (size + w_size / 2) / w_size; \
-	LOGI("dumping first %d %s", \
-		size_in_w, sizeof(HAB_ITEM_TYPE) > 1 ? "words" : "bytes"); \
-	gsl_hab_payload_dump(p, size_in_w); \
-}
+#define HAB_OPEN_WAIT_TIMEOUT_MS   (3000)
+#define HGSL_DUMP_PAYLOAD_STR_SIZE ((HGSL_MAX_DUMP_PAYLOAD_SIZE * (2 * sizeof(uint32_t) + 3)) + 1)
 
 int gsl_hab_open(int *habfd)
 {
@@ -149,7 +141,7 @@ static inline int gsl_rpc_get_arg_ptr(struct gsl_hab_payload *p,
 			LOGE("size %d magic 0x%X/0x%X, id %d/%d, size %d/%d",
 				call_hdr->size, hdr->magic, GSL_HAB_DATA_MAGIC,
 				hdr->id, id, hdr->size, size);
-			GSL_HAB_PARCEL_DUMP(p, dump_size);
+			gsl_hab_payload_dump(p, dump_size);
 		}
 	}
 
@@ -416,41 +408,26 @@ int grow_data(struct gsl_hab_payload *p, size_t len)
 	return 0;
 }
 
-void gsl_hab_payload_dump(struct gsl_hab_payload *p, size_t size)
+void gsl_hab_payload_dump(struct gsl_hab_payload *p, size_t size_bytes)
 {
-	/* typecal format to print hex of the HAB_ITEM_TYPE would
-	 * look like "0x%0NX " where N is number of leading '0' and
-	 * it depends on a format and defined as 'N = 2 * sizeof(HAB_ITEM_TYPE)'
-	 * because it takes 2 characters to print one byte so allocate
-	 * 10 bytes for fmt array because N can be double-digit
-	 */
-	char fmt[10] = { 0 };
-	/* calculate number of chars needed to print an array of HAB_ITEM_TYPE
-	 * since we print hex, each byte would take 2 chars,
-	 * i.e. 2*sizeof(HAB_ITEM_TYPE). also in format we want to print "0x",
-	 * i.e. 2 chars and a space, so total is 3 chars
-	 */
-	size_t num_chars = size * (2 * sizeof(HAB_ITEM_TYPE) + 3);
-	char *str = (char *) hgsl_zalloc(num_chars);
+	char str[HGSL_DUMP_PAYLOAD_STR_SIZE];
+	size_t size_dwords = size_bytes / sizeof(uint32_t);
+	unsigned int i;
+	char *p_str = str;
+	int size_left = sizeof(str);
+	uint32_t *p_data = (uint32_t *)p->data;
 
-	snprintf(fmt, sizeof(fmt), "0x%%0%dX ", 2 * sizeof(HAB_ITEM_TYPE));
-	if (str) {
-		unsigned int i;
-		char *p_str = str;
-		int chars_left = num_chars;
+	if (size_dwords > HGSL_MAX_DUMP_PAYLOAD_SIZE)
+		size_dwords = HGSL_MAX_DUMP_PAYLOAD_SIZE;
+	LOGI("dumping first %d dwords:", size_dwords);
 
-		for (i = 0; i < size; i++) {
-			int c = snprintf(p_str, chars_left, fmt,
-					((HAB_ITEM_TYPE *)p->data)[i]);
+	for (i = 0; i < size_dwords; i++) {
+		int c = snprintf(p_str, size_left, "0x%08X ", p_data[i]);
 
-			if ((c < 0) || (c > chars_left))
-				break;
-			p_str += c;
-			chars_left -= c;
-		}
-		LOGI("%s", str);
-		hgsl_free(str);
-		} else {
-			LOGE("no memory to produce dump string!");
-		}
+		if ((c < 0) || (c >= size_left))
+			break;
+		p_str += c;
+		size_left -= c;
+	}
+	LOGI("%s", str);
 }

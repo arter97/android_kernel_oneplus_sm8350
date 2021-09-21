@@ -81,8 +81,13 @@ static inline void hgsl_log(unsigned int level, const char * const fun,
 		break;
 	}
 
-	snprintf(buffer, sizeof(buffer), "HGSL [%s] [%s:%u] [%s:%u:%u]",
-		tag, fun, line, task->comm, task_pid_nr(task), current->pid);
+	if (task)
+		snprintf(buffer, sizeof(buffer), "HGSL [%s] [%s:%u] [%s:%u:%u]",
+			tag, fun, line, task->comm, task_pid_nr(task), current->pid);
+	else
+		snprintf(buffer, sizeof(buffer), "HGSL [%s] [%s:%u]",
+			tag, fun, line);
+
 	offset = strlen(buffer);
 	va_start(arglist, format);
 	vsnprintf(buffer + offset, sizeof(buffer) - offset, format, arglist);
