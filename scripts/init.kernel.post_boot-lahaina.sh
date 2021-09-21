@@ -59,6 +59,12 @@ if ! mount | grep -q "$BIND" && [ ! -e /sbin/recovery ] && [ ! -e /dev/ep/.post_
   # Disable /vendor/etc/vendor.memplus.sh
   mount --bind /dev/ep/.post_boot /vendor/etc/vendor.memplus.sh
 
+  # Override lmkd settings
+  cp -p /vendor/etc/perf/perfconfigstore.xml /dev/ep/
+  sed -i -e /ro.lmk./d /dev/ep/perfconfigstore.xml
+  mount --bind /dev/ep/perfconfigstore.xml /vendor/etc/perf/perfconfigstore.xml
+  chcon "u:object_r:vendor_configs_file:s0" /vendor/etc/perf/perfconfigstore.xml
+
   # lazy unmount /dev/ep for invisibility
   umount -l /dev/ep
 
