@@ -38,6 +38,11 @@ echo "execprog: sh execution"
 
 BIND=/vendor/bin/init.kernel.post_boot-lahaina.sh
 
+rev=`cat /sys/devices/soc0/revision`
+ddr_type=`od -An -tx /proc/device-tree/memory/ddr_device_type`
+ddr_type4="07"
+ddr_type5="08"
+
 if ! mount | grep -q "$BIND" && [ ! -e /sbin/recovery ] && [ ! -e /dev/ep/.post_boot ]; then
   echo "execprog: restarting under tmpfs"
   # Run under a new tmpfs to avoid /dev selabel
@@ -54,16 +59,52 @@ if ! mount | grep -q "$BIND" && [ ! -e /sbin/recovery ] && [ ! -e /dev/ep/.post_
   # lazy unmount /dev/ep for invisibility
   umount -l /dev/ep
 
+  # Setup swap
+  while [ ! -e /dev/block/zram0 ]; do
+    sleep 1
+  done
+  if ! grep -q zram /proc/swaps; then
+    # Setup backing device
+    BDEV="/dev/block/by-name/last_parti"
+    if [ ! -e "$BDEV" ]; then
+      echo "post_boot: failed to find the backing device"
+    fi
+    echo "post_boot: using $BDEV for zram backing_dev"
+    realpath $BDEV > /sys/block/zram0/backing_dev
+    # 4GB
+    echo 4294967296 > /sys/block/zram0/disksize
+
+    # Set swappiness reflecting the device's RAM size
+    RamStr=$(cat /proc/meminfo | grep MemTotal)
+    RamMB=$((${RamStr:16:8} / 1024))
+    if [ $RamMB -le 6144 ]; then
+      echo 190 > /proc/sys/vm/rswappiness
+    elif [ $RamMB -le 8192 ]; then
+      echo 160 > /proc/sys/vm/rswappiness
+    else
+      echo 130 > /proc/sys/vm/rswappiness
+    fi
+
+    mkswap /dev/block/zram0
+    swapon /dev/block/zram0
+  fi
+
+  echo 0 > /proc/sys/vm/page-cluster
+
+  # configure input boost settings
+  chown system:system /sys/devices/system/cpu/cpu_boost/input_boost_freq
+  if [ $rev == "1.0" ]; then
+      echo "0:1382800" > /sys/devices/system/cpu/cpu_boost/input_boost_freq
+  else
+      echo "0:1305600" > /sys/devices/system/cpu/cpu_boost/input_boost_freq
+  fi
+  echo 120 > /sys/devices/system/cpu/cpu_boost/input_boost_ms
+
   # Re-enable SELinux
   echo "97" > /sys/fs/selinux/enforce
 
   exit
 fi
-
-rev=`cat /sys/devices/soc0/revision`
-ddr_type=`od -An -tx /proc/device-tree/memory/ddr_device_type`
-ddr_type4="07"
-ddr_type5="08"
 
 # Core control parameters for gold
 echo 2 > /sys/devices/system/cpu/cpu4/core_ctl/min_cpus
@@ -128,14 +169,6 @@ else
 fi
 echo 691200 > /sys/devices/system/cpu/cpufreq/policy0/scaling_min_freq
 echo 1 > /sys/devices/system/cpu/cpufreq/policy0/schedutil/pl
-
-# configure input boost settings
-if [ $rev == "1.0" ]; then
-    echo "0:1382800" > /sys/devices/system/cpu/cpu_boost/input_boost_freq
-else
-    echo "0:1305600" > /sys/devices/system/cpu/cpu_boost/input_boost_freq
-fi
-echo 120 > /sys/devices/system/cpu/cpu_boost/input_boost_ms
 
 # configure governor settings for gold cluster
 echo "schedutil" > /sys/devices/system/cpu/cpufreq/policy4/scaling_governor
@@ -266,38 +299,6 @@ do
 done
 echo N > /sys/module/lpm_levels/parameters/sleep_disabled
 echo deep > /sys/power/mem_sleep
-
-# Setup swap
-while [ ! -e /dev/block/zram0 ]; do
-  sleep 1
-done
-if ! grep -q zram /proc/swaps; then
-  # Setup backing device
-  BDEV="/dev/block/by-name/last_parti"
-  if [ ! -e "$BDEV" ]; then
-    echo "post_boot: failed to find the backing device"
-  fi
-  echo "post_boot: using $BDEV for zram backing_dev"
-  realpath $BDEV > /sys/block/zram0/backing_dev
-  # 4GB
-  echo 4294967296 > /sys/block/zram0/disksize
-
-  # Set swappiness reflecting the device's RAM size
-  RamStr=$(cat /proc/meminfo | grep MemTotal)
-  RamMB=$((${RamStr:16:8} / 1024))
-  if [ $RamMB -le 6144 ]; then
-    echo 190 > /proc/sys/vm/rswappiness
-  elif [ $RamMB -le 8192 ]; then
-    echo 160 > /proc/sys/vm/rswappiness
-  else
-    echo 130 > /proc/sys/vm/rswappiness
-  fi
-
-  mkswap /dev/block/zram0
-  swapon /dev/block/zram0
-fi
-
-echo 0 > /proc/sys/vm/page-cluster
 
 # Setup readahead
 find /sys/devices -name read_ahead_kb | while read node; do echo 128 > $node; done
