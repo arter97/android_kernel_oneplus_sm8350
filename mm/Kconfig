@@ -654,6 +654,7 @@ config MAX_STACK_SIZE_MB
 config BALANCE_ANON_FILE_RECLAIM
 	bool "During reclaim treat anon and file backed pages equally"
 	depends on SWAP
+	default y
 	help
 	  When performing memory reclaim treat anonymous and file backed pages
 	  equally.
@@ -744,6 +745,16 @@ config PERCPU_STATS
 	  This feature collects and exposes statistics via debugfs. The
 	  information includes global and per chunk statistics, which can
 	  be used to help understand percpu memory usage.
+
+config INCREASE_MAXIMUM_SWAPPINESS
+	bool "Allow swappiness to be set up to 200"
+	depends on SWAP
+	default y
+
+config DIRECT_RECLAIM_FILE_PAGES_ONLY
+	bool "Reclaim file pages only on direct reclaim path"
+	depends on SWAP
+	default y
 
 config MM_STAT_UNRECLAIMABLE_PAGES
 	default y
