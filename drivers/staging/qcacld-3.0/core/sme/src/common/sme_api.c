@@ -2431,7 +2431,7 @@ sme_process_sta_twt_del_dialog_event(
 		struct wmi_twt_del_dialog_complete_event_param *param)
 {
 	twt_del_dialog_cb callback;
-	bool is_evt_allowed;
+	bool is_evt_allowed, usr_cfg_ps_enable;
 	enum wlan_twt_commands active_cmd = WLAN_TWT_NONE;
 
 	is_evt_allowed = mlme_twt_is_command_in_progress(
@@ -2450,7 +2450,8 @@ sme_process_sta_twt_del_dialog_event(
 		return;
 	}
 
-	if (!mac->usr_cfg_ps_enable &&
+	usr_cfg_ps_enable = mlme_get_user_ps(mac->psoc, param->vdev_id);
+	if (!usr_cfg_ps_enable &&
 	    param->status == WMI_HOST_DEL_TWT_STATUS_OK)
 		param->status = WMI_HOST_DEL_TWT_STATUS_PS_DISABLE_TEARDOWN;
 
@@ -14299,19 +14300,11 @@ QDF_STATUS sme_get_rssi_snr_by_bssid(mac_handle_t mac_handle,
 		goto exit;
 	}
 
-	status = csr_roam_get_scan_filter_from_profile(mac_ctx,
-						       profile, scan_filter,
-						       false, vdev_id);
-	if (QDF_STATUS_SUCCESS != status) {
-		sme_err("prepare_filter failed");
-		qdf_mem_free(scan_filter);
-		goto exit;
-	}
-
 	/* update filter to get scan result with just target BSSID */
 	scan_filter->num_of_bssid = 1;
 	qdf_mem_copy(scan_filter->bssid_list[0].bytes,
 		     bssid, sizeof(struct qdf_mac_addr));
+	scan_filter->ignore_auth_enc_type = true;
 
 	status = csr_scan_get_result(mac_ctx, scan_filter, &result_handle,
 				     false);
@@ -14965,6 +14958,7 @@ QDF_STATUS sme_add_dialog_cmd(mac_handle_t mac_handle,
 	struct mac_context *mac = MAC_CONTEXT(mac_handle);
 	struct scheduler_msg twt_msg = {0};
 	bool is_twt_cmd_in_progress, is_twt_notify_in_progress;
+	bool usr_cfg_ps_enable;
 	QDF_STATUS status;
 	void *wma_handle;
 	struct wmi_twt_add_dialog_param *cmd_params;
@@ -14972,7 +14966,8 @@ QDF_STATUS sme_add_dialog_cmd(mac_handle_t mac_handle,
 
 	SME_ENTER();
 
-	if (!mac->usr_cfg_ps_enable) {
+	usr_cfg_ps_enable = mlme_get_user_ps(mac->psoc, twt_params->vdev_id);
+	if (!usr_cfg_ps_enable) {
 		sme_debug("Power save mode disable");
 		return QDF_STATUS_E_INVAL;
 	}
