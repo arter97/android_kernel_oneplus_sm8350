@@ -149,6 +149,7 @@ struct qti_qbg {
 	struct regmap		*regmap;
 	struct power_supply	*qbg_psy;
 	struct power_supply	*batt_psy;
+	struct power_supply	*usb_psy;
 	struct class		qbg_class;
 	struct device		*qbg_device;
 	struct cdev		qbg_cdev;
@@ -172,6 +173,7 @@ struct qti_qbg {
 	struct mutex		context_lock;
 	struct iio_channel	*batt_id_chan;
 	struct iio_channel	*batt_temp_chan;
+	struct iio_channel	**ext_iio_chans;
 	struct rtc_device	*rtc;
 	ktime_t			last_fast_char_time;
 	wait_queue_head_t	qbg_wait_q;
@@ -206,6 +208,15 @@ struct qti_qbg {
 	int			tte;
 	int			soh;
 	int			charge_type;
+	int			charge_status;
+	int			charger_present;
+	bool			charge_done;
+	bool			charge_full;
+	bool			in_recharge;
+	int			recharge_soc;
+	int			recharge_vflt_delta_mv;
+	int			recharge_iterm_ma;
+	int			default_iterm_ma;
 	int			float_volt_uv;
 	int			fastchg_curr_ma;
 	int			vbat_cutoff_mv;
