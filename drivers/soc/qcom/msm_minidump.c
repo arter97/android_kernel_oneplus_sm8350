@@ -303,7 +303,7 @@ int msm_minidump_add_region(const struct md_region *entry)
 }
 EXPORT_SYMBOL(msm_minidump_add_region);
 
-int msm_minidump_clear_headers(const struct md_region *entry)
+static int msm_minidump_clear_headers(const struct md_region *entry)
 {
 	struct elfhdr *hdr = minidump_elfheader.ehdr;
 	struct elf_shdr *shdr = NULL, *tshdr = NULL;
