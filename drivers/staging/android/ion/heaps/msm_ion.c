@@ -606,7 +606,7 @@ static int msm_ion_probe(struct platform_device *pdev)
 
 		heaps[i] = ion_heap_create(heap_data);
 		if (IS_ERR_OR_NULL(heaps[i])) {
-			heaps[i] = 0;
+			heaps[i] = NULL;
 			continue;
 		} else {
 			if (heap_data->size)
