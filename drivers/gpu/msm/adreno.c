@@ -29,6 +29,7 @@
 #include "kgsl_bus.h"
 #include "kgsl_trace.h"
 #include "kgsl_util.h"
+#include "msm_adreno_devfreq.h"
 
 /* Include the master list of GPU cores that are supported */
 #include "adreno-gpulist.h"
@@ -116,15 +117,23 @@ int adreno_zap_shader_load(struct adreno_device *adreno_dev,
 {
 	void *ptr;
 
-	if (!name || adreno_dev->zap_loaded)
+	if (!name || adreno_dev->zap_handle)
 		return 0;
 
 	ptr = subsystem_get(name);
 
 	if (!IS_ERR(ptr))
-		adreno_dev->zap_loaded = true;
+		adreno_dev->zap_handle = ptr;
 
 	return PTR_ERR_OR_ZERO(ptr);
+}
+
+static void adreno_zap_shader_unload(struct adreno_device *adreno_dev)
+{
+	if (adreno_dev->zap_handle) {
+		subsystem_put(adreno_dev->zap_handle);
+		adreno_dev->zap_handle = NULL;
+	}
 }
 
 void adreno_reglist_write(struct adreno_device *adreno_dev,
@@ -4007,8 +4016,154 @@ static int adreno_remove(struct platform_device *pdev)
 	return 0;
 }
 
+/*
+ * Secure buffers cannot be preserved during hibernation.
+ * Issue hyp_assign call to assign non-used internal secure
+ * buffers to kernel.
+ * This function will fail if there is an active secure context
+ * since we cannot remove the content from user secure buffer.
+ */
+static int adreno_secure_pt_hibernate(struct adreno_device *adreno_dev)
+{
+	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
+	struct kgsl_global_memdesc *md;
+	struct kgsl_context *context;
+	struct kgsl_memdesc *memdesc;
+	struct sg_table *sgt;
+	int ret;
+
+	read_lock(&device->context_lock);
+	idr_for_each_entry(&device->context_idr, context, ret) {
+		if (context->flags & KGSL_CONTEXT_SECURE) {
+			read_unlock(&device->context_lock);
+			pr_context(device, context,
+				"Secure context is active, cannot hibernate secure PT\n");
+			return -EBUSY;
+		}
+	}
+	read_unlock(&device->context_lock);
+
+	list_for_each_entry(md, &device->globals, node) {
+		memdesc = &md->memdesc;
+		if (kgsl_memdesc_is_secured(memdesc)) {
+			ret = kgsl_unlock_sgt(memdesc->sgt);
+			if (ret) {
+				dev_err(device->dev, "kgsl_unlock_sgt failed ret %d\n", ret);
+				goto fail;
+			}
+		}
+	}
+
+	return 0;
+
+fail:
+	list_for_each_entry(md, &device->globals, node) {
+		memdesc = &md->memdesc;
+		if (kgsl_memdesc_is_secured(memdesc)) {
+			sgt = memdesc->sgt;
+			if (!PagePrivate(sg_page(sgt->sgl)))
+				kgsl_lock_sgt(memdesc->sgt, memdesc->size);
+		}
+	}
+
+	return -EBUSY;
+}
+
+static int adreno_secure_pt_restore(struct adreno_device *adreno_dev)
+{
+	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
+	struct kgsl_memdesc *memdesc;
+	struct kgsl_global_memdesc *md;
+	int ret;
+
+	list_for_each_entry(md, &device->globals, node) {
+		memdesc = &md->memdesc;
+		if (kgsl_memdesc_is_secured(memdesc)) {
+			ret = kgsl_lock_sgt(memdesc->sgt, memdesc->size);
+			if (ret) {
+				dev_err(device->dev, "kgsl_lock_sgt failed ret %d\n", ret);
+				return ret;
+			}
+		}
+	}
+
+	return 0;
+}
+
+static int adreno_hibernation_suspend(struct device *dev)
+{
+	struct kgsl_device *device = dev_get_drvdata(dev);
+	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
+	const struct adreno_power_ops *ops = ADRENO_POWER_OPS(adreno_dev);
+	int status = -EINVAL;
+
+	if (!device)
+		return -EINVAL;
+
+	mutex_lock(&device->mutex);
+
+	status = ops->pm_suspend(adreno_dev);
+	if (status)
+		goto err;
+
+	/**
+	 * Unload zap shader during device hibernation and reload it
+	 * during resume as there is possibility that TZ driver
+	 * is not aware of the hibernation.
+	 */
+	adreno_zap_shader_unload(adreno_dev);
+	status = adreno_secure_pt_hibernate(adreno_dev);
+
+err:
+	mutex_unlock(&device->mutex);
+	return status;
+}
+
+static int adreno_hibernation_resume(struct device *dev)
+{
+	struct kgsl_device *device = dev_get_drvdata(dev);
+	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
+	const struct adreno_power_ops *ops = ADRENO_POWER_OPS(adreno_dev);
+	int ret = 0;
+
+	if (!device)
+		return -EINVAL;
+
+	mutex_lock(&device->mutex);
+
+	ret = adreno_secure_pt_restore(adreno_dev);
+	if (ret)
+		goto err;
+
+	ret = kgsl_set_smmu_aperture(device);
+	if (ret)
+		goto err;
+
+	gmu_core_dev_force_first_boot(device);
+
+	if (device->pwrscale.devfreqptr) {
+		ret = srcu_notifier_call_chain(&device->pwrscale.nh,
+				ADRENO_DEVFREQ_NOTIFY_REINIT,
+				device->pwrscale.devfreqptr);
+		ret = notifier_to_errno(ret);
+		if (ret)
+			goto err;
+	}
+
+	ops->pm_resume(adreno_dev);
+
+err:
+	mutex_unlock(&device->mutex);
+	return ret;
+}
+
 static const struct dev_pm_ops adreno_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(adreno_pm_suspend, adreno_pm_resume)
+	.suspend  = adreno_pm_suspend,
+	.resume = adreno_pm_resume,
+	.freeze = adreno_hibernation_suspend,
+	.thaw = adreno_hibernation_resume,
+	.poweroff = adreno_hibernation_suspend,
+	.restore = adreno_hibernation_resume,
 };
 
 static struct platform_driver adreno_platform_driver = {
