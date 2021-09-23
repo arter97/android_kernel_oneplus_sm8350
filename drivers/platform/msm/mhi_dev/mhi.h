@@ -495,6 +495,8 @@ struct mhi_dev_channel {
 	uint32_t			flush_req_cnt;
 	uint32_t			pend_flush_cnt;
 	bool				skip_td;
+	bool				db_pending;
+	bool				reset_pending;
 };
 
 /* Structure device for mhi dev */
