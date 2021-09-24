@@ -204,6 +204,12 @@ enum {
 #define FORCE_5V_BIT				BIT(1)
 #define IDLE_BIT				BIT(0)
 
+#define USB_APSD_CFG_REG(base)			(base.usbin_base + 0x46)
+#define FLOAT_OPTIONS_MASK			GENMASK(2, 0)
+#define FLOAT_DIS_CHGING_CFG_BIT		BIT(2)
+#define SUSPEND_FLOAT_CFG_BIT			BIT(1)
+#define FORCE_FLOAT_SDP_CFG_BIT			BIT(0)
+
 /********************************
  *  TYPEC Peripheral Registers  *
  ********************************/

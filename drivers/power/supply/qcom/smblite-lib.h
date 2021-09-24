@@ -73,6 +73,7 @@ enum print_reason {
 #define USBIN_400UA     400000
 #define USBIN_500UA     500000
 #define USBIN_900UA     900000
+#define SDP_CURRENT_UA			500000
 #define CDP_CURRENT_UA			1500000
 #define DCP_CURRENT_UA			1500000
 #define TYPEC_DEFAULT_CURRENT_UA	900000
@@ -167,6 +168,13 @@ enum smb_irq_index {
 	FLASH_EN_IRQ,
 	/* END */
 	SMB_IRQ_MAX,
+};
+
+enum float_options {
+	FLOAT_DCP		= 1,
+	FLOAT_SDP		= 2,
+	DISABLE_CHARGING	= 3,
+	SUSPEND_INPUT		= 4,
 };
 
 struct apsd_result {
@@ -371,6 +379,7 @@ struct smb_charger {
 	bool			hvdcp3_detected;
 	bool			concurrent_mode_supported;
 	bool			concurrent_mode_status;
+	u8			float_cfg;
 
 	/* workaround flag */
 	u32			wa_flags;
