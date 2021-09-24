@@ -75,6 +75,11 @@ enum {
 
 #define CHGR_INHIBIT_THRESHOLD_CFG_REG(base)		(base.chg_base + 0x7A)
 
+#define CHGR_QG_SOC_REG(base)			(base.chg_base + 0x84)
+
+#define CHGR_QG_SOC_UPDATE_REG(base)		(base.chg_base + 0x85)
+#define SOC_UPDATE_PCT_BIT			BIT(0)
+
 #define CHGR_FAST_CHARGE_SAFETY_TIMER_CFG_REG(base)	(base.chg_base + 0x90)
 #define FAST_CHARGE_SAFETY_TIMER_EN_BIT		BIT(3)
 #define FAST_CHARGE_SAFETY_TIMER_MASK		GENMASK(1, 0)
