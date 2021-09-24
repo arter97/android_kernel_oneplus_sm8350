@@ -450,16 +450,20 @@ static void send_back_notification(uint32_t slav_status_reg,
 			pr_debug("Slate DSP DOWN\n", __func__);
 			set_slate_dsp_state(false);
 		} else if (slav_status_reg & BIT(30)) {
-			pr_debug("Slate DSP UP\n", __func__);
-			set_slate_dsp_state(true);
+			if (!(slav_status_reg & BIT(26))) {
+				pr_debug("Slate DSP UP\n", __func__);
+				set_slate_dsp_state(true);
+			}
 		}
 
 		if (slav_status_reg & BIT(25)) {
 			pr_debug("Slate BT DOWN\n", __func__);
 			set_slate_bt_state(false);
 		} else if (slav_status_reg & BIT(30)) {
-			pr_debug("Slate BT UP\n", __func__);
-			set_slate_bt_state(true);
+			if (!(slav_status_reg & BIT(25))) {
+				pr_debug("Slate BT UP\n", __func__);
+				set_slate_bt_state(true);
+			}
 		}
 
 		oem_provisioning_status = slav_status_reg & (BIT(23) | BIT(24));
