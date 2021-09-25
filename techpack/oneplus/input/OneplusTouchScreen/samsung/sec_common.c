@@ -41,7 +41,7 @@ static ssize_t sec_ts_reg_store(struct device *dev, struct device_attribute *att
 
 	if (size > 0) {
 		mutex_lock(&ts->mutex);
-		touch_i2c_write(ts->client, (u8 *)buf, size);
+		touch_i2c_write(ts->client, (u8 *) buf, size);
 		mutex_unlock(&ts->mutex);
 	}
 
@@ -88,9 +88,9 @@ static ssize_t sec_ts_regread_show(struct device *dev, struct device_attribute *
 	TPD_DEBUG("%s: lv1_readsize = %d\n", __func__, lv1_readsize);
 	memcpy(buf, read_lv1_buff, lv1_readsize);
 
-i2c_err:
+ i2c_err:
 	kfree(read_lv1_buff);
-malloc_err:
+ malloc_err:
 	mutex_unlock(&ts->mutex);
 	enable_irq(ts->irq);
 
@@ -104,8 +104,7 @@ static ssize_t sec_ts_regreadsize_store(struct device *dev, struct device_attrib
 	mutex_lock(&ts->mutex);
 
 	lv1cmd = buf[0];
-	lv1_readsize = ((unsigned int)buf[4] << 24) |
-		((unsigned int)buf[3] << 16) | ((unsigned int) buf[2] << 8) | ((unsigned int)buf[1] << 0);
+	lv1_readsize = ((unsigned int)buf[4] << 24) | ((unsigned int)buf[3] << 16) | ((unsigned int)buf[2] << 8) | ((unsigned int)buf[1] << 0);
 
 	mutex_unlock(&ts->mutex);
 
@@ -140,11 +139,10 @@ void sec_raw_device_init(struct touchpanel_data *ts)
 
 	TPD_INFO("create debug interface success\n");
 	return;
-err_sysfs:
+ err_sysfs:
 	TPD_INFO("%s: fail\n", __func__);
 	return;
 }
-
 
 void sec_limit_read(struct seq_file *s, struct touchpanel_data *ts)
 {
@@ -163,7 +161,7 @@ void sec_limit_read(struct seq_file *s, struct touchpanel_data *ts)
 	}
 
 	ph = (struct sec_test_header *)(fw->data);
-	p_item_offset = (uint32_t *)(fw->data + 16);
+	p_item_offset = (uint32_t *) (fw->data + 16);
 	if ((ph->magic1 != 0x494D494C) || (ph->magic2 != 0x474D4954)) {
 		TPD_INFO("limit image is not generated\n");
 		seq_printf(s, "limit image is not generated\n");
@@ -171,8 +169,8 @@ void sec_limit_read(struct seq_file *s, struct touchpanel_data *ts)
 		return;
 	}
 
-	for (i = 0; i < 8*sizeof(ph->test_item); i++) {
-		if ((ph->test_item >> i) & 0x01 ) {
+	for (i = 0; i < 8 * sizeof(ph->test_item); i++) {
+		if ((ph->test_item >> i) & 0x01) {
 			item_cnt++;
 		}
 	}
@@ -188,17 +186,18 @@ void sec_limit_read(struct seq_file *s, struct touchpanel_data *ts)
 			continue;
 		}
 
-		seq_printf(s, "item %d[size %d, limit type %d, para num %d] :\n", item_head->item_bit, item_head->item_size, item_head->item_limit_type, item_head->para_num);
+		seq_printf(s, "item %d[size %d, limit type %d, para num %d] :\n", item_head->item_bit, item_head->item_size, item_head->item_limit_type,
+			   item_head->para_num);
 		if (item_head->item_limit_type == LIMIT_TYPE_NO_DATA) {
 			seq_printf(s, "no limit data\n");
 		} else if (item_head->item_limit_type == LIMIT_TYPE_CERTAIN_DATA) {
-			p_data32 = (int32_t *)(fw->data + item_head->top_limit_offset);
+			p_data32 = (int32_t *) (fw->data + item_head->top_limit_offset);
 			seq_printf(s, "top limit data: %d\n", *p_data32);
-			p_data32 = (int32_t *)(fw->data + item_head->floor_limit_offset);
+			p_data32 = (int32_t *) (fw->data + item_head->floor_limit_offset);
 			seq_printf(s, "floor limit data: %d\n", *p_data32);
 		} else if (item_head->item_limit_type == LIMIT_TYPE_EACH_NODE_DATA) {
 			if (item_head->item_bit == TYPE_MUTUAL_RAW_OFFSET_DATA_SDC) {
-				p_data32 = (int32_t *)(fw->data + item_head->top_limit_offset);
+				p_data32 = (int32_t *) (fw->data + item_head->top_limit_offset);
 				seq_printf(s, "mutual raw top data: \n");
 				for (i = 0; i < ts->hw_res.TX_NUM; i++) {
 					seq_printf(s, "[%02d] ", i);
@@ -209,7 +208,7 @@ void sec_limit_read(struct seq_file *s, struct touchpanel_data *ts)
 					seq_printf(s, "\n");
 				}
 
-				p_data32 = (int32_t *)(fw->data + item_head->top_limit_offset + 4 * ts->hw_res.TX_NUM * ts->hw_res.RX_NUM);
+				p_data32 = (int32_t *) (fw->data + item_head->top_limit_offset + 4 * ts->hw_res.TX_NUM * ts->hw_res.RX_NUM);
 				seq_printf(s, "mutual gap top data: \n");
 				for (i = 0; i < ts->hw_res.TX_NUM; i++) {
 					seq_printf(s, "[%02d] ", i);
@@ -220,7 +219,7 @@ void sec_limit_read(struct seq_file *s, struct touchpanel_data *ts)
 					seq_printf(s, "\n");
 				}
 
-				p_data32 = (int32_t *)(fw->data + item_head->floor_limit_offset);
+				p_data32 = (int32_t *) (fw->data + item_head->floor_limit_offset);
 				seq_printf(s, "mutual raw floor data: \n");
 				for (i = 0; i < ts->hw_res.TX_NUM; i++) {
 					seq_printf(s, "[%02d] ", i);
@@ -231,7 +230,7 @@ void sec_limit_read(struct seq_file *s, struct touchpanel_data *ts)
 					seq_printf(s, "\n");
 				}
 
-				p_data32 = (int32_t *)(fw->data + item_head->floor_limit_offset + 4 * ts->hw_res.TX_NUM * ts->hw_res.RX_NUM);
+				p_data32 = (int32_t *) (fw->data + item_head->floor_limit_offset + 4 * ts->hw_res.TX_NUM * ts->hw_res.RX_NUM);
 				seq_printf(s, "mutual gap floor data: \n");
 				for (i = 0; i < ts->hw_res.TX_NUM; i++) {
 					seq_printf(s, "[%02d] ", i);
@@ -241,36 +240,36 @@ void sec_limit_read(struct seq_file *s, struct touchpanel_data *ts)
 					}
 					seq_printf(s, "\n");
 				}
-			} else if(item_head->item_bit == TYPE_SELF_RAW_OFFSET_DATA_SDC){
-				p_data32 = (int32_t *)(fw->data + item_head->top_limit_offset);
+			} else if (item_head->item_bit == TYPE_SELF_RAW_OFFSET_DATA_SDC) {
+				p_data32 = (int32_t *) (fw->data + item_head->top_limit_offset);
 				seq_printf(s, "tx top data: \n");
 				for (i = 0; i < ts->hw_res.TX_NUM; i++) {
 					seq_printf(s, "%4d, ", p_data32[i]);
 				}
 				seq_printf(s, "\n");
 
-				p_data32 = (int32_t *)(fw->data + item_head->top_limit_offset + 4*ts->hw_res.TX_NUM);
+				p_data32 = (int32_t *) (fw->data + item_head->top_limit_offset + 4 * ts->hw_res.TX_NUM);
 				seq_printf(s, "tx floor data: \n");
 				for (i = 0; i < ts->hw_res.TX_NUM; i++) {
 					seq_printf(s, "%4d, ", p_data32[i]);
 				}
 				seq_printf(s, "\n");
 
-				p_data32 = (int32_t *)(fw->data + item_head->top_limit_offset + 2*4*ts->hw_res.TX_NUM);
+				p_data32 = (int32_t *) (fw->data + item_head->top_limit_offset + 2 * 4 * ts->hw_res.TX_NUM);
 				seq_printf(s, "rx top data: \n");
 				for (i = 0; i < ts->hw_res.RX_NUM; i++) {
 					seq_printf(s, "%4d, ", p_data32[i]);
 				}
 				seq_printf(s, "\n");
 
-				p_data32 = (int32_t *)(fw->data + item_head->top_limit_offset + 2*4*ts->hw_res.TX_NUM + 4*ts->hw_res.RX_NUM);
+				p_data32 = (int32_t *) (fw->data + item_head->top_limit_offset + 2 * 4 * ts->hw_res.TX_NUM + 4 * ts->hw_res.RX_NUM);
 				seq_printf(s, "rx floor data: \n");
 				for (i = 0; i < ts->hw_res.RX_NUM; i++) {
 					seq_printf(s, "%4d, ", p_data32[i]);
 				}
 				seq_printf(s, "\n");
 			} else if (item_head->item_bit == TYPE_MUTU_RAW_NOI_P2P) {
-				p_data32 = (int32_t *)(fw->data + item_head->top_limit_offset);
+				p_data32 = (int32_t *) (fw->data + item_head->top_limit_offset);
 				seq_printf(s, "noise top data: \n");
 				for (i = 0; i < ts->hw_res.TX_NUM; i++) {
 					seq_printf(s, "[%02d] ", i);
@@ -281,7 +280,7 @@ void sec_limit_read(struct seq_file *s, struct touchpanel_data *ts)
 					seq_printf(s, "\n");
 				}
 
-				p_data32 = (int32_t *)(fw->data + item_head->floor_limit_offset);
+				p_data32 = (int32_t *) (fw->data + item_head->floor_limit_offset);
 				seq_printf(s, "noise floor data: \n");
 				for (i = 0; i < ts->hw_res.TX_NUM; i++) {
 					seq_printf(s, "[%02d] ", i);
@@ -294,7 +293,7 @@ void sec_limit_read(struct seq_file *s, struct touchpanel_data *ts)
 			}
 		}
 
-		p_data32 = (int32_t *)(fw->data + p_item_offset[m] + sizeof(struct sec_test_item_header));
+		p_data32 = (int32_t *) (fw->data + p_item_offset[m] + sizeof(struct sec_test_item_header));
 		if (item_head->para_num) {
 			seq_printf(s, "parameter:");
 			for (j = 0; j < item_head->para_num; j++) {
@@ -317,8 +316,7 @@ static int tp_auto_test_read_func(struct seq_file *s, void *v)
 	struct sec_test_header *test_head = NULL;
 	uint32_t *p_data32 = NULL;
 
-	struct sec_testdata sec_testdata =
-	{
+	struct sec_testdata sec_testdata = {
 		.TX_NUM = 0,
 		.RX_NUM = 0,
 		.fd = NULL,
@@ -338,7 +336,6 @@ static int tp_auto_test_read_func(struct seq_file *s, void *v)
 		seq_printf(s, "Not support auto-test proc node\n");
 		return 0;
 	}
-
 	//step1:disable_irq && get mutex locked
 	disable_irq_nosync(ts->irq);
 	mutex_lock(&ts->mutex);
@@ -347,14 +344,13 @@ static int tp_auto_test_read_func(struct seq_file *s, void *v)
 		esd_handle_switch(&ts->esd_info, false);
 	}
 
-	/*step2:malloc space to store test data*/
-	/*set buffer pos to first position every time*/
+	/*step2:malloc space to store test data */
+	/*set buffer pos to first position every time */
 	ts->result_cur_len = 0;
 
 	if (!ts->result_flag) {
-		ts->result_max_len = PAGE_SIZE * 5;/*20k*/
-		ts->result_data = kvzalloc(ts->result_max_len,
-						GFP_KERNEL);
+		ts->result_max_len = PAGE_SIZE * 5;	/*20k */
+		ts->result_data = kvzalloc(ts->result_max_len, GFP_KERNEL);
 
 		if (!ts->result_data) {
 			TPD_INFO("%s kvzalloc failed\n", __func__);
@@ -366,7 +362,6 @@ static int tp_auto_test_read_func(struct seq_file *s, void *v)
 		}
 	}
 
-
 	//step3:request test limit data from userspace
 	ret = request_firmware(&fw, ts->panel_data.test_limit_name, ts->dev);
 	if (ret < 0) {
@@ -376,10 +371,9 @@ static int tp_auto_test_read_func(struct seq_file *s, void *v)
 		enable_irq(ts->irq);
 		return 0;
 	}
-
 	//step4: decode the limit image
 	test_head = (struct sec_test_header *)fw->data;
-	p_data32 = (uint32_t *)(fw->data + 16);
+	p_data32 = (uint32_t *) (fw->data + 16);
 	if ((test_head->magic1 != 0x494D494C) || (test_head->magic2 != 0x474D4954)) {
 		TPD_INFO("limit image is not generated\n");
 		seq_printf(s, "limit image is not generated by\n");
@@ -400,7 +394,7 @@ static int tp_auto_test_read_func(struct seq_file *s, void *v)
 
 	sec_ops->auto_test(s, ts->chip_data, &sec_testdata);
 
-OUT:
+ OUT:
 	release_firmware(fw);
 
 	//step5: return to normal mode
@@ -421,10 +415,11 @@ static int baseline_autotest_open(struct inode *inode, struct file *file)
 
 static const struct file_operations tp_auto_test_proc_fops = {
 	.owner = THIS_MODULE,
-	.open  = baseline_autotest_open,
-	.read  = seq_read,
+	.open = baseline_autotest_open,
+	.read = seq_read,
 	.release = single_release,
 };
+
 /*baseline_result - For GKI auto test result*/
 
 static int tp_auto_test_result(struct seq_file *s, void *v)
@@ -434,7 +429,7 @@ static int tp_auto_test_result(struct seq_file *s, void *v)
 	TPD_INFO("%s:s->size:%d,s->count:%d\n", __func__, s->size, s->count);
 	mutex_lock(&ts->mutex);
 
-	/*the result data is big than one page, so do twice.*/
+	/*the result data is big than one page, so do twice. */
 	if (s->size <= (ts->result_cur_len)) {
 		s->count = s->size;
 		mutex_unlock(&ts->mutex);
@@ -477,8 +472,8 @@ static int tp_auto_test_result_open(struct inode *inode, struct file *file)
 
 static const struct file_operations tp_auto_test_result_fops = {
 	.owner = THIS_MODULE,
-	.open  = tp_auto_test_result_open,
-	.read  = seq_read,
+	.open = tp_auto_test_result_open,
+	.read = seq_read,
 	.release = single_release,
 };
 
@@ -504,7 +499,7 @@ static int proc_get_firmware_version_open(struct inode *inode, struct file *file
 
 static const struct file_operations proc_get_firmware_version_fops = {
 	.read = seq_read,
-	.open  = proc_get_firmware_version_open,
+	.open = proc_get_firmware_version_open,
 	.owner = THIS_MODULE,
 	.release = single_release,
 };
@@ -520,11 +515,11 @@ static int calibrate_fops_read_func(struct seq_file *s, void *v)
 	disable_irq_nosync(ts->irq);
 	TPD_INFO("Start calibration\n");
 	mutex_lock(&ts->mutex);
-//	if (!ts->touch_count) {
-		sec_ops->calibrate(s, ts->chip_data);
-//	} else {
-//		seq_printf(s, "1 error, release touch on the screen\n");
-//	}
+//      if (!ts->touch_count) {
+	sec_ops->calibrate(s, ts->chip_data);
+//      } else {
+//              seq_printf(s, "1 error, release touch on the screen\n");
+//      }
 	mutex_unlock(&ts->mutex);
 	enable_irq(ts->irq);
 
@@ -538,8 +533,8 @@ static int proc_calibrate_fops_open(struct inode *inode, struct file *file)
 
 static const struct file_operations proc_calibrate_fops = {
 	.owner = THIS_MODULE,
-	.open  = proc_calibrate_fops_open,
-	.read  = seq_read,
+	.open = proc_calibrate_fops_open,
+	.read = seq_read,
 	.release = single_release,
 };
 
@@ -572,8 +567,8 @@ static int proc_verify_fops_open(struct inode *inode, struct file *file)
 
 static const struct file_operations proc_verify_fops = {
 	.owner = THIS_MODULE,
-	.open  = proc_verify_fops_open,
-	.read  = seq_read,
+	.open = proc_verify_fops_open,
+	.read = seq_read,
 	.release = single_release,
 };
 
@@ -607,8 +602,8 @@ static int proc_calibrate_data_fops_open(struct inode *inode, struct file *file)
 
 static const struct file_operations proc_calibrate_data_fops = {
 	.owner = THIS_MODULE,
-	.open  = proc_calibrate_data_fops_open,
-	.read  = seq_read,
+	.open = proc_calibrate_data_fops_open,
+	.read = seq_read,
 	.release = single_release,
 };
 

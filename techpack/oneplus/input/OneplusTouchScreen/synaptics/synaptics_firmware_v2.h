@@ -87,16 +87,12 @@ struct boot_config {
 
 static inline unsigned int le2_to_uint(const unsigned char *src)
 {
-	return (unsigned int)src[0] +
-		(unsigned int)src[1] * 0x100;
+	return (unsigned int)src[0] + (unsigned int)src[1] * 0x100;
 }
 
 static inline unsigned int le4_to_uint(const unsigned char *src)
 {
-	return (unsigned int)src[0] +
-		(unsigned int)src[1] * 0x100 +
-		(unsigned int)src[2] * 0x10000 +
-		(unsigned int)src[3] * 0x1000000;
+	return (unsigned int)src[0] + (unsigned int)src[1] * 0x100 + (unsigned int)src[2] * 0x10000 + (unsigned int)src[3] * 0x1000000;
 }
 
 #endif

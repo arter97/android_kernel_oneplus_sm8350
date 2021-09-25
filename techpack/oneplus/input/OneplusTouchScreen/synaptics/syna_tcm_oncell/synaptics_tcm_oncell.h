@@ -16,7 +16,6 @@
 //#include "../../touchpanel_common.h"
 #include "../synaptics_common.h"
 
-
 #define TPD_DEVICE "syna-tcm"
 
 #define TPD_INFO(a, arg...)  pr_err("[TP]"TPD_DEVICE ": " a, ##arg)
@@ -38,12 +37,11 @@
 		printk(a, ##arg);\
 	}while(0)
 
-
 #define SYNAPTICS_TCM_ID_PRODUCT (1 << 0)
 #define SYNAPTICS_TCM_ID_VERSION 0x0007
 
-#define RD_CHUNK_SIZE 0 /* read length limit in bytes, 0 = unlimited */
-#define WR_CHUNK_SIZE 0 /* write length limit in bytes, 0 = unlimited */
+#define RD_CHUNK_SIZE 0		/* read length limit in bytes, 0 = unlimited */
+#define WR_CHUNK_SIZE 0		/* write length limit in bytes, 0 = unlimited */
 
 #define MESSAGE_HEADER_SIZE     4
 #define MESSAGE_MARKER          0xA5
@@ -104,7 +102,6 @@ buffer.clone = is_clone
 #define TOUCH_HOLD_DOWN 0x80
 #define TOUCH_HOLD_UP   0x81
 
-
 enum test_code {
 	TEST_TRX_TRX_SHORTS = 0,
 	TEST_TRX_SENSOR_OPENS = 1,
@@ -153,54 +150,54 @@ enum touch_report_code {
 	TOUCH_NSM_STATE,
 	TOUCH_NUM_OF_ACTIVE_OBJECTS,
 	TOUCH_NUM_OF_CPU_CYCLES_USED_SINCE_LAST_FRAME,
-	TOUCH_TUNING_GAUSSIAN_WIDTHS                    = 0x80,
+	TOUCH_TUNING_GAUSSIAN_WIDTHS = 0x80,
 	TOUCH_TUNING_SMALL_OBJECT_PARAMS,
 	TOUCH_TUNING_0D_BUTTONS_VARIANCE,
-	TOUCH_REPORT_GESTURE_SWIPE                      = 193,
-	TOUCH_REPORT_GESTURE_CIRCLE                     = 194,
-	TOUCH_REPORT_GESTURE_UNICODE                    = 195,
-	TOUCH_REPORT_GESTURE_VEE                        = 196,
-	TOUCH_REPORT_GESTURE_TRIANGLE                   = 197,
-	TOUCH_REPORT_GESTURE_INFO                       = 198,
-	TOUCH_REPORT_GESTURE_COORDINATE                 = 199,
+	TOUCH_REPORT_GESTURE_SWIPE = 193,
+	TOUCH_REPORT_GESTURE_CIRCLE = 194,
+	TOUCH_REPORT_GESTURE_UNICODE = 195,
+	TOUCH_REPORT_GESTURE_VEE = 196,
+	TOUCH_REPORT_GESTURE_TRIANGLE = 197,
+	TOUCH_REPORT_GESTURE_INFO = 198,
+	TOUCH_REPORT_GESTURE_COORDINATE = 199,
 };
 
 enum module_type {
-	TCM_TOUCH           = 0,
-	TCM_DEVICE          = 1,
-	TCM_TESTING         = 2,
-	TCM_REFLASH         = 3,
-	TCM_RECOVERY        = 4,
-	TCM_ZEROFLASH       = 5,
-	TCM_DIAGNOSTICS     = 6,
+	TCM_TOUCH = 0,
+	TCM_DEVICE = 1,
+	TCM_TESTING = 2,
+	TCM_REFLASH = 3,
+	TCM_RECOVERY = 4,
+	TCM_ZEROFLASH = 5,
+	TCM_DIAGNOSTICS = 6,
 	TCM_LAST,
 };
 
 enum boot_mode {
-	MODE_APPLICATION        = 0x01,
-	MODE_HOST_DOWNLOAD      = 0x02,
-	MODE_BOOTLOADER         = 0x0b,
-	MODE_TDDI_BOOTLOADER    = 0x0c,
+	MODE_APPLICATION = 0x01,
+	MODE_HOST_DOWNLOAD = 0x02,
+	MODE_BOOTLOADER = 0x0b,
+	MODE_TDDI_BOOTLOADER = 0x0c,
 };
 
 enum boot_status {
-	BOOT_STATUS_OK                      = 0x00,
-	BOOT_STATUS_BOOTING                 = 0x01,
-	BOOT_STATUS_APP_BAD_DISPLAY_CRC     = 0xfc,
-	BOOT_STATUS_BAD_DISPLAY_CONFIG      = 0xfd,
-	BOOT_STATUS_BAD_APP_FIRMWARE        = 0xfe,
-	BOOT_STATUS_WARM_BOOT               = 0xff,
+	BOOT_STATUS_OK = 0x00,
+	BOOT_STATUS_BOOTING = 0x01,
+	BOOT_STATUS_APP_BAD_DISPLAY_CRC = 0xfc,
+	BOOT_STATUS_BAD_DISPLAY_CONFIG = 0xfd,
+	BOOT_STATUS_BAD_APP_FIRMWARE = 0xfe,
+	BOOT_STATUS_WARM_BOOT = 0xff,
 };
 
 enum app_status {
-	APP_STATUS_OK               = 0x00,
-	APP_STATUS_BOOTING          = 0x01,
-	APP_STATUS_UPDATING         = 0x02,
-	APP_STATUS_BAD_APP_CONFIG   = 0xff,
+	APP_STATUS_OK = 0x00,
+	APP_STATUS_BOOTING = 0x01,
+	APP_STATUS_UPDATING = 0x02,
+	APP_STATUS_BAD_APP_CONFIG = 0xff,
 };
 
 enum firmware_mode {
-	FW_MODE_BOOTLOADER  = 0,
+	FW_MODE_BOOTLOADER = 0,
 	FW_MODE_APPLICATION = 1,
 };
 
@@ -230,8 +227,8 @@ enum dynamic_config_id {
 	DC_GRIP_SPECIAL_ZONE_Y = 0xDA,
 	DC_GRIP_SPECIAL_ZONE_L = 0xDB,
 	DC_GRIP_ROATE_TO_HORIZONTAL_LEVEL = 0xDC,
-	DC_DARK_ZONE_ENABLE = 0xDD,/*bit0-3,enable bit, bit8-11,finger width*/
-	DC_GRIP_ENABLED = 0xDE,/*bit4-7 finger width*/
+	DC_DARK_ZONE_ENABLE = 0xDD,	/*bit0-3,enable bit, bit8-11,finger width */
+	DC_GRIP_ENABLED = 0xDE,	/*bit4-7 finger width */
 	DC_GRIP_DARK_ZONE_X = 0xDF,
 	DC_GRIP_DARK_ZONE_Y = 0xE0,
 	DC_GRIP_ABS_DARK_X = 0xE1,
@@ -244,70 +241,70 @@ enum dynamic_config_id {
 };
 
 enum command {
-	CMD_NONE                            = 0x00,
-	CMD_CONTINUE_WRITE                  = 0x01,
-	CMD_IDENTIFY                        = 0x02,
-	CMD_RESET                           = 0x04,
-	CMD_ENABLE_REPORT                   = 0x05,
-	CMD_DISABLE_REPORT                  = 0x06,
-	CMD_GET_BOOT_INFO                   = 0x10,
-	CMD_ERASE_FLASH                     = 0x11,
-	CMD_WRITE_FLASH                     = 0x12,
-	CMD_READ_FLASH                      = 0x13,
-	CMD_RUN_APPLICATION_FIRMWARE        = 0x14,
-	CMD_SPI_MASTER_WRITE_THEN_READ      = 0x15,
-	CMD_REBOOT_TO_ROM_BOOTLOADER        = 0x16,
-	CMD_RUN_BOOTLOADER_FIRMWARE         = 0x1f,
-	CMD_GET_APPLICATION_INFO            = 0x20,
-	CMD_GET_STATIC_CONFIG               = 0x21,
-	CMD_SET_STATIC_CONFIG               = 0x22,
-	CMD_GET_DYNAMIC_CONFIG              = 0x23,
-	CMD_SET_DYNAMIC_CONFIG              = 0x24,
-	CMD_GET_TOUCH_REPORT_CONFIG         = 0x25,
-	CMD_SET_TOUCH_REPORT_CONFIG         = 0x26,
-	CMD_REZERO                          = 0x27,
-	CMD_COMMIT_CONFIG                   = 0x28,
-	CMD_DESCRIBE_DYNAMIC_CONFIG         = 0x29,
-	CMD_PRODUCTION_TEST                 = 0x2a,
-	CMD_SET_CONFIG_ID                   = 0x2b,
-	CMD_ENTER_DEEP_SLEEP                = 0x2c,
-	CMD_EXIT_DEEP_SLEEP                 = 0x2d,
-	CMD_GET_TOUCH_INFO                  = 0x2e,
-	CMD_GET_DATA_LOCATION               = 0x2f,
-	CMD_DOWNLOAD_CONFIG                 = 0xc0,
-	CMD_GET_NSM_INFO                    = 0xc3,
-	CMD_EXIT_ESD                        = 0xc4,
+	CMD_NONE = 0x00,
+	CMD_CONTINUE_WRITE = 0x01,
+	CMD_IDENTIFY = 0x02,
+	CMD_RESET = 0x04,
+	CMD_ENABLE_REPORT = 0x05,
+	CMD_DISABLE_REPORT = 0x06,
+	CMD_GET_BOOT_INFO = 0x10,
+	CMD_ERASE_FLASH = 0x11,
+	CMD_WRITE_FLASH = 0x12,
+	CMD_READ_FLASH = 0x13,
+	CMD_RUN_APPLICATION_FIRMWARE = 0x14,
+	CMD_SPI_MASTER_WRITE_THEN_READ = 0x15,
+	CMD_REBOOT_TO_ROM_BOOTLOADER = 0x16,
+	CMD_RUN_BOOTLOADER_FIRMWARE = 0x1f,
+	CMD_GET_APPLICATION_INFO = 0x20,
+	CMD_GET_STATIC_CONFIG = 0x21,
+	CMD_SET_STATIC_CONFIG = 0x22,
+	CMD_GET_DYNAMIC_CONFIG = 0x23,
+	CMD_SET_DYNAMIC_CONFIG = 0x24,
+	CMD_GET_TOUCH_REPORT_CONFIG = 0x25,
+	CMD_SET_TOUCH_REPORT_CONFIG = 0x26,
+	CMD_REZERO = 0x27,
+	CMD_COMMIT_CONFIG = 0x28,
+	CMD_DESCRIBE_DYNAMIC_CONFIG = 0x29,
+	CMD_PRODUCTION_TEST = 0x2a,
+	CMD_SET_CONFIG_ID = 0x2b,
+	CMD_ENTER_DEEP_SLEEP = 0x2c,
+	CMD_EXIT_DEEP_SLEEP = 0x2d,
+	CMD_GET_TOUCH_INFO = 0x2e,
+	CMD_GET_DATA_LOCATION = 0x2f,
+	CMD_DOWNLOAD_CONFIG = 0xc0,
+	CMD_GET_NSM_INFO = 0xc3,
+	CMD_EXIT_ESD = 0xc4,
 };
 
 enum status_code {
-	STATUS_IDLE                     = 0x00,
-	STATUS_OK                       = 0x01,
-	STATUS_BUSY                     = 0x02,
-	STATUS_CONTINUED_READ           = 0x03,
-	STATUS_RECEIVE_BUFFER_OVERFLOW  = 0x0c,
+	STATUS_IDLE = 0x00,
+	STATUS_OK = 0x01,
+	STATUS_BUSY = 0x02,
+	STATUS_CONTINUED_READ = 0x03,
+	STATUS_RECEIVE_BUFFER_OVERFLOW = 0x0c,
 	STATUS_PREVIOUS_COMMAND_PENDING = 0x0d,
-	STATUS_NOT_IMPLEMENTED          = 0x0e,
-	STATUS_ERROR                    = 0x0f,
-	STATUS_INVALID                  = 0xff,
+	STATUS_NOT_IMPLEMENTED = 0x0e,
+	STATUS_ERROR = 0x0f,
+	STATUS_INVALID = 0xff,
 };
 
 enum report_type {
-	REPORT_IDENTIFY     = 0x10,
-	REPORT_TOUCH        = 0x11,
-	REPORT_DELTA        = 0x12,
-	REPORT_RAW          = 0x13,
-	REPORT_PRINTF       = 0x82,
-	REPORT_STATUS       = 0xc0,
-	REPORT_DEBUG        = 0x14,
-	REPORT_HDL          = 0xfe,
-	REPORT_LOG          = 0x1d,
-	REPORT_TOUCH_HOLD   = 0x20,
+	REPORT_IDENTIFY = 0x10,
+	REPORT_TOUCH = 0x11,
+	REPORT_DELTA = 0x12,
+	REPORT_RAW = 0x13,
+	REPORT_PRINTF = 0x82,
+	REPORT_STATUS = 0xc0,
+	REPORT_DEBUG = 0x14,
+	REPORT_HDL = 0xfe,
+	REPORT_LOG = 0x1d,
+	REPORT_TOUCH_HOLD = 0x20,
 };
 
 enum command_status {
-	CMD_IDLE    = 0,
-	CMD_BUSY    = 1,
-	CMD_ERROR   = -1,
+	CMD_IDLE = 0,
+	CMD_BUSY = 1,
+	CMD_ERROR = -1,
 };
 
 enum flash_area {
@@ -419,7 +416,7 @@ struct object_data {
 
 struct touch_data {
 	struct object_data *object_data;
-	unsigned char data_point[24]; //6 points
+	unsigned char data_point[24];	//6 points
 	unsigned char extra_gesture_info[6];
 	unsigned int timestamp;
 	unsigned int buttons_state;
@@ -463,7 +460,7 @@ struct syna_tcm_test {
 };
 
 struct syna_tcm_data {
-	/*must be first*/
+	/*must be first */
 	struct invoke_method cb;
 	struct i2c_client *client;
 	struct hw_resource *hw_res;
@@ -527,25 +524,21 @@ struct device_hcd {
 	struct syna_tcm_buffer report;
 	struct syna_tcm_data *tcm_info;
 	int (*reset)(void *chip_data);
-	int (*write_message)(struct syna_tcm_data *tcm_info,
-			unsigned char command, unsigned char *payload,
-			unsigned int length, unsigned char **resp_buf,
-			unsigned int *resp_buf_size, unsigned int *resp_length,
-			unsigned int polling_delay_ms);
-	int (*read_message)(struct syna_tcm_data *tcm_info, unsigned char *in_buf, unsigned int length);
-	int (*report_touch) (struct syna_tcm_data *tcm_info);
+	int (*write_message)(struct syna_tcm_data * tcm_info,
+			     unsigned char command, unsigned char *payload,
+			     unsigned int length, unsigned char **resp_buf,
+			     unsigned int *resp_buf_size, unsigned int *resp_length, unsigned int polling_delay_ms);
+	int (*read_message)(struct syna_tcm_data * tcm_info, unsigned char *in_buf, unsigned int length);
+	int (*report_touch)(struct syna_tcm_data * tcm_info);
 };
 
-static inline int secure_memcpy(unsigned char *dest, unsigned int dest_size,
-		const unsigned char *src, unsigned int src_size,
-		unsigned int count)
+static inline int secure_memcpy(unsigned char *dest, unsigned int dest_size, const unsigned char *src, unsigned int src_size, unsigned int count)
 {
 	if (dest == NULL || src == NULL)
 		return -EINVAL;
 
 	if (count > dest_size || count > src_size) {
-		pr_err("%s: src_size = %d, dest_size = %d, count = %d\n",
-				__func__, src_size, dest_size, count);
+		pr_err("%s: src_size = %d, dest_size = %d, count = %d\n", __func__, src_size, dest_size, count);
 		return -EINVAL;
 	}
 
@@ -607,16 +600,13 @@ static inline int syna_tcm_alloc_mem(struct syna_tcm_buffer *buffer, unsigned in
 	return 0;
 }
 
-
 static inline unsigned int ceil_div(unsigned int dividend, unsigned divisor)
 {
 	return (dividend + divisor - 1) / divisor;
 }
 
-int syna_tcm_rmi_read(struct syna_tcm_data *tcm_info,
-		unsigned short addr, unsigned char *data, unsigned int length);
+int syna_tcm_rmi_read(struct syna_tcm_data *tcm_info, unsigned short addr, unsigned char *data, unsigned int length);
 
-int syna_tcm_rmi_write(struct syna_tcm_data *tcm_info,
-		unsigned short addr, unsigned char *data, unsigned int length);
+int syna_tcm_rmi_write(struct syna_tcm_data *tcm_info, unsigned short addr, unsigned char *data, unsigned int length);
 
 #endif

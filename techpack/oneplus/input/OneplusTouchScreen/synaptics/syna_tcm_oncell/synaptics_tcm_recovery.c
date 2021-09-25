@@ -25,10 +25,10 @@ struct rmi_pdt_entry {
 	unsigned char command_base_addr;
 	unsigned char control_base_addr;
 	unsigned char data_base_addr;
-	unsigned char intr_src_count: 3;
-	unsigned char reserved_1: 2;
-	unsigned char fn_version: 2;
-	unsigned char reserved_2: 1;
+	unsigned char intr_src_count:3;
+	unsigned char reserved_1:2;
+	unsigned char fn_version:2;
+	unsigned char reserved_2:1;
 	unsigned char fn_number;
 } __packed;
 
@@ -57,10 +57,7 @@ static int recovery_device_reset(struct recovery_hcd *recovery_hcd)
 	int retval;
 	unsigned char command = F35_RESET_COMMAND;
 
-	retval = syna_tcm_rmi_write(recovery_hcd->tcm_info,
-			recovery_hcd->f35_addr.control_base + F35_CTRL3_OFFSET,
-			&command,
-			sizeof(command));
+	retval = syna_tcm_rmi_write(recovery_hcd->tcm_info, recovery_hcd->f35_addr.control_base + F35_CTRL3_OFFSET, &command, sizeof(command));
 	if (retval < 0) {
 		TPD_INFO("Failed to write F$35 command\n");
 		return retval;
@@ -134,15 +131,7 @@ static int recovery_parse_ihex(struct recovery_hcd *recovery_hcd)
 
 	for (record = 0; record < recovery_hcd->ihex_records; record++) {
 		buf[(record + 1) * IHEX_RECORD_SIZE - 1] = 0x00;
-		retval = sscanf(&buf[record * IHEX_RECORD_SIZE],
-				"%c%02x%02x%02x%02x%02x%02x",
-				&colon,
-				&count,
-				&addrh,
-				&addrl,
-				&type,
-				&data0,
-				&data1);
+		retval = sscanf(&buf[record * IHEX_RECORD_SIZE], "%c%02x%02x%02x%02x%02x%02x", &colon, &count, &addrh, &addrl, &type, &data0, &data1);
 		if (retval != 7) {
 			TPD_INFO("Failed to read ihex record\n");
 			return -EINVAL;
@@ -206,10 +195,7 @@ static int recovery_check_status(struct recovery_hcd *recovery_hcd)
 	int retval;
 	unsigned char status;
 
-	retval = syna_tcm_rmi_read(recovery_hcd->tcm_info,
-			recovery_hcd->f35_addr.data_base,
-			&status,
-			sizeof(status));
+	retval = syna_tcm_rmi_read(recovery_hcd->tcm_info, recovery_hcd->f35_addr.data_base, &status, sizeof(status));
 	if (retval < 0) {
 		TPD_INFO("Failed to read status\n");
 		return retval;
@@ -247,20 +233,13 @@ static int recovery_write_flash(struct recovery_hcd *recovery_hcd)
 	while (entries_written < recovery_hcd->data_entries) {
 		entries_to_write = F35_CHUNK_SIZE + 2;
 
-		retval = secure_memcpy(recovery_hcd->chunk_buf,
-				chunk_buf_size - 1,
-				data_ptr,
-				recovery_hcd->data_entries - entries_written,
-				entries_to_write);
+		retval = secure_memcpy(recovery_hcd->chunk_buf, chunk_buf_size - 1, data_ptr, recovery_hcd->data_entries - entries_written, entries_to_write);
 		if (retval < 0) {
 			TPD_INFO("Failed to copy chunk data\n");
 			return retval;
 		}
 
-		retval = syna_tcm_rmi_write(recovery_hcd->tcm_info,
-				recovery_hcd->f35_addr.control_base,
-				recovery_hcd->chunk_buf,
-				chunk_buf_size);
+		retval = syna_tcm_rmi_write(recovery_hcd->tcm_info, recovery_hcd->f35_addr.control_base, recovery_hcd->chunk_buf, chunk_buf_size);
 		if (retval < 0) {
 			TPD_INFO("Failed to write chunk data\n");
 			return retval;
@@ -294,20 +273,14 @@ static int recovery_poll_erase_completion(struct recovery_hcd *recovery_hcd)
 	do {
 		command = F35_READ_FLASH_STATUS_COMMAND;
 
-		retval = syna_tcm_rmi_write(recovery_hcd->tcm_info,
-				recovery_hcd->f35_addr.command_base,
-				&command,
-				sizeof(command));
+		retval = syna_tcm_rmi_write(recovery_hcd->tcm_info, recovery_hcd->f35_addr.command_base, &command, sizeof(command));
 		if (retval < 0) {
 			TPD_INFO("Failed to write F$35 command\n");
 			return retval;
 		}
 
 		do {
-			retval = syna_tcm_rmi_read(recovery_hcd->tcm_info,
-					recovery_hcd->f35_addr.command_base,
-					&command,
-					sizeof(command));
+			retval = syna_tcm_rmi_read(recovery_hcd->tcm_info, recovery_hcd->f35_addr.command_base, &command, sizeof(command));
 			if (retval < 0) {
 				TPD_INFO("Failed to read command status\n");
 				return retval;
@@ -328,10 +301,7 @@ static int recovery_poll_erase_completion(struct recovery_hcd *recovery_hcd)
 			goto exit;
 		}
 
-		retval = syna_tcm_rmi_read(recovery_hcd->tcm_info,
-				data_base + F35_DATA5_OFFSET,
-				&status,
-				sizeof(status));
+		retval = syna_tcm_rmi_read(recovery_hcd->tcm_info, data_base + F35_DATA5_OFFSET, &status, sizeof(status));
 		if (retval < 0) {
 			TPD_INFO("Failed to read flash status\n");
 			return retval;
@@ -351,7 +321,7 @@ static int recovery_poll_erase_completion(struct recovery_hcd *recovery_hcd)
 
 	retval = 0;
 
-exit:
+ exit:
 	if (retval < 0) {
 		TPD_INFO("Failed to get erase completion\n");
 	}
@@ -366,10 +336,7 @@ static int recovery_erase_flash(struct recovery_hcd *recovery_hcd)
 
 	command = F35_ERASE_ALL_COMMAND;
 
-	retval = syna_tcm_rmi_write(recovery_hcd->tcm_info,
-			recovery_hcd->f35_addr.control_base + F35_CTRL3_OFFSET,
-			&command,
-			sizeof(command));
+	retval = syna_tcm_rmi_write(recovery_hcd->tcm_info, recovery_hcd->f35_addr.control_base + F35_CTRL3_OFFSET, &command, sizeof(command));
 	if (retval < 0) {
 		TPD_INFO("Failed to write F$35 command\n");
 		return retval;
@@ -398,10 +365,7 @@ static int recovery_in_ubl_mode(struct recovery_hcd *recovery_hcd)
 {
 	int retval = 0;
 	struct rmi_pdt_entry p_entry;
-	retval = syna_tcm_rmi_read(recovery_hcd->tcm_info,
-			PDT_START_ADDR,
-			(unsigned char *)&p_entry,
-			sizeof(p_entry));
+	retval = syna_tcm_rmi_read(recovery_hcd->tcm_info, PDT_START_ADDR, (unsigned char *)&p_entry, sizeof(p_entry));
 	if (retval < 0) {
 		TPD_INFO("Failed to read PDT entry\n");
 		return false;
@@ -413,6 +377,7 @@ static int recovery_in_ubl_mode(struct recovery_hcd *recovery_hcd)
 	}
 	return true;
 }
+
 static int recovery_get_fw_ihex(struct recovery_hcd *recovery_hcd, char *iHex)
 {
 	int retval;
@@ -425,10 +390,7 @@ static int recovery_get_fw_ihex(struct recovery_hcd *recovery_hcd, char *iHex)
 
 	TPD_INFO("ihex file size = %d\n", (unsigned int)recovery_hcd->fw_entry->size);
 	retval = secure_memcpy(recovery_hcd->ihex_buf,
-			recovery_hcd->fw_entry->size,
-			recovery_hcd->fw_entry->data,
-			recovery_hcd->fw_entry->size,
-			recovery_hcd->fw_entry->size);
+			       recovery_hcd->fw_entry->size, recovery_hcd->fw_entry->data, recovery_hcd->fw_entry->size, recovery_hcd->fw_entry->size);
 	if (retval < 0) {
 		TPD_INFO("Failed to copy ihex data\n");
 		return retval;
@@ -456,10 +418,7 @@ int recovery_do_recovery(struct recovery_hcd *recovery_hcd, char *iHex)
 		return retval;
 	}
 
-	retval = syna_tcm_rmi_read(recovery_hcd->tcm_info,
-			PDT_START_ADDR,
-			(unsigned char *)&p_entry,
-			sizeof(p_entry));
+	retval = syna_tcm_rmi_read(recovery_hcd->tcm_info, PDT_START_ADDR, (unsigned char *)&p_entry, sizeof(p_entry));
 	if (retval < 0) {
 		TPD_INFO("Failed to read PDT entry\n");
 		return retval;
@@ -543,11 +502,11 @@ int try_to_recovery_ic(struct syna_tcm_data *tcm_info, char *iHex)
 	recovery_do_recovery(recovery_hcd, iHex);
 
 	retval = 1;
-exit:
+ exit:
 	kfree(recovery_hcd->data_buf);
-err_allocate_data_buf:
+ err_allocate_data_buf:
 	kfree(recovery_hcd->ihex_buf);
-err_allocate_ihex_buf:
+ err_allocate_ihex_buf:
 	kfree(recovery_hcd);
 	recovery_hcd = NULL;
 

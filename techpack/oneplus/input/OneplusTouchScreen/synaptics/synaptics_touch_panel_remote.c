@@ -16,28 +16,19 @@
 #define DEV_NUMBER 1
 #define REG_ADDR_LIMIT 0xFFFF
 
-static ssize_t rmidev_sysfs_data_show(struct file *data_file,
-		struct kobject *kobj, struct bin_attribute *attributes,
-		char *buf, loff_t pos, size_t count);
+static ssize_t rmidev_sysfs_data_show(struct file *data_file, struct kobject *kobj, struct bin_attribute *attributes, char *buf, loff_t pos, size_t count);
 
-static ssize_t rmidev_sysfs_data_store(struct file *data_file,
-		struct kobject *kobj, struct bin_attribute *attributes,
-		char *buf, loff_t pos, size_t count);
+static ssize_t rmidev_sysfs_data_store(struct file *data_file, struct kobject *kobj, struct bin_attribute *attributes, char *buf, loff_t pos, size_t count);
 
-static ssize_t rmidev_sysfs_open_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count);
+static ssize_t rmidev_sysfs_open_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count);
 
-static ssize_t rmidev_sysfs_release_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count);
+static ssize_t rmidev_sysfs_release_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count);
 
-static ssize_t rmidev_sysfs_address_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count);
+static ssize_t rmidev_sysfs_address_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count);
 
-static ssize_t rmidev_sysfs_length_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count);
+static ssize_t rmidev_sysfs_length_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count);
 
-static ssize_t rmidev_sysfs_attn_state_show(struct device *dev,
-		struct device_attribute *attr, char *buf);
+static ssize_t rmidev_sysfs_attn_state_show(struct device *dev, struct device_attribute *attr, char *buf);
 
 static int remote_rmi4_i2c_read(unsigned short addr, unsigned char *data, unsigned short length);
 static int remote_rmi4_i2c_write(unsigned short addr, unsigned char *data, unsigned short length);
@@ -74,9 +65,9 @@ struct rmidev_data {
 
 static struct bin_attribute attr_data = {
 	.attr = {
-		.name = "data",
-		.mode = (S_IRUSR | S_IWUSR),
-	},
+		 .name = "data",
+		 .mode = (S_IRUSR | S_IWUSR),
+		 },
 	.size = 0,
 	.read = rmidev_sysfs_data_show,
 	.write = rmidev_sysfs_data_store,
@@ -84,20 +75,20 @@ static struct bin_attribute attr_data = {
 
 static struct device_attribute attrs[] = {
 	__ATTR(open, S_IRUSR | S_IWUSR,
-			NULL,
-			rmidev_sysfs_open_store),
+	       NULL,
+	       rmidev_sysfs_open_store),
 	__ATTR(release, S_IRUSR | S_IWUSR,
-			NULL,
-			rmidev_sysfs_release_store),
+	       NULL,
+	       rmidev_sysfs_release_store),
 	__ATTR(address, S_IRUSR | S_IWUSR,
-			NULL,
-			rmidev_sysfs_address_store),
+	       NULL,
+	       rmidev_sysfs_address_store),
 	__ATTR(length, S_IRUSR | S_IWUSR,
-			NULL,
-			rmidev_sysfs_length_store),
+	       NULL,
+	       rmidev_sysfs_length_store),
 	__ATTR(attn_state, S_IRUSR | S_IWUSR,
-			rmidev_sysfs_attn_state_show,
-			NULL),
+	       rmidev_sysfs_attn_state_show,
+	       NULL),
 };
 
 static int rmidev_major_num;
@@ -109,10 +100,7 @@ static struct rmidev_handle *rmidev;
 static struct device *device_ptr;
 static struct delayed_work delay_work;
 
-
-static ssize_t rmidev_sysfs_data_show(struct file *data_file,
-		struct kobject *kobj, struct bin_attribute *attributes,
-		char *buf, loff_t pos, size_t count)
+static ssize_t rmidev_sysfs_data_show(struct file *data_file, struct kobject *kobj, struct bin_attribute *attributes, char *buf, loff_t pos, size_t count)
 {
 	int retval;
 	unsigned int data_length = rmidev->length;
@@ -121,21 +109,14 @@ static ssize_t rmidev_sysfs_data_show(struct file *data_file,
 		data_length = REG_ADDR_LIMIT - rmidev->address;
 
 	if (count < data_length) {
-		dev_err(device_ptr,
-				"%s: Not enough space (%zd bytes) in buffer\n",
-				__func__, count);
+		dev_err(device_ptr, "%s: Not enough space (%zd bytes) in buffer\n", __func__, count);
 		return -EINVAL;
 	}
 
 	if (data_length) {
-		retval = remote_rmi4_i2c_read(
-				rmidev->address,
-				(unsigned char *)buf,
-				data_length);
+		retval = remote_rmi4_i2c_read(rmidev->address, (unsigned char *)buf, data_length);
 		if (retval < 0) {
-			dev_err(device_ptr,
-					"%s: Failed to read data\n",
-					__func__);
+			dev_err(device_ptr, "%s: Failed to read data\n", __func__);
 			return retval;
 		}
 	} else {
@@ -145,9 +126,7 @@ static ssize_t rmidev_sysfs_data_show(struct file *data_file,
 	return data_length;
 }
 
-static ssize_t rmidev_sysfs_data_store(struct file *data_file,
-		struct kobject *kobj, struct bin_attribute *attributes,
-		char *buf, loff_t pos, size_t count)
+static ssize_t rmidev_sysfs_data_store(struct file *data_file, struct kobject *kobj, struct bin_attribute *attributes, char *buf, loff_t pos, size_t count)
 {
 	int retval;
 	unsigned int data_length = rmidev->length;
@@ -156,14 +135,9 @@ static ssize_t rmidev_sysfs_data_store(struct file *data_file,
 		data_length = REG_ADDR_LIMIT - rmidev->address;
 
 	if (data_length) {
-		retval = remote_rmi4_i2c_write(
-				rmidev->address,
-				(unsigned char *)buf,
-				data_length);
+		retval = remote_rmi4_i2c_write(rmidev->address, (unsigned char *)buf, data_length);
 		if (retval < 0) {
-			dev_err(device_ptr,
-					"%s: Failed to write data\n",
-					__func__);
+			dev_err(device_ptr, "%s: Failed to write data\n", __func__);
 			return retval;
 		}
 	} else {
@@ -173,8 +147,7 @@ static ssize_t rmidev_sysfs_data_store(struct file *data_file,
 	return count;
 }
 
-static ssize_t rmidev_sysfs_open_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t rmidev_sysfs_open_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
 	unsigned int input;
 
@@ -185,15 +158,12 @@ static ssize_t rmidev_sysfs_open_store(struct device *dev,
 		return -EINVAL;
 
 	remote_rmi4_i2c_enable(false);
-	dev_dbg(device_ptr,
-			"%s: Attention interrupt disabled\n",
-			__func__);
+	dev_dbg(device_ptr, "%s: Attention interrupt disabled\n", __func__);
 
 	return count;
 }
 
-static ssize_t rmidev_sysfs_release_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t rmidev_sysfs_release_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
 	unsigned int input;
 
@@ -204,15 +174,12 @@ static ssize_t rmidev_sysfs_release_store(struct device *dev,
 		return -EINVAL;
 
 	remote_rmi4_i2c_enable(true);
-	dev_dbg(device_ptr,
-			"%s: Attention interrupt enabled\n",
-			__func__);
+	dev_dbg(device_ptr, "%s: Attention interrupt enabled\n", __func__);
 
 	return count;
 }
 
-static ssize_t rmidev_sysfs_address_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t rmidev_sysfs_address_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
 	unsigned int input;
 
@@ -227,8 +194,7 @@ static ssize_t rmidev_sysfs_address_store(struct device *dev,
 	return count;
 }
 
-static ssize_t rmidev_sysfs_length_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t rmidev_sysfs_length_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
 	unsigned int input;
 
@@ -243,8 +209,7 @@ static ssize_t rmidev_sysfs_length_store(struct device *dev,
 	return count;
 }
 
-static ssize_t rmidev_sysfs_attn_state_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
+static ssize_t rmidev_sysfs_attn_state_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	int attn_state;
 
@@ -265,23 +230,24 @@ static struct input_dev *remote_rmi4_get_input(void)
 	return dev_data->pdata->input_dev;
 }
 
-static struct i2c_client* remote_rmi4_get_i2c_client(void)
+static struct i2c_client *remote_rmi4_get_i2c_client(void)
 {
 	struct rmidev_data *dev_data = (struct rmidev_data *)rmidev->data;
 	return dev_data->pdata->client;
 }
 
-static int remote_rmit_set_page(unsigned int address) {
-	struct i2c_client* i2c_client = remote_rmi4_get_i2c_client();
+static int remote_rmit_set_page(unsigned int address)
+{
+	struct i2c_client *i2c_client = remote_rmi4_get_i2c_client();
 	unsigned char retry;
 	unsigned char *buf = NULL;
 	struct i2c_msg msg[] = {
 		{
-			.addr = i2c_client->addr,
-			.flags = 0,
-			.len = 2,
-			.buf = buf,
-		}
+		 .addr = i2c_client->addr,
+		 .flags = 0,
+		 .len = 2,
+		 .buf = buf,
+		 }
 	};
 
 	buf = kzalloc(2, GFP_KERNEL | GFP_DMA);
@@ -316,16 +282,16 @@ static int remote_rmit_set_page(unsigned int address) {
 
 static int remote_rmit_put_page(void)
 {
-	struct i2c_client* i2c_client = remote_rmi4_get_i2c_client();
+	struct i2c_client *i2c_client = remote_rmi4_get_i2c_client();
 	unsigned char retry;
 	unsigned char *buf = NULL;
 	struct i2c_msg msg[] = {
 		{
-			.addr = i2c_client->addr,
-			.flags = 0,
-			.len = 2,
-			.buf = buf,
-		}
+		 .addr = i2c_client->addr,
+		 .flags = 0,
+		 .len = 2,
+		 .buf = buf,
+		 }
 	};
 
 	buf = kzalloc(2, GFP_KERNEL | GFP_DMA);
@@ -364,20 +330,20 @@ int remote_rmi4_i2c_read(unsigned short addr, unsigned char *data, unsigned shor
 	unsigned char retry;
 	unsigned char *buf = NULL;
 	unsigned char *read_buf = NULL;
-	struct i2c_client* i2c_client = remote_rmi4_get_i2c_client();
+	struct i2c_client *i2c_client = remote_rmi4_get_i2c_client();
 	struct i2c_msg msg[] = {
 		{
-			.addr = i2c_client->addr,
-			.flags = 0,
-			.len = 1,
-			.buf = buf,
-		},
+		 .addr = i2c_client->addr,
+		 .flags = 0,
+		 .len = 1,
+		 .buf = buf,
+		 },
 		{
-			.addr = i2c_client->addr,
-			.flags = I2C_M_RD,
-			.len = length,
-			.buf = read_buf,
-		},
+		 .addr = i2c_client->addr,
+		 .flags = I2C_M_RD,
+		 .len = length,
+		 .buf = read_buf,
+		 },
 	};
 
 	buf = kzalloc(1, GFP_KERNEL | GFP_DMA);
@@ -418,7 +384,7 @@ int remote_rmi4_i2c_read(unsigned short addr, unsigned char *data, unsigned shor
 
 	memcpy(data, read_buf, length);
 
-exit:
+ exit:
 	kfree(buf);
 	buf = NULL;
 	kfree(read_buf);
@@ -433,14 +399,14 @@ int remote_rmi4_i2c_write(unsigned short addr, unsigned char *data, unsigned sho
 	int retval;
 	unsigned char retry;
 	unsigned char *buf = NULL;
-	struct i2c_client* i2c_client = remote_rmi4_get_i2c_client();
+	struct i2c_client *i2c_client = remote_rmi4_get_i2c_client();
 	struct i2c_msg msg[] = {
 		{
-			.addr = i2c_client->addr,
-			.flags = 0,
-			.len = length + 1,
-			.buf = buf,
-		}
+		 .addr = i2c_client->addr,
+		 .flags = 0,
+		 .len = length + 1,
+		 .buf = buf,
+		 }
 	};
 
 	buf = kzalloc(length + 1, GFP_KERNEL | GFP_DMA);
@@ -470,7 +436,7 @@ int remote_rmi4_i2c_write(unsigned short addr, unsigned char *data, unsigned sho
 		retval = -EIO;
 	}
 
-exit:
+ exit:
 	remote_rmit_put_page();
 	kfree(buf);
 	buf = NULL;
@@ -484,12 +450,11 @@ int remote_rmi4_i2c_enable(bool enable)
 
 	if (enable) {
 		*(dev_data->pdata->enable_remote) = 0;
-	}else{
+	} else {
 		*(dev_data->pdata->enable_remote) = 1;
 	}
-	return 0 ;
+	return 0;
 }
-
 
 /*
  * rmidev_llseek - used to set up register address
@@ -515,35 +480,32 @@ static loff_t rmidev_llseek(struct file *filp, loff_t off, int whence)
 		return -EBADF;
 	}
 
-
 	mutex_lock(&(dev_data->file_mutex));
 
 	switch (whence) {
-		case SEEK_SET:
-			newpos = off;
-			break;
-		case SEEK_CUR:
-			newpos = filp->f_pos + off;
-			break;
-		case SEEK_END:
-			newpos = REG_ADDR_LIMIT + off;
-			break;
-		default:
-			newpos = -EINVAL;
-			goto clean_up;
+	case SEEK_SET:
+		newpos = off;
+		break;
+	case SEEK_CUR:
+		newpos = filp->f_pos + off;
+		break;
+	case SEEK_END:
+		newpos = REG_ADDR_LIMIT + off;
+		break;
+	default:
+		newpos = -EINVAL;
+		goto clean_up;
 	}
 
 	if (newpos < 0 || newpos > REG_ADDR_LIMIT) {
-		dev_err(device_ptr,
-				"%s: New position 0x%04x is invalid\n",
-				__func__, (unsigned int)newpos);
+		dev_err(device_ptr, "%s: New position 0x%04x is invalid\n", __func__, (unsigned int)newpos);
 		newpos = -EINVAL;
 		goto clean_up;
 	}
 
 	filp->f_pos = newpos;
 
-clean_up:
+ clean_up:
 	mutex_unlock(&(dev_data->file_mutex));
 
 	return newpos;
@@ -557,8 +519,7 @@ clean_up:
  * @count: number of bytes to read
  * @f_pos: offset (starting register address)
  */
-static ssize_t rmidev_read(struct file *filp, char __user *buf,
-		size_t count, loff_t *f_pos)
+static ssize_t rmidev_read(struct file *filp, char __user * buf, size_t count, loff_t * f_pos)
 {
 	ssize_t retval;
 	unsigned char *tmpbuf = NULL;
@@ -576,7 +537,7 @@ static ssize_t rmidev_read(struct file *filp, char __user *buf,
 		count = REG_ADDR_LIMIT - *f_pos;
 
 	tmpbuf = kzalloc(count + 1, GFP_KERNEL);
-	if(tmpbuf == NULL) {
+	if (tmpbuf == NULL) {
 		pr_err("buf info kzalloc error\n");
 		return -ENOMEM;
 	}
@@ -584,10 +545,7 @@ static ssize_t rmidev_read(struct file *filp, char __user *buf,
 	mutex_lock(dev_data->pdata->pmutex);
 	mutex_lock(&(dev_data->file_mutex));
 
-	retval = remote_rmi4_i2c_read(
-			*f_pos,
-			tmpbuf,
-			count);
+	retval = remote_rmi4_i2c_read(*f_pos, tmpbuf, count);
 	if (retval < 0)
 		goto clean_up;
 
@@ -596,7 +554,7 @@ static ssize_t rmidev_read(struct file *filp, char __user *buf,
 	else
 		*f_pos += retval;
 
-clean_up:
+ clean_up:
 	mutex_unlock(&(dev_data->file_mutex));
 	mutex_unlock(dev_data->pdata->pmutex);
 	kfree(tmpbuf);
@@ -613,8 +571,7 @@ clean_up:
  * @count: number of bytes to write
  * @f_pos: offset (starting register address)
  */
-static ssize_t rmidev_write(struct file *filp, const char __user *buf,
-		size_t count, loff_t *f_pos)
+static ssize_t rmidev_write(struct file *filp, const char __user * buf, size_t count, loff_t * f_pos)
 {
 	ssize_t retval;
 	unsigned char *tmpbuf = NULL;
@@ -632,7 +589,7 @@ static ssize_t rmidev_write(struct file *filp, const char __user *buf,
 		count = REG_ADDR_LIMIT - *f_pos;
 
 	tmpbuf = kzalloc(count + 1, GFP_KERNEL);
-	if(tmpbuf == NULL) {
+	if (tmpbuf == NULL) {
 		pr_err("buf info kzalloc error\n");
 		return -ENOMEM;
 	}
@@ -645,32 +602,30 @@ static ssize_t rmidev_write(struct file *filp, const char __user *buf,
 	mutex_lock(dev_data->pdata->pmutex);
 	mutex_lock(&(dev_data->file_mutex));
 
-	retval = remote_rmi4_i2c_write(
-			*f_pos,
-			tmpbuf,
-			count);
+	retval = remote_rmi4_i2c_write(*f_pos, tmpbuf, count);
 	if (retval >= 0)
 		*f_pos += retval;
 
 	mutex_unlock(&(dev_data->file_mutex));
 	mutex_unlock(dev_data->pdata->pmutex);
 
-clean_up:
+ clean_up:
 	kfree(tmpbuf);
 	tmpbuf = NULL;
 	return retval;
 }
 
-static int rmidev_create_attr(bool create) {
+static int rmidev_create_attr(bool create)
+{
 	int retval = 0;
 	unsigned char attr_count;
 	struct input_dev *input_dev = remote_rmi4_get_input();
 
 	if (!create)
-		goto err_sysfs_attrs ;
+		goto err_sysfs_attrs;
 
 	if (rmidev->sysfs_dir)
-		return 0 ;
+		return 0;
 
 	if (!input_dev)
 		return -1;
@@ -690,45 +645,39 @@ static int rmidev_create_attr(bool create) {
 	   }
 	   }
 	 */
-	rmidev->sysfs_dir = kobject_create_and_add("rmidev",
-			&input_dev->dev.kobj);
+	rmidev->sysfs_dir = kobject_create_and_add("rmidev", &input_dev->dev.kobj);
 	if (!rmidev->sysfs_dir) {
-		dev_err(device_ptr,
-				"%s: Failed to create sysfs directory\n", __func__);
+		dev_err(device_ptr, "%s: Failed to create sysfs directory\n", __func__);
 		return -1;
 	}
 
-	retval = sysfs_create_bin_file(rmidev->sysfs_dir,
-			&attr_data);
+	retval = sysfs_create_bin_file(rmidev->sysfs_dir, &attr_data);
 	if (retval < 0) {
-		dev_err(device_ptr,
-				"%s: Failed to create sysfs bin file\n",
-				__func__);
+		dev_err(device_ptr, "%s: Failed to create sysfs bin file\n", __func__);
 		goto err_sysfs_bin;
 	}
 
 	for (attr_count = 0; attr_count < ARRAY_SIZE(attrs); attr_count++) {
 		retval = sysfs_create_file(rmidev->sysfs_dir, &attrs[attr_count].attr);
 		if (retval < 0) {
-			dev_err(device_ptr,
-					"%s: Failed to create sysfs attributes\n", __func__);
+			dev_err(device_ptr, "%s: Failed to create sysfs attributes\n", __func__);
 			retval = -ENODEV;
 			goto err_sysfs_attrs;
 		}
 	}
 
-	return 0 ;
+	return 0;
 
-err_sysfs_attrs:
+ err_sysfs_attrs:
 	if (!rmidev->sysfs_dir)
-		return 0 ;
+		return 0;
 	for (attr_count = 0; attr_count < ARRAY_SIZE(attrs); attr_count++) {
 		sysfs_remove_file(rmidev->sysfs_dir, &attrs[attr_count].attr);
 	}
 
 	sysfs_remove_bin_file(rmidev->sysfs_dir, &attr_data);
 
-err_sysfs_bin:
+ err_sysfs_bin:
 	kobject_put(rmidev->sysfs_dir);
 	rmidev->sysfs_dir = NULL;
 
@@ -743,8 +692,7 @@ err_sysfs_bin:
 static int rmidev_open(struct inode *inp, struct file *filp)
 {
 	int retval = 0;
-	struct rmidev_data *dev_data =
-		container_of(inp->i_cdev, struct rmidev_data, main_dev);
+	struct rmidev_data *dev_data = container_of(inp->i_cdev, struct rmidev_data, main_dev);
 
 	rmidev_create_attr(true);
 
@@ -753,8 +701,7 @@ static int rmidev_open(struct inode *inp, struct file *filp)
 	mutex_lock(&(dev_data->file_mutex));
 	*(dev_data->pdata->enable_remote) = 1;
 	//remote_rmi4_i2c_enable(false);
-	dev_dbg(device_ptr,
-			"%s: Attention interrupt disabled\n", __func__);
+	dev_dbg(device_ptr, "%s: Attention interrupt disabled\n", __func__);
 	disable_irq_nosync(dev_data->pdata->irq);
 
 	if (dev_data->ref_count < 1)
@@ -774,8 +721,7 @@ static int rmidev_open(struct inode *inp, struct file *filp)
  */
 static int rmidev_release(struct inode *inp, struct file *filp)
 {
-	struct rmidev_data *dev_data =
-		container_of(inp->i_cdev, struct rmidev_data, main_dev);
+	struct rmidev_data *dev_data = container_of(inp->i_cdev, struct rmidev_data, main_dev);
 
 	rmidev_create_attr(false);
 
@@ -786,8 +732,7 @@ static int rmidev_release(struct inode *inp, struct file *filp)
 		dev_data->ref_count = 0;
 
 	remote_rmi4_i2c_enable(true);
-	dev_dbg(device_ptr,
-			"%s: Attention interrupt enabled\n", __func__);
+	dev_dbg(device_ptr, "%s: Attention interrupt enabled\n", __func__);
 	enable_irq(dev_data->pdata->irq);
 	mutex_unlock(&(dev_data->file_mutex));
 
@@ -817,14 +762,13 @@ static void rmidev_device_cleanup(struct rmidev_data *dev_data)
 		unregister_chrdev_region(devno, 1);
 		remote_free_panel_data(dev_data->pdata);
 
-		dev_dbg(device_ptr,
-				"%s: rmidev device removed\n",  __func__);
+		dev_dbg(device_ptr, "%s: rmidev device removed\n", __func__);
 	}
 
 	return;
 }
 
-static char *rmi_char_devnode(struct device *dev, umode_t *mode)
+static char *rmi_char_devnode(struct device *dev, umode_t * mode)
 {
 	if (!mode)
 		return NULL;
@@ -839,8 +783,7 @@ static int rmidev_create_device_class(void)
 	rmidev_device_class = class_create(THIS_MODULE, DEVICE_CLASS_NAME);
 
 	if (IS_ERR(rmidev_device_class)) {
-		pr_err("%s: Failed to create /dev/%s\n",
-				__func__, CHAR_DEVICE_NAME);
+		pr_err("%s: Failed to create /dev/%s\n", __func__, CHAR_DEVICE_NAME);
 		return -ENODEV;
 	}
 
@@ -849,14 +792,14 @@ static int rmidev_create_device_class(void)
 	return 0;
 }
 
-static void remote_rmi4_delay_work(struct work_struct *work) {
-	rmidev_create_attr(true) ;
+static void remote_rmi4_delay_work(struct work_struct *work)
+{
+	rmidev_create_attr(true);
 }
 
 struct remotepanel_data *remote_alloc_panel_data(void)
 {
-	if (rmidev)
-	{
+	if (rmidev) {
 		pr_err("%s:remote panel data has alloc already null\n", __func__);
 		return NULL;
 	}
@@ -879,14 +822,11 @@ int register_remote_device(struct remotepanel_data *pdata)
 	dev_t dev_no;
 	struct rmidev_data *dev_data = NULL;
 
-
-	if (pdata == NULL)
-	{
+	if (pdata == NULL) {
 		pr_err("%s:pdata is null\n", __func__);
 		return -1;
 	}
-	if (rmidev)
-	{
+	if (rmidev) {
 		pr_err("%s:remote device has register already null\n", __func__);
 		return -1;
 	}
@@ -938,35 +878,33 @@ int register_remote_device(struct remotepanel_data *pdata)
 	dev_set_name(&rmidev->dev, "rmidev%d", MINOR(dev_no));
 	dev_data->device_class = rmidev_device_class;
 
-	device_ptr = device_create(dev_data->device_class, NULL, dev_no,
-			NULL, CHAR_DEVICE_NAME"%d", MINOR(dev_no));
+	device_ptr = device_create(dev_data->device_class, NULL, dev_no, NULL, CHAR_DEVICE_NAME "%d", MINOR(dev_no));
 	if (IS_ERR(device_ptr)) {
-		dev_err(device_ptr,
-				"%s: Failed to create rmi char device\n", __func__);
+		dev_err(device_ptr, "%s: Failed to create rmi char device\n", __func__);
 		retval = -ENODEV;
 		goto err_char_device;
 	}
 
 	INIT_DELAYED_WORK(&delay_work, remote_rmi4_delay_work);
-	schedule_delayed_work(&delay_work, msecs_to_jiffies(8*1000));
+	schedule_delayed_work(&delay_work, msecs_to_jiffies(8 * 1000));
 
 	return 0;
 
-err_char_device:
+ err_char_device:
 	remote_free_panel_data(dev_data->pdata);
 	rmidev_device_cleanup(dev_data);
 	kfree(dev_data);
 
-err_dev_data:
+ err_dev_data:
 	unregister_chrdev_region(dev_no, 1);
 
-err_device_region:
+ err_device_region:
 	class_destroy(rmidev_device_class);
 
-err_device_class:
+ err_device_class:
 	kfree(rmidev);
 	rmidev = NULL;
-err_rmidev:
+ err_rmidev:
 	return retval;
 }
 
@@ -1015,4 +953,3 @@ void unregister_remote_device(void)
    MODULE_DESCRIPTION("Synaptics DSX RMI Dev Module");
    MODULE_LICENSE("GPL v2");
  */
-
