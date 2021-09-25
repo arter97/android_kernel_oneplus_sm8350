@@ -11,10 +11,8 @@
 #include <linux/cdev.h>
 #include <linux/dma-mapping.h>
 
-#include "touch_interfaces.h"
-
 #define TPD_DEVICE "touch_interface"
-#define TPD_INFO(a, arg...)  pr_err("[TP]"TPD_DEVICE ": " a, ##arg)
+#include "touch_interfaces.h"
 
 static struct touch_dma_buf *dma_buffer;
 

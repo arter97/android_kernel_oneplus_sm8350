@@ -22,6 +22,7 @@
 #include <linux/notifier.h>
 //#endif
 
+#define TPD_DEVICE "sec-s6sy792"
 #include "sec_drivers_s6sy792.h"
 
 static struct dma_buf_s6sy792 *dma_buffer;
@@ -29,28 +30,6 @@ extern int tp_register_times;
 extern struct touchpanel_data *g_tp;
 #define PM_QOS_VALUE_TP 200
 struct pm_qos_request pm_qos_req_stp;
-
-/****************** Start of Log Tag Declear and level define*******************************/
-#define TPD_DEVICE "sec-s6sy792"
-#define TPD_INFO(a, arg...)  pr_err("[TP]"TPD_DEVICE ": " a, ##arg)
-#define TPD_DEBUG(a, arg...)\
-	do{\
-		if (LEVEL_DEBUG == tp_debug)\
-		pr_err("[TP]"TPD_DEVICE ": " a, ##arg);\
-	}while(0)
-
-#define TPD_DETAIL(a, arg...)\
-	do{\
-		if (LEVEL_BASIC != tp_debug)\
-		pr_err("[TP]"TPD_DEVICE ": " a, ##arg);\
-	}while(0)
-
-#define TPD_DEBUG_NTAG(a, arg...)\
-	do{\
-		if (tp_debug)\
-		printk(a, ##arg);\
-	}while(0)
-/******************** End of Log Tag Declear and level define*********************************/
 
 /*************************** start of function delcare****************************************/
 void sec_mdelay(unsigned int ms);

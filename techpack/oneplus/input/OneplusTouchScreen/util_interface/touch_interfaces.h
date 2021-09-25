@@ -12,6 +12,8 @@
 #ifndef TOUCH_INTERFACES_H
 #define TOUCH_INTERFACES_H
 
+#include "../touchpanel_common.h"
+
 #define MAX_I2C_RETRY_TIME 2
 
 //---SPI READ/WRITE---

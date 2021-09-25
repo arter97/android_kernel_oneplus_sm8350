@@ -1,30 +1,10 @@
 #include <linux/module.h>
+
+#define TPD_DEVICE "tp_module_init"
 #include "touchpanel_common.h"
 
 extern struct i2c_driver sec_tp_i2c_driver;
 extern struct i2c_driver syna_i2c_driver;
-
-/****************** Start of Log Tag Declear and level define*******************************/
-#define TPD_DEVICE "tp_module_init"
-#define TPD_INFO(a, arg...)  pr_err("[TP]"TPD_DEVICE ": " a, ##arg)
-#define TPD_DEBUG(a, arg...)\
-	do{\
-		if (LEVEL_DEBUG == tp_debug)\
-		pr_err("[TP]"TPD_DEVICE ": " a, ##arg);\
-	}while(0)
-
-#define TPD_DETAIL(a, arg...)\
-	do{\
-		if (LEVEL_BASIC != tp_debug)\
-		pr_err("[TP]"TPD_DEVICE ": " a, ##arg);\
-	}while(0)
-
-#define TPD_DEBUG_NTAG(a, arg...)\
-	do{\
-		if (tp_debug)\
-		printk(a, ##arg);\
-	}while(0)
-/******************** End of Log Tag Declear and level define*********************************/
 
 /***********************Start of module init and exit****************************/
 static int __init tp_driver_init(void)

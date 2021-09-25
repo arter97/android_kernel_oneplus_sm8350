@@ -1,25 +1,10 @@
-
-#include "../touchpanel_common.h"
-#include "synaptics_common.h"
 #include <linux/crc32.h>
 #include <linux/syscalls.h>
 #include <linux/fs.h>
 
-/*******Part0:LOG TAG Declear********************/
-
 #define TPD_DEVICE "synaptics_common"
-#define TPD_INFO(a, arg...)  pr_err("[TP]"TPD_DEVICE ": " a, ##arg)
-#define TPD_DEBUG(a, arg...)\
-	do{\
-		if (LEVEL_DEBUG == tp_debug)\
-		pr_err("[TP]"TPD_DEVICE ": " a, ##arg);\
-	}while(0)
-
-#define TPD_DETAIL(a, arg...)\
-	do{\
-		if (LEVEL_BASIC != tp_debug)\
-		pr_err("[TP]"TPD_DEVICE ": " a, ##arg);\
-	}while(0)
+#include "../touchpanel_common.h"
+#include "synaptics_common.h"
 
 /*******Part1:Call Back Function implement*******/
 
