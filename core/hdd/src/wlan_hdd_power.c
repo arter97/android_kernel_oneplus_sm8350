@@ -678,16 +678,16 @@ out:
  */
 static void hdd_send_ps_config_to_fw(struct hdd_adapter *adapter)
 {
-	struct mac_context *mac_ctx;
 	struct hdd_context *hdd_ctx;
+	bool usr_ps_cfg;
 
 	if (hdd_validate_adapter(adapter))
 		return;
 
 	hdd_ctx = WLAN_HDD_GET_CTX(adapter);
-	mac_ctx  = MAC_CONTEXT(hdd_ctx->mac_handle);
 
-	if (mac_ctx->usr_cfg_ps_enable)
+	usr_ps_cfg = ucfg_mlme_get_user_ps(hdd_ctx->psoc, adapter->vdev_id);
+	if (usr_ps_cfg)
 		sme_ps_enable_disable(hdd_ctx->mac_handle, adapter->vdev_id,
 				      SME_PS_ENABLE);
 	else
@@ -1185,6 +1185,7 @@ int wlan_hdd_pm_qos_notify(struct notifier_block *nb, unsigned long curr_val,
 	struct hdd_context *hdd_ctx = container_of(nb, struct hdd_context,
 						   pm_qos_notifier);
 	void *hif_ctx;
+	bool is_any_sta_connected = false;
 
 	if (hdd_ctx->driver_status != DRIVER_MODULES_ENABLED) {
 		hdd_debug_rl("Driver Module closed; skipping pm qos notify");
@@ -1197,11 +1198,15 @@ int wlan_hdd_pm_qos_notify(struct notifier_block *nb, unsigned long curr_val,
 		return -EINVAL;
 	}
 
-	hdd_debug("PM QOS update: runtime_pm_prevented %d Current value: %ld",
-		  hdd_ctx->runtime_pm_prevented, curr_val);
+	is_any_sta_connected = hdd_is_any_sta_connected(hdd_ctx);
+
+	hdd_debug("PM QOS update: runtime_pm_prevented %d Current value: %ld, is_any_sta_connected %d",
+		  hdd_ctx->runtime_pm_prevented, curr_val,
+		  is_any_sta_connected);
 	qdf_spin_lock_irqsave(&hdd_ctx->pm_qos_lock);
 
 	if (!hdd_ctx->runtime_pm_prevented &&
+	    is_any_sta_connected &&
 	    curr_val != wlan_hdd_get_pm_qos_cpu_latency()) {
 		hif_pm_runtime_get_noresume(hif_ctx, RTPM_ID_QOS_NOTIFY);
 		hdd_ctx->runtime_pm_prevented = true;
@@ -1939,7 +1944,7 @@ int wlan_hdd_set_powersave(struct hdd_adapter *adapter,
 				goto end;
 		}
 
-		sme_save_usr_ps_cfg(mac_handle, true);
+		ucfg_mlme_set_user_ps(hdd_ctx->psoc, adapter->vdev_id, true);
 		ucfg_mlme_is_bmps_enabled(hdd_ctx->psoc, &is_bmps_enabled);
 		if (is_bmps_enabled) {
 			hdd_debug("Wlan driver Entering Power save");
@@ -1967,7 +1972,7 @@ int wlan_hdd_set_powersave(struct hdd_adapter *adapter,
 	} else {
 		hdd_debug("Wlan driver Entering Full Power");
 
-		sme_save_usr_ps_cfg(mac_handle, false);
+		ucfg_mlme_set_user_ps(hdd_ctx->psoc, adapter->vdev_id, false);
 		/*
 		 * Enter Full power command received from GUI
 		 * this means we are disconnected
