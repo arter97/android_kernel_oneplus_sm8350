@@ -577,8 +577,8 @@ static void tp_touch_handle(struct touchpanel_data *ts)
 	int i = 0;
 	uint8_t finger_num = 0, touch_near_edge = 0;
 	int obj_attention = 0;
-	struct point_info points[10];
-	struct corner_info corner[4];
+	struct point_info points[10] = { 0, };
+	struct corner_info corner[4] = { 0, };
 	static bool up_status = false;
 	static struct point_info last_point = {.x = 0,.y = 0 };
 	static int touch_report_num = 0;
@@ -593,8 +593,6 @@ static void tp_touch_handle(struct touchpanel_data *ts)
 		return;
 	}
 
-	memset(points, 0, sizeof(points));
-	memset(corner, 0, sizeof(corner));
 	if (ts->reject_point) {	//sensor will reject point when call mode.
 		if (ts->touch_count) {
 #ifdef TYPE_B_PROTOCOL
