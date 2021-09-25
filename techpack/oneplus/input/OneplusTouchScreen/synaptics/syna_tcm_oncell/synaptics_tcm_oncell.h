@@ -514,10 +514,10 @@ struct device_hcd {
 
 static inline int secure_memcpy(unsigned char *dest, unsigned int dest_size, const unsigned char *src, unsigned int src_size, unsigned int count)
 {
-	if (dest == NULL || src == NULL)
+	if (unlikely(dest == NULL || src == NULL))
 		return -EINVAL;
 
-	if (count > dest_size || count > src_size) {
+	if (unlikely(count > dest_size || count > src_size)) {
 		pr_err("%s: src_size = %d, dest_size = %d, count = %d\n", __func__, src_size, dest_size, count);
 		return -EINVAL;
 	}
@@ -532,7 +532,7 @@ static inline int syna_tcm_realloc_mem(struct syna_tcm_buffer *buffer, unsigned 
 	int retval;
 	unsigned char *temp;
 
-	if (size > buffer->buf_size) {
+	if (unlikely(size > buffer->buf_size)) {
 		temp = buffer->buf;
 
 		buffer->buf = kmalloc(size, GFP_KERNEL);
@@ -562,7 +562,7 @@ static inline int syna_tcm_realloc_mem(struct syna_tcm_buffer *buffer, unsigned 
 
 static inline int syna_tcm_alloc_mem(struct syna_tcm_buffer *buffer, unsigned int size)
 {
-	if (size > buffer->buf_size) {
+	if (unlikely(size > buffer->buf_size)) {
 		kfree(buffer->buf);
 		buffer->buf = kmalloc(size, GFP_KERNEL);
 		if (!(buffer->buf)) {
