@@ -56,9 +56,6 @@ enum uci_dbg_level {
 };
 
 static enum uci_dbg_level mhi_uci_msg_lvl = UCI_DBG_CRITICAL;
-static enum uci_dbg_level mhi_uci_ipc_log_lvl = UCI_DBG_INFO;
-static void *mhi_uci_ipc_log;
-
 
 enum mhi_chan_dir {
 	MHI_DIR_INVALID = 0x0,

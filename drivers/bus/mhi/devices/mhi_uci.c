@@ -50,8 +50,6 @@ struct uci_dev {
 	int ref_count;
 	bool enabled;
 	u32 tiocm;
-	void *ipc_log;
-	enum MHI_DEBUG_LEVEL *ipc_log_lvl;
 };
 
 struct mhi_uci_drv {
@@ -80,33 +78,19 @@ static enum MHI_DEBUG_LEVEL msg_lvl = MHI_MSG_LVL_ERROR;
 #else
 
 #define MHI_UCI_IPC_LOG_PAGES (1)
-#define MSG_VERB(fmt, ...) do { \
-		if (uci_dev->ipc_log && uci_dev->ipc_log_lvl && \
-		    (*uci_dev->ipc_log_lvl <= MHI_MSG_LVL_VERBOSE)) \
-			ipc_log_string(uci_dev->ipc_log, "%s[D][%s] " fmt, \
-					"", __func__, ##__VA_ARGS__); \
-	} while (0)
-
+#define MSG_VERB(fmt, ...) {}
 #endif
 
 #define MSG_LOG(fmt, ...) do { \
 		if (msg_lvl <= MHI_MSG_LVL_INFO) \
 			printk("%s[I][%s] " fmt, KERN_ERR, __func__, \
 					##__VA_ARGS__); \
-		if (uci_dev->ipc_log && uci_dev->ipc_log_lvl && \
-		    (*uci_dev->ipc_log_lvl <= MHI_MSG_LVL_INFO)) \
-			ipc_log_string(uci_dev->ipc_log, "%s[I][%s] " fmt, \
-				       "", __func__, ##__VA_ARGS__); \
 	} while (0)
 
 #define MSG_ERR(fmt, ...) do { \
 		if (msg_lvl <= MHI_MSG_LVL_ERROR) \
 			printk("%s[E][%s] " fmt, KERN_ERR, __func__, \
 					##__VA_ARGS__); \
-		if (uci_dev->ipc_log && uci_dev->ipc_log_lvl && \
-		    (*uci_dev->ipc_log_lvl <= MHI_MSG_LVL_ERROR)) \
-			ipc_log_string(uci_dev->ipc_log, "%s[E][%s] " fmt, \
-				       "", __func__, ##__VA_ARGS__); \
 	} while (0)
 
 #define MAX_UCI_DEVICES (64)
@@ -592,7 +576,6 @@ static int mhi_uci_probe(struct mhi_device *mhi_dev,
 			 const struct mhi_device_id *id)
 {
 	struct uci_dev *uci_dev;
-	struct mhi_controller *mhi_cntrl = mhi_dev->mhi_cntrl;
 	int minor;
 	char node_name[32];
 	int dir;
@@ -626,9 +609,6 @@ static int mhi_uci_probe(struct mhi_device *mhi_dev,
 	snprintf(node_name, sizeof(node_name), "mhi_uci_%04x_%02u.%02u.%02u_%d",
 		 mhi_dev->dev_id, mhi_dev->domain, mhi_dev->bus, mhi_dev->slot,
 		 mhi_dev->ul_chan_id);
-	uci_dev->ipc_log = ipc_log_context_create(MHI_UCI_IPC_LOG_PAGES,
-						  node_name, 0);
-	uci_dev->ipc_log_lvl = &mhi_cntrl->log_lvl;
 
 	for (dir = 0; dir < 2; dir++) {
 		struct uci_chan *uci_chan = (dir) ?

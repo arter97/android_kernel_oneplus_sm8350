@@ -56,7 +56,7 @@ static void __iomem *pdc_base;
 static struct pdc_pin_region *pdc_region;
 static int pdc_region_cnt;
 static struct spi_cfg_regs *spi_cfg;
-static void *pdc_ipc_log;
+#define pdc_ipc_log NULL
 
 static void pdc_reg_write(int reg, u32 i, u32 val)
 {
@@ -455,16 +455,6 @@ static int pdc_setup_pin_mapping(struct device_node *np)
 
 	return 0;
 }
-
-static int __init qcom_pdc_early_init(void)
-{
-	pdc_ipc_log = ipc_log_context_create(PDC_IPC_LOG_SZ, "pdc", 0);
-
-	return 0;
-}
-#ifndef MODULE
-module_init(qcom_pdc_early_init);
-#endif
 
 static int qcom_pdc_init(struct device_node *node, struct device_node *parent)
 {

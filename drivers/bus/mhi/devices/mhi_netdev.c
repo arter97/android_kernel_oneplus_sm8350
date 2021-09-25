@@ -103,8 +103,6 @@ struct mhi_netdev {
 
 	struct dentry *dentry;
 	enum MHI_DEBUG_LEVEL msg_lvl;
-	enum MHI_DEBUG_LEVEL *ipc_log_lvl;
-	void *ipc_log;
 
 	/* debug stats */
 	u32 abuffers, kbuffers, rbuffers;
@@ -974,9 +972,7 @@ static void mhi_netdev_clone_dev(struct mhi_netdev *mhi_netdev,
 {
 	mhi_netdev->ndev = parent->ndev;
 	mhi_netdev->napi = parent->napi;
-	mhi_netdev->ipc_log = parent->ipc_log;
 	mhi_netdev->msg_lvl = parent->msg_lvl;
-	mhi_netdev->ipc_log_lvl = parent->ipc_log_lvl;
 	mhi_netdev->is_rsc_dev = true;
 	mhi_netdev->chain = parent->chain;
 	mhi_netdev->rsc_parent = parent;

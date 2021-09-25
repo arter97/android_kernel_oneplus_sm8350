@@ -36,7 +36,6 @@
 
 #define altmode_dbg(fmt, ...) \
 	do { \
-		ipc_log_string(altmode_ipc_log, fmt, ##__VA_ARGS__); \
 		pr_debug(fmt, ##__VA_ARGS__); \
 	} while (0)
 
@@ -134,7 +133,6 @@ static LIST_HEAD(probe_notify_list);
 static DEFINE_MUTEX(notify_lock);
 
 static void altmode_send_pan_ack(struct work_struct *work);
-static void *altmode_ipc_log;
 
 static struct altmode_dev *to_altmode_device(struct device_node *amdev_node)
 {
@@ -737,10 +735,6 @@ static int altmode_probe(struct platform_device *pdev)
 		goto unreg_pmic_glink;
 	}
 
-	altmode_ipc_log = ipc_log_context_create(NUM_LOG_PAGES, "altmode", 0);
-	if (!altmode_ipc_log)
-		dev_warn(dev, "Error in creating ipc_log_context\n");
-
 	altmode_notify_clients(amdev);
 
 	return 0;
@@ -778,9 +772,6 @@ static int altmode_remove(struct platform_device *pdev)
 	list_for_each_entry_safe(client, tmp, &amdev->client_list, c_node)
 		list_del(&client->c_node);
 	mutex_unlock(&amdev->client_lock);
-
-	ipc_log_context_destroy(altmode_ipc_log);
-	altmode_ipc_log = NULL;
 
 	rc = pmic_glink_unregister_client(amdev->pgclient);
 	if (rc < 0)

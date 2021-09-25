@@ -20,7 +20,6 @@
 #include <linux/thermal.h>
 #include <linux/slab.h>
 #include <linux/nvmem-consumer.h>
-#include <linux/ipc_logging.h>
 
 #include "../thermal_core.h"
 
@@ -62,13 +61,7 @@
 #define MAX_PERPH_COUNT       2
 #define IPC_LOGPAGES          2
 
-#define BCL_IPC(dev, msg, args...)      do { \
-			if ((dev) && (dev)->ipc_log) { \
-				ipc_log_string((dev)->ipc_log, \
-					"[%s]: %s: " msg, \
-					current->comm, __func__, args); \
-			} \
-		} while (0)
+#define BCL_IPC(dev, msg, args...) ((void)0)
 
 enum bcl_dev_type {
 	BCL_IBAT_LVL0,
@@ -125,7 +118,6 @@ struct bcl_device {
 	struct device			*dev;
 	struct regmap			*regmap;
 	uint16_t			fg_bcl_addr;
-	void				*ipc_log;
 	bool				ibat_ccm_enabled;
 	uint32_t			ibat_ext_range_factor;
 	struct bcl_peripheral_data	param[BCL_TYPE_MAX];
@@ -812,12 +804,6 @@ static int bcl_probe(struct platform_device *pdev)
 	snprintf(bcl_name, sizeof(bcl_name), "bcl_0x%04x_%d",
 					bcl_perph->fg_bcl_addr,
 					bcl_device_ct - 1);
-
-	bcl_perph->ipc_log = ipc_log_context_create(IPC_LOGPAGES,
-							bcl_name, 0);
-	if (!bcl_perph->ipc_log)
-		pr_err("%s: unable to create IPC Logging for %s\n",
-					__func__, bcl_name);
 
 	return 0;
 }

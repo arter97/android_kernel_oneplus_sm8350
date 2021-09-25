@@ -45,7 +45,6 @@ enum mhi_dev_net_dbg_lvl {
 
 static enum mhi_dev_net_dbg_lvl mhi_net_msg_lvl = MHI_CRITICAL;
 static enum mhi_dev_net_dbg_lvl mhi_net_ipc_log_lvl = MHI_VERBOSE;
-static void *mhi_net_ipc_log;
 
 enum mhi_chan_dir {
 	MHI_DIR_INVALID = 0x0,

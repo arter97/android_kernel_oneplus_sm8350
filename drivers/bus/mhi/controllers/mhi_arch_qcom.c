@@ -28,8 +28,6 @@ struct arch_info {
 	u32 icc_peak_bw_len;
 	struct msm_pcie_register_event pcie_reg_event;
 	struct pci_saved_state *pcie_state;
-	void *boot_ipc_log;
-	void *tsync_ipc_log;
 	struct mhi_device *boot_dev;
 	bool drv_connected;
 	struct notifier_block pm_notifier;

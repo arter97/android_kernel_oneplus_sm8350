@@ -6,13 +6,11 @@
  */
 
 #include <linux/debugfs.h>
-#include <linux/ipc_logging.h>
 #include "rmnet_ctl.h"
 #include "rmnet_ctl_client.h"
 
 #define RMNET_CTL_LOG_PAGE 10
 #define RMNET_CTL_LOG_NAME "rmnet_ctl"
-#define RMNET_CTL_LOG_LVL  "ipc_log_lvl"
 
 struct rmnet_ctl_client {
 	struct rmnet_ctl_client_hooks hooks;
@@ -21,47 +19,14 @@ struct rmnet_ctl_client {
 struct rmnet_ctl_endpoint {
 	struct rmnet_ctl_dev __rcu *dev;
 	struct rmnet_ctl_client __rcu *client;
-	struct dentry *dbgfs_dir;
-	struct dentry *dbgfs_loglvl;
-	void *ipc_log;
 };
 
 #if defined(CONFIG_IPA_DEBUG) || defined(CONFIG_MHI_DEBUG)
 #define CONFIG_RMNET_CTL_DEBUG 1
 #endif
 
-#ifdef CONFIG_RMNET_CTL_DEBUG
-static u8 ipc_log_lvl = RMNET_CTL_LOG_DEBUG;
-#else
-static u8 ipc_log_lvl = RMNET_CTL_LOG_ERR;
-#endif
-
 static DEFINE_SPINLOCK(client_lock);
 static struct rmnet_ctl_endpoint ctl_ep;
-
-void rmnet_ctl_set_dbgfs(bool enable)
-{
-	if (enable) {
-		if (IS_ERR_OR_NULL(ctl_ep.dbgfs_dir))
-			ctl_ep.dbgfs_dir = debugfs_create_dir(
-				RMNET_CTL_LOG_NAME, NULL);
-
-		if (!IS_ERR_OR_NULL(ctl_ep.dbgfs_dir))
-			ctl_ep.dbgfs_loglvl = debugfs_create_u8(
-				RMNET_CTL_LOG_LVL, 0644, ctl_ep.dbgfs_dir,
-				&ipc_log_lvl);
-
-		if (!ctl_ep.ipc_log)
-			ctl_ep.ipc_log = ipc_log_context_create(
-				RMNET_CTL_LOG_PAGE, RMNET_CTL_LOG_NAME, 0);
-	} else {
-		debugfs_remove_recursive(ctl_ep.dbgfs_dir);
-		ipc_log_context_destroy(ctl_ep.ipc_log);
-		ctl_ep.dbgfs_dir = NULL;
-		ctl_ep.dbgfs_loglvl = NULL;
-		ctl_ep.ipc_log = NULL;
-	}
-}
 
 void rmnet_ctl_endpoint_setdev(const struct rmnet_ctl_dev *dev)
 {
@@ -135,8 +100,6 @@ void *rmnet_ctl_register_client(struct rmnet_ctl_client_hooks *hook)
 
 	spin_unlock(&client_lock);
 
-	rmnet_ctl_set_dbgfs(true);
-
 	return client;
 }
 EXPORT_SYMBOL(rmnet_ctl_register_client);
@@ -158,8 +121,6 @@ int rmnet_ctl_unregister_client(void *handle)
 
 	synchronize_rcu();
 	kfree(client);
-
-	rmnet_ctl_set_dbgfs(false);
 
 	return 0;
 }
@@ -191,25 +152,10 @@ int rmnet_ctl_send_client(void *handle, struct sk_buff *skb)
 }
 EXPORT_SYMBOL(rmnet_ctl_send_client);
 
-void rmnet_ctl_log(enum rmnet_ctl_log_lvl lvl, const char *msg,
-		   int rc, const void *data, unsigned int len)
-{
-	if (lvl <= ipc_log_lvl && ctl_ep.ipc_log) {
-		if (data == NULL || len == 0)
-			ipc_log_string(ctl_ep.ipc_log, "%3s(%d): (null)\n",
-				       msg, rc);
-		else
-			ipc_log_string(ctl_ep.ipc_log, "%3s(%d): %*ph\n",
-				       msg, rc, len > 32 ? 32 : len, data);
-	}
-}
-EXPORT_SYMBOL(rmnet_ctl_log);
-
 static struct rmnet_ctl_client_if client_if = {
 	.reg = rmnet_ctl_register_client,
 	.dereg = rmnet_ctl_unregister_client,
 	.send = rmnet_ctl_send_client,
-	.log = rmnet_ctl_log,
 };
 
 struct rmnet_ctl_client_if *rmnet_ctl_if(void)

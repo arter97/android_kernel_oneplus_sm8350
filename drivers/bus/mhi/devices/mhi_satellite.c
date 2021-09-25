@@ -165,8 +165,6 @@ struct mhi_sat_subsys {
 	struct list_head cntrl_list; /* controllers list */
 	struct mutex cntrl_mutex; /* mutex to walk/modify controllers list */
 	spinlock_t cntrl_lock; /* lock to walk/modify controllers list */
-
-	void *ipc_log;
 };
 
 /* satellite IPC definitions */

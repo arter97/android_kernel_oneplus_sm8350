@@ -347,10 +347,6 @@ static void clear_eps(struct usb_function *f)
 
 static void clear_desc(struct usb_gadget *gadget, struct usb_function *f)
 {
-	struct f_qdss *qdss = func_to_qdss(f);
-
-	qdss_log("channel:%s\n", qdss->ch.name);
-
 	usb_free_all_descriptors(f);
 }
 
@@ -1116,10 +1112,6 @@ static int __init usb_qdss_init(void)
 {
 	int ret;
 
-	_qdss_ipc_log = ipc_log_context_create(NUM_PAGES, "usb_qdss", 0);
-	if (IS_ERR_OR_NULL(_qdss_ipc_log))
-		_qdss_ipc_log =  NULL;
-
 	INIT_LIST_HEAD(&usb_qdss_ch_list);
 	ret = usb_function_register(&qdssusb_func);
 	if (ret) {
@@ -1131,7 +1123,6 @@ static int __init usb_qdss_init(void)
 
 static void __exit usb_qdss_exit(void)
 {
-	ipc_log_context_destroy(_qdss_ipc_log);
 	usb_function_unregister(&qdssusb_func);
 	qdss_cleanup();
 }

@@ -287,9 +287,6 @@ struct edma_dev {
 	/* edma channel available for apps */
 	u32	edmac_mask;
 	char	label[EDMA_LABEL_SIZE];
-	void	*ipc_log;
-	void	*ipc_log_irq;
-	enum	debug_log_lvl ipc_log_lvl;
 	enum	debug_log_lvl klog_lvl;
 };
 
@@ -318,8 +315,6 @@ struct edmac_dev {
 	/* processing tasklet */
 	struct	tasklet_struct proc_task;
 	char	label[EDMA_LABEL_SIZE];
-	void	*ipc_log;
-	enum	debug_log_lvl ipc_log_lvl;
 	enum	debug_log_lvl klog_lvl;
 	enum	edma_hw_state hw_state;
 

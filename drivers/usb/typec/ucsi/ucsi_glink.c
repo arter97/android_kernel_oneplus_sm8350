@@ -35,7 +35,6 @@
 
 #define ucsi_dbg(fmt, ...) \
 	do { \
-		ipc_log_string(ucsi_ipc_log, fmt, ##__VA_ARGS__); \
 		pr_debug(fmt, ##__VA_ARGS__); \
 	} while (0)
 
@@ -88,7 +87,6 @@ struct ucsi_dev {
 	atomic_t			state;
 };
 
-static void *ucsi_ipc_log;
 static RAW_NOTIFIER_HEAD(ucsi_glink_notifier);
 
 int register_ucsi_glink_notifier(struct notifier_block *nb)
@@ -604,14 +602,8 @@ static int ucsi_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, udev);
 	udev->dev = dev;
 
-	ucsi_ipc_log = ipc_log_context_create(NUM_LOG_PAGES, "ucsi", 0);
-	if (!ucsi_ipc_log)
-		dev_warn(dev, "Error in creating ipc_log_context\n");
-
 	rc = ucsi_setup(udev);
 	if (rc) {
-		ipc_log_context_destroy(ucsi_ipc_log);
-		ucsi_ipc_log = NULL;
 		pmic_glink_unregister_client(udev->client);
 	}
 
@@ -632,9 +624,6 @@ static int ucsi_remove(struct platform_device *pdev)
 	if (rc < 0)
 		dev_err(dev, "pmic_glink_unregister_client failed rc=%d\n",
 			rc);
-
-	ipc_log_context_destroy(ucsi_ipc_log);
-	ucsi_ipc_log = NULL;
 
 	return rc;
 }

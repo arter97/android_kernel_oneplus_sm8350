@@ -65,8 +65,6 @@ struct f_qdss {
 	bool qdss_close;
 };
 
-static void *_qdss_ipc_log;
-
 #define NUM_PAGES	10 /* # of pages for ipc logging */
 
 #ifdef CONFIG_DYNAMIC_DEBUG
@@ -75,8 +73,7 @@ static void *_qdss_ipc_log;
 	dynamic_pr_debug("%s: " fmt, __func__, ##__VA_ARGS__); \
 } while (0)
 #else
-#define qdss_log(fmt, ...) \
-	ipc_log_string(_qdss_ipc_log, "%s: " fmt,  __func__, ##__VA_ARGS__)
+#define qdss_log(fmt, ...) ((void)0)
 #endif
 
 struct usb_qdss_opts {

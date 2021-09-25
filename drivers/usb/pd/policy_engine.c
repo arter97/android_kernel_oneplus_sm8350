@@ -219,7 +219,6 @@ enum vdm_state {
 	MODE_EXITED,
 };
 
-static void *usbpd_ipc_log;
 #define usbpd_dbg(dev, fmt, ...) do { \
 	ipc_log_string(usbpd_ipc_log, "%s: %s: " fmt, dev_name(dev), __func__, \
 			##__VA_ARGS__); \

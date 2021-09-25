@@ -121,7 +121,6 @@ struct uaudio_qmi_svc {
 	struct workqueue_struct *uaudio_wq;
 	struct sockaddr_qrtr client_sq;
 	bool client_connected;
-	void *uaudio_ipc_log;
 };
 
 static struct uaudio_qmi_svc *uaudio_svc;
@@ -166,15 +165,11 @@ enum usb_qmi_audio_format {
 };
 
 #define uaudio_print(level, fmt, ...) do { \
-	ipc_log_string(uaudio_svc->uaudio_ipc_log, "%s%s: " fmt, "", __func__,\
-			##__VA_ARGS__); \
 	printk("%s%s: " fmt, level, __func__, ##__VA_ARGS__); \
 	} while (0)
 
 #ifdef CONFIG_DYNAMIC_DEBUG
 #define uaudio_dbg(fmt, ...) do { \
-	ipc_log_string(uaudio_svc->uaudio_ipc_log, "%s: " fmt, __func__,\
-			##__VA_ARGS__); \
 	dynamic_pr_debug("%s: " fmt, __func__, ##__VA_ARGS__); \
 	} while (0)
 #else
@@ -1447,9 +1442,6 @@ static int uaudio_qmi_svc_init(void)
 
 	uaudio_svc = svc;
 
-	svc->uaudio_ipc_log = ipc_log_context_create(NUM_LOG_PAGES, "usb_audio",
-			0);
-
 	return 0;
 
 release_uaudio_svs_hdl:
@@ -1471,7 +1463,6 @@ static void uaudio_qmi_svc_exit(void)
 	flush_workqueue(svc->uaudio_wq);
 	destroy_workqueue(svc->uaudio_wq);
 	kfree(svc->uaudio_svc_hdl);
-	ipc_log_context_destroy(svc->uaudio_ipc_log);
 	kfree(svc);
 	uaudio_svc = NULL;
 }

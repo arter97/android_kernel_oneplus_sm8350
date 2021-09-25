@@ -15,7 +15,6 @@
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/iopoll.h>
-#include <linux/ipc_logging.h>
 #include <linux/irq.h>
 #include <linux/irqdomain.h>
 #include <linux/jiffies.h>
@@ -290,57 +289,13 @@
 #define BDF_OFFSET(bus, devfn) \
 	((bus << 24) | (devfn << 16))
 
-#define PCIE_DBG(dev, fmt, arg...) do {			 \
-	if ((dev) && (dev)->ipc_log_long)   \
-		ipc_log_string((dev)->ipc_log_long, \
-			"DBG1:%s: " fmt, __func__, ##arg); \
-	if ((dev) && (dev)->ipc_log)   \
-		ipc_log_string((dev)->ipc_log, "%s: " fmt, __func__, ##arg); \
-	} while (0)
-
-#define PCIE_DBG2(dev, fmt, arg...) do {			 \
-	if ((dev) && (dev)->ipc_log)   \
-		ipc_log_string((dev)->ipc_log, "DBG2:%s: " fmt, \
-				__func__, ##arg);\
-	} while (0)
-
-#define PCIE_DBG3(dev, fmt, arg...) do {			 \
-	if ((dev) && (dev)->ipc_log)   \
-		ipc_log_string((dev)->ipc_log, "DBG3:%s: " fmt, \
-				__func__, ##arg);\
-	} while (0)
-
-#define PCIE_DUMP(dev, fmt, arg...) do {			\
-	if ((dev) && (dev)->ipc_log_dump) \
-		ipc_log_string((dev)->ipc_log_dump, \
-			"DUMP:%s: " fmt, __func__, ##arg); \
-	} while (0)
-
-#define PCIE_DBG_FS(dev, fmt, arg...) do {			\
-	if ((dev) && (dev)->ipc_log_dump) \
-		ipc_log_string((dev)->ipc_log_dump, \
-			"DBG_FS:%s: " fmt, __func__, ##arg); \
-	pr_alert("%s: " fmt, __func__, ##arg); \
-	} while (0)
-
-#define PCIE_INFO(dev, fmt, arg...) do {			 \
-	if ((dev) && (dev)->ipc_log_long)   \
-		ipc_log_string((dev)->ipc_log_long, \
-			"INFO:%s: " fmt, __func__, ##arg); \
-	if ((dev) && (dev)->ipc_log)   \
-		ipc_log_string((dev)->ipc_log, "%s: " fmt, __func__, ##arg); \
-	pr_info("%s: " fmt, __func__, ##arg);  \
-	} while (0)
-
-#define PCIE_ERR(dev, fmt, arg...) do {			 \
-	if ((dev) && (dev)->ipc_log_long)   \
-		ipc_log_string((dev)->ipc_log_long, \
-			"ERR:%s: " fmt, __func__, ##arg); \
-	if ((dev) && (dev)->ipc_log)   \
-		ipc_log_string((dev)->ipc_log, "%s: " fmt, __func__, ##arg); \
-	pr_err("%s: " fmt, __func__, arg);  \
-	} while (0)
-
+#define PCIE_DBG(dev, fmt, arg...) ((void)0)
+#define PCIE_DBG2(dev, fmt, arg...) ((void)0)
+#define PCIE_DBG3(dev, fmt, arg...) ((void)0)
+#define PCIE_DUMP(dev, fmt, arg...) ((void)0)
+#define PCIE_DBG_FS(dev, fmt, arg...) ((void)0)
+#define PCIE_INFO(dev, fmt, arg...) ((void)0)
+#define PCIE_ERR(dev, fmt, arg...) ((void)0)
 
 enum msm_pcie_res {
 	MSM_PCIE_RES_PARF,
@@ -872,9 +827,6 @@ struct msm_pcie_dev_t {
 	struct list_head event_reg_list;
 	spinlock_t evt_reg_list_lock;
 	bool power_on;
-	void *ipc_log;
-	void *ipc_log_long;
-	void *ipc_log_dump;
 	bool use_pinctrl;
 	struct pinctrl *pinctrl;
 	struct pinctrl_state *pins_default;
@@ -4421,9 +4373,6 @@ static int ntn3_i2c_read(struct i2c_client *client, u32 reg_addr,
 static int ntn3_ep_reset_ctrl(struct pcie_i2c_ctrl *i2c_ctrl, bool reset)
 {
 	int ret, rd_val;
-	struct msm_pcie_dev_t *pcie_dev = container_of(i2c_ctrl,
-						       struct msm_pcie_dev_t,
-						       i2c_ctrl);
 
 	if (!i2c_ctrl->client_i2c_write || !i2c_ctrl->client_i2c_read)
 		return -EOPNOTSUPP;
@@ -4431,12 +4380,8 @@ static int ntn3_ep_reset_ctrl(struct pcie_i2c_ctrl *i2c_ctrl, bool reset)
 	/* set NTN3 GPIO as output */
 	ret = i2c_ctrl->client_i2c_read(i2c_ctrl->client,
 					i2c_ctrl->gpio_config_reg, &rd_val);
-	if (ret) {
-		PCIE_DBG(pcie_dev,
-			 "PCIe: RC%d: gpio config reg read failed : %d\n",
-			 pcie_dev->rc_idx, ret);
+	if (ret)
 		return ret;
-	}
 
 	rd_val &= ~i2c_ctrl->ep_reset_gpio_mask;
 	i2c_ctrl->client_i2c_write(i2c_ctrl->client, i2c_ctrl->gpio_config_reg,
@@ -4445,21 +4390,13 @@ static int ntn3_ep_reset_ctrl(struct pcie_i2c_ctrl *i2c_ctrl, bool reset)
 	/* read back to flush write - config gpio */
 	ret = i2c_ctrl->client_i2c_read(i2c_ctrl->client,
 					i2c_ctrl->gpio_config_reg, &rd_val);
-	if (ret) {
-		PCIE_DBG(pcie_dev,
-			 "PCIe: RC%d: gpio config reg read failed : %d\n",
-			 pcie_dev->rc_idx, ret);
+	if (ret)
 		return ret;
-	}
 
 	ret = i2c_ctrl->client_i2c_read(i2c_ctrl->client,
 					i2c_ctrl->ep_reset_reg, &rd_val);
-	if (ret) {
-		PCIE_DBG(pcie_dev,
-			 "PCIe: RC%d: ep_reset_gpio read failed : %d\n",
-			 pcie_dev->rc_idx, ret);
+	if (ret)
 		return ret;
-	}
 
 	rd_val &= ~i2c_ctrl->ep_reset_gpio_mask;
 	i2c_ctrl->client_i2c_write(i2c_ctrl->client, i2c_ctrl->ep_reset_reg,
@@ -4468,12 +4405,8 @@ static int ntn3_ep_reset_ctrl(struct pcie_i2c_ctrl *i2c_ctrl, bool reset)
 	/* read back to flush write - reset gpio */
 	ret = i2c_ctrl->client_i2c_read(i2c_ctrl->client,
 					i2c_ctrl->ep_reset_reg, &rd_val);
-	if (ret) {
-		PCIE_DBG(pcie_dev,
-			 "PCIe: RC%d: ep_reset_gpio read failed : %d\n",
-			 pcie_dev->rc_idx, ret);
+	if (ret)
 		return ret;
-	}
 
 	/* ep reset done */
 	if (reset)
@@ -4487,12 +4420,8 @@ static int ntn3_ep_reset_ctrl(struct pcie_i2c_ctrl *i2c_ctrl, bool reset)
 	/* read back to flush write - reset gpio */
 	ret = i2c_ctrl->client_i2c_read(i2c_ctrl->client,
 					i2c_ctrl->ep_reset_reg, &rd_val);
-	if (ret) {
-		PCIE_DBG(pcie_dev,
-			 "PCIe: RC%d: ep_reset_gpio read failed : %d\n",
-			 pcie_dev->rc_idx, ret);
+	if (ret)
 		return ret;
-	}
 
 	return 0;
 }
@@ -4500,31 +4429,19 @@ static int ntn3_ep_reset_ctrl(struct pcie_i2c_ctrl *i2c_ctrl, bool reset)
 static void ntn3_dump_regs(struct pcie_i2c_ctrl *i2c_ctrl)
 {
 	int i, val;
-	struct msm_pcie_dev_t *pcie_dev = container_of(i2c_ctrl,
-						       struct msm_pcie_dev_t,
-						       i2c_ctrl);
 
 	if (!i2c_ctrl->client_i2c_read || !i2c_ctrl->dump_reg_count)
 		return;
 
-	PCIE_DUMP(pcie_dev, "PCIe: RC%d: NTN3 reg dumps\n", pcie_dev->rc_idx);
-
 	for (i = 0; i < i2c_ctrl->dump_reg_count; i++) {
 		i2c_ctrl->client_i2c_read(i2c_ctrl->client,
 					  i2c_ctrl->dump_regs[i], &val);
-		PCIE_DUMP(pcie_dev, "PCIe: RC%d: reg: 0x%04x val: 0x%08x\n",
-			  pcie_dev->rc_idx, i2c_ctrl->dump_regs[i], val);
 	}
 }
 
 static void ntn3_de_emphasis_wa(struct pcie_i2c_ctrl *i2c_ctrl)
 {
 	int i, val;
-	struct msm_pcie_dev_t *pcie_dev = container_of(i2c_ctrl,
-						       struct msm_pcie_dev_t,
-						       i2c_ctrl);
-
-	PCIE_DBG(pcie_dev, "PCIe: RC%d: NTN3 reg update\n", pcie_dev->rc_idx);
 
 	for (i = 0; i < i2c_ctrl->reg_update_count; i++) {
 		i2c_ctrl->client_i2c_write(i2c_ctrl->client, i2c_ctrl->reg_update[i].offset,
@@ -7095,7 +7012,6 @@ static struct i2c_driver pcie_i2c_ctrl_driver = {
 static int __init pcie_init(void)
 {
 	int ret = 0, i;
-	char rc_name[MAX_RC_NAME_LEN];
 
 	pr_alert("pcie:%s.\n", __func__);
 
@@ -7104,36 +7020,6 @@ static int __init pcie_init(void)
 	mutex_init(&pcie_drv.rpmsg_lock);
 
 	for (i = 0; i < MAX_RC_NUM; i++) {
-		scnprintf(rc_name, MAX_RC_NAME_LEN, "pcie%d-short", i);
-		msm_pcie_dev[i].ipc_log =
-			ipc_log_context_create(PCIE_LOG_PAGES, rc_name, 0);
-		if (msm_pcie_dev[i].ipc_log == NULL)
-			pr_err("%s: unable to create IPC log context for %s\n",
-				__func__, rc_name);
-		else
-			PCIE_DBG(&msm_pcie_dev[i],
-				"PCIe IPC logging is enable for RC%d\n",
-				i);
-		scnprintf(rc_name, MAX_RC_NAME_LEN, "pcie%d-long", i);
-		msm_pcie_dev[i].ipc_log_long =
-			ipc_log_context_create(PCIE_LOG_PAGES, rc_name, 0);
-		if (msm_pcie_dev[i].ipc_log_long == NULL)
-			pr_err("%s: unable to create IPC log context for %s\n",
-				__func__, rc_name);
-		else
-			PCIE_DBG(&msm_pcie_dev[i],
-				"PCIe IPC logging %s is enable for RC%d\n",
-				rc_name, i);
-		scnprintf(rc_name, MAX_RC_NAME_LEN, "pcie%d-dump", i);
-		msm_pcie_dev[i].ipc_log_dump =
-			ipc_log_context_create(PCIE_LOG_PAGES, rc_name, 0);
-		if (msm_pcie_dev[i].ipc_log_dump == NULL)
-			pr_err("%s: unable to create IPC log context for %s\n",
-				__func__, rc_name);
-		else
-			PCIE_DBG(&msm_pcie_dev[i],
-				"PCIe IPC logging %s is enable for RC%d\n",
-				rc_name, i);
 		spin_lock_init(&msm_pcie_dev[i].cfg_lock);
 		spin_lock_init(&msm_pcie_dev[i].evt_reg_list_lock);
 		msm_pcie_dev[i].cfg_access = true;
@@ -7210,9 +7096,6 @@ module_exit(pcie_exit);
 /* RC do not represent the right class; set it to PCI_CLASS_BRIDGE_PCI */
 static void msm_pcie_fixup_early(struct pci_dev *dev)
 {
-	struct msm_pcie_dev_t *pcie_dev = PCIE_BUS_PRIV_DATA(dev->bus);
-
-	PCIE_DBG(pcie_dev, "hdr_type %d\n", dev->hdr_type);
 	if (pci_is_root_bus(dev->bus))
 		dev->class = (dev->class & 0xff) | (PCI_CLASS_BRIDGE_PCI << 8);
 }
