@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Authors:	Thiébaud Weksteen <tweek@google.com>
- *		Peter Enderborg <Peter.Enderborg@sony.com>
+ * Author: Thiébaud Weksteen <tweek@google.com>
  */
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM avc
@@ -13,38 +12,23 @@
 
 TRACE_EVENT(selinux_audited,
 
-	TP_PROTO(struct selinux_audit_data *sad,
-		char *scontext,
-		char *tcontext,
-		const char *tclass
-	),
+	TP_PROTO(struct selinux_audit_data *sad),
 
-	TP_ARGS(sad, scontext, tcontext, tclass),
+	TP_ARGS(sad),
 
 	TP_STRUCT__entry(
-		__field(u32, requested)
-		__field(u32, denied)
-		__field(u32, audited)
-		__field(int, result)
-		__string(scontext, scontext)
-		__string(tcontext, tcontext)
-		__string(tclass, tclass)
+		__field(unsigned int, tclass)
+		__field(unsigned int, audited)
 	),
 
 	TP_fast_assign(
-		__entry->requested	= sad->requested;
-		__entry->denied		= sad->denied;
-		__entry->audited	= sad->audited;
-		__entry->result		= sad->result;
-		__assign_str(tcontext, tcontext);
-		__assign_str(scontext, scontext);
-		__assign_str(tclass, tclass);
+		__entry->tclass = sad->tclass;
+		__entry->audited = sad->audited;
 	),
 
-	TP_printk("requested=0x%x denied=0x%x audited=0x%x result=%d scontext=%s tcontext=%s tclass=%s",
-		__entry->requested, __entry->denied, __entry->audited, __entry->result,
-		__get_str(scontext), __get_str(tcontext), __get_str(tclass)
-	)
+	TP_printk("tclass=%u audited=%x",
+		__entry->tclass,
+		__entry->audited)
 );
 
 #endif
