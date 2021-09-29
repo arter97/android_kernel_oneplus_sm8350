@@ -44,11 +44,13 @@ struct pkt_capture_cfg {
  * @mon_cb: monitor callback function pointer
  * @mon_ctx: monitor callback context
  * @pkt_capture_mode: packet capture mode
+ * @pkt_capture_config: pakcet capture config
  */
 struct pkt_capture_cb_context {
 	QDF_STATUS (*mon_cb)(void *, qdf_nbuf_t);
 	void *mon_ctx;
 	enum pkt_capture_mode pkt_capture_mode;
+	enum pkt_capture_config pkt_capture_config;
 };
 
 /**

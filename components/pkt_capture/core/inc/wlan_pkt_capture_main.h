@@ -173,6 +173,25 @@ enum pkt_capture_mode
 pkt_capture_get_pktcap_mode(struct wlan_objmgr_psoc *psoc);
 
 /**
+ * pkt_capture_set_pktcap_config - Set packet capture config
+ * @psoc: pointer to psoc object
+ * @config: config to be set
+ *
+ * Return: None
+ */
+void pkt_capture_set_pktcap_config(struct wlan_objmgr_psoc *psoc,
+				   enum pkt_capture_config config);
+
+/**
+ * pkt_capture_get_pktcap_config - Get packet capture config
+ * @psoc: pointer to psoc object
+ *
+ * Return: config value
+ */
+enum pkt_capture_config
+pkt_capture_get_pktcap_config(struct wlan_objmgr_psoc *psoc);
+
+/**
  * pkt_capture_drop_nbuf_list() - drop an nbuf list
  * @buf_list: buffer list to be dropepd
  *
@@ -210,6 +229,14 @@ void pkt_capture_mon(struct pkt_capture_cb_context *cb_ctx, qdf_nbuf_t msdu,
  */
 QDF_STATUS pkt_capture_set_filter(struct pkt_capture_frame_filter frame_filter,
 				  struct wlan_objmgr_vdev *vdev);
+
+/**
+ * pkt_capture_is_tx_mgmt_enable - Check if tx mgmt frames enabled
+ * @pdev: pointer to pdev
+ *
+ * Return: bool
+ */
+bool pkt_capture_is_tx_mgmt_enable(struct wlan_objmgr_pdev *pdev);
 
 #ifdef WLAN_FEATURE_PKT_CAPTURE_V2
 /**
