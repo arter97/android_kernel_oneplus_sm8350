@@ -5,6 +5,7 @@
 config QCOM_HGSL
 	bool "Graphics driver for Hypervisor"
 	depends on QTI_QUIN_GVM
+	depends on MSM_HAB
 	help
 	  This driver could help commands submmitting functions for
 	  hypervisor Linux. With HFI feature provided by A6x, it
