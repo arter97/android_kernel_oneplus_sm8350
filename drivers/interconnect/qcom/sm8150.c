@@ -2668,6 +2668,18 @@ static struct qcom_icc_desc sm8150_system_noc = {
 	.num_voters = ARRAY_SIZE(system_noc_voters),
 };
 
+static int qnoc_sm8150_restore(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct qcom_icc_provider *qp = platform_get_drvdata(pdev);
+
+	return qcom_icc_rpmh_configure_qos(qp);
+}
+
+static const struct dev_pm_ops qnoc_sm8150_pm_ops = {
+	.restore = qnoc_sm8150_restore,
+};
+
 static const struct of_device_id qnoc_of_match[] = {
 	{ .compatible = "qcom,sm8150-aggre1_noc",
 	  .data = &sm8150_aggre1_noc
@@ -2712,6 +2724,7 @@ static struct platform_driver qnoc_driver = {
 	.driver = {
 		.name = "qnoc-sm8150",
 		.of_match_table = qnoc_of_match,
+		.pm = &qnoc_sm8150_pm_ops,
 		.sync_state = qcom_icc_rpmh_sync_state,
 	},
 };
