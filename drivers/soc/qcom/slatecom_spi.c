@@ -571,7 +571,6 @@ static int slatecom_resume_l(void *handle)
 	mutex_lock(&slate_resume_mutex);
 	if (slate_spi->slate_state == SLATECOM_STATE_ACTIVE)
 		goto unlock;
-	enable_irq(slate_irq);
 
 	if (!(g_slav_status_reg & BIT(31))) {
 		pr_err("Slate boot is not complete, skip SPI resume\n");
@@ -1259,17 +1258,22 @@ static int slatecom_pm_resume(struct device *dev)
 	struct slate_spi_priv *spi =
 		container_of(slate_com_drv, struct slate_spi_priv, lhandle);
 
-	if (!(g_slav_status_reg & BIT(31))) {
-		pr_err("Slate boot is not complete, skip SPI resume\n");
+	if (atomic_read(&slate_is_spi_active)) {
+		pr_info("Slatecom in resume state\n");
 		return 0;
+	} else {
+		if (!(g_slav_status_reg & BIT(31))) {
+			pr_err("Slate boot is not complete, skip SPI resume\n");
+			return 0;
+		}
+		clnt_handle.slate_spi = spi;
+		atomic_set(&slate_is_spi_active, 1);
+		atomic_set(&slate_is_runtime_suspend, 0);
+		enable_irq(slate_irq);
+		ret = slatecom_resume_l(&clnt_handle);
+			pr_info("Slatecom resumed with : %d\n", ret);
+		return ret;
 	}
-	clnt_handle.slate_spi = spi;
-	atomic_set(&slate_is_spi_active, 1);
-	atomic_set(&slate_is_runtime_suspend, 0);
-	enable_irq(slate_irq);
-	ret = slatecom_resume_l(&clnt_handle);
-	pr_info("Bgcom resumed with : %d\n", ret);
-	return ret;
 }
 
 static int slatecom_pm_runtime_suspend(struct device *dev)
@@ -1287,7 +1291,11 @@ static int slatecom_pm_runtime_suspend(struct device *dev)
 
 	mutex_lock(&slate_task_mutex);
 
-	cmnd_reg |= BIT(31);
+	if (mem_sleep_current == PM_SUSPEND_MEM)
+		cmnd_reg |= SLATE_OK_SLP_S2R;
+	else
+		cmnd_reg |= SLATE_OK_SLP_RBSC;
+
 	ret = slatecom_reg_write_cmd(&clnt_handle, SLATE_CMND_REG,
 					1, &cmnd_reg);
 	if (ret == 0) {
