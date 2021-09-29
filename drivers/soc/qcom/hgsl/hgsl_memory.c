@@ -110,14 +110,17 @@ static void hgsl_mem_unmap_dma_buf(struct dma_buf_attachment *attachment,
 static int hgsl_mem_mmap(struct dma_buf *dmabuf, struct vm_area_struct *vma)
 {
 	struct hgsl_mem_node *mem_node = dmabuf->priv;
-	unsigned long page_count = vma_pages(vma);
-	unsigned long addr = vma->vm_start;
+	unsigned long page_count;
+	unsigned long addr;
 	uint32_t i;
 	uint32_t cache_mode;
 	int ret;
 
 	if (vma == NULL)
 		return -EINVAL;
+
+	page_count = vma_pages(vma);
+	addr = vma->vm_start;
 
 	/* Check for valid size. */
 	if ((mem_node->page_count < vma->vm_pgoff) ||

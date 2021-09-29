@@ -12,7 +12,7 @@
 #define GSL_HAB_DATA_MAGIC 0xfeedda7a
 
 #define HAB_INVALID_HANDLE ((int)-1)
-#define HAB_ITEM_TYPE uint32_t
+#define HGSL_MAX_DUMP_PAYLOAD_SIZE (32)
 
 int gsl_hab_open(int *habfd);
 int gsl_hab_recv(int habfd, unsigned char *p, size_t sz, int interruptible);

@@ -2225,6 +2225,10 @@ static int hgsl_ioctl_issueib_with_alloc_list(struct file *filep,
 		be_data_size = (params.num_ibs + params.num_allocations) *
 			(sizeof(struct gsl_memdesc_t) + sizeof(uint64_t));
 		be_descs = (struct gsl_memdesc_t *)hgsl_malloc(be_data_size);
+		if (be_descs == NULL) {
+			ret = -ENOMEM;
+			goto out;
+		}
 		be_offsets = (uint64_t *)&be_descs[params.num_ibs +
 							params.num_allocations];
 		if (copy_from_user(be_descs, USRPTR(params.be_data), be_data_size)) {
@@ -2465,7 +2469,7 @@ static int hgsl_ioctl_syncobj_wait_multiple(struct file *filep,
 			ret = -EFAULT;
 			goto out;
 		}
-		if (copy_to_user(USRPTR(param.status), &status, status_size)) {
+		if (copy_to_user(USRPTR(param.status), status, status_size)) {
 			ret = -EFAULT;
 			goto out;
 		}
@@ -2695,6 +2699,11 @@ static int hgsl_open(struct inode *inodep, struct file *filep)
 
 	if (!priv)
 		return -ENOMEM;
+
+	if (!task) {
+		ret = -EINVAL;
+		goto out;
+	}
 
 	idr_init(&priv->isync_timeline_idr);
 	spin_lock_init(&priv->isync_timeline_lock);
