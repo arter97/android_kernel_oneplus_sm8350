@@ -1781,6 +1781,16 @@ int smblite_lib_get_prop_usb_online(struct smb_charger *chg,
 		return 0;
 	}
 
+	/*
+	 * USB_ONLINE is reported as 0 for Debug board + USB present use-case
+	 * because USE_USBIN bit is set to 0. Report USB_ONLINE = 1 for
+	 * Debug Board + USB present use-case.
+	 */
+	if (input_present && chg->is_debug_batt) {
+		val->intval = true;
+		return 0;
+	}
+
 	if (get_client_vote_locked(chg->usb_icl_votable, USER_VOTER) == 0) {
 		val->intval = false;
 		return rc;
