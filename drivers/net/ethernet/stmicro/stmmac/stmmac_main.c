@@ -5134,8 +5134,13 @@ int stmmac_resume(struct device *dev)
 			phylink_start(priv->phylink);
 		rtnl_unlock();
 #endif
-	if (!priv->plat->mac2mac_en)
+	if (!priv->plat->mac2mac_en) {
 		phylink_mac_change(priv->phylink, true);
+	} else {
+		stmmac_mac2mac_adjust_link(priv->plat->mac2mac_rgmii_speed,
+					   priv);
+		netif_carrier_on(ndev);
+	}
 
 	return 0;
 }
