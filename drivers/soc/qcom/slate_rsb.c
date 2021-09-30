@@ -98,11 +98,12 @@ static int slatersb_tx_msg(struct slatersb_priv *dev, void  *msg, size_t len)
 	dev->slate_resp_cmplt = false;
 	/* check SLATE response */
 	resp = *(uint8_t *)dev->rx_buf;
-	if (!(resp == 0x01)) {
+	if (resp == 0x01) {
 		pr_err("Bad SLATE response\n");
 		rc = -EINVAL;
 		goto err_ret;
 	}
+
 	rc = 0;
 
 err_ret:
@@ -118,6 +119,7 @@ static int slatersb_enable(struct slatersb_priv *dev, bool enable)
 	req.cmd_id = SLATERSB_ENABLE;
 	req.data = enable ? 0x01 : 0x00;
 
+	pr_debug("req.data = %d, req.cmd_id = %d\n", req.data, req.cmd_id);
 	return slatersb_tx_msg(dev, &req, SLATERSB_MSG_SIZE);
 }
 
@@ -128,6 +130,7 @@ static int slatersb_configr_rsb(struct slatersb_priv *dev, bool enable)
 	req.cmd_id = SLATERSB_CONFIGR_RSB;
 	req.data = enable ? 0x01 : 0x00;
 
+	pr_debug("req.data = %d, req.cmd_id = %d\n", req.data, req.cmd_id);
 	return slatersb_tx_msg(dev, &req, SLATERSB_MSG_SIZE);
 }
 
@@ -272,6 +275,7 @@ static void slatersb_enable_rsb(struct work_struct *work)
 		dev->calibration_needed = false;
 		queue_work(dev->slatersb_wq, &dev->rsb_calibration_work);
 	}
+	pr_debug("RSB Enabled\n");
 unlock:
 	mutex_unlock(&dev->rsb_state_mutex);
 
@@ -549,6 +553,7 @@ static int slate_rsb_probe(struct platform_device *pdev)
 	if (rc)
 		pr_err("Not able to create the file slate-rsb/enable\n");
 
+	dev_set_drvdata(&pdev->dev, dev);
 	pr_debug("RSB probe successfully\n");
 	return 0;
 
@@ -574,8 +579,8 @@ static int slate_rsb_suspend(struct device *pldev)
 }
 
 static const struct of_device_id slate_rsb_of_match[] = {
-	{ .compatible = "qcom,slate-rsb", },
-	{ }
+	{ .compatible = "qcom,slate-rsb" },
+	{ },
 };
 
 static const struct dev_pm_ops pm_rsb = {
