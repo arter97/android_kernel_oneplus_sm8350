@@ -1690,6 +1690,8 @@ static void _dsi_display_setup_misr(struct dsi_display *display)
 
 extern int dsi_panel_set_aod_mode(struct dsi_panel *panel, int level);
 
+extern void zram_set_screen_state(bool on);
+
 int dsi_display_set_power(struct drm_connector *connector,
 		int power_mode, void *disp)
 {
@@ -1754,6 +1756,7 @@ int dsi_display_set_power(struct drm_connector *connector,
 		notifier_data_f2fs.data = &blank_f2fs;
 		f2fs_panel_notifier_call_chain(DRM_PANEL_EARLY_EVENT_BLANK, &notifier_data_f2fs);
 #endif
+		zram_set_screen_state(true);
 		break;
 	case SDE_MODE_DPMS_OFF:
 		blank = DRM_PANEL_BLANK_POWERDOWN_CUST;
@@ -1766,6 +1769,7 @@ int dsi_display_set_power(struct drm_connector *connector,
 		notifier_data_f2fs.data = &blank_f2fs;
 		f2fs_panel_notifier_call_chain(DRM_PANEL_EARLY_EVENT_BLANK, &notifier_data_f2fs);
 #endif
+		zram_set_screen_state(false);
 		break;
 	default:
 		return rc;
