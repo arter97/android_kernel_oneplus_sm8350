@@ -1339,6 +1339,34 @@ int smblite_lib_set_prop_batt_capacity(struct smb_charger *chg,
 	return 0;
 }
 
+int smblite_lib_set_prop_batt_sys_soc(struct smb_charger *chg, int val)
+{
+	int rc;
+	u8 sys_soc;
+
+	if (val < 0 || val > 100) {
+		smblite_lib_err(chg, "Invalid system soc = %d\n", val);
+		return -EINVAL;
+	}
+
+	sys_soc = DIV_ROUND_CLOSEST(val * 255, 100);
+
+	/* This is used to trigger SOC based auto-recharge */
+	rc = smblite_lib_write(chg, CHGR_QG_SOC_REG(chg->base), sys_soc);
+	if (rc < 0) {
+		smblite_lib_err(chg, "Couldn't write to CHGR_QG_SOC_REG rc=%d\n",
+				rc);
+		return rc;
+	}
+
+	rc = smblite_lib_write(chg, CHGR_QG_SOC_UPDATE_REG(chg->base), SOC_UPDATE_PCT_BIT);
+	if (rc < 0)
+		smblite_lib_err(chg, "Couldn't write to CHGR_QG_SOC_UPDATE_REG rc=%d\n",
+				rc);
+
+	return rc;
+}
+
 int smblite_lib_set_prop_batt_status(struct smb_charger *chg,
 				  const union power_supply_propval *val)
 {

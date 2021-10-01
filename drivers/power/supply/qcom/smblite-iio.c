@@ -207,6 +207,9 @@ int smblite_iio_set_prop(struct smb_charger *chg, int channel, int val)
 	case PSY_IIO_DIE_HEALTH:
 		power_supply_changed(chg->batt_psy);
 		break;
+	case PSY_IIO_SYS_SOC:
+		rc = smblite_lib_set_prop_batt_sys_soc(chg, val);
+		break;
 	default:
 		pr_debug("get prop %d is not supported\n", channel);
 		rc = -EINVAL;

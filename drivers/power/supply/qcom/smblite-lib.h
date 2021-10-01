@@ -461,6 +461,7 @@ int smblite_lib_set_prop_input_suspend(struct smb_charger *chg,
 					const int val);
 int smblite_lib_set_prop_batt_capacity(struct smb_charger *chg,
 				const union power_supply_propval *val);
+int smblite_lib_set_prop_batt_sys_soc(struct smb_charger *chg, int val);
 int smblite_lib_set_prop_batt_status(struct smb_charger *chg,
 				const union power_supply_propval *val);
 int smblite_lib_set_prop_system_temp_level(struct smb_charger *chg,
