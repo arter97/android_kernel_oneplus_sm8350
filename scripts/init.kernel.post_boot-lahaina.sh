@@ -87,13 +87,13 @@ if ! mount | grep -q "$BIND" && [ ! -e /sbin/recovery ] && [ ! -e /dev/ep/.post_
     RamStr=$(cat /proc/meminfo | grep MemTotal)
     RamMB=$((${RamStr:16:8} / 1024))
     if [ $RamMB -le 6144 ]; then
-      echo 190 > /proc/sys/vm/rswappiness
+      echo 160 > /proc/sys/vm/rswappiness
       echo 240 > /sys/module/zram/parameters/wb_start_mins
     elif [ $RamMB -le 8192 ]; then
-      echo 160 > /proc/sys/vm/rswappiness
+      echo 120 > /proc/sys/vm/rswappiness
       echo 360 > /sys/module/zram/parameters/wb_start_mins
     else
-      echo 130 > /proc/sys/vm/rswappiness
+      echo 90 > /proc/sys/vm/rswappiness
       echo 480 > /sys/module/zram/parameters/wb_start_mins
     fi
 
