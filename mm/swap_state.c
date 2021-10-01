@@ -460,7 +460,6 @@ struct page *read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 	return retpage;
 }
 
-#ifdef CONFIG_SWAP_ENABLE_READAHEAD
 static unsigned int __swapin_nr_pages(unsigned long prev_offset,
 				      unsigned long offset,
 				      int hits,
@@ -521,7 +520,6 @@ static unsigned long swapin_nr_pages(unsigned long offset)
 
 	return pages;
 }
-#endif
 
 /**
  * swap_cluster_readahead - swap in pages in hope we need them soon
@@ -548,10 +546,6 @@ static unsigned long swapin_nr_pages(unsigned long offset)
 struct page *swap_cluster_readahead(swp_entry_t entry, gfp_t gfp_mask,
 				struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
-	unsigned long addr = vmf->address;
-	bool do_poll = true;
-#ifdef CONFIG_SWAP_ENABLE_READAHEAD
 	struct page *page;
 	unsigned long entry_offset = swp_offset(entry);
 	unsigned long offset = entry_offset;
@@ -559,7 +553,9 @@ struct page *swap_cluster_readahead(swp_entry_t entry, gfp_t gfp_mask,
 	unsigned long mask;
 	struct swap_info_struct *si = swp_swap_info(entry);
 	struct blk_plug plug;
-	bool page_allocated;
+	bool do_poll = true, page_allocated;
+	struct vm_area_struct *vma = vmf->vma;
+	unsigned long addr = vmf->address;
 
 	mask = swapin_nr_pages(offset) - 1;
 	if (!mask)
@@ -602,7 +598,6 @@ struct page *swap_cluster_readahead(swp_entry_t entry, gfp_t gfp_mask,
 
 	lru_add_drain();	/* Push any new pages onto the LRU now */
 skip:
-#endif
 	return read_swap_cache_async(entry, gfp_mask, vma, addr, do_poll);
 }
 
@@ -636,7 +631,6 @@ void exit_swap_address_space(unsigned int type)
 	swapper_spaces[type] = NULL;
 }
 
-#ifdef CONFIG_SWAP_ENABLE_READAHEAD
 static inline void swap_ra_clamp_pfn(struct vm_area_struct *vma,
 				     unsigned long faddr,
 				     unsigned long lpfn,
@@ -717,7 +711,6 @@ static void swap_ra_info(struct vm_fault *vmf,
 #endif
 	pte_unmap(orig_pte);
 }
-#endif
 
 /**
  * swap_vma_readahead - swap in pages in hope we need them soon
@@ -736,10 +729,8 @@ static void swap_ra_info(struct vm_fault *vmf,
 static struct page *swap_vma_readahead(swp_entry_t fentry, gfp_t gfp_mask,
 				       struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
-	bool do_poll = true;
-#ifdef CONFIG_SWAP_ENABLE_READAHEAD
 	struct blk_plug plug;
+	struct vm_area_struct *vma = vmf->vma;
 	struct page *page;
 	pte_t *pte, pentry;
 	swp_entry_t entry;
@@ -750,8 +741,6 @@ static struct page *swap_vma_readahead(swp_entry_t fentry, gfp_t gfp_mask,
 	swap_ra_info(vmf, &ra_info);
 	if (ra_info.win == 1)
 		goto skip;
-
-	do_poll = false;
 
 	blk_start_plug(&plug);
 	for (i = 0, pte = ra_info.ptes; i < ra_info.nr_pte;
@@ -780,9 +769,8 @@ static struct page *swap_vma_readahead(swp_entry_t fentry, gfp_t gfp_mask,
 	blk_finish_plug(&plug);
 	lru_add_drain();
 skip:
-#endif
 	return read_swap_cache_async(fentry, gfp_mask, vma, vmf->address,
-				     do_poll);
+				     ra_info.win == 1);
 }
 
 /**
