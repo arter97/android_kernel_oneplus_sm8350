@@ -77,7 +77,7 @@ static int slatersb_rpmsg_cb(struct rpmsg_device *rpdev,
 }
 
 static const struct rpmsg_device_id rpmsg_driver_slatersb_id_table[] = {
-	{ "RSB_CTRL" },
+	{ "slate-rsb-ctl" },
 	{},
 };
 MODULE_DEVICE_TABLE(rpmsg, rpmsg_driver_slatersb_id_table);

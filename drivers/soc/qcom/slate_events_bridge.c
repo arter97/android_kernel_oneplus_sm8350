@@ -21,15 +21,16 @@
 struct event {
 	uint8_t sub_id;
 	int16_t evnt_data;
-	uint32_t evnt_tm;
+	uint64_t evnt_tm;
 };
+
 
 #define	SEB_GLINK_INTENT_SIZE	0x04
 #define	SEB_MSG_SIZE			0x08
 #define	TIMEOUT_MS				2000
 #define	TIMEOUT_MS_GLINK_OPEN			10000
 #define	SEB_SLATE_SUBSYS "slatefw"
-#define	HED_EVENT_DATA_TIME_LEN 0x04
+#define	HED_EVENT_DATA_TIME_LEN 0x08
 
 enum seb_state {
 	SEB_STATE_UNKNOWN,
@@ -439,14 +440,16 @@ void handle_rx_event(struct seb_priv *dev, void *rx_event_buf, int len)
 	if (event_header->opcode == GMI_SLATE_EVENT_RSB ||
 		event_header->opcode == GMI_SLATE_EVENT_BUTTON) {
 
+		evnt = kmalloc(sizeof(struct event), GFP_ATOMIC);
 		/* consume the events*/
 		event_payload = (char *)(rx_event_buf + sizeof(struct gmi_header));
 		evnt->sub_id = event_header->opcode;
-		evnt->evnt_tm = *((uint32_t *)(event_payload));
+		evnt->evnt_tm = *((uint64_t *)(event_payload));
 		evnt->evnt_data =
 				*(int16_t *)(event_payload + HED_EVENT_DATA_TIME_LEN);
 
 		seb_send_input(evnt);
+		kfree(evnt);
 	} else if (event_header->opcode == GMI_SLATE_EVENT_TOUCH) {
 		return;
 	}
