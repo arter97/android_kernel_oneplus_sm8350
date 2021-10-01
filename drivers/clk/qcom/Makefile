@@ -92,6 +92,7 @@ obj-$(CONFIG_SM_DEBUGCC_6150) += debugcc-sm6150.o
 obj-$(CONFIG_SM_DEBUGCC_8150) += debugcc-sm8150.o
 obj-$(CONFIG_SM_DEBUGCC_BLAIR) += debugcc-blair.o
 obj-$(CONFIG_SM_DEBUGCC_HOLI) += debugcc-holi.o
+obj-$(CONFIG_SM_DEBUGCC_SCUBA) += debugcc-scuba.o
 obj-$(CONFIG_SM_DEBUGCC_SHIMA) += debugcc-shima.o
 obj-$(CONFIG_SM_DEBUGCC_YUPIK) += debugcc-yupik.o
 obj-$(CONFIG_SM_DISPCC_6150) += dispcc-sm6150.o
