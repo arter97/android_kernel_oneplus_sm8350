@@ -53,4 +53,18 @@ struct qbg_iio_channels {
 	QBG_IIO_CHAN(_name, _num, IIO_COUNT,		\
 		BIT(IIO_CHAN_INFO_PROCESSED))
 
+enum qbg_ext_iio_channels {
+	RECHARGE_SOC,
+	FORCE_RECHARGE,
+	CHARGE_DONE,
+	SYS_SOC,
+};
+
+static const char * const qbg_ext_iio_chan_name[] = {
+	[RECHARGE_SOC]			= "recharge_soc",
+	[FORCE_RECHARGE]		= "force_recharge",
+	[CHARGE_DONE]			= "charge_done",
+	[SYS_SOC]			= "sys_soc",
+};
+
 #endif /* __QBG_IIO_H__ */
