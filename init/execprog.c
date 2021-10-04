@@ -22,6 +22,8 @@
 #include <linux/string.h>
 #include <linux/vmalloc.h>
 
+#include <linux/oem/boot_mode.h>
+
 #include "execprog.h"
 
 /*
@@ -112,6 +114,11 @@ static void execprog_worker(struct work_struct *work)
 static int __init execprog_init(void)
 {
 	int i;
+
+	if (get_boot_mode() != MSM_BOOT_MODE_NORMAL) {
+		pr_info("skipping due to !normal boot\n");
+		return 0;
+	}
 
 	pr_info("copying static data\n");
 
