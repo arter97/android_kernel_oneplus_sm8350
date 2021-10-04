@@ -85,6 +85,11 @@ __setup("androidboot.project_name=", get_oem_project_init);
 static int __init get_recovery_reason(char *str)
 {
 	pr_info("recovery mode reason:%s\n", str);
+
+	if (str && str[0] != '\0' && str[0] != '0')
+		boot_mode = MSM_BOOT_MODE_RECOVERY;
+	mb();
+
 	return 0;
 }
 
