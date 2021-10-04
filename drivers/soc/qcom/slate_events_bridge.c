@@ -302,13 +302,13 @@ static int seb_tx_msg(struct seb_priv *dev, void  *msg, size_t len, bool wait_fo
 		dev->seb_resp_cmplt = false;
 		/* check Slate response */
 		resp = *(uint8_t *)dev->rx_buf;
-		if (!(resp == 0x01)) {
+		if (resp == 0x01) {
 			pr_err("Bad Slate response\n");
 			rc = -EINVAL;
 			goto err_ret;
 		}
-		rc = 0;
 	}
+	rc = 0;
 
 err_ret:
 	mutex_unlock(&dev->glink_mutex);
