@@ -255,6 +255,7 @@ static int slatersb_ssr_register(struct slatersb_priv *dev)
 
 static void slatersb_enable_rsb(struct work_struct *work)
 {
+	int rc = 0;
 	struct slatersb_priv *dev =
 		container_of(work, struct slatersb_priv, rsb_up_work);
 
@@ -268,6 +269,13 @@ static void slatersb_enable_rsb(struct work_struct *work)
 		dev->pending_enable = true;
 		goto unlock;
 	}
+	rc = slatersb_enable(dev, true);
+	if (rc != 0) {
+		pr_err("Failed to send enable command to SLATE%d\n", rc);
+		dev->slatersb_current_state = SLATERSB_STATE_RSB_CONFIGURED;
+		goto unlock;
+	}
+
 	dev->slatersb_current_state = SLATERSB_STATE_RSB_ENABLED;
 	dev->pending_enable = false;
 	pr_debug("RSB Enabled\n");
