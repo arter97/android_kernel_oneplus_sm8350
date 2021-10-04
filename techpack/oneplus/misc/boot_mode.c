@@ -25,55 +25,47 @@ enum oem_boot_mode get_boot_mode(void)
 }
 EXPORT_SYMBOL(get_boot_mode);
 
-static int __init boot_mode_init(char *str)
+static int __init ftm_mode_init(char *str)
 {
 
-	pr_info("boot_mode_init %s\n", str);
+	if (!str)
+		return 0;
 
-	if (str) {
-		if (strncmp(str, "ftm_at", 6) == 0)
-			boot_mode = MSM_BOOT_MODE_FACTORY;
-		else if (strncmp(str, "ftm_rf", 6) == 0)
-			boot_mode = MSM_BOOT_MODE_RF;
-		else if (strncmp(str, "ftm_recovery", 12) == 0)
-			boot_mode = MSM_BOOT_MODE_RECOVERY;
-		else if (strncmp(str, "ftm_aging", 9) == 0)
-			boot_mode = MSM_BOOT_MODE_AGING;
-	}
+	if (strncmp(str, "ftm_at", 6) == 0)
+		boot_mode = MSM_BOOT_MODE_FACTORY;
+	else if (strncmp(str, "ftm_rf", 6) == 0)
+		boot_mode = MSM_BOOT_MODE_RF;
+	else if (strncmp(str, "ftm_recovery", 12) == 0)
+		boot_mode = MSM_BOOT_MODE_RECOVERY;
+	else if (strncmp(str, "ftm_aging", 9) == 0)
+		boot_mode = MSM_BOOT_MODE_AGING;
 
+	mb();
 	pr_info("kernel boot_mode = %s[%d]\n",
 			enum_ftm_mode[boot_mode], boot_mode);
+
 	return 0;
 }
-__setup("androidboot.ftm_mode=", boot_mode_init);
+__setup("androidboot.ftm_mode=", ftm_mode_init);
 
-static int __init boot_mode_init_normal(void)
+static int __init mode_init(char *str)
 {
-	char *substrftm = strnstr(boot_command_line,
-		"androidboot.ftm_mode=", strlen(boot_command_line));
-	char *substrnormal = strnstr(boot_command_line,
-		"androidboot.mode=", strlen(boot_command_line));
-	char *substrftmstr = NULL;
-	char *substrnormalstr = NULL;
 
-	substrftmstr = substrftm + strlen("androidboot.ftm_mode=");
-	substrnormalstr = substrnormal + strlen("androidboot.mode=");
+	if (!str)
+		return 0;
 
-	if (substrftm != NULL && substrftmstr != NULL) {
+	if (strncmp(str, "recovery", 8) == 0)
+		boot_mode = MSM_BOOT_MODE_RECOVERY;
+	else if (strncmp(str, "charger", 7) == 0)
+		boot_mode = MSM_BOOT_MODE_CHARGE;
 
-	} else if (substrnormal != NULL && substrnormalstr != NULL) {
-		if (strncmp(substrnormalstr, "recovery", 8) == 0)
-			boot_mode = MSM_BOOT_MODE_RECOVERY;
-		else if (strncmp(substrnormalstr, "charger", 7) == 0)
-			boot_mode = MSM_BOOT_MODE_CHARGE;
-	}
-
-	pr_info("kernel normal boot_mode = %s[%d]\n",
-	enum_ftm_mode[boot_mode], boot_mode);
+	mb();
+	pr_info("kernel boot_mode = %s[%d]\n",
+			enum_ftm_mode[boot_mode], boot_mode);
 
 	return 0;
 }
-arch_initcall(boot_mode_init_normal);
+__setup("androidboot.mode=", mode_init);
 
 int get_oem_project(void)
 {
