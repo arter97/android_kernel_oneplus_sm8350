@@ -50,6 +50,11 @@ struct seb_notif_info {
 	struct list_head list;
 };
 
+struct seb_buf_list {
+	struct list_head rx_queue_head;
+	void  *rx_buf;
+};
+
 struct gmi_header {
 	uint32_t opcode;
 	uint32_t payload_size;
@@ -58,7 +63,6 @@ struct gmi_header {
 static LIST_HEAD(seb_notify_list);
 static DEFINE_SPINLOCK(notif_lock);
 static DEFINE_MUTEX(notif_add_lock);
-static DEFINE_MUTEX(notifier_lock);
 
 struct seb_priv {
 	void *handle;
@@ -69,6 +73,8 @@ struct seb_priv {
 	void *lhndl;
 	char rx_buf[SEB_GLINK_INTENT_SIZE];
 	void *rx_event_buf;
+	spinlock_t rx_lock;
+	struct list_head rx_list;
 	uint8_t rx_event_len;
 	struct work_struct slate_up_work;
 	struct work_struct slate_down_work;
@@ -225,19 +231,39 @@ static void seb_notify_work(struct work_struct *work)
 {
 	struct seb_notif_info *seb_notify = NULL;
 	struct gmi_header *event_header = NULL;
+	struct seb_buf_list *rx_notify, *next;
+	unsigned long flags;
+
 	struct seb_priv *dev =
 		container_of(work, struct seb_priv, slate_notify_work);
 
-	mutex_lock(&notifier_lock);
-	event_header = (struct gmi_header *)(dev->rx_event_buf);
-	seb_notify = _notif_find_group(event_header->opcode);
-	if (seb_notify) {
-		srcu_notifier_call_chain(&seb_notify->seb_notif_rcvr_list,
-					 ((struct gmi_header *)event_header)->opcode,
-					 dev->rx_event_buf + sizeof(struct gmi_header));
+	if (!list_empty(&dev->rx_list)) {
+		list_for_each_entry_safe(rx_notify, next, &dev->rx_list, rx_queue_head) {
+			event_header = (struct gmi_header *)rx_notify->rx_buf;
+
+			seb_notify = _notif_find_group(event_header->opcode);
+			if (!seb_notify) {
+				pr_err("notifier event not found\n");
+				spin_lock_irqsave(&dev->rx_lock, flags);
+				list_del(&rx_notify->rx_queue_head);
+				spin_unlock_irqrestore(&dev->rx_lock, flags);
+				kfree(rx_notify->rx_buf);
+				kfree(rx_notify);
+				return;
+			}
+
+			srcu_notifier_call_chain(&seb_notify->seb_notif_rcvr_list,
+						 ((struct gmi_header *)event_header)->opcode,
+						 rx_notify->rx_buf + sizeof(struct gmi_header));
+
+			spin_lock_irqsave(&dev->rx_lock, flags);
+			list_del(&rx_notify->rx_queue_head);
+			spin_unlock_irqrestore(&dev->rx_lock, flags);
+			kfree(rx_notify->rx_buf);
+			kfree(rx_notify);
+		}
 	}
-	kfree(dev->rx_event_buf);
-	mutex_unlock(&notifier_lock);
+	pr_debug("notifier call successful\n");
 }
 
 static int seb_tx_msg(struct seb_priv *dev, void  *msg, size_t len, bool wait_for_resp)
@@ -433,7 +459,8 @@ void handle_rx_event(struct seb_priv *dev, void *rx_event_buf, int len)
 	struct gmi_header *event_header = NULL;
 	char *event_payload = NULL;
 	struct event *evnt = NULL;
-	struct seb_notif_info *seb_notif = NULL;
+	struct seb_buf_list *rx_notif = NULL;
+	unsigned long flags;
 
 	event_header = (struct gmi_header *)rx_event_buf;
 
@@ -454,11 +481,23 @@ void handle_rx_event(struct seb_priv *dev, void *rx_event_buf, int len)
 		return;
 	}
 
-	seb_notif = _notif_find_group(event_header->opcode);
+	rx_notif = kzalloc(sizeof(struct seb_buf_list), GFP_ATOMIC);
+	if (!rx_notif)
+		return;
 
-	if (seb_notif) {
-		queue_work(dev->seb_wq, &dev->slate_notify_work);
+	rx_notif->rx_buf = kmalloc(len, GFP_ATOMIC);
+	if (!(rx_notif->rx_buf)) {
+		kfree(rx_notif);
+		pr_err("failed to allocate memory\n");
+		return;
 	}
+	memcpy(rx_notif->rx_buf, rx_event_buf, len);
+
+	spin_lock_irqsave(&dev->rx_lock, flags);
+	list_add_tail(&rx_notif->rx_queue_head, &dev->rx_list);
+	spin_unlock_irqrestore(&dev->rx_lock, flags);
+
+	queue_work(dev->seb_wq, &dev->slate_notify_work);
 }
 
 void seb_rx_msg(void *data, int len)
@@ -467,6 +506,7 @@ void seb_rx_msg(void *data, int len)
 		container_of(seb_drv, struct seb_priv, lhndl);
 
 	dev->seb_resp_cmplt = true;
+
 	wake_up(&dev->link_state_wait);
 	if (dev->wait_for_resp) {
 		memcpy(dev->rx_buf, data, len);
@@ -476,6 +516,7 @@ void seb_rx_msg(void *data, int len)
 		if (dev->rx_event_buf) {
 			memcpy(dev->rx_event_buf, data, len);
 			handle_rx_event(dev, dev->rx_event_buf, len);
+			kfree(dev->rx_event_buf);
 		}
 	}
 }
@@ -565,6 +606,8 @@ static int seb_init(struct seb_priv *dev)
 	INIT_WORK(&dev->slate_up_work, seb_slateup_work);
 	INIT_WORK(&dev->slate_down_work, seb_slatedown_work);
 	INIT_WORK(&dev->slate_notify_work, seb_notify_work);
+	INIT_LIST_HEAD(&dev->rx_list);
+	spin_lock_init(&dev->rx_lock);
 
 	return 0;
 }
