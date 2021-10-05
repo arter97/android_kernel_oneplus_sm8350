@@ -447,6 +447,8 @@ static int send_time_sync(struct slate_ui_data *tui_obj_msg)
 	ret = slatecom_tx_msg(dev, write_buf, tui_obj_msg->num_of_words*4);
 	if (ret < 0)
 		pr_err("send_time_data cmd failed\n");
+	else
+		pr_info("send_time_data cmd success\n");
 return ret;
 }
 
