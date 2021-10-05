@@ -1931,6 +1931,7 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	qcom_ethqos_read_iomacro_por_values(ethqos);
 
 	if (pparams.is_valid_mac_addr) {
+		priv->dev->addr_assign_type = NET_ADDR_PERM;
 		ether_addr_copy(dev_addr, pparams.mac_addr);
 		memcpy(priv->dev->dev_addr, dev_addr, ETH_ALEN);
 		ETHQOSINFO("using partition device MAC address %pM\n", priv->dev->dev_addr);
