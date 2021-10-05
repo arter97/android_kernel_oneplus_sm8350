@@ -1569,6 +1569,7 @@ int smblite_lib_set_concurrent_config(struct smb_charger *chg, bool enable)
 	int rc = 0, icl_ua = 0, settled_icl_ua = 0, usb_present = 0;
 	union power_supply_propval pval = {0, };
 	u8 apsd_status = 0;
+	bool boost_enabled = is_boost_en(chg);
 
 	if (!is_concurrent_mode_supported(chg)) {
 		smblite_lib_dbg(chg, PR_MISC, "concurrency-mode: support disabled\n");
@@ -1605,9 +1606,9 @@ int smblite_lib_set_concurrent_config(struct smb_charger *chg, bool enable)
 		 * When boost is enabled and usb is inserted chargering will be disabled causing
 		 * AICL to be always zero, Skip calculating ICL for this.
 		 */
-		if (is_boost_en(chg)) {
+		if (boost_enabled) {
 			smblite_lib_dbg(chg, PR_MISC,
-				"settled_icl_ua=0: boost is already enabled. Skipping ICL vote.\n");
+				"boost is already enabled. Skipping ICL vote.\n");
 		} else {
 			/*
 			 * On charger insertion, if concurrency mode is enabled it can cause
@@ -1689,8 +1690,14 @@ int smblite_lib_set_concurrent_config(struct smb_charger *chg, bool enable)
 			smblite_lib_err(chg, "Couldn't read APSD_RESULT_STATUS rc=%d\n",
 					rc);
 
-		/* Try to Restore vbus to MAX(6V) if QC adapter is connected */
-		if ((apsd_status & QC_3P0_BIT) && usb_present)
+		/*
+		 * Try to Restore vbus to MAX(6V) only if:
+		 *	1. QC adapter is connected.
+		 *	2. USB is present.
+		 *	3. Boost is disabled : DPDM request does not take
+		 *			       effect with boost enabled.
+		 */
+		if ((apsd_status & QC_3P0_BIT) && usb_present && !boost_enabled)
 			chg->hvdcp3_detected = smblite_lib_hvdcp3_force_max_vbus(chg);
 
 		rc = smblite_lib_run_aicl(chg, RERUN_AICL);
@@ -3816,9 +3823,35 @@ irqreturn_t smblite_boost_mode_active_irq_handler(int irq, void *data)
 {
 	struct smb_irq_data *irq_data = data;
 	struct smb_charger *chg = irq_data->parent_data;
+	union power_supply_propval pval = {0, };
+	bool is_qc = false, boost_enabled = is_boost_en(chg);
+	u8 apsd_status = 0;
+	int rc = 0;
 
-	smblite_lib_dbg(chg, PR_INTERRUPT, "IRQ: %s, BOOST_EN=%s\n",
-		irq_data->name, (is_boost_en(chg) ? "True" : "False"));
+	rc = smblite_lib_get_prop_usb_present(chg, &pval);
+	if (rc < 0)
+		smblite_lib_dbg(chg, PR_MISC,
+				"Couldn't get USB preset status rc=%d\n", rc);
+
+	/* Try to restore VBUS to MAX(6V) once boost is disabled and USB is present. */
+	if (!boost_enabled && pval.intval) {
+		rc = smblite_lib_read(chg, APSD_RESULT_STATUS_REG(chg->base), &apsd_status);
+		if (rc < 0)
+			smblite_lib_err(chg, "Couldn't read APSD_RESULT_STATUS rc=%d\n",
+					rc);
+
+		/* Restore vbus to MAX(6V) only if QC adapter is connected */
+		if (apsd_status & QC_3P0_BIT) {
+			is_qc = true;
+			smblite_lib_rerun_apsd_if_required(chg);
+		}
+	}
+
+	smblite_lib_dbg(chg, PR_INTERRUPT, "IRQ: %s, BOOST_EN=%s, usb_present=%d, qc_adapter=%s\n",
+			irq_data->name,
+			(boost_enabled ? "True" : "False"),
+			pval.intval,
+			(is_qc ? "True" : "False"));
 
 	return IRQ_HANDLED;
 }
