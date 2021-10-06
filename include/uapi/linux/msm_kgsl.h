@@ -1892,4 +1892,20 @@ struct kgsl_gpu_aux_command_timeline {
 	__u32 timelines_size;
 };
 
+/**
+ * struct kgsl_drawctxt_set_shadow_mem - Argument to IOCTL_KGSL_DRAWCTXT_SET_SHADOW_MEM
+ * @drawctxt_id: context ID to set separate shadow memory
+ * @gpuobj_id: GPU object ID of the shadow memory
+ */
+struct kgsl_drawctxt_set_shadow_mem {
+	unsigned int drawctxt_id;
+	unsigned int gpuobj_id;
+};
+
+/**
+ * Set a separate timestamp shadow memory for a context
+ */
+#define IOCTL_KGSL_DRAWCTXT_SET_SHADOW_MEM \
+	_IOW(KGSL_IOC_TYPE, 0x5E, struct kgsl_drawctxt_set_shadow_mem)
+
 #endif /* _UAPI_MSM_KGSL_H */
