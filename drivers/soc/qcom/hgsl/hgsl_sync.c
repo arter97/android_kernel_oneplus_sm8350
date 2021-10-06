@@ -61,7 +61,6 @@ struct hgsl_hsync_fence *hgsl_hsync_fence_create(
 		return NULL;
 	}
 
-	fence->timeline = timeline;
 	fence->ts = ts;
 
 	dma_fence_init(&fence->fence, &hgsl_hsync_fence_ops,
@@ -71,10 +70,10 @@ struct hgsl_hsync_fence *hgsl_hsync_fence_create(
 	dma_fence_put(&fence->fence);
 	if (fence->sync_file == NULL) {
 		hgsl_hsync_timeline_put(timeline);
-		kfree(fence);
 		return NULL;
 	}
 
+	fence->timeline = timeline;
 	spin_lock_irqsave(&timeline->lock, flags);
 	list_add_tail(&fence->child_list, &timeline->fence_list);
 	spin_unlock_irqrestore(&timeline->lock, flags);
@@ -347,8 +346,6 @@ int hgsl_isync_fence_create(struct hgsl_priv *priv, uint32_t timeline_id,
 		goto out;
 	}
 
-	fence->timeline = timeline;
-
 	/* set a minimal ts if user don't set it */
 	if (!ts_is_valid)
 		ts = 1;
@@ -361,13 +358,11 @@ int hgsl_isync_fence_create(struct hgsl_priv *priv, uint32_t timeline_id,
 						ts);
 
 	sync_file = sync_file_create(&fence->fence);
-
+	dma_fence_put(&fence->fence);
 	if (sync_file == NULL) {
 		ret = -ENOMEM;
 		goto out;
 	}
-
-	dma_fence_put(&fence->fence);
 
 	*fence_fd = get_unused_fd_flags(0);
 	if (*fence_fd < 0) {
@@ -377,6 +372,7 @@ int hgsl_isync_fence_create(struct hgsl_priv *priv, uint32_t timeline_id,
 
 	fd_install(*fence_fd, sync_file->file);
 
+	fence->timeline = timeline;
 	spin_lock(&timeline->lock);
 	list_add_tail(&fence->child_list, &timeline->fence_list);
 	spin_unlock(&timeline->lock);
@@ -599,8 +595,10 @@ static void hgsl_isync_fence_release(struct dma_fence *base)
 				    struct hgsl_isync_fence,
 				    fence);
 
-	_isync_timeline_signal(fence->timeline, base);
-	hgsl_isync_timeline_put(fence->timeline);
+	if (fence->timeline) {
+		_isync_timeline_signal(fence->timeline, base);
+		hgsl_isync_timeline_put(fence->timeline);
+	}
 
 	kfree(fence);
 }
