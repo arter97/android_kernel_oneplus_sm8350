@@ -3840,6 +3840,17 @@ irqreturn_t smblite_usb_id_irq_handler(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+irqreturn_t smblite_boost_mode_active_irq_handler(int irq, void *data)
+{
+	struct smb_irq_data *irq_data = data;
+	struct smb_charger *chg = irq_data->parent_data;
+
+	smblite_lib_dbg(chg, PR_INTERRUPT, "IRQ: %s, BOOST_EN=%s\n",
+		irq_data->name, (is_boost_en(chg) ? "True" : "False"));
+
+	return IRQ_HANDLED;
+}
+
 /***************
  * Work Queues *
  ***************/

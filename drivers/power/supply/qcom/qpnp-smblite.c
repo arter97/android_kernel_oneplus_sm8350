@@ -1455,6 +1455,10 @@ static struct smb_irq_info smblite_irqs[] = {
 		.name		= "switcher-power-ok",
 		.handler	= smblite_switcher_power_ok_irq_handler,
 	},
+	[BOOST_MODE_ACTIVE_IRQ] = {
+		.name		= "boost-mode-active",
+		.handler	= smblite_boost_mode_active_irq_handler,
+	},
 	/* BATTERY IRQs */
 	[BAT_TEMP_IRQ] = {
 		.name		= "bat-temp",
