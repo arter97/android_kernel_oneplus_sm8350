@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/clk-provider.h>
@@ -15,6 +15,7 @@
 
 #include "clk-alpha-pll.h"
 #include "clk-branch.h"
+#include "clk-pm.h"
 #include "clk-rcg.h"
 #include "clk-regmap.h"
 #include "common.h"
@@ -271,20 +272,6 @@ static struct clk_rcg2 gpu_cc_gx_gfx3d_clk_src = {
 	},
 };
 
-static struct clk_branch gpu_cc_ahb_clk = {
-	.halt_reg = 0x1078,
-	.halt_check = BRANCH_HALT_DELAY,
-	.clkr = {
-		.enable_reg = 0x1078,
-		.enable_mask = BIT(0),
-		.hw.init = &(struct clk_init_data){
-			.name = "gpu_cc_ahb_clk",
-			.flags = CLK_IS_CRITICAL,
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
 static struct clk_branch gpu_cc_crc_ahb_clk = {
 	.halt_reg = 0x107c,
 	.halt_check = BRANCH_HALT_VOTED,
@@ -459,7 +446,6 @@ struct clk_hw *gpu_cc_sm6150_hws[] = {
 };
 
 static struct clk_regmap *gpu_cc_sm6150_clocks[] = {
-	[GPU_CC_AHB_CLK] = &gpu_cc_ahb_clk.clkr,
 	[GPU_CC_CRC_AHB_CLK] = &gpu_cc_crc_ahb_clk.clkr,
 	[GPU_CC_CX_GFX3D_CLK] = &gpu_cc_cx_gfx3d_clk.clkr,
 	[GPU_CC_CX_GFX3D_SLV_CLK] = &gpu_cc_cx_gfx3d_slv_clk.clkr,
@@ -485,13 +471,21 @@ static const struct regmap_config gpu_cc_sm6150_regmap_config = {
 	.fast_io = true,
 };
 
-static const struct qcom_cc_desc gpu_cc_sm6150_desc = {
+static struct critical_clk_offset critical_clk_list[] = {
+	{ .offset = 0x1078, .mask = 0x1 },
+	{ .offset = 0x1098, .mask = 0xff0 },
+	{ .offset = 0x1028, .mask = 0x00015011 },
+	{ .offset = 0x1024, .mask = 0x00800000 },
+};
+
+static struct qcom_cc_desc gpu_cc_sm6150_desc = {
 	.config = &gpu_cc_sm6150_regmap_config,
 	.clks = gpu_cc_sm6150_clocks,
 	.num_clks = ARRAY_SIZE(gpu_cc_sm6150_clocks),
 	.clk_hws = gpu_cc_sm6150_hws,
 	.num_clk_hws = ARRAY_SIZE(gpu_cc_sm6150_hws),
-
+	.critical_clk_en = critical_clk_list,
+	.num_critical_clk = ARRAY_SIZE(critical_clk_list),
 };
 
 static const struct of_device_id gpu_cc_sm6150_match_table[] = {
@@ -570,11 +564,21 @@ static int gpu_cc_sm6150_probe(struct platform_device *pdev)
 	clk_alpha_pll_configure(&gpu_cc_pll0, regmap, gpu_cc_pll0.config);
 	clk_alpha_pll_configure(&gpu_cc_pll1, regmap, gpu_cc_pll1.config);
 
+	/*
+	 * Keep clocks always enabled:
+	 *	gpu_cc_ahb_clk
+	 */
+	regmap_update_bits(regmap, 0x1078, BIT(0), BIT(0));
+
 	ret = qcom_cc_really_probe(pdev, &gpu_cc_sm6150_desc, regmap);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register GPU CC clocks\n");
 		return ret;
 	}
+
+	ret = register_qcom_clks_pm(pdev, false, &gpu_cc_sm6150_desc);
+	if (ret)
+		dev_err(&pdev->dev, "GPU CC failed to register for pm ops\n");
 
 	configure_crc(regmap);
 
