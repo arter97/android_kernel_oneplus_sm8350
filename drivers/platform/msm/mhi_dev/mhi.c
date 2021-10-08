@@ -1945,7 +1945,7 @@ static int mhi_dev_process_cmd_ring(struct mhi_dev *mhi,
 				if (rc)
 					mhi_log(MHI_MSG_VERBOSE,
 						"Error with compl event\n");
-				return;
+				return rc;
 			}
 		}
 
