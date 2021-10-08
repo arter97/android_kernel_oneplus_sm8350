@@ -202,6 +202,7 @@ enum adreno_gpurev {
 	ADRENO_REV_A630 = 630,
 	ADRENO_REV_A640 = 640,
 	ADRENO_REV_A642 = 642,
+	ADRENO_REV_A643 = 643,
 	ADRENO_REV_A650 = 650,
 	ADRENO_REV_A660 = 660,
 	ADRENO_REV_A680 = 680,
@@ -995,6 +996,7 @@ void adreno_active_count_put(struct adreno_device *adreno_dev);
 #define adreno_is_a702(x) false
 #define adreno_is_a642(x) false
 #define adreno_is_a642l(x) false
+#define adreno_is_a643(x) false
 #define adreno_is_a615_family(x) false
 #define adreno_is_a640_family(x) false
 #define adreno_is_a619_holi(x) false
