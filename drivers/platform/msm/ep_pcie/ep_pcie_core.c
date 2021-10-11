@@ -437,7 +437,7 @@ static int ep_pcie_clk_init(struct ep_pcie_dev_t *dev)
 
 static void ep_pcie_clk_deinit(struct ep_pcie_dev_t *dev)
 {
-	int i;
+	int i, rc;
 
 	EP_PCIE_DBG(dev, "PCIe V%d\n", dev->rev);
 
@@ -446,11 +446,10 @@ static void ep_pcie_clk_deinit(struct ep_pcie_dev_t *dev)
 			clk_disable_unprepare(dev->clk[i].hdl);
 
 	if (dev->icc_path) {
-		icc_put(dev->icc_path);
-		dev->icc_path = 0;
-			EP_PCIE_DBG(dev,
-				"PCIe V%d: relinquish bus bandwidth\n",
-				dev->rev);
+		rc = icc_set_bw(dev->icc_path, 0, 0);
+		EP_PCIE_DBG(dev,
+			"PCIe V%d: relinquish bus bandwidth returns %d\n",
+			dev->rev, rc);
 	}
 
 	if (!m2_enabled) {
@@ -2610,7 +2609,8 @@ int32_t ep_pcie_irq_init(struct ep_pcie_dev_t *dev)
 	INIT_WORK(&dev->handle_d3cold_work, handle_d3cold_func);
 
 	if (dev->aggregated_irq) {
-		irq_set_status_flags(dev->irq[EP_PCIE_INT_GLOBAL].num, IRQ_NOAUTOEN);
+		if (!ep_pcie_dev.perst_enum)
+			irq_set_status_flags(dev->irq[EP_PCIE_INT_GLOBAL].num, IRQ_NOAUTOEN);
 		ret = devm_request_irq(pdev,
 			dev->irq[EP_PCIE_INT_GLOBAL].num,
 			ep_pcie_handle_global_irq,
@@ -3455,7 +3455,8 @@ static int ep_pcie_probe(struct platform_device *pdev)
 
 	qcom_edma_init(&pdev->dev);
 
-	enable_irq(ep_pcie_dev.irq[EP_PCIE_INT_GLOBAL].num);
+	if (!ep_pcie_dev.perst_enum)
+		enable_irq(ep_pcie_dev.irq[EP_PCIE_INT_GLOBAL].num);
 	return 0;
 
 irq_deinit:
