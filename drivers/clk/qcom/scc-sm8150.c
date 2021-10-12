@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/clk-provider.h>
@@ -21,6 +21,10 @@
 #include "vdd-level-sm8150.h"
 
 static DEFINE_VDD_REGULATORS(vdd_scc_cx, VDD_NUM, 1, vdd_corner);
+
+static struct clk_vdd_class *scc_sm8150_regulators[] = {
+	&vdd_scc_cx,
+};
 
 enum {
 	P_AOSS_CC_RO_CLK,
@@ -572,6 +576,8 @@ static const struct qcom_cc_desc scc_sm8150_desc = {
 	.config = &scc_sm8150_regmap_config,
 	.clks = scc_sm8150_clocks,
 	.num_clks = ARRAY_SIZE(scc_sm8150_clocks),
+	.clk_regulators = scc_sm8150_regulators,
+	.num_clk_regulators = ARRAY_SIZE(scc_sm8150_regulators),
 };
 
 static const struct of_device_id scc_sm8150_match_table[] = {
@@ -689,15 +695,6 @@ static int scc_sm8150_probe(struct platform_device *pdev)
 	struct regmap *regmap;
 	int ret;
 
-	vdd_scc_cx.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_scc_cx");
-	if (IS_ERR(vdd_scc_cx.regulator[0])) {
-		ret = PTR_ERR(vdd_scc_cx.regulator[0]);
-		if (ret != -EPROBE_DEFER)
-			dev_err(&pdev->dev, "Unable to get vdd_scc_cx regulator, ret=%d\n",
-				ret);
-		return ret;
-	}
-
 	regmap = qcom_cc_map(pdev, &scc_sm8150_desc);
 	if (IS_ERR(regmap)) {
 		pr_err("Failed to map the scc registers\n");
@@ -728,11 +725,17 @@ static int scc_sm8150_probe(struct platform_device *pdev)
 	return 0;
 }
 
+static void scc_sm8150_sync_state(struct device *dev)
+{
+	qcom_cc_sync_state(dev, &scc_sm8150_desc);
+}
+
 static struct platform_driver scc_sm8150_driver = {
 	.probe = scc_sm8150_probe,
 	.driver = {
 		.name = "scc-sm8150",
 		.of_match_table = scc_sm8150_match_table,
+		.sync_state = scc_sm8150_sync_state,
 	},
 };
 

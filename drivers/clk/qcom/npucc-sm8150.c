@@ -29,6 +29,10 @@
 
 static DEFINE_VDD_REGULATORS(vdd_cx, VDD_NUM, 1, vdd_corner);
 
+static struct clk_vdd_class *npu_cc_sm8150_regulators[] = {
+	&vdd_cx,
+};
+
 enum {
 	P_BI_TCXO,
 	P_CORE_BI_PLL_TEST_SE,
@@ -298,6 +302,7 @@ static struct clk_branch npu_cc_bto_core_clk = {
 		.enable_mask = BIT(0),
 		.hw.init = &(struct clk_init_data){
 			.name = "npu_cc_bto_core_clk",
+			.flags = CLK_DONT_HOLD_STATE,
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -571,6 +576,8 @@ static const struct qcom_cc_desc npu_cc_sm8150_desc = {
 	.num_clks = ARRAY_SIZE(npu_cc_sm8150_clocks),
 	.resets = npu_cc_sm8150_resets,
 	.num_resets = ARRAY_SIZE(npu_cc_sm8150_resets),
+	.clk_regulators = npu_cc_sm8150_regulators,
+	.num_clk_regulators = ARRAY_SIZE(npu_cc_sm8150_regulators),
 };
 
 static const struct of_device_id npu_cc_sm8150_match_table[] = {
@@ -666,13 +673,6 @@ static int npu_cc_sm8150_probe(struct platform_device *pdev)
 	struct regmap *regmap;
 	int ret;
 
-	vdd_cx.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_cx");
-	if (IS_ERR(vdd_cx.regulator[0])) {
-		if (PTR_ERR(vdd_cx.regulator[0]) != -EPROBE_DEFER)
-			dev_err(&pdev->dev, "Unable to get vdd_cx regulator\n");
-		return PTR_ERR(vdd_cx.regulator[0]);
-	}
-
 	vdd_gdsc = devm_regulator_get(&pdev->dev, "vdd_gdsc");
 	if (IS_ERR(vdd_gdsc)) {
 		if (!(PTR_ERR(vdd_gdsc) == -EPROBE_DEFER))
@@ -718,11 +718,17 @@ static int npu_cc_sm8150_probe(struct platform_device *pdev)
 	return ret;
 }
 
+static void npu_cc_sm8150_sync_state(struct device *dev)
+{
+	qcom_cc_sync_state(dev, &npu_cc_sm8150_desc);
+}
+
 static struct platform_driver npu_cc_sm8150_driver = {
 	.probe = npu_cc_sm8150_probe,
 	.driver = {
 		.name = "npu_cc-sm8150",
 		.of_match_table = npu_cc_sm8150_match_table,
+		.sync_state = npu_cc_sm8150_sync_state,
 	},
 };
 
