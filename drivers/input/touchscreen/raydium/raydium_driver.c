@@ -1332,6 +1332,7 @@ exit_error:
 static void raydium_ts_do_suspend(void)
 {
 	unsigned char u8_i = 0;
+	int rc;
 
 	if (g_u8_raw_data_type == 0)
 		g_u8_resetflag = false;
@@ -1340,6 +1341,13 @@ static void raydium_ts_do_suspend(void)
 		return;
 	}
 
+	rc = raydium_enable_regulator(g_raydium_ts, false);
+	if (rc < 0) {
+		LOGD(LOG_ERR, "[touch]%s:Failed to disable regulators:rc=%d\n",
+			__func__, rc);
+	}
+	LOGD(LOG_INFO, "[touch]%s:voltage regulators disabled:rc=%d\n",
+		__func__, rc);
 	/*#ifndef GESTURE_EN*/
 	raydium_irq_control(DISABLE);
 	/*#endif*/
@@ -1381,6 +1389,7 @@ static void raydium_ts_do_resume(void)
 	int i32_ret = 0;
 	unsigned char u8_retry = 0;
 #endif
+	int rc;
 
 
 	LOGD(LOG_INFO, "[touch]%s, %d.\n", __func__, g_raydium_ts->is_suspend);
@@ -1420,6 +1429,14 @@ static void raydium_ts_do_resume(void)
 		g_u8_checkflag = false;
 	}
 #endif
+
+	rc = raydium_enable_regulator(g_raydium_ts, true);
+	if (rc < 0) {
+		LOGD(LOG_ERR, "[touch]%s: failed to enable regulators: rc=%d\n",
+			__func__, rc);
+	}
+	LOGD(LOG_INFO, "[touch]%s: voltage regulators enabled: rc=%d\n",
+		__func__, rc);
 	raydium_irq_control(ENABLE);
 #ifdef GESTURE_EN
 	if (device_may_wakeup(&g_raydium_ts->client->dev)) {
