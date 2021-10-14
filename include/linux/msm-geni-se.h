@@ -9,6 +9,8 @@
 #include <linux/dma-direction.h>
 #include <linux/io.h>
 #include <linux/list.h>
+/* SSC Qup SSR related */
+#include <soc/qcom/subsystem_notif.h>
 
 /* Transfer mode supported by GENI Serial Engines */
 enum se_xfer_mode {
@@ -26,6 +28,38 @@ enum se_protocol_types {
 	I2C,
 	I3C,
 	SPI_SLAVE
+};
+
+/* Notifier block Structure */
+struct ssc_qup_nb {
+	struct notifier_block nb;
+	/*Notifier block pointer to next notifier block structure*/
+	void *next;
+};
+
+/**
+ * struct ssc_qup_ssr	GENI Serial Engine SSC qup SSR Structure.
+ * @is_ssr_down		To check SE status.
+ * @subsys_name		Subsystem name for ssr registration.
+ * @active_list_head	List Head of all client in SSC QUPv3.
+ */
+struct ssc_qup_ssr {
+	struct ssc_qup_nb ssc_qup_nb;
+	bool is_ssr_down;
+	const char *subsys_name;
+	struct list_head active_list_head;
+};
+
+/**
+ * struct se_rsc_ssr	GENI Resource SSR Structure.
+ * @active_list		List of SSC qup SE clients.
+ * @force_suspend	Function pointer for Subsystem shutdown case.
+ * @force_resume	Function pointer for Subsystem restart case.
+ */
+struct se_rsc_ssr {
+	struct list_head active_list;
+	int (*force_suspend)(struct device *ctrl_dev);
+	int (*force_resume)(struct device *ctrl_dev);
 };
 
 /**
@@ -52,6 +86,7 @@ enum se_protocol_types {
  * @num_clk_levels:	Number of valid clock levels in clk_perf_tbl.
  * @clk_perf_tbl:	Table of clock frequency input to Serial Engine clock.
  * @skip_bw_vote:	Used for PMIC over i2c use case to skip the BW vote.
+ * @se_rsc_ssr:		Pointer to Geni resource SSR structure.
  */
 struct se_geni_rsc {
 	struct device *ctrl_dev;
@@ -75,6 +110,7 @@ struct se_geni_rsc {
 	unsigned int num_clk_levels;
 	unsigned long *clk_perf_tbl;
 	bool skip_bw_vote;
+	struct se_rsc_ssr rsc_ssr;
 };
 
 #define PINCTRL_DEFAULT	"default"
