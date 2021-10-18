@@ -253,6 +253,8 @@ static void boot_marker_cleanup(void)
 	spin_lock(&boot_marker_list.slock);
 	list_for_each_entry_safe(marker, temp_addr, &boot_marker_list.list,
 			list) {
+		num_markers--;
+		hash_del(&marker->hash);
 		list_del(&marker->list);
 		kfree(marker);
 	}
