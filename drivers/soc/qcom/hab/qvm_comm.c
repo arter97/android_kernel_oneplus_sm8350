@@ -80,8 +80,9 @@ int physical_channel_send(struct physical_channel *pchan,
 		(unsigned char *)header,
 		sizeof(*header)) != sizeof(*header)) {
 		hab_spin_unlock(&dev->io_lock, irqs_disabled);
-		pr_err("***incompleted pchan send id-type-size %x session %d seq# %d\n",
-			header->id_type_size, header->session_id,
+		pr_err("***incompleted pchan send id-type %x size %x session %d seq# %d\n",
+			header->id_type, header->payload_size,
+			header->session_id,
 			header->sequence);
 		return -EIO;
 	}
@@ -97,8 +98,9 @@ int physical_channel_send(struct physical_channel *pchan,
 			pstat->tx_usec = ts.tv_nsec/NSEC_PER_USEC;
 		} else {
 			hab_spin_unlock(&dev->io_lock, irqs_disabled);
-			pr_err("***incompleted pchan send prof id-type-size %x session %d seq# %d\n",
-				header->id_type_size, header->session_id,
+			pr_err("***incompleted pchan send prof id-type %x size %x session %d seq# %d\n",
+				header->id_type, header->payload_size,
+				header->session_id,
 				header->sequence);
 			return -EINVAL;
 		}
@@ -115,8 +117,9 @@ int physical_channel_send(struct physical_channel *pchan,
 			(unsigned char *)payload,
 			sizebytes) != sizebytes) {
 			hab_spin_unlock(&dev->io_lock, irqs_disabled);
-			pr_err("***incompleted pchan send id-type-size %x session %d seq# %d\n",
-				header->id_type_size, header->session_id,
+			pr_err("***incompleted pchan send id-type %x size %x session %d seq# %d\n",
+				header->id_type, header->payload_size,
+				header->session_id,
 				header->sequence);
 			return -EIO;
 		}
@@ -162,9 +165,10 @@ void physical_channel_rx_dispatch(unsigned long data)
 		if (ret == 0xFFFFFFFF) { /* signature mismatched first time */
 			hab_pipe_rxinfo(dev->pipe_ep, dev->rx_buf, &rd, &wr, &idx);
 
-			pr_err("!!!!! HAB signature mismatch expect %X received %X, id_type_size %X session %X sequence %X\n",
+			pr_err("!!!!! HAB signature mismatch expect %X received %X, id_type %X size %X session %X sequence %X i %d\n",
 				HAB_HEAD_SIGNATURE, header.signature,
-				header.id_type_size,
+				header.id_type,
+				header.payload_size,
 				header.session_id,
 				header.sequence);
 
