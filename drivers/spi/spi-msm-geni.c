@@ -130,12 +130,6 @@ struct spi_geni_gsi {
 	struct gsi_desc_cb desc_cb;
 };
 
-struct spi_geni_ssr {
-	struct mutex ssr_lock;
-	bool is_ssr_down;
-	bool xfer_prepared;
-};
-
 struct spi_geni_master {
 	struct se_geni_rsc spi_rsc;
 	resource_size_t phys_addr;
@@ -184,12 +178,9 @@ struct spi_geni_master {
 	bool slave_state;
 	bool slave_cross_connected;
 	bool use_fixed_timeout;
-	struct spi_geni_ssr spi_ssr;
 };
 
 static void spi_slv_setup(struct spi_geni_master *mas);
-static int ssr_spi_force_suspend(struct device *dev);
-static int ssr_spi_force_resume(struct device *dev);
 
 static ssize_t spi_slave_state_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -1010,21 +1001,13 @@ static int spi_geni_prepare_message(struct spi_master *spi,
 	struct spi_geni_master *mas = spi_master_get_devdata(spi);
 	int count;
 
-	mutex_lock(&mas->spi_ssr.ssr_lock);
-	/* Bail out if prepare_transfer didn't happen due to SSR */
-	if (mas->spi_ssr.is_ssr_down || !mas->spi_ssr.xfer_prepared) {
-		mutex_unlock(&mas->spi_ssr.ssr_lock);
-		return -EINVAL;
-	}
-
 	if (mas->shared_ee) {
 		if (mas->setup) {
 			/* Client to respect system suspend */
 			if (!pm_runtime_enabled(mas->dev)) {
 				GENI_SE_ERR(mas->ipc, false, NULL,
 					"%s: System suspended\n", __func__);
-				ret = -EACCES;
-				goto exit_prepare_message;
+				return -EACCES;
 			}
 
 			ret = pm_runtime_get_sync(mas->dev);
@@ -1057,7 +1040,7 @@ static int spi_geni_prepare_message(struct spi_master *spi,
 			if (ret) {
 				GENI_SE_ERR(mas->ipc, true, NULL,
 					"%s failed: %d\n", __func__, ret);
-				goto exit_prepare_message;
+				return ret;
 			}
 		}
 	}
@@ -1079,7 +1062,6 @@ static int spi_geni_prepare_message(struct spi_master *spi,
 	}
 
 exit_prepare_message:
-	mutex_unlock(&mas->spi_ssr.ssr_lock);
 	return ret;
 }
 
@@ -1327,18 +1309,6 @@ static int spi_geni_prepare_transfer_hardware(struct spi_master *spi)
 	u32 max_speed = spi->cur_msg->spi->max_speed_hz;
 	struct se_geni_rsc *rsc = &mas->spi_rsc;
 
-	mutex_lock(&mas->spi_ssr.ssr_lock);
-	if (mas->spi_ssr.is_ssr_down) {
-		/*
-		 * xfer_prepared will be set to true once prepare_transfer
-		 * hardware is complete.
-		 * It used in prepare_message and transfer_one to bail out
-		 * during SSR.
-		 */
-		mas->spi_ssr.xfer_prepared = false;
-		mutex_unlock(&mas->spi_ssr.ssr_lock);
-		return 0;
-	}
 
 	/* Adjust the IB based on the max speed of the slave in kHz.*/
 	rsc->ib = (max_speed * DEFAULT_BUS_WIDTH) / 1000;
@@ -1347,16 +1317,13 @@ static int spi_geni_prepare_transfer_hardware(struct spi_master *spi)
 	 * Not required for LE as below intializations are specific
 	 * to usecases. For LE, client takes care of get_sync.
 	 */
-	if (mas->is_le_vm) {
-		mutex_unlock(&mas->spi_ssr.ssr_lock);
+	if (mas->is_le_vm)
 		return 0;
-	}
 
 	/* Client to respect system suspend */
 	if (!pm_runtime_enabled(mas->dev)) {
 		GENI_SE_ERR(mas->ipc, false, NULL,
 			"%s: System suspended\n", __func__);
-		mutex_unlock(&mas->spi_ssr.ssr_lock);
 		return -EACCES;
 	}
 
@@ -1382,7 +1349,7 @@ static int spi_geni_prepare_transfer_hardware(struct spi_master *spi)
 			pm_runtime_put_noidle(mas->dev);
 			/* Set device in suspended since resume failed */
 			pm_runtime_set_suspended(mas->dev);
-			goto exit_prepare_transfer_hardware;
+			return ret;
 		}
 
 		if (!mas->setup) {
@@ -1390,7 +1357,6 @@ static int spi_geni_prepare_transfer_hardware(struct spi_master *spi)
 			if (ret) {
 				GENI_SE_ERR(mas->ipc, true, NULL,
 				"%s mas_setup failed: %d\n", __func__, ret);
-				mutex_unlock(&mas->spi_ssr.ssr_lock);
 				return ret;
 			}
 		}
@@ -1403,9 +1369,7 @@ static int spi_geni_prepare_transfer_hardware(struct spi_master *spi)
 				"resume usage count mismatch:%d", count);
 		}
 	}
-exit_prepare_transfer_hardware:
-	mas->spi_ssr.xfer_prepared = true;
-	mutex_unlock(&mas->spi_ssr.ssr_lock);
+
 	return ret;
 }
 
@@ -1413,15 +1377,6 @@ static int spi_geni_unprepare_transfer_hardware(struct spi_master *spi)
 {
 	struct spi_geni_master *mas = spi_master_get_devdata(spi);
 	int count = 0;
-
-	mutex_lock(&mas->spi_ssr.ssr_lock);
-	if (mas->spi_ssr.is_ssr_down || !mas->spi_ssr.xfer_prepared) {
-		/* Call runtime_put to match get in prepare_transfer */
-		pm_runtime_put_noidle(mas->dev);
-		mutex_unlock(&mas->spi_ssr.ssr_lock);
-		return -EINVAL;
-	}
-	mutex_unlock(&mas->spi_ssr.ssr_lock);
 
 	if (mas->shared_ee || mas->is_le_vm)
 		return 0;
@@ -1670,12 +1625,6 @@ static int spi_geni_transfer_one(struct spi_master *spi,
 		return -EINVAL;
 	}
 
-	mutex_lock(&mas->spi_ssr.ssr_lock);
-	if (mas->spi_ssr.is_ssr_down || !mas->spi_ssr.xfer_prepared) {
-		mutex_unlock(&mas->spi_ssr.ssr_lock);
-		return -EINVAL;
-	}
-
 	if (mas->use_fixed_timeout)
 		xfer_timeout = msecs_to_jiffies(SPI_XFER_TIMEOUT_MS);
 	else
@@ -1708,12 +1657,8 @@ static int spi_geni_transfer_one(struct spi_master *spi,
 
 		if (spi->slave)
 			mas->slave_state = true;
-		mutex_unlock(&mas->spi_ssr.ssr_lock);
 		timeout = wait_for_completion_timeout(&mas->xfer_done,
 					xfer_timeout);
-		mutex_lock(&mas->spi_ssr.ssr_lock);
-		if (mas->spi_ssr.is_ssr_down)
-			goto err_ssr_transfer_one;
 		if (spi->slave)
 			mas->slave_state = false;
 
@@ -1784,7 +1729,6 @@ static int spi_geni_transfer_one(struct spi_master *spi,
 			}
 		}
 	}
-	mutex_unlock(&mas->spi_ssr.ssr_lock);
 	return ret;
 err_gsi_geni_transfer_one:
 	geni_se_dump_dbg_regs(&mas->spi_rsc, mas->base, mas->ipc);
@@ -1799,14 +1743,9 @@ err_gsi_geni_transfer_one:
 				"Channel cancel failed\n");
 		}
 	}
-	mutex_unlock(&mas->spi_ssr.ssr_lock);
 	return ret;
 err_fifo_geni_transfer_one:
 	handle_fifo_timeout(spi, xfer);
-	mutex_unlock(&mas->spi_ssr.ssr_lock);
-	return ret;
-err_ssr_transfer_one:
-	mutex_unlock(&mas->spi_ssr.ssr_lock);
 	return ret;
 }
 
@@ -1843,8 +1782,6 @@ static void geni_spi_handle_tx(struct spi_geni_master *mas)
 		int bytes_per_fifo = tx_fifo_width;
 		int bytes_to_write = 0;
 
-		if (mas->spi_ssr.is_ssr_down)
-			break;
 		if ((mas->tx_fifo_width % mas->cur_word_len))
 			bytes_per_fifo =
 				(mas->cur_word_len / BITS_PER_BYTE) + 1;
@@ -1857,7 +1794,7 @@ static void geni_spi_handle_tx(struct spi_geni_master *mas)
 		mb();
 	}
 	mas->tx_rem_bytes -= max_bytes;
-	if (!mas->tx_rem_bytes && !mas->spi_ssr.is_ssr_down) {
+	if (!mas->tx_rem_bytes) {
 		geni_write_reg(0, mas->base, SE_GENI_TX_WATERMARK_REG);
 		/* Barrier here before return to prevent further ISRs */
 		mb();
@@ -1872,9 +1809,6 @@ static void geni_spi_handle_rx(struct spi_geni_master *mas)
 	int rx_bytes = 0;
 	int rx_wc = 0;
 	u8 *rx_buf = NULL;
-
-	if (mas->spi_ssr.is_ssr_down)
-		return;
 
 	if (!mas->cur_xfer)
 		return;
@@ -1904,8 +1838,6 @@ static void geni_spi_handle_rx(struct spi_geni_master *mas)
 		int read_bytes = 0;
 		int j;
 
-		if (mas->spi_ssr.is_ssr_down)
-			break;
 		if ((mas->tx_fifo_width % mas->cur_word_len))
 			bytes_per_fifo =
 				(mas->cur_word_len / BITS_PER_BYTE) + 1;
@@ -1927,13 +1859,6 @@ static irqreturn_t geni_spi_irq(int irq, void *data)
 		GENI_SE_DBG(mas->ipc, false, mas->dev,
 				"%s: device is suspended\n", __func__);
 		goto exit_geni_spi_irq;
-	}
-
-	if (mas->spi_ssr.is_ssr_down) {
-		mas->cmd_done = false;
-		complete(&mas->xfer_done);
-		dev_err(mas->dev, "IRQ at SSR down\n");
-		return IRQ_HANDLED;
 	}
 	m_irq = geni_read_reg(mas->base, SE_GENI_M_IRQ_STATUS);
 	if (mas->cur_xfer_mode == FIFO_MODE) {
@@ -1991,8 +1916,7 @@ static irqreturn_t geni_spi_irq(int irq, void *data)
 			mas->cmd_done = true;
 	}
 exit_geni_spi_irq:
-	if (!mas->spi_ssr.is_ssr_down)
-		geni_write_reg(m_irq, mas->base, SE_GENI_M_IRQ_CLEAR);
+	geni_write_reg(m_irq, mas->base, SE_GENI_M_IRQ_CLEAR);
 	if (mas->cmd_done) {
 		mas->cmd_done = false;
 		complete(&mas->xfer_done);
@@ -2230,12 +2154,10 @@ static int spi_geni_probe(struct platform_device *pdev)
 	spi->unprepare_transfer_hardware
 			= spi_geni_unprepare_transfer_hardware;
 	spi->auto_runtime_pm = false;
-	rsc->rsc_ssr.force_suspend = ssr_spi_force_suspend;
-	rsc->rsc_ssr.force_resume = ssr_spi_force_resume;
+
 	init_completion(&geni_mas->xfer_done);
 	init_completion(&geni_mas->tx_cb);
 	init_completion(&geni_mas->rx_cb);
-	mutex_init(&geni_mas->spi_ssr.ssr_lock);
 	pm_runtime_set_suspended(&pdev->dev);
 	if (!geni_mas->dis_autosuspend) {
 		pm_runtime_set_autosuspend_delay(&pdev->dev,
@@ -2314,11 +2236,6 @@ static int spi_geni_runtime_resume(struct device *dev)
 	struct spi_master *spi = get_spi_master(dev);
 	struct spi_geni_master *geni_mas = spi_master_get_devdata(spi);
 
-	if (geni_mas->spi_ssr.is_ssr_down) {
-		GENI_SE_ERR(geni_mas->ipc, false, NULL,
-			"%s: Error runtime resume in SSR down\n", __func__);
-		return -EAGAIN;
-	}
 	if (geni_mas->is_le_vm) {
 		if (!geni_mas->setup) {
 			ret = spi_geni_mas_setup(spi);
@@ -2410,49 +2327,6 @@ static int spi_geni_suspend(struct device *dev)
 	return 0;
 }
 #endif
-
-static int ssr_spi_force_suspend(struct device *dev)
-{
-	struct spi_master *spi = get_spi_master(dev);
-	struct spi_geni_master *mas = spi_master_get_devdata(spi);
-	int ret = 0;
-
-	mutex_lock(&mas->spi_ssr.ssr_lock);
-	mas->spi_ssr.xfer_prepared = false;
-	disable_irq(mas->irq);
-	mas->spi_ssr.is_ssr_down = true;
-	complete(&mas->xfer_done);
-
-	if (!pm_runtime_status_suspended(mas->dev)) {
-		ret = spi_geni_runtime_suspend(mas->dev);
-		if (ret) {
-			dev_err(mas->dev, "runtime suspend failed %d\n", ret);
-		} else {
-			pm_runtime_disable(mas->dev);
-			pm_runtime_set_suspended(mas->dev);
-			pm_runtime_enable(mas->dev);
-		}
-	}
-
-	GENI_SE_DBG(mas->ipc, false, mas->dev, "force suspend done\n");
-	mutex_unlock(&mas->spi_ssr.ssr_lock);
-
-	return ret;
-}
-
-static int ssr_spi_force_resume(struct device *dev)
-{
-	struct spi_master *spi = get_spi_master(dev);
-	struct spi_geni_master *mas = spi_master_get_devdata(spi);
-
-	mutex_lock(&mas->spi_ssr.ssr_lock);
-	mas->spi_ssr.is_ssr_down = false;
-	enable_irq(mas->irq);
-	GENI_SE_DBG(mas->ipc, false, mas->dev, "force resume done\n");
-	mutex_unlock(&mas->spi_ssr.ssr_lock);
-
-	return 0;
-}
 
 static const struct dev_pm_ops spi_geni_pm_ops = {
 	SET_RUNTIME_PM_OPS(spi_geni_runtime_suspend,
