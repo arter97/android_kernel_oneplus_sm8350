@@ -109,6 +109,7 @@ extern int qcom_scm_pas_mem_setup(u32 peripheral, phys_addr_t addr,
 extern int qcom_scm_pas_mss_reset(bool reset);
 extern int qcom_scm_pas_auth_and_reset(u32 peripheral);
 extern int qcom_scm_pas_shutdown(u32 peripheral);
+extern int qcom_scm_pas_dsentry(u32 peripheral);
 extern int qcom_scm_get_sec_dump_state(u32 *dump_state);
 extern int qcom_scm_tz_blsp_modify_owner(int food, u64 subsystem, int *out);
 extern int qcom_scm_io_readl(phys_addr_t addr, unsigned int *val);
@@ -260,6 +261,7 @@ static inline int qcom_scm_pas_mss_reset(bool reset) { return -ENODEV; }
 static inline int qcom_scm_pas_auth_and_reset(u32 peripheral)
 		{ return -ENODEV; }
 static inline int qcom_scm_pas_shutdown(u32 peripheral) { return -ENODEV; }
+static inline int qcom_scm_pas_dsentry(u32 peripheral) { return -ENODEV; }
 static inline int qcom_scm_get_sec_dump_state(u32 *dump_state)
 		{return -ENODEV; }
 static inline int qcom_scm_tz_blsp_modify_owner(int food, u64 subsystem,

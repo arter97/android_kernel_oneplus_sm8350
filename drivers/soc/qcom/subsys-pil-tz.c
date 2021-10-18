@@ -811,13 +811,17 @@ static int subsys_enter_ds(const struct subsys_desc *subsys)
 {
 
 	struct pil_tz_data *d = subsys_to_data(subsys);
+	u32 scm_ret = 0;
 
 	/* Instruct secure firmware to unprotect memory
 	 * without running tear down sequence here
 	 */
+	scm_ret = qcom_scm_pas_dsentry(d->pas_id);
 
+	disable_unprepare_clocks(d->clks, d->clk_count);
+	disable_regulators(d, d->regs, d->reg_count, false);
 	subsys_disable_all_irqs(d);
-	return 0;
+	return scm_ret;
 }
 
 
