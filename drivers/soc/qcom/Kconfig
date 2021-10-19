@@ -1496,6 +1496,16 @@ config QCOM_ADSP_VOTE_SMP2P
 		This driver can be used to manually release and acquire the ADSP vote
 		from debugfs interface.
 
+config QCOM_SECURE_HIBERNATION
+	bool "Add security support to hibernation"
+	depends on HIBERNATION
+	help
+	  Secure the hibernation snapshot by encrypting
+	  the snapshot at kernel before saving to disk.
+	  This uses GCM-AES crypto algorithm to encrypt the
+	  pages at the kernel.
+	  If not sure, say N.
+
 source "drivers/soc/qcom/icnss2/Kconfig"
 
 source "drivers/soc/qcom/gnsssirf/Kconfig"
