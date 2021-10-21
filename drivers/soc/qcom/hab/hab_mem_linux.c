@@ -47,6 +47,7 @@ static struct pages_list *pages_list_create(
 	struct pages_list *pglist = NULL;
 	unsigned long pfn;
 	int i, j, k = 0, size;
+	unsigned long region_total_page = 0;
 
 	if (!pfn_table)
 		return ERR_PTR(-EINVAL);
@@ -71,11 +72,29 @@ static struct pages_list *pages_list_create(
 	}
 
 	for (i = 0; i < pfn_table->nregions; i++) {
+		if (pfn_table->region[i].size <= 0) {
+			pr_err("pfn_table->region[%d].size %d is less than 1\n",
+				i, pfn_table->region[i].size);
+			goto err_region_total_page;
+		}
+
+		region_total_page += pfn_table->region[i].size;
+		if (region_total_page > exp->payload_count) {
+			pr_err("payload_count %d but region_total_page %lu\n",
+				exp->payload_count, region_total_page);
+			goto err_region_total_page;
+		}
+
 		for (j = 0; j < pfn_table->region[i].size; j++) {
 			pages[k] = pfn_to_page(pfn+j);
 			k++;
 		}
 		pfn += pfn_table->region[i].size + pfn_table->region[i].space;
+	}
+	if (region_total_page != exp->payload_count) {
+		pr_err("payload_count %d and region_total_page %lu are not equal\n",
+			exp->payload_count, region_total_page);
+		goto err_region_total_page;
 	}
 
 	pglist->pages = pages;
@@ -88,6 +107,11 @@ static struct pages_list *pages_list_create(
 	kref_init(&pglist->refcount);
 
 	return pglist;
+
+err_region_total_page:
+	vfree(pages);
+	kfree(pglist);
+	return ERR_PTR(-EINVAL);
 }
 
 static void pages_list_add(struct pages_list *pglist)

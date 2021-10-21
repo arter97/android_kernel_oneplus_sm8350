@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2010-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2010-2021, The Linux Foundation. All rights reserved.
  */
 #include <linux/errno.h>
 #include <linux/module.h>
@@ -429,10 +429,36 @@ static int tz_get_target_freq(struct devfreq *devfreq, unsigned long *freq)
 	return 0;
 }
 
+static int __tz_init(struct devfreq *devfreq)
+{
+	unsigned int tz_pwrlevels[MSM_ADRENO_MAX_PWRLEVELS + 1];
+	unsigned int version, i;
+	int result;
+
+	if (devfreq->profile->max_state < ARRAY_SIZE(tz_pwrlevels)) {
+		for (i = 0; i < devfreq->profile->max_state; i++)
+			tz_pwrlevels[i+1] = devfreq->profile->freq_table[i];
+		tz_pwrlevels[0] = i;
+	} else {
+		pr_err(TAG "tz_pwrlevels[] is too short\n");
+		return -EINVAL;
+	}
+	result = tz_init(&(devfreq->dev), devfreq->data, tz_pwrlevels,
+				sizeof(tz_pwrlevels), &version, sizeof(version));
+	if (result || version > MAX_TZ_VERSION) {
+		pr_err(TAG "tz_init failed - ver(%u)\n", version);
+		result = -EINVAL;
+	}
+	return result;
+}
+
 static int tz_notify(struct notifier_block *nb, unsigned long type, void *devp)
 {
 	int result = 0;
 	struct devfreq *devfreq = devp;
+
+	if (IS_ERR_OR_NULL(devfreq))
+		return notifier_from_errno(-EINVAL);
 
 	switch (type) {
 	case ADRENO_DEVFREQ_NOTIFY_IDLE:
@@ -447,6 +473,9 @@ static int tz_notify(struct notifier_block *nb, unsigned long type, void *devp)
 			mutex_unlock(&partner_gpu_profile->bus_devfreq->lock);
 		}
 		break;
+	case ADRENO_DEVFREQ_NOTIFY_REINIT:
+		result = __tz_init(devfreq);
+		break;
 	/* ignored by this governor */
 	case ADRENO_DEVFREQ_NOTIFY_SUBMIT:
 	default:
@@ -458,9 +487,7 @@ static int tz_notify(struct notifier_block *nb, unsigned long type, void *devp)
 static int tz_start(struct devfreq *devfreq)
 {
 	struct devfreq_msm_adreno_tz_data *priv;
-	unsigned int tz_pwrlevels[MSM_ADRENO_MAX_PWRLEVELS + 1];
-	int i, out, ret;
-	unsigned int version;
+	int i, ret;
 
 	struct msm_adreno_extended_profile *gpu_profile = container_of(
 					(devfreq->profile),
@@ -479,15 +506,9 @@ static int tz_start(struct devfreq *devfreq)
 	priv = devfreq->data;
 	priv->nb.notifier_call = tz_notify;
 
-	out = 1;
-	if (devfreq->profile->max_state < ARRAY_SIZE(tz_pwrlevels)) {
-		for (i = 0; i < devfreq->profile->max_state; i++)
-			tz_pwrlevels[out++] = devfreq->profile->freq_table[i];
-		tz_pwrlevels[0] = i;
-	} else {
-		pr_err(TAG "tz_pwrlevels[] is too short\n");
-		return -EINVAL;
-	}
+	ret = __tz_init(devfreq);
+	if (ret)
+		return ret;
 
 	INIT_WORK(&gpu_profile->partner_start_event_ws,
 					do_partner_start_event);
@@ -497,13 +518,6 @@ static int tz_start(struct devfreq *devfreq)
 					do_partner_suspend_event);
 	INIT_WORK(&gpu_profile->partner_resume_event_ws,
 					do_partner_resume_event);
-
-	ret = tz_init(&devfreq->dev, priv, tz_pwrlevels, sizeof(tz_pwrlevels),
-			&version, sizeof(version));
-	if (ret != 0 || version > MAX_TZ_VERSION) {
-		pr_err(TAG "tz_init failed\n");
-		return ret;
-	}
 
 	for (i = 0; adreno_tz_attr_list[i] != NULL; i++)
 		device_create_file(&devfreq->dev, adreno_tz_attr_list[i]);

@@ -104,7 +104,7 @@ struct virt_msg_hdr {
 	u32 tid;	/* GVM tid */
 	s32 cid;	/* channel id connected to DSP */
 	u32 cmd;	/* command type */
-	u16 len;	/* command length */
+	u32 len;	/* command length */
 	u16 msgid;	/* unique message id */
 	u32 result;	/* message return value */
 } __packed;

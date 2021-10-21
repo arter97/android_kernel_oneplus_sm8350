@@ -36,6 +36,9 @@ struct qcom_scm {
 	u64 dload_mode_addr;
 };
 
+enum qcom_scm_custom_reset_type qcom_scm_custom_reset_type;
+EXPORT_SYMBOL(qcom_scm_custom_reset_type);
+
 static struct qcom_scm *__scm;
 
 static int qcom_scm_clk_enable(void)
@@ -1110,8 +1113,13 @@ static int qcom_scm_do_restart(struct notifier_block *this, unsigned long event,
 {
 	struct qcom_scm *scm = container_of(this, struct qcom_scm, restart_nb);
 
-	if (reboot_mode == REBOOT_WARM)
+	if (reboot_mode == REBOOT_WARM &&
+		qcom_scm_custom_reset_type == QCOM_SCM_RST_NONE)
 		__qcom_scm_reboot(scm->dev);
+
+	if (qcom_scm_custom_reset_type > QCOM_SCM_RST_NONE &&
+			qcom_scm_custom_reset_type < QCOM_SCM_RST_MAX)
+		__qcom_scm_custom_reboot(scm->dev, qcom_scm_custom_reset_type);
 
 	return NOTIFY_OK;
 }

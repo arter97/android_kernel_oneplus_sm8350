@@ -61,6 +61,10 @@ enum print_reason {
 
 #define ITERM_LIMITS_MA			10000
 #define ADC_CHG_ITERM_MASK		32767
+#define PM5100_MAX_LIMITS_MA		2000
+#define PM5100_ADC_CHG_ITERM_MULT	16384
+#define PM5100_RAW_ITERM(iterm)					\
+		div_s64(((int64_t)iterm * PM5100_ADC_CHG_ITERM_MULT), 1000)
 
 #define USBIN_25UA	25000
 #define USBIN_100UA     100000
@@ -441,6 +445,7 @@ int smblite_lib_get_prop_system_temp_level_max(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblite_lib_get_prop_batt_iterm(struct smb_charger *chg,
 				union power_supply_propval *val);
+int smblite_lib_set_prop_batt_iterm(struct smb_charger *chg, int iterm_ma);
 int smblite_lib_get_prop_input_suspend(struct smb_charger *chg,
 					int *val);
 int smblite_lib_set_prop_input_suspend(struct smb_charger *chg,

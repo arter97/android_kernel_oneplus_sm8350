@@ -1021,6 +1021,13 @@ gen_headers_out_arm64 = [
     "linux/netfilter_ipv4/ipt_NATTYPE.h",
     "linux/mhi.h",
     "linux/esoc_ctrl.h",
+    "linux/eavb_shared.h",
+    "audio/linux/msm_audio_ar.h",
+    "linux/qbg.h",
+    "linux/netfilter_ipv4/ipt_TRIGGER.h",
+    "linux/qbg-profile.h",
+    "linux/slatecom_interface.h",
+    "linux/power_state.h",
 ]
 
 genrule {

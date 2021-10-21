@@ -706,13 +706,11 @@ static int ssr_slate_cb(struct notifier_block *this,
 	case SUBSYS_AFTER_SHUTDOWN:
 		pr_debug("Slate after shutdown\n");
 		slatee.e_type = SLATE_AFTER_POWER_DOWN;
-		slatecom_slatedown_handler();
 		send_uevent(&slatee);
 		break;
 	case SUBSYS_BEFORE_POWERUP:
 		pr_debug("Slate before powerup\n");
 		slatee.e_type = SLATE_BEFORE_POWER_UP;
-		slatecom_slatedown_handler();
 		send_uevent(&slatee);
 		break;
 	case SUBSYS_AFTER_POWERUP:
@@ -720,7 +718,8 @@ static int ssr_slate_cb(struct notifier_block *this,
 		slatee.e_type = SLATE_AFTER_POWER_UP;
 		slatecom_set_spi_state(SLATECOM_SPI_FREE);
 		send_uevent(&slatee);
-		if (dev->slatecom_current_state == SLATECOM_STATE_INIT)
+		if (dev->slatecom_current_state == SLATECOM_STATE_INIT ||
+			dev->slatecom_current_state == SLATECOM_STATE_SLATE_SSR)
 			queue_work(dev->slatecom_wq, &dev->slatecom_up_work);
 		break;
 	}

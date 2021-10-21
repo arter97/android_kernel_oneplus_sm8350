@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/debugfs.h>
@@ -26,6 +26,7 @@ bool msm_cvp_cacheop_disabled = !true;
 int msm_cvp_clock_voting = !1;
 bool msm_cvp_syscache_disable = !true;
 bool msm_cvp_dsp_disable = !true;
+bool msm_cvp_dcvs_disable = !true;
 
 #define MAX_DBG_BUF_SIZE 4096
 
@@ -262,7 +263,9 @@ struct dentry *msm_cvp_debugfs_init_drv(void)
 	__debugfs_create(bool, "disable_cacheop",
 			&msm_cvp_cacheop_disabled) &&
 	__debugfs_create(bool, "disable_cvp_syscache",
-			&msm_cvp_syscache_disable);
+			&msm_cvp_syscache_disable)  &&
+	__debugfs_create(bool, "disable_dcvs",
+			&msm_cvp_dcvs_disable);
 
 #undef __debugfs_create
 

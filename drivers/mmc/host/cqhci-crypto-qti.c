@@ -326,6 +326,8 @@ int cqhci_crypto_qti_prep_desc(struct cqhci_host *host, struct mmc_request *mrq,
 	struct ice_data_setting setting;
 	bool bypass = true;
 	short key_index = 0;
+	if (!ice_ctx)
+		return -EINVAL;
 	*ice_ctx = 0;
 
 	if (!req || !req->bio)

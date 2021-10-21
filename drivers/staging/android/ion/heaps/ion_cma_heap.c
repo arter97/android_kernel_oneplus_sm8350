@@ -5,7 +5,7 @@
  * Copyright (C) Linaro 2012
  * Author: <benjamin.gaignard@linaro.org> for ST-Ericsson.
  *
- * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/device.h>
@@ -245,9 +245,29 @@ out:
 	return ret;
 }
 
+#ifdef CONFIG_HIBERNATION
+static int ion_secure_cma_pm_freeze(struct ion_heap *heap)
+{
+	long sz;
+
+	sz = atomic_long_read(&heap->total_allocated);
+	if (sz) {
+		pr_err("%s: %lx bytes won't be saved across hibernation. Aborting.\n",
+		       __func__, sz);
+		return -EINVAL;
+	}
+	return 0;
+}
+#endif
+
 static struct ion_heap_ops ion_secure_cma_ops = {
 	.allocate = ion_secure_cma_allocate,
 	.free = ion_secure_cma_free,
+#ifdef CONFIG_HIBERNATION
+	.pm = {
+		.freeze = ion_secure_cma_pm_freeze,
+	}
+#endif
 };
 
 struct ion_heap *ion_cma_secure_heap_create(struct ion_platform_heap *data)

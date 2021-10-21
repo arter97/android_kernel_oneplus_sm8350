@@ -485,15 +485,6 @@ config SM_GCC_HOLI
 	  Say Y if you want to use peripheral devices such as UART, SPI, I2C,
 	  USB, UFS, SD/eMMC etc.
 
-config SM_GCC_BENGAL
-        tristate "BENGAL Global Clock Controller"
-        depends on COMMON_CLK_QCOM
-        help
-          Support for the global clock controller on Qualcomm Technologies, Inc
-          BENGAL devices.
-          Say Y if you want to use peripheral devices such as UART, SPI, I2C,
-          USB, UFS, SD/eMMC etc.
-
 config SM_GCC_SHIMA
 	tristate "SHIMA Global Clock Controller"
 	depends on COMMON_CLK_QCOM
@@ -539,24 +530,6 @@ config SM_GPUCC_HOLI
 	  Say Y if you want to support graphics controller devices and
 	  functionality such as 3D graphics.
 
-config SM_DISPCC_BENGAL
-	tristate "BENGAL Display Clock Controller"
-	select SM_GCC_BENGAL
-	help
-	  Support for the display clock controller on Qualcomm Technologies, Inc.
-	  BENGAL devices.
-	  Say Y if you want to support display devices and functionality such as
-	  splash screen.
-
-config SM_GPUCC_BENGAL
-        tristate "BENGAL Graphics Clock Controller"
-        select SM_GCC_BENGAL
-        help
-          Support for the graphics clock controller on Qualcomm Technologies,
-          Inc. BENGAL devices.
-          Say Y if you want to support graphics controller devices and
-          functionality such as 3D graphics.
-
 config SM_DISPCC_SHIMA
 	tristate "SHIMA Display Clock Controller"
 	depends on SM_GCC_SHIMA
@@ -592,15 +565,6 @@ config SM_DEBUGCC_HOLI
 	  HOLI devices.
 	  Say Y if you want to support the debug clocks such as
 	  clock measurement functionality.
-
-config SM_DEBUGCC_BENGAL
-        tristate "BENGAL Debug Clock Controller"
-        depends on SM_GCC_BENGAL
-        help
-          Support for the debug clock controller on Qualcomm Technologies, Inc.
-          BENGAL devices.
-          Say Y if you want to support the debug clocks such as
-          clock measurement functionality.
 
 config SDX_GCC_LEMUR
 	tristate "SDXLEMUR Global Clock Controller"
@@ -927,6 +891,15 @@ config SA_VIDEOCC_DIREWOLF
 	  DIREWOLF devices.
 	  Say Y if you want to support video devices and functionality such as
 	  video encode/decode.
+
+config SM_GCC_SCUBA
+	tristate "SCUBA Global Clock Controller"
+	depends on COMMON_CLK_QCOM
+	help
+	  Support for the global clock controller on Qualcomm Technologies, Inc.
+	  SCUBA devices.
+	  Say Y if you want to use peripheral devices such as UART, SPI, I2C,
+	  USB, UFS, SD/eMMC, video encode/decode, camera etc.
 
 endif
 

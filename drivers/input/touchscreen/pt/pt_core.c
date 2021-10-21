@@ -7664,8 +7664,14 @@ static int pt_core_sleep_(struct pt_core_data *cd)
 
 	if (IS_EASY_WAKE_CONFIGURED(cd->easy_wakeup_gesture))
 		rc = pt_put_device_into_easy_wakeup_(cd);
-	else if (cd->cpdata->flags & PT_CORE_FLAG_POWEROFF_ON_SLEEP)
+	else if (cd->cpdata->flags & PT_CORE_FLAG_POWEROFF_ON_SLEEP) {
+		pt_debug(cd->dev, DL_INFO,
+			"%s: Entering into poweroff mode:\n", __func__);
 		rc = pt_core_poweroff_device_(cd);
+		if (rc < 0)
+			pr_err("%s: Poweroff error detected :rc=%d\n",
+				__func__, rc);
+	}
 	else if (cd->cpdata->flags & PT_CORE_FLAG_DEEP_STANDBY)
 		rc = pt_put_device_into_deep_standby_(cd);
 	else
@@ -9490,8 +9496,14 @@ static int pt_core_wake_(struct pt_core_data *cd)
 	if (!(cd->cpdata->flags & PT_CORE_FLAG_SKIP_RESUME)) {
 		if (IS_EASY_WAKE_CONFIGURED(cd->easy_wakeup_gesture))
 			rc = pt_core_wake_device_from_easy_wake_(cd);
-		else if (cd->cpdata->flags & PT_CORE_FLAG_POWEROFF_ON_SLEEP)
+		else if (cd->cpdata->flags & PT_CORE_FLAG_POWEROFF_ON_SLEEP) {
+			pt_debug(cd->dev, DL_INFO,
+				"%s: Entering into poweron mode:\n", __func__);
 			rc = pt_core_poweron_device_(cd);
+			if (rc < 0)
+				pr_err("%s: Poweron error detected: rc=%d\n",
+					__func__, rc);
+		}
 		else if (cd->cpdata->flags & PT_CORE_FLAG_DEEP_STANDBY)
 			rc = pt_core_wake_device_from_deep_standby_(cd);
 		else /* Default action to exit DeepSleep */
@@ -10438,11 +10450,6 @@ static int pt_core_rt_suspend(struct device *dev)
 		return -EAGAIN;
 	}
 
-	rc = pt_enable_regulator(cd, false);
-	if (rc < 0) {
-		dev_err(dev, "%s: Failed to disable regulators: rc=%d\n",
-			__func__, rc);
-	}
 	return 0;
 }
 
@@ -10467,15 +10474,6 @@ static int pt_core_rt_resume(struct device *dev)
 		__func__);
 	if (cd->cpdata->flags & PT_CORE_FLAG_SKIP_RUNTIME)
 		return 0;
-
-	rc = pt_enable_regulator(cd, true);
-	if (rc < 0) {
-		dev_err(dev, "%s: Failed to enable regulators: rc=%d\n",
-			__func__, rc);
-	}
-
-	dev_info(dev, "%s: Runtime voltage regulator enabled: rc=%d\n",
-		__func__, rc);
 
 	rc = pt_core_wake(cd);
 	if (rc < 0) {
@@ -10507,6 +10505,8 @@ static int pt_core_suspend_(struct device *dev)
 	int rc;
 	struct pt_core_data *cd = dev_get_drvdata(dev);
 
+	pt_debug(dev, DL_INFO, "%s: Entering into suspend mode:\n",
+		__func__);
 	rc = pt_core_sleep(cd);
 	if (rc < 0) {
 		pt_debug(dev, DL_ERROR, "%s: Error on sleep\n", __func__);
@@ -10579,7 +10579,7 @@ static int pt_core_suspend(struct device *dev)
  ******************************************************************************/
 static int pt_core_resume_(struct device *dev)
 {
-	int rc;
+	int rc = 0;
 	struct pt_core_data *cd = dev_get_drvdata(dev);
 
 	dev_info(dev, "%s: Entering into resume mode:\n",

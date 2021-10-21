@@ -890,6 +890,67 @@ static long clk_alpha_pll_round_rate(struct clk_hw *hw, unsigned long rate,
 	return clamp(rate, min_freq, max_freq);
 }
 
+void clk_huayra_pll_configure(struct clk_alpha_pll *pll, struct regmap *regmap,
+				const struct alpha_pll_config *config)
+{
+	if (config->config_ctl_val)
+		regmap_write(regmap, PLL_CONFIG_CTL(pll),
+				config->config_ctl_val);
+
+	if (config->config_ctl_hi_val)
+		regmap_write(regmap, PLL_CONFIG_CTL_U(pll),
+				config->config_ctl_hi_val);
+
+	if (config->config_ctl_hi1_val)
+		regmap_write(regmap, PLL_CONFIG_CTL_U1(pll),
+				config->config_ctl_hi1_val);
+
+	if (config->test_ctl_val)
+		regmap_write(regmap, PLL_TEST_CTL(pll),
+				config->test_ctl_val);
+
+	if (config->test_ctl_hi_val)
+		regmap_write(regmap, PLL_TEST_CTL_U(pll),
+				config->test_ctl_hi_val);
+
+	if (config->test_ctl_hi1_val)
+		regmap_write(regmap, PLL_TEST_CTL_U1(pll),
+				config->test_ctl_hi1_val);
+
+	if (config->l)
+		regmap_write(regmap, PLL_L_VAL(pll), config->l);
+
+	if (config->alpha)
+		regmap_write(regmap, PLL_ALPHA_VAL(pll), config->alpha);
+
+	if (config->user_ctl_val)
+		regmap_write(regmap, PLL_USER_CTL(pll),
+				config->user_ctl_val);
+
+	/* Set PLL_BYPASSNL */
+	regmap_update_bits(regmap, PLL_MODE(pll),
+			 PLL_BYPASSNL, PLL_BYPASSNL);
+
+	/*
+	 * H/W requires a 1us delay between disabling the bypass and
+	 * de-asserting the reset.
+	 */
+	mb();
+	udelay(5);
+
+	/* Take PLL out from reset state */
+	regmap_update_bits(regmap, PLL_MODE(pll),
+				 PLL_RESET_N, PLL_RESET_N);
+
+	/* Wait 50us for pll_lock_det bit to go high */
+	mb();
+	udelay(50);
+
+	/* Enables PLL output */
+	regmap_update_bits(regmap, PLL_MODE(pll),
+			 PLL_OUTCTRL, PLL_OUTCTRL);
+}
+
 static unsigned long
 alpha_huayra_pll_calc_rate(u64 prate, u32 l, u32 a)
 {
@@ -1034,12 +1095,20 @@ static int alpha_pll_huayra_set_rate(struct clk_hw *hw, unsigned long rate,
 	return 0;
 }
 
-static long alpha_pll_huayra_round_rate(struct clk_hw *hw, unsigned long rate,
-					unsigned long *prate)
+static int alpha_pll_huayra_determine_rate(struct clk_hw *hw,
+				struct clk_rate_request *req)
 {
+	unsigned long rrate, prate;
 	u32 l, a;
 
-	return alpha_huayra_pll_round_rate(rate, *prate, &l, &a);
+	prate = clk_hw_get_rate(clk_hw_get_parent(hw));
+	rrate = alpha_huayra_pll_round_rate(req->rate, prate, &l, &a);
+
+	req->best_parent_hw = clk_hw_get_parent(hw);
+	req->best_parent_rate = prate;
+	req->rate = rrate;
+
+	return 0;
 }
 
 static int trion_pll_is_enabled(struct clk_alpha_pll *pll,
@@ -1863,6 +1932,74 @@ static void clk_alpha_pll_huayra_init(struct clk_hw *hw)
 		rclk->ops = &clk_alpha_pll_huayra_regmap_ops;
 }
 
+static int get_pll_type(struct clk_alpha_pll *pll,
+				const u8 clk_alpha_pll_regs[][PLL_OFF_MAX_REGS])
+{
+	if (pll->regs)
+		return (pll->regs - clk_alpha_pll_regs[0]) / (PLL_OFF_MAX_REGS);
+
+	pr_debug("pll->regs not defined\n");
+	return -EINVAL;
+}
+
+static void clk_pll_restore_context(struct clk_hw *hw)
+{
+	struct clk_alpha_pll *pll = to_clk_alpha_pll(hw);
+	int type = get_pll_type(pll, clk_alpha_pll_regs);
+
+	if (!pll->config)
+		return;
+
+	switch (type) {
+	case CLK_ALPHA_PLL_TYPE_DEFAULT:
+	case CLK_ALPHA_PLL_TYPE_HUAYRA:
+		clk_alpha_pll_configure(pll, pll->clkr.regmap,
+					pll->config);
+		break;
+	case CLK_ALPHA_PLL_TYPE_FABIA:
+		clk_fabia_pll_configure(pll, pll->clkr.regmap,
+					pll->config);
+		break;
+	case CLK_ALPHA_PLL_TYPE_TRION:
+		clk_trion_pll_configure(pll, pll->clkr.regmap,
+					 pll->config);
+		break;
+	case CLK_ALPHA_PLL_TYPE_LUCID:
+		clk_lucid_pll_configure(pll, pll->clkr.regmap,
+					 pll->config);
+		break;
+	case CLK_ALPHA_PLL_TYPE_ZONDA:
+		clk_zonda_pll_configure(pll, pll->clkr.regmap,
+					pll->config);
+		break;
+	case CLK_ALPHA_PLL_TYPE_ZONDA_EVO:
+		clk_zonda_evo_pll_configure(pll, pll->clkr.regmap, pll->config);
+		break;
+	case CLK_ALPHA_PLL_TYPE_LUCID_5LPE:
+		clk_lucid_5lpe_pll_configure(pll, pll->clkr.regmap,
+					 pll->config);
+		break;
+	case CLK_ALPHA_PLL_TYPE_ZONDA_5LPE:
+		clk_zonda_5lpe_pll_configure(pll, pll->clkr.regmap,
+					pll->config);
+		break;
+	case CLK_ALPHA_PLL_TYPE_REGERA:
+		clk_regera_pll_configure(pll, pll->clkr.regmap,
+					pll->config);
+		break;
+	case CLK_ALPHA_PLL_TYPE_AGERA:
+		clk_agera_pll_configure(pll, pll->clkr.regmap,
+					pll->config);
+		break;
+	case CLK_ALPHA_PLL_TYPE_LUCID_EVO:
+		clk_lucid_evo_pll_configure(pll, pll->clkr.regmap,
+					pll->config);
+		break;
+	default:
+		pr_err("Invalid pll type!\n");
+	}
+}
+
 const struct clk_ops clk_alpha_pll_ops = {
 	.prepare = clk_prepare_regmap,
 	.unprepare = clk_unprepare_regmap,
@@ -1876,6 +2013,7 @@ const struct clk_ops clk_alpha_pll_ops = {
 	.set_rate = clk_alpha_pll_set_rate,
 	.init = clk_alpha_pll_init,
 	.debug_init = clk_common_debug_init,
+	.restore_context = clk_pll_restore_context,
 #ifdef CONFIG_COMMON_CLK_QCOM_DEBUG
 	.list_rate_vdd_level = clk_list_rate_vdd_level,
 #endif
@@ -1891,10 +2029,11 @@ const struct clk_ops clk_alpha_pll_huayra_ops = {
 	.disable = clk_alpha_pll_disable,
 	.is_enabled = clk_alpha_pll_is_enabled,
 	.recalc_rate = alpha_pll_huayra_recalc_rate,
-	.round_rate = alpha_pll_huayra_round_rate,
+	.determine_rate = alpha_pll_huayra_determine_rate,
 	.set_rate = alpha_pll_huayra_set_rate,
 	.debug_init = clk_common_debug_init,
 	.init = clk_alpha_pll_huayra_init,
+	.restore_context = clk_pll_restore_context,
 #ifdef CONFIG_COMMON_CLK_QCOM_DEBUG
 	.list_rate_vdd_level = clk_list_rate_vdd_level,
 #endif
@@ -1912,6 +2051,7 @@ const struct clk_ops clk_alpha_pll_hwfsm_ops = {
 	.recalc_rate = clk_alpha_pll_recalc_rate,
 	.round_rate = clk_alpha_pll_round_rate,
 	.set_rate = clk_alpha_pll_hwfsm_set_rate,
+	.restore_context = clk_pll_restore_context,
 	.debug_init = clk_common_debug_init,
 #ifdef CONFIG_COMMON_CLK_QCOM_DEBUG
 	.list_rate_vdd_level = clk_list_rate_vdd_level,
@@ -1932,6 +2072,7 @@ const struct clk_ops clk_trion_pll_ops = {
 	.set_rate = clk_trion_pll_set_rate,
 	.debug_init = clk_common_debug_init,
 	.init = clk_trion_pll_init,
+	.restore_context = clk_pll_restore_context,
 #ifdef CONFIG_COMMON_CLK_QCOM_DEBUG
 	.list_rate_vdd_level = clk_list_rate_vdd_level,
 #endif
@@ -1950,6 +2091,7 @@ const struct clk_ops clk_trion_fixed_pll_ops = {
 	.round_rate = clk_alpha_pll_round_rate,
 	.debug_init = clk_common_debug_init,
 	.init = clk_trion_pll_init,
+	.restore_context = clk_pll_restore_context,
 #ifdef CONFIG_COMMON_CLK_QCOM_DEBUG
 	.list_rate_vdd_level = clk_list_rate_vdd_level,
 #endif
@@ -2026,6 +2168,7 @@ const struct clk_ops clk_alpha_pll_zonda_ops = {
 	.set_rate = clk_zonda_pll_set_rate,
 	.debug_init = clk_common_debug_init,
 	.init = clk_alpha_pll_zonda_init,
+	.restore_context = clk_pll_restore_context,
 #ifdef CONFIG_COMMON_CLK_QCOM_DEBUG
 	.list_rate_vdd_level = clk_list_rate_vdd_level,
 #endif
@@ -2045,6 +2188,7 @@ const struct clk_ops clk_alpha_pll_zonda_5lpe_ops = {
 	.set_rate = clk_zonda_pll_set_rate,
 	.debug_init = clk_common_debug_init,
 	.init = clk_alpha_pll_zonda_init,
+	.restore_context = clk_pll_restore_context,
 #ifdef CONFIG_COMMON_CLK_QCOM_DEBUG
 	.list_rate_vdd_level = clk_list_rate_vdd_level,
 #endif
@@ -2440,6 +2584,7 @@ const struct clk_ops clk_alpha_pll_fabia_ops = {
 	.round_rate = clk_alpha_pll_round_rate,
 	.debug_init = clk_common_debug_init,
 	.init = clk_fabia_pll_init,
+	.restore_context = clk_pll_restore_context,
 #ifdef CONFIG_COMMON_CLK_QCOM_DEBUG
 	.list_rate_vdd_level = clk_list_rate_vdd_level,
 #endif
@@ -2458,6 +2603,7 @@ const struct clk_ops clk_alpha_pll_fixed_fabia_ops = {
 	.round_rate = clk_alpha_pll_round_rate,
 	.debug_init = clk_common_debug_init,
 	.init = clk_fabia_pll_init,
+	.restore_context = clk_pll_restore_context,
 #ifdef CONFIG_COMMON_CLK_QCOM_DEBUG
 	.list_rate_vdd_level = clk_list_rate_vdd_level,
 #endif
@@ -3372,6 +3518,7 @@ const struct clk_ops clk_alpha_pll_lucid_ops = {
 	.set_rate = alpha_pll_lucid_set_rate,
 	.debug_init = clk_common_debug_init,
 	.init = clk_lucid_pll_init,
+	.restore_context = clk_pll_restore_context,
 #ifdef CONFIG_COMMON_CLK_QCOM_DEBUG
 	.list_rate_vdd_level = clk_list_rate_vdd_level,
 #endif
@@ -3391,6 +3538,7 @@ const struct clk_ops clk_alpha_pll_lucid_5lpe_ops = {
 	.set_rate = alpha_pll_lucid_5lpe_set_rate,
 	.debug_init = clk_common_debug_init,
 	.init = clk_lucid_pll_init,
+	.restore_context = clk_pll_restore_context,
 #ifdef CONFIG_COMMON_CLK_QCOM_DEBUG
 	.list_rate_vdd_level = clk_list_rate_vdd_level,
 #endif
@@ -3428,6 +3576,7 @@ const struct clk_ops clk_alpha_pll_fixed_lucid_ops = {
 	.round_rate = clk_alpha_pll_round_rate,
 	.debug_init = clk_common_debug_init,
 	.init = clk_lucid_pll_init,
+	.restore_context = clk_pll_restore_context,
 #ifdef CONFIG_COMMON_CLK_QCOM_DEBUG
 	.list_rate_vdd_level = clk_list_rate_vdd_level,
 #endif
@@ -3453,6 +3602,7 @@ const struct clk_ops clk_alpha_pll_fixed_lucid_5lpe_ops = {
 	.round_rate = clk_alpha_pll_round_rate,
 	.debug_init = clk_common_debug_init,
 	.init = clk_lucid_pll_init,
+	.restore_context = clk_pll_restore_context,
 #ifdef CONFIG_COMMON_CLK_QCOM_DEBUG
 	.list_rate_vdd_level = clk_list_rate_vdd_level,
 #endif
@@ -3859,6 +4009,7 @@ const struct clk_ops clk_alpha_pll_fixed_lucid_evo_ops = {
 	.round_rate = clk_alpha_pll_round_rate,
 	.debug_init = clk_common_debug_init,
 	.init = clk_lucid_evo_pll_init,
+	.restore_context = clk_pll_restore_context,
 #ifdef CONFIG_COMMON_CLK_QCOM_DEBUG
 	.list_rate_vdd_level = clk_list_rate_vdd_level,
 #endif
@@ -3885,6 +4036,7 @@ const struct clk_ops clk_alpha_pll_lucid_evo_ops = {
 	.set_rate = alpha_pll_lucid_evo_set_rate,
 	.debug_init = clk_common_debug_init,
 	.init = clk_lucid_evo_pll_init,
+	.restore_context = clk_pll_restore_context,
 #ifdef CONFIG_COMMON_CLK_QCOM_DEBUG
 	.list_rate_vdd_level = clk_list_rate_vdd_level,
 #endif
@@ -4147,6 +4299,7 @@ const struct clk_ops clk_alpha_pll_fixed_zonda_evo_ops = {
 	.round_rate = clk_alpha_pll_round_rate,
 	.debug_init = clk_common_debug_init,
 	.init = clk_alpha_pll_zonda_evo_init,
+	.restore_context = clk_pll_restore_context,
 #ifdef CONFIG_COMMON_CLK_QCOM_DEBUG
 	.list_rate_vdd_level = clk_list_rate_vdd_level,
 #endif
@@ -4468,6 +4621,7 @@ const struct clk_ops clk_regera_pll_ops = {
 	.set_rate = clk_regera_pll_set_rate,
 	.debug_init = clk_common_debug_init,
 	.init = clk_regera_pll_init,
+	.restore_context = clk_pll_restore_context,
 #ifdef CONFIG_COMMON_CLK_QCOM_DEBUG
 	.list_rate_vdd_level = clk_list_rate_vdd_level,
 #endif
@@ -4624,6 +4778,7 @@ const struct clk_ops clk_agera_pll_ops = {
 	.set_rate = alpha_pll_agera_set_rate,
 	.debug_init = clk_common_debug_init,
 	.init = clk_agera_pll_init,
+	.restore_context = clk_pll_restore_context,
 #ifdef CONFIG_COMMON_CLK_QCOM_DEBUG
 	.list_rate_vdd_level = clk_list_rate_vdd_level,
 #endif

@@ -172,7 +172,7 @@ struct geni_i2c_clk_fld {
 
 static struct geni_i2c_clk_fld geni_i2c_clk_map[] = {
 	{KHz(100), 7, 10, 11, 26},
-	{KHz(400), 2,  5, 12, 24},
+	{KHz(400), 2,  7, 10, 24},
 	{KHz(1000), 1, 3,  9, 18},
 };
 
@@ -244,12 +244,24 @@ err_ret:
 
 static int geni_i2c_prepare(struct geni_i2c_dev *gi2c)
 {
+	u32 geni_ios = 0;
+
 	if (gi2c->se_mode == UNINITIALIZED) {
 		int proto = get_se_proto(gi2c->base);
 		u32 se_mode;
 
 		if (proto != I2C) {
 			dev_err(gi2c->dev, "Invalid proto %d\n", proto);
+			if (!gi2c->is_le_vm)
+				se_geni_resources_off(&gi2c->i2c_rsc);
+			return -ENXIO;
+		}
+
+		geni_ios = geni_read_reg_nolog(gi2c->base, SE_GENI_IOS);
+		if ((geni_ios & 0x3) != 0x3) { //SCL:b'1, SDA:b'0
+			GENI_SE_DBG(gi2c->ipcl, true, gi2c->dev,
+			"IO lines not in good state, Check power to slave\n");
+
 			if (!gi2c->is_le_vm)
 				se_geni_resources_off(&gi2c->i2c_rsc);
 			return -ENXIO;
@@ -1237,6 +1249,9 @@ static int geni_i2c_probe(struct platform_device *pdev)
 		gi2c->first_resume = true;
 		dev_info(&pdev->dev, "LE-VM usecase\n");
 	}
+
+	if (of_property_read_bool(pdev->dev.of_node, "qcom,leica-used-i2c"))
+		gi2c->i2c_rsc.skip_bw_vote = true;
 
 	gi2c->i2c_rsc.wrapper_dev = &wrapper_pdev->dev;
 	gi2c->i2c_rsc.ctrl_dev = gi2c->dev;

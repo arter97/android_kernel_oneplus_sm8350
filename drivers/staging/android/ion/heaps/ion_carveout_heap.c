@@ -347,6 +347,8 @@ struct ion_sc_entry {
 	struct list_head list;
 	struct ion_heap *heap;
 	u32 token;
+	u64 base;
+	u64 size;
 };
 
 struct ion_sc_heap {
@@ -412,9 +414,43 @@ static void ion_sc_heap_free(struct ion_buffer *buffer)
 	kfree(table);
 }
 
+#ifdef CONFIG_HIBERNATION
+static int ion_secure_carveout_pm_freeze(struct ion_heap *heap)
+{
+	long sz;
+
+	sz = atomic_long_read(&heap->total_allocated);
+	if (sz) {
+		pr_err("%s: %lx bytes won't be saved across hibernation. Aborting.\n",
+		       __func__, sz);
+		return -EINVAL;
+	}
+	return 0;
+}
+
+static int ion_secure_carveout_pm_restore(struct ion_heap *heap)
+{
+	struct ion_sc_heap *manager;
+	struct ion_sc_entry *child;
+
+	manager = container_of(to_msm_ion_heap(heap), struct ion_sc_heap, heap);
+
+	list_for_each_entry(child, &manager->children, list)
+		ion_hyp_assign_from_flags(child->base, child->size,
+					  child->token);
+	return 0;
+}
+#endif
+
 static struct ion_heap_ops ion_sc_heap_ops = {
 	.allocate = ion_sc_heap_allocate,
 	.free = ion_sc_heap_free,
+#ifdef CONFIG_HIBERNATION
+	.pm = {
+		.freeze = ion_secure_carveout_pm_freeze,
+		.restore = ion_secure_carveout_pm_restore,
+	}
+#endif
 };
 
 static int ion_sc_get_dt_token(struct ion_sc_entry *entry,
@@ -464,6 +500,8 @@ static int ion_sc_add_child(struct ion_sc_heap *manager,
 	heap_data.priv = dev;
 	heap_data.base = res.start;
 	heap_data.size = resource_size(&res);
+	entry->base = heap_data.base;
+	entry->size = heap_data.size;
 
 	/* This will zero memory initially */
 	entry->heap = __ion_carveout_heap_create(&heap_data, false);

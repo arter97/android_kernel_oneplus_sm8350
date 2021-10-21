@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
 /*
- * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/debugfs.h>
@@ -38,6 +38,7 @@
 #define GET_FIELD(a) ((strnstr(#a, ".", 80) + 1))
 
 #ifdef CONFIG_ARM
+#undef readq_relaxed
 #define readq_relaxed(a) ({			\
 	u64 val = readl_relaxed((a) + 4);	\
 	val <<= 32;				\

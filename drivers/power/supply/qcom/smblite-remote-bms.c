@@ -3,6 +3,8 @@
  * Copyright (c) 2021 The Linux Foundation. All rights reserved.
  */
 
+#define pr_fmt(fmt)	"REMOTE-FG: %s: " fmt, __func__
+
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/iio/consumer.h>
@@ -21,18 +23,6 @@
 #include "battery-profile-loader.h"
 #include "smb5-iio.h"
 #include "smblite-remote-bms.h"
-
-#define SEB_BUF_HEADER_SIZE		2
-#define SEB_EACH_OPCODE_SIZE		1
-#define SEB_EACH_DATA_SIZE		4
-#define SEB_EACH_PARAM_SIZE		(SEB_EACH_OPCODE_SIZE + SEB_EACH_DATA_SIZE)
-#define BMS_WRITE			1
-#define BMS_READ			0
-
-#define BMS_READ_INTERVAL_MS		30000
-
-#define REMOTE_FG_VOTER			"REMOTE_FG_VOTER"
-#define REMOTE_FG_DEBUG_BATT_SOC	67
 
 static struct smblite_remote_bms *the_bms;
 
@@ -138,6 +128,8 @@ int remote_bms_get_prop(int channel, int *val, int src)
 	case SMB5_QG_CAPACITY:
 		if (is_debug_batt_id(the_bms))
 			*val = REMOTE_FG_DEBUG_BATT_SOC;
+		else if (!the_bms->is_seb_up)
+			*val = REMOTE_FG_FAKE_BATT_SOC;
 		else
 			rc = bms_get_buffered_data(channel, val, src);
 		break;
@@ -228,143 +220,6 @@ static void periodic_fg_work(struct work_struct *work)
 				msecs_to_jiffies(BMS_READ_INTERVAL_MS));
 }
 
-static void rx_data_work(struct work_struct *work)
-{
-	struct smblite_remote_bms *bms = container_of(work,
-						struct smblite_remote_bms,
-						rx_data_work);
-	int rc = -EINVAL, i;
-	unsigned int rx_buf_size, buf_ptr = 0, param;
-	unsigned char command;
-	unsigned char num_params;
-	char *rx_buf;
-	union power_supply_propval prop = {0, };
-
-	vote(bms->awake_votable, REMOTE_FG_VOTER, true, 0);
-
-	mutex_lock(&bms->rx_lock);
-
-	command = *(unsigned char *)(bms->rx_buf);
-	num_params = *(unsigned char *)(bms->rx_buf + 1);
-	rx_buf_size = SEB_BUF_HEADER_SIZE + (RX_MAX * SEB_EACH_PARAM_SIZE);
-
-	if (command != BMS_READ) {
-		pr_err("Packet with invalid command received, cannot process\n");
-		goto out;
-	}
-
-	pr_debug("Received data from remote-fg with %d parameteres\n", num_params);
-
-	rx_buf = (char *)(bms->rx_buf + SEB_BUF_HEADER_SIZE);
-
-	if (num_params > RX_MAX)
-		num_params = RX_MAX;
-
-	for (i = 0, buf_ptr = 0; i < num_params; i++) {
-		param = rx_buf[buf_ptr++];
-		bms->rx_params[param].data = *(unsigned int *)(rx_buf + buf_ptr);
-		buf_ptr += 4;
-		pr_debug("param:%u data:%u\n", param, bms->rx_params[param].data);
-	}
-
-	/* Process important parameter updates from QBG */
-	if (bms->rx_params[RECHARGE_TRIGGER].data != bms->force_recharge) {
-		bms->force_recharge = bms->rx_params[RECHARGE_TRIGGER].data;
-		rc = bms->iio_write(bms->dev, PSY_IIO_FORCE_RECHARGE,
-					bms->force_recharge);
-		if (rc < 0) {
-			pr_err("Failed to set force recharge, rc=%d\n",
-				rc);
-			goto out;
-		}
-
-		if (bms->rx_params[RECHARGE_FV].data != bms->recharge_float_voltage) {
-			bms->recharge_float_voltage = bms->rx_params[RECHARGE_FV].data;
-			prop.intval = bms->recharge_float_voltage;
-			rc = power_supply_set_property(bms->batt_psy,
-					POWER_SUPPLY_PROP_VOLTAGE_MAX, &prop);
-			if (rc < 0) {
-				pr_err("Failed to set voltage_max property on batt_psy, rc=%d\n",
-					rc);
-				goto out;
-			}
-		}
-	}
-
-	if (!rc)
-		pr_debug("Finished processing rx buf from remote-fg\n");
-
-out:
-	mutex_unlock(&bms->rx_lock);
-	vote(bms->awake_votable, REMOTE_FG_VOTER, false, 0);
-	kfree(bms->rx_buf);
-}
-
-static int seb_notifier_cb(struct notifier_block *nb,
-			unsigned long event, void *data)
-{
-	struct smblite_remote_bms *bms = container_of(nb,
-			struct smblite_remote_bms, seb_nb);
-	int rc, buf_size;
-	u8 num_params;
-
-	if (is_debug_batt_id(bms))
-		return 0;
-
-	if (event == GLINK_CHANNEL_STATE_UP) {
-		bms->is_seb_up = true;
-
-		rc = remote_bms_get_data(bms);
-		if (rc < 0) {
-			pr_err("Couldn't request runtime data from QBG, rc=%d\n");
-			return rc;
-		}
-		pr_debug("Slate-UP, requested first data from QBG\n");
-
-		/* send the first charger status */
-		if (!work_pending(&bms->psy_status_change_work))
-			schedule_work(&bms->psy_status_change_work);
-
-		return 0;
-	} else if (event != GMI_SLATE_EVENT_QBG) {
-		pr_debug("SEB event is not for GMI_SLATE_EVENT_QBG\n");
-		return 0;
-	}
-
-	/* valid data received */
-	if (work_pending(&bms->rx_data_work))
-		return 0;
-
-	if (!data) {
-		pr_err("Invalid buffer received\n");
-		return -EINVAL;
-	}
-
-	num_params = *(u8 *)(data + 1);
-	if (!num_params) {
-		pr_err("No params received\n");
-		return -EINVAL;
-	}
-
-	buf_size = SEB_BUF_HEADER_SIZE + (num_params * SEB_EACH_PARAM_SIZE);
-
-	bms->rx_buf = kzalloc(buf_size, GFP_KERNEL);
-	if (!bms->rx_buf)
-		return -ENOMEM;
-
-	memcpy(bms->rx_buf, data, buf_size);
-
-	/* Process QBG data */
-	schedule_work(&bms->rx_data_work);
-
-	/* Cancel and re-schedule periodic work to read QBG data */
-	cancel_delayed_work(&bms->periodic_fg_work);
-	schedule_delayed_work(&bms->periodic_fg_work,
-				msecs_to_jiffies(BMS_READ_INTERVAL_MS));
-
-	return 0;
-}
-
 static int remote_bms_send_data(struct smblite_remote_bms *bms)
 {
 	int rc;
@@ -412,7 +267,215 @@ free_tx_buf:
 	return rc;
 }
 
-static int remote_bms_set_batt_init_props(struct smblite_remote_bms *bms)
+static int remote_bms_handle_recharge(struct smblite_remote_bms *bms)
+{
+	int rc = 0;
+	union power_supply_propval prop = {0, };
+	int force_recharge = bms->rx_params[RECHARGE_TRIGGER].data;
+	int recharge_fv = bms->rx_params[RECHARGE_FV].data;
+	int recharge_iterm = bms->rx_params[RECHARGE_ITERM].data;
+
+	if (force_recharge != bms->force_recharge) {
+		bms->force_recharge = force_recharge;
+		if (!force_recharge)
+			return 0;
+
+		pr_debug("Recharge configuration requested with FV:%duV Iterm:%dmA\n",
+						recharge_fv, recharge_iterm);
+
+		if ((recharge_fv >= 0) && (recharge_fv != bms->recharge_float_voltage)) {
+			prop.intval = bms->recharge_float_voltage = recharge_fv;
+			rc = power_supply_set_property(bms->batt_psy,
+					POWER_SUPPLY_PROP_VOLTAGE_MAX, &prop);
+			if (rc < 0) {
+				pr_err("Failed to set recharge voltage_max property on batt_psy, rc=%d\n",
+					rc);
+				return rc;
+			}
+		}
+
+		/* Configure charger iterm only if digital termination is used */
+		if (bms->default_iterm_ma && (bms->default_iterm_ma != -EINVAL) &&
+			(recharge_iterm != bms->recharge_iterm)) {
+			prop.intval = bms->recharge_iterm = recharge_iterm;
+			/* smblite charger expects termination current with -ve sign */
+			prop.intval = (-1 * prop.intval);
+			rc = power_supply_set_property(bms->batt_psy,
+					POWER_SUPPLY_PROP_CHARGE_TERM_CURRENT, &prop);
+			if (rc < 0) {
+				pr_err("Failed to set recharge charge_term_current property on batt_psy, rc=%d\n",
+					rc);
+				return rc;
+			}
+		}
+
+		rc = bms->iio_write(bms->dev, PSY_IIO_FORCE_RECHARGE, bms->force_recharge);
+		if (rc < 0)
+			pr_err("Failed to set force recharge, rc=%d\n", rc);
+
+		pr_debug("Recharge configuration completed with FV:%duV Iterm:%dmA\n",
+					bms->recharge_float_voltage, bms->recharge_iterm);
+	}
+
+	return rc;
+}
+
+static void rx_data_work(struct work_struct *work)
+{
+	struct smblite_remote_bms *bms = container_of(work,
+						struct smblite_remote_bms,
+						rx_data_work);
+	int rc = -EINVAL, i;
+	unsigned int buf_ptr = 0, param;
+	unsigned char num_params;
+	char *rx_buf;
+
+	vote(bms->awake_votable, REMOTE_FG_VOTER, true, 0);
+
+	mutex_lock(&bms->rx_lock);
+
+	num_params = *(unsigned char *)(bms->rx_buf + 1);
+
+	pr_debug("Processing %d parameteres\n", num_params);
+
+	rx_buf = (char *)(bms->rx_buf + SEB_BUF_HEADER_SIZE);
+
+	if (num_params > SEB_MAX_RX_PARAMS)
+		num_params = SEB_MAX_RX_PARAMS;
+
+	for (i = 0, buf_ptr = 0; i < num_params; i++) {
+		param = rx_buf[buf_ptr++];
+
+		switch (param) {
+		case CAPACITY:
+		case CURRENT_NOW:
+		case VOLTAGE_OCV:
+		case CYCLE_COUNT:
+		case CHARGE_COUNTER:
+		case CHARGE_FULL:
+		case CHARGE_FULL_DESIGN:
+		case TIME_TO_FULL:
+		case TIME_TO_EMPTY:
+		case SOH:
+		case RECHARGE_TRIGGER:
+		case RECHARGE_FV:
+		case RECHARGE_ITERM:
+		case REQUEST_CHG_DATA:
+			bms->rx_params[param].data =
+					*(unsigned int *)(rx_buf + buf_ptr);
+			buf_ptr += 4;
+			pr_debug("param:%u data:%u\n", param, bms->rx_params[param].data);
+			break;
+		default:
+			pr_debug("Unsupported remote-fg parameter %d with value %d\n",
+					param, *(unsigned int *)(rx_buf + buf_ptr));
+			buf_ptr += 4;
+			break;
+		};
+	}
+
+	rc = remote_bms_handle_recharge(bms);
+	if (rc < 0) {
+		pr_err("Failed to handle recharge, rc=%d\n",
+			rc);
+		goto out;
+	}
+
+	if (bms->rx_params[REQUEST_CHG_DATA].data) {
+		pr_debug("Charger data requested by remote-fg\n");
+
+		rc = remote_bms_send_data(bms);
+		if (rc < 0) {
+			pr_err("Failed to send data to remote-fg, rc=%d\n",
+				rc);
+			goto out;
+		}
+	}
+
+	if (!rc)
+		pr_debug("Finished processing rx buf from remote-fg\n");
+
+out:
+	mutex_unlock(&bms->rx_lock);
+	vote(bms->awake_votable, REMOTE_FG_VOTER, false, 0);
+}
+
+static int seb_notifier_cb(struct notifier_block *nb,
+			unsigned long event, void *data)
+{
+	struct smblite_remote_bms *bms = container_of(nb,
+			struct smblite_remote_bms, seb_nb);
+	int rc, buf_size;
+	u8 command, num_params;
+
+	if (is_debug_batt_id(bms))
+		return 0;
+
+	if (event == GLINK_CHANNEL_STATE_UP) {
+		bms->is_seb_up = true;
+
+		rc = remote_bms_get_data(bms);
+		if (rc < 0) {
+			pr_err("Couldn't request runtime data from QBG, rc=%d\n");
+			return rc;
+		}
+		pr_debug("Slate-UP, requested first data from QBG\n");
+
+		/* send the first charger status */
+		if (!work_pending(&bms->psy_status_change_work))
+			schedule_work(&bms->psy_status_change_work);
+
+		schedule_delayed_work(&bms->periodic_fg_work,
+				msecs_to_jiffies(BMS_READ_INTERVAL_MS));
+		return 0;
+	} else if (event != GMI_SLATE_EVENT_QBG) {
+		pr_debug("SEB event is not for GMI_SLATE_EVENT_QBG\n");
+		return 0;
+	}
+
+	/* Always process latest data from remote-fg */
+	cancel_work_sync(&bms->rx_data_work);
+
+	if (!data) {
+		pr_err("Invalid buffer received from remote-fg\n");
+		return -EINVAL;
+	}
+
+	command = *(u8 *)data;
+	if (command != BMS_READ) {
+		pr_err("Packet with invalid command %d received, cannot process\n", command);
+		return -EINVAL;
+	}
+
+	num_params = *(u8 *)(data + 1);
+	if (!num_params) {
+		pr_err("No params received from remote-fg\n");
+		return -EINVAL;
+	}
+
+	pr_debug("Remote-fg data received: event:%d command:%d num_params:%d\n",
+			event, command, num_params);
+
+	buf_size = SEB_BUF_HEADER_SIZE + (num_params * SEB_EACH_PARAM_SIZE);
+	if (buf_size > SEB_RX_BUF_SIZE) {
+		pr_err("Received more parameters from remote-fg, processing only till %d bytes\n",
+			SEB_RX_BUF_SIZE);
+	}
+
+	memcpy(bms->rx_buf, data, SEB_RX_BUF_SIZE);
+
+	/* Process QBG data */
+	schedule_work(&bms->rx_data_work);
+
+	/* Cancel and re-schedule periodic work to read QBG data */
+	cancel_delayed_work(&bms->periodic_fg_work);
+	schedule_delayed_work(&bms->periodic_fg_work,
+				msecs_to_jiffies(BMS_READ_INTERVAL_MS));
+
+	return 0;
+}
+
+static int remote_bms_set_battery_params(struct smblite_remote_bms *bms)
 {
 	int rc;
 	union power_supply_propval prop = {0, };
@@ -435,8 +498,21 @@ static int remote_bms_set_batt_init_props(struct smblite_remote_bms *bms)
 		return rc;
 	}
 
-	pr_debug("Set max voltage:%duV and max_current:%dmA to charger\n",
-			bms->float_volt_uv, bms->fastchg_curr_ma);
+	if (bms->default_iterm_ma != -EINVAL) {
+		prop.intval = bms->default_iterm_ma;
+		rc = power_supply_set_property(bms->batt_psy,
+				POWER_SUPPLY_PROP_CHARGE_TERM_CURRENT, &prop);
+		if (rc < 0) {
+			pr_err("Failed to set charge_current_max property on batt_psy, rc=%d\n",
+				rc);
+			return rc;
+		}
+	}
+
+	bms->recharge_float_voltage = bms->recharge_iterm = 0;
+
+	pr_debug("Set iterm:%dmA max voltage:%duV and max_current:%dmA to charger\n",
+			bms->default_iterm_ma, bms->float_volt_uv, bms->fastchg_curr_ma);
 
 	return rc;
 }
@@ -444,13 +520,23 @@ static int remote_bms_set_batt_init_props(struct smblite_remote_bms *bms)
 static bool is_batt_available(struct smblite_remote_bms *bms)
 {
 	int rc;
+	union power_supply_propval prop = {0, };
 
 	if (!bms->batt_psy) {
 		bms->batt_psy = power_supply_get_by_name("battery");
 		if (!bms->batt_psy)
 			return false;
 
-		rc = remote_bms_set_batt_init_props(bms);
+		/*
+		 * Read termination current from charger,
+		 * Use it to configure iterm after recharge upon USB removal.
+		 */
+		rc = power_supply_get_property(bms->batt_psy,
+				POWER_SUPPLY_PROP_CHARGE_TERM_CURRENT, &prop);
+		if (!rc)
+			bms->default_iterm_ma = prop.intval;
+
+		rc = remote_bms_set_battery_params(bms);
 		return (rc < 0) ? false : true;
 	}
 
@@ -514,6 +600,18 @@ static void psy_status_change_work(struct work_struct *work)
 	}
 	charge_type = prop.intval;
 
+	/*
+	 * Set FCC and iterm back to default value on charger removal
+	 * as they could have been updated during recharge.
+	 */
+	if (bms->charger_present && !charger_present) {
+		rc = remote_bms_set_battery_params(bms);
+		if (rc < 0) {
+			pr_err("Failed to set battery FCC and FV on charger removal\n");
+			goto out;
+		}
+	}
+
 	if ((charge_status != bms->charge_status) ||
 	    (charger_present != bms->charger_present) ||
 	    (charge_type != bms->charge_type)) {
@@ -521,9 +619,12 @@ static void psy_status_change_work(struct work_struct *work)
 		bms->charger_present = charger_present;
 		bms->charge_type = charge_type;
 
+		pr_debug("Charger update: charger_status:%d charger_present:%d charger_type:%d\n",
+				bms->charge_status, bms->charger_present, bms->charge_type);
+
 		rc = remote_bms_send_data(bms);
 		if (rc < 0)
-			pr_err("Failed to send data to remote-fg\n");
+			pr_err("Failed to send data to remote-fg, rc=%d\n", rc);
 	}
 
 out:

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-/* Copyright (c) 2013-2020, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
  */
 
 #ifndef UFS_QCOM_H_
@@ -377,6 +377,7 @@ struct ufs_qcom_host {
 	struct ufs_qcom_qos_req *ufs_qos;
 	bool bypass_g4_cfgready;
 	bool is_dt_pm_level_read;
+	bool disable_wb_support;
 };
 
 static inline u32

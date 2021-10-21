@@ -99,6 +99,7 @@ MODULE_PARM_DESC(eee_timer, "LPI tx expiration time in msec");
 #define DWC_ETH_QOS_MICREL_INTR_LEVEL 0x4000
 #define PHY_ID_KSZ9031		0x00221620
 #define MICREL_PHY_ID PHY_ID_KSZ9031
+#define PHY_ID_KSZ9131		0x00221640
 
 /* By default the driver will use the ring mode to manage tx and rx descriptors,
  * but allow user to force to use the chain instead of the ring
@@ -387,6 +388,11 @@ static void stmmac_eee_ctrl_timer(struct timer_list *t)
 bool stmmac_eee_init(struct stmmac_priv *priv)
 {
 	int tx_lpi_timer = priv->tx_lpi_timer;
+
+	if (priv->phydev && ((priv->phydev->phy_id &
+	     priv->phydev->drv->phy_id_mask)
+	     == PHY_ID_KSZ9131))
+		return false;
 
 	/* Using PCS we cannot dial with the phy registers at this stage
 	 * so we do not support extra feature like EEE.

@@ -325,6 +325,9 @@ static bool __disable_cx_regulator_wait(struct regulator *reg,
 
 	regulator_disable(reg);
 
+	if (IS_ENABLED(CONFIG_ARM_SMMU_POWER_ALWAYS_ON))
+		return true;
+
 	for (;;) {
 		if (adreno_is_a619_holi(adreno_dev))
 			adreno_read_gmu_wrapper(adreno_dev,
@@ -1203,7 +1206,7 @@ int a6xx_rb_start(struct adreno_device *adreno_dev)
 	 * Take the GPU out of secure mode. Try the zap shader if it is loaded,
 	 * otherwise just try to write directly to the secure control register
 	 */
-	if (!adreno_dev->zap_loaded)
+	if (!adreno_dev->zap_handle)
 		kgsl_regwrite(device, A6XX_RBBM_SECVID_TRUST_CNTL, 0);
 	else {
 		cmds = adreno_ringbuffer_allocspace(rb, 2);

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2013-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2019,2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/atomic.h>
@@ -62,7 +62,7 @@ struct msm_rtb_state {
 };
 
 #if defined(CONFIG_QCOM_RTB_SEPARATE_CPUS)
-DEFINE_PER_CPU(atomic_t, msm_rtb_idx_cpu);
+static DEFINE_PER_CPU(atomic_t, msm_rtb_idx_cpu);
 #else
 static atomic_t msm_rtb_idx;
 #endif
@@ -249,7 +249,7 @@ static int msm_rtb_probe(struct platform_device *pdev)
 		pnode = of_parse_phandle(pdev->dev.of_node,
 						"linux,contiguous-region", 0);
 		if (pnode != NULL) {
-			const u32 *addr;
+			const __be32 *addr;
 
 			addr = of_get_address(pnode, 0, &size, NULL);
 			if (!addr) {

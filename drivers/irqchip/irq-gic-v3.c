@@ -18,7 +18,6 @@
 #include <linux/percpu.h>
 #include <linux/refcount.h>
 #include <linux/slab.h>
-#include <linux/suspend.h>
 #include <linux/msm_rtb.h>
 #include <linux/wakeup_reason.h>
 
@@ -34,6 +33,8 @@
 #include <asm/virt.h>
 
 #include <linux/syscore_ops.h>
+#include <linux/suspend.h>
+#include <linux/notifier.h>
 
 #include "irq-gic-common.h"
 
@@ -59,6 +60,14 @@ struct gic_chip_data {
 	bool			has_rss;
 	unsigned int		ppi_nr;
 	struct partition_desc	**ppi_descs;
+#ifdef CONFIG_HIBERNATION
+	unsigned int enabled_irqs[32];
+	unsigned int active_irqs[32];
+	unsigned int irq_edg_lvl[64];
+	unsigned int ppi_edg_lvl;
+	unsigned int enabled_sgis;
+	unsigned int pending_sgis;
+#endif
 };
 
 static struct gic_chip_data gic_data __read_mostly;
@@ -138,6 +147,9 @@ static enum gic_intid_range get_intid_range(struct irq_data *d)
 {
 	return __get_intid_range(d->hwirq);
 }
+
+static void gic_dist_init(void);
+static void gic_cpu_init(void);
 
 static inline unsigned int gic_irq(struct irq_data *d)
 {
@@ -576,9 +588,55 @@ static int gic_irq_set_vcpu_affinity(struct irq_data *d, void *vcpu)
 }
 
 #ifdef CONFIG_PM
+#ifdef CONFIG_HIBERNATION
+extern int in_suspend;
+static bool hibernation;
+
+static int gic_suspend_notifier(struct notifier_block *nb,
+				unsigned long event,
+				void *dummy)
+{
+	if (event == PM_HIBERNATION_PREPARE)
+		hibernation = true;
+	else if (event == PM_POST_HIBERNATION)
+		hibernation = false;
+	return NOTIFY_OK;
+}
+
+static struct notifier_block gic_notif_block = {
+	.notifier_call = gic_suspend_notifier,
+};
+
+static void gic_hibernation_suspend(void)
+{
+	int i;
+	void __iomem *base = gic_data.dist_base;
+	void __iomem *rdist_base = gic_data_rdist_sgi_base();
+
+	gic_data.enabled_sgis = readl_relaxed(rdist_base + GICD_ISENABLER);
+	gic_data.pending_sgis = readl_relaxed(rdist_base + GICD_ISPENDR);
+	/* Store edge level for PPIs by reading GICR_ICFGR1 */
+	gic_data.ppi_edg_lvl = readl_relaxed(rdist_base + GICR_ICFGR0 + 4);
+
+	for (i = 0; i * 32 < GIC_LINE_NR; i++) {
+		gic_data.enabled_irqs[i] = readl_relaxed(base +
+						GICD_ISENABLER + i * 4);
+		gic_data.active_irqs[i] = readl_relaxed(base +
+						GICD_ISPENDR + i * 4);
+	}
+
+	for (i = 2; i < GIC_LINE_NR / 16; i++)
+		gic_data.irq_edg_lvl[i] = readl_relaxed(base +
+						GICD_ICFGR + i * 4);
+}
+#endif
 
 static int gic_suspend(void)
 {
+#ifdef CONFIG_HIBERNATION
+	if (unlikely(hibernation))
+		gic_hibernation_suspend();
+#endif
 	return 0;
 }
 
@@ -627,6 +685,47 @@ static void gic_resume_one(struct gic_chip_data *gic)
 
 static void gic_resume(void)
 {
+#ifdef CONFIG_HIBERNATION
+	int i;
+	void __iomem *base = gic_data.dist_base;
+	void __iomem *rdist_base = gic_data_rdist_sgi_base();
+
+	/*
+	 * in_suspend is defined in hibernate.c and will be 0 during
+	 * hibernation restore case. Also it willl be 0 for suspend to ram case
+	 * and similar cases. Underlying code will not get executed in regular
+	 * cases and will be executed only for hibernation restore.
+	 */
+	if (unlikely((in_suspend == 0 && hibernation))) {
+		pr_info("Re-initializing gic in hibernation restore\n");
+		gic_dist_init();
+		gic_cpu_init();
+		/* Activate and enable SGIs and PPIs */
+		writel_relaxed(gic_data.enabled_sgis,
+			       rdist_base + GICD_ISENABLER);
+		writel_relaxed(gic_data.pending_sgis,
+			       rdist_base + GICD_ISPENDR);
+		/* Restore edge and level triggers for PPIs from GICR_ICFGR1 */
+		writel_relaxed(gic_data.ppi_edg_lvl,
+			       rdist_base + GICR_ICFGR0 + 4);
+
+		/* Restore edge and level triggers */
+		for (i = 2; i < GIC_LINE_NR / 16; i++)
+			writel_relaxed(gic_data.irq_edg_lvl[i],
+					base + GICD_ICFGR + i * 4);
+		gic_dist_wait_for_rwp();
+
+		/* Activate and enable interrupts from backup */
+		for (i = 0; i * 32 < GIC_LINE_NR; i++) {
+			writel_relaxed(gic_data.active_irqs[i],
+				       base + GICD_ISPENDR + i * 4);
+
+			writel_relaxed(gic_data.enabled_irqs[i],
+				       base + GICD_ISENABLER + i * 4);
+		}
+		gic_dist_wait_for_rwp();
+	}
+#endif
 	gic_resume_one(&gic_data);
 }
 
@@ -789,7 +888,7 @@ static bool gic_has_group0(void)
 	return val != 0;
 }
 
-static void __init gic_dist_init(void)
+static void gic_dist_init(void)
 {
 	unsigned int i;
 	u64 affinity;
@@ -1858,7 +1957,11 @@ static int __init gicv3_of_init(struct device_node *node, struct device_node *pa
 			     redist_stride, &node->fwnode);
 	if (err)
 		goto out_unmap_rdist;
-
+#ifdef CONFIG_HIBERNATION
+	err = register_pm_notifier(&gic_notif_block);
+	if (err)
+		goto out_unmap_rdist;
+#endif
 	gic_populate_ppi_partitions(node);
 
 	if (static_branch_likely(&supports_deactivate_key))

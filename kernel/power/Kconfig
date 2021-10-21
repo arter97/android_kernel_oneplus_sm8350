@@ -39,6 +39,7 @@ config HIBERNATION
 	select LZO_COMPRESS
 	select LZO_DECOMPRESS
 	select CRC32
+	select DEBUG_ION_TRACK_HEAP_MEM
 	---help---
 	  Enable the suspend to disk (STD) functionality, which is usually
 	  called "hibernation" in user interfaces.  STD checkpoints the

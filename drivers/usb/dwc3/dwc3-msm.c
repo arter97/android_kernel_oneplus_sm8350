@@ -4130,6 +4130,7 @@ static int dwc3_msm_vbus_notifier(struct notifier_block *nb,
 static int dwc3_msm_extcon_register(struct dwc3_msm *mdwc)
 {
 	struct device_node *node = mdwc->dev->of_node;
+	struct dwc3 *dwc = platform_get_drvdata(mdwc->dwc3);
 	struct extcon_dev *edev;
 	int idx, extcon_cnt, ret = 0;
 	bool check_vbus_state, check_id_state, phandle_found = false;
@@ -4153,25 +4154,27 @@ static int dwc3_msm_extcon_register(struct dwc3_msm *mdwc)
 		if (IS_ERR_OR_NULL(edev))
 			continue;
 
-		check_vbus_state = check_id_state = true;
+		check_vbus_state = check_id_state = false;
 		phandle_found = true;
 
 		mdwc->extcon[idx].mdwc = mdwc;
 		mdwc->extcon[idx].edev = edev;
 		mdwc->extcon[idx].idx = idx;
 
-		mdwc->extcon[idx].vbus_nb.notifier_call =
+		if (dwc->dr_mode != USB_DR_MODE_HOST) {
+			mdwc->extcon[idx].vbus_nb.notifier_call =
 						dwc3_msm_vbus_notifier;
-		ret = extcon_register_notifier(edev, EXTCON_USB,
+			ret = extcon_register_notifier(edev, EXTCON_USB,
 						&mdwc->extcon[idx].vbus_nb);
-		if (ret < 0)
-			check_vbus_state = false;
+			if (!ret)
+				check_vbus_state = true;
+		}
 
 		mdwc->extcon[idx].id_nb.notifier_call = dwc3_msm_id_notifier;
 		ret = extcon_register_notifier(edev, EXTCON_USB_HOST,
 						&mdwc->extcon[idx].id_nb);
-		if (ret < 0)
-			check_id_state = false;
+		if (!ret)
+			check_id_state = true;
 
 		/* Update initial VBUS/ID state */
 		if (check_vbus_state && extcon_get_state(edev, EXTCON_USB))
@@ -4578,7 +4581,7 @@ static void dwc3_start_stop_host(struct dwc3_msm *mdwc, bool start)
 	dwc3_ext_event_notify(mdwc);
 	dbg_event(0xFF, "flush_work", 0);
 	flush_work(&mdwc->resume_work);
-	drain_workqueue(mdwc->sm_usb_wq);
+	flush_workqueue(mdwc->sm_usb_wq);
 	if (start)
 		dbg_log_string("host mode started");
 	else
@@ -4602,7 +4605,7 @@ static void dwc3_start_stop_device(struct dwc3_msm *mdwc, bool start)
 	dwc3_ext_event_notify(mdwc);
 	dbg_event(0xFF, "flush_work", 0);
 	flush_work(&mdwc->resume_work);
-	drain_workqueue(mdwc->sm_usb_wq);
+	flush_workqueue(mdwc->sm_usb_wq);
 	if (start)
 		dbg_log_string("device mode restarted");
 	else
@@ -4638,7 +4641,7 @@ int dwc3_msm_release_ss_lane(struct device *dev, bool usb_dp_concurrent_mode)
 	dbg_event(0xFF, "ss_lane_release", 0);
 	/* flush any pending work */
 	flush_work(&mdwc->resume_work);
-	drain_workqueue(mdwc->sm_usb_wq);
+	flush_workqueue(mdwc->sm_usb_wq);
 
 	redriver_release_usb_lanes(mdwc->ss_redriver_node);
 
