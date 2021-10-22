@@ -2006,6 +2006,7 @@ static struct qcom_icc_bcm bcm_cn0 = {
 static struct qcom_icc_bcm bcm_co0 = {
 	.name = "CO0",
 	.voter_idx = 0,
+	.keepalive = true,
 	.num_nodes = 1,
 	.nodes = { &qns_cdsp_mem_noc },
 };
@@ -2013,6 +2014,7 @@ static struct qcom_icc_bcm bcm_co0 = {
 static struct qcom_icc_bcm bcm_co1 = {
 	.name = "CO1",
 	.voter_idx = 0,
+	.keepalive = true,
 	.num_nodes = 1,
 	.nodes = { &qnm_npu },
 };
