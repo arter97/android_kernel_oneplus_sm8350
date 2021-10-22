@@ -1884,6 +1884,8 @@ static int icnss_slate_notifier_nb(struct notifier_block *nb,
 {
 	struct icnss_priv *priv = container_of(nb, struct icnss_priv,
 					       slate_ssr_nb);
+	int ret = 0;
+
 	icnss_pr_vdbg("Slate-subsys-notify: event %lu\n", code);
 
 	if (code == SUBSYS_AFTER_POWERUP) {
@@ -1891,8 +1893,25 @@ static int icnss_slate_notifier_nb(struct notifier_block *nb,
 		complete(&priv->slate_boot_complete);
 		icnss_pr_dbg("Slate boot complete, state: 0x%lx\n",
 			     priv->state);
+	} else if (code == SUBSYS_BEFORE_SHUTDOWN &&
+		   test_bit(ICNSS_SLATE_UP, &priv->state)) {
+		clear_bit(ICNSS_SLATE_UP, &priv->state);
+		if (test_bit(ICNSS_PD_RESTART, &priv->state)) {
+			icnss_pr_err("PD_RESTART in progress 0x%lx\n",
+				     priv->state);
+			goto skip_pdr;
+		}
+
+		icnss_pr_dbg("Initiating PDR 0x%lx\n", priv->state);
+		ret = icnss_trigger_recovery(&priv->pdev->dev);
+		if (ret < 0) {
+			icnss_fatal_err("Fail to trigger PDR: ret: %d, state: 0x%lx\n",
+					ret, priv->state);
+			goto skip_pdr;
+		}
 	}
 
+skip_pdr:
 	return NOTIFY_OK;
 }
 
