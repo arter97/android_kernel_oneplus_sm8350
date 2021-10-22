@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 // Copyright (c) 2018-19 Linaro Limited
+/* Copyright (c) 2021, The Linux Foundation. All rights reserved. */
 
 #include <linux/module.h>
 #include <linux/of.h>
@@ -1965,8 +1966,11 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	}
 
 	res = platform_get_resource(ethqos->pdev, IORESOURCE_MEM, 0);
-	if (!res)
+	if (!res) {
 		ETHQOSERR("get emac-base resource failed\n");
+		ret = -ENOMEM;
+		goto err_clk;
+	}
 
 	ethqos->emac_mem_size = resource_size(res);
 
