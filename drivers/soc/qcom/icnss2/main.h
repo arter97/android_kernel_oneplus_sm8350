@@ -124,6 +124,7 @@ enum icnss_driver_state {
 	ICNSS_COLD_BOOT_CAL,
 	ICNSS_QMI_DMS_CONNECTED,
 	ICNSS_SLATE_SSR_REGISTERED,
+	ICNSS_SLATE_UP,
 };
 
 struct ce_irq_list {
@@ -468,6 +469,7 @@ struct icnss_priv {
 	struct icnss_dms_data dms;
 	u8 use_nv_mac;
 	u8 is_slate_rfa;
+	struct completion slate_boot_complete;
 };
 
 struct icnss_reg_info {
