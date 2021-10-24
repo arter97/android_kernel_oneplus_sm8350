@@ -3546,11 +3546,14 @@ static void adreno_power_stats(struct kgsl_device *device,
 
 	memset(stats, 0, sizeof(*stats));
 
-	if (adreno_is_a619_holi(adreno_dev))
+	if (adreno_is_a619_holi(adreno_dev)) {
 		adreno_read_gmu_wrapper(adreno_dev,
 			adreno_dev->perfctr_pwr_lo, &val);
-	else
+	} else {
+		if (!test_bit(KGSL_PWRFLAGS_CLK_ON, &device->pwrctrl.power_flags))
+			return;
 		kgsl_regread(device, adreno_dev->perfctr_pwr_lo, &val);
+	}
 
 	if (busy->gpu_busy)
 		gpu_busy = (val >= busy->gpu_busy) ? val - busy->gpu_busy :
