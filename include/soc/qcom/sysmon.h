@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2011-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2019, 2021 The Linux Foundation. All rights reserved.
  */
 
 #ifndef __MSM_SYSMON_H
@@ -19,6 +19,10 @@ enum ssctl_ssr_event_enum_type {
 	SSCTL_SSR_EVENT_AFTER_POWERUP = 1,
 	SSCTL_SSR_EVENT_BEFORE_SHUTDOWN = 2,
 	SSCTL_SSR_EVENT_AFTER_SHUTDOWN = 3,
+	SSCTL_DS_EVENT_BEFORE_ENTRY = 4,
+	SSCTL_DS_EVENT_AFTER_ENTRY = 5,
+	SSCTL_DS_EVENT_BEFORE_EXIT = 6,
+	SSCTL_DS_EVENT_AFTER_EXIT = 7,
 	SSCTL_SSR_EVENT_ENUM_TYPE_MAX_ENUM_VAL = 2147483647
 };
 
@@ -39,6 +43,7 @@ extern int sysmon_send_event(struct subsys_desc *dest_desc,
 extern int sysmon_get_reason(struct subsys_desc *dest_desc, char *buf,
 				size_t len);
 extern int sysmon_send_shutdown(struct subsys_desc *dest_desc);
+extern int sysmon_send_enter_ds(struct subsys_desc *dest_desc);
 extern int sysmon_notifier_register(struct subsys_desc *desc);
 extern void sysmon_notifier_unregister(struct subsys_desc *desc);
 #else
@@ -54,6 +59,10 @@ static inline int sysmon_get_reason(struct subsys_desc *dest_desc,
 	return 0;
 }
 static inline int sysmon_send_shutdown(struct subsys_desc *dest_desc)
+{
+	return 0;
+}
+static inline int sysmon_send_enter_ds(struct subsys_desc *dest_desc)
 {
 	return 0;
 }
