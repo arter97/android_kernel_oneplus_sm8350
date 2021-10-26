@@ -4341,6 +4341,7 @@ int smblite_lib_init(struct smb_charger *chg)
 	struct iio_channel **iio_list;
 	struct smblite_remote_bms *remote_bms;
 
+	mutex_init(&chg->dpdm_lock);
 	INIT_WORK(&chg->bms_update_work, bms_update_work);
 	INIT_WORK(&chg->jeita_update_work, jeita_update_work);
 	INIT_DELAYED_WORK(&chg->icl_change_work, smblite_lib_icl_change_work);
