@@ -1091,6 +1091,9 @@ static int pil_parse_devicetree(struct pil_desc *desc)
 	}
 	desc->proxy_unvote_irq = clk_ready;
 
+	desc->sequential_loading = of_property_read_bool(ofnode,
+				"qcom,sequential-fw-load");
+
 
 	return 0;
 }
