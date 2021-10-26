@@ -143,6 +143,8 @@ extern int subsystem_restart(const char *name);
 extern int subsystem_crashed(const char *name);
 extern int subsystem_ds_entry(const char *subsystem);
 extern int subsystem_ds_exit(const char *name);
+extern int subsystem_s2d_entry(const char *subsystem);
+extern int subsystem_s2d_exit(const char *name);
 
 extern void *subsystem_get(const char *name);
 extern void *subsystem_get_with_fwname(const char *name, const char *fw_name);
@@ -195,6 +197,16 @@ static int subsystem_ds_entry(const char *subsystem)
 }
 
 static int subsystem_ds_exit(const char *name)
+{
+	return 0;
+}
+
+static int subsystem_s2d_exit(const char *name)
+{
+	return 0;
+}
+
+static int subsystem_s2d_entry(const char *name)
 {
 	return 0;
 }
