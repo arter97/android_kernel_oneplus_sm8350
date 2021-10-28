@@ -182,6 +182,7 @@ struct qti_qbg {
 	int			irq;
 	u8			*context;
 	u32			base;
+	u32			rev4;
 	u32			sdam_base;
 	u32			num_data_sdams;
 	u32			batt_id_ohm;

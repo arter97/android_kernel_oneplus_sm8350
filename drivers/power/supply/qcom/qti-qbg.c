@@ -87,6 +87,10 @@
 
 #define QBG_MAIN_LAST_BURST_AVG_ACC2_DATA0		0xA4
 
+/* PM5100 REVID */
+#define REVID_REVISION4					0x103
+#define REVISION_V1					0x1
+
 #define QBG_FAST_CHAR_DELTA_MS				100000
 #define VBATT_1S_LSB					19463
 #define IBATT_10A_LSB					6103
@@ -853,10 +857,13 @@ static irqreturn_t qbg_data_full_irq_handler(int irq, void *_chip)
 
 	qbg_dbg(chip, QBG_DEBUG_IRQ, "DATA FULL IRQ triggered\n");
 
-	rc = qbg_handle_fast_char(chip);
-	if (rc < 0) {
-		pr_err("Failed to handle QBG fast char, rc=%d\n", rc);
-		return IRQ_HANDLED;
+	/* Disable fast char for PM5100 V1 */
+	if (chip->rev4 != REVISION_V1) {
+		rc = qbg_handle_fast_char(chip);
+		if (rc < 0) {
+			pr_err("Failed to handle QBG fast char, rc=%d\n", rc);
+			return IRQ_HANDLED;
+		}
 	}
 
 	mutex_lock(&chip->fifo_lock);
@@ -2352,6 +2359,12 @@ static int qti_qbg_probe(struct platform_device *pdev)
 	chip->rtc = rtc_class_open(CONFIG_RTC_HCTOSYS_DEVICE);
 	if (chip->rtc == NULL)
 		return -EPROBE_DEFER;
+
+	rc = regmap_read(chip->regmap, REVID_REVISION4, &chip->rev4);
+	if (rc < 0) {
+		pr_err("Failed to read REVID_REVISION4, rc=%d\n", rc);
+		return rc;
+	}
 
 	rc = qbg_init_sdam(chip);
 	if (rc < 0) {
