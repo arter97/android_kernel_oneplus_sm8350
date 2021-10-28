@@ -788,6 +788,12 @@ static int glink_slatecom_request_intent(struct glink_slatecom *glink,
 		ret = -ETIMEDOUT;
 	}
 
+	if (!channel->intent_req_result) {
+		dev_err(glink->dev, "intent request not granted for lcid\n");
+		ret = -EAGAIN;
+		goto unlock;
+	}
+
 	ret = wait_for_completion_timeout(&channel->intent_alloc_comp, 10 * HZ);
 	if (!ret) {
 		dev_err(glink->dev, "intent request alloc timed out\n");
