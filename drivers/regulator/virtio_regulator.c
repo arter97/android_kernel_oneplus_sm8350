@@ -503,6 +503,14 @@ static int virtio_regulator_init_reg(struct reg_virtio *reg)
 	init_data->constraints.input_uV = init_data->constraints.max_uV;
 	init_data->constraints.valid_ops_mask |= REGULATOR_CHANGE_VOLTAGE;
 
+	if (init_data->constraints.min_uV == 0 &&
+	    init_data->constraints.max_uV == 0)
+		reg->rdesc.n_voltages = 0;
+	else if (init_data->constraints.min_uV == init_data->constraints.max_uV)
+		reg->rdesc.n_voltages = 1;
+	else
+		reg->rdesc.n_voltages = 2;
+
 	reg_config.dev			= dev;
 	reg_config.init_data		= init_data;
 	reg_config.of_node		= reg->of_node;
