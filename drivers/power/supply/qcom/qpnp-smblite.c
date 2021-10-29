@@ -138,6 +138,7 @@ struct smb_dt_props {
 	int			term_current_thresh_lo_ma;
 	int			disable_suspend_on_collapse;
 	bool			remote_fg;
+	enum float_options	float_option;
 };
 
 struct smblite {
@@ -328,6 +329,13 @@ static int smblite_parse_dt_misc(struct smblite *chip, struct device_node *node)
 
 	chg->concurrent_mode_supported = of_property_read_bool(node,
 					"qcom,concurrency-mode-supported");
+
+	rc = of_property_read_u32(node, "qcom,float-option",
+						&chip->dt.float_option);
+	if (!rc && (chip->dt.float_option < 0 || chip->dt.float_option > 4)) {
+		pr_err("qcom,float-option is out of range [0, 4]\n");
+		return -EINVAL;
+	}
 
 	return 0;
 }
@@ -1075,6 +1083,41 @@ static int smblite_configure_recharging(struct smblite *chip)
 	return 0;
 }
 
+static int smblite_configure_float_charger(struct smblite *chip)
+{
+	int rc = 0;
+	struct smb_charger *chg = &chip->chg;
+
+	/* configure float charger options */
+	switch (chip->dt.float_option) {
+	case FLOAT_SDP:
+		chg->float_cfg = FORCE_FLOAT_SDP_CFG_BIT;
+		break;
+	case DISABLE_CHARGING:
+		chg->float_cfg = FLOAT_DIS_CHGING_CFG_BIT;
+		break;
+	case SUSPEND_INPUT:
+		chg->float_cfg = SUSPEND_FLOAT_CFG_BIT;
+		break;
+	case FLOAT_DCP:
+	default:
+		chg->float_cfg = 0;
+		break;
+	}
+
+	/* Update float charger setting and set DCD timeout 300ms */
+	rc = smblite_lib_masked_write(chg, USB_APSD_CFG_REG(chg->base),
+				FLOAT_OPTIONS_MASK, chg->float_cfg);
+	if (rc < 0) {
+		dev_err(chg->dev, "Couldn't change float charger setting rc=%d\n",
+			rc);
+		return rc;
+	}
+
+	return 0;
+}
+
+
 static int smblite_init_connector_type(struct smb_charger *chg)
 {
 	int rc, type = 0;
@@ -1264,6 +1307,10 @@ static int smblite_init_hw(struct smblite *chip)
 	if (rc < 0)
 		return rc;
 
+	rc = smblite_configure_float_charger(chip);
+	if (rc < 0)
+		return rc;
+
 	return rc;
 }
 
@@ -1407,6 +1454,10 @@ static struct smb_irq_info smblite_irqs[] = {
 	[SWITCHER_POWER_OK_IRQ] = {
 		.name		= "switcher-power-ok",
 		.handler	= smblite_switcher_power_ok_irq_handler,
+	},
+	[BOOST_MODE_ACTIVE_IRQ] = {
+		.name		= "boost-mode-active",
+		.handler	= smblite_boost_mode_active_irq_handler,
 	},
 	/* BATTERY IRQs */
 	[BAT_TEMP_IRQ] = {

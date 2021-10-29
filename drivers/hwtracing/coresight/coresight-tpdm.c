@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2014-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/kernel.h>
@@ -323,12 +323,18 @@ static void __tpdm_config_dsb_msr(struct tpdm_drvdata *drvdata)
 
 static void __tpdm_config_cmb_msr(struct tpdm_drvdata *drvdata)
 {
-	int i;
+	int i, ret;
+	u32 msr_cnt;
+	struct device_node *node = drvdata->dev->of_node;
 
 	if (!drvdata->msr_support)
 		return;
 
-	for (i = 0; i < TPDM_CMB_MAX_MSR; i++)
+	ret = of_property_read_u32(node, "qcom,cmb-msr-cnt", &msr_cnt);
+	if (ret)
+		msr_cnt = TPDM_CMB_MAX_MSR;
+
+	for (i = 0; i < msr_cnt; i++)
 		tpdm_writel(drvdata, drvdata->cmb->msr[i], TPDM_CMB_MSR(i));
 }
 

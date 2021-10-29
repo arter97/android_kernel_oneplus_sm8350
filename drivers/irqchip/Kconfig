@@ -442,7 +442,7 @@ config QCOM_PDC
 config QTI_PDC_SAVE_RESTORE
 	bool "QTI PDC SAVE RESTORE"
 	depends on QCOM_PDC
-	default y if ARCH_SA6155 || ARCH_SA8155 || ARCH_SA8195
+	default y if ARCH_SA6155 || ARCH_SA8155 || ARCH_SA8195 || ARCH_SM6150
 	help
 	Enables the QTI PDC feature to save/restore pin configurations
 	during suspend/resume. Enable this to save the PDC enabled irqs

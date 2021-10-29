@@ -544,8 +544,8 @@ static int smblite_lib_concurrent_mode_config(struct smb_charger *chg, bool enab
 	if (!is_concurrent_mode_supported(chg))
 		return 0;
 
-	rc = smblite_lib_write(chg, CONCURRENT_MODE_CFG_REG(chg->base),
-			(enable ? CONCURRENT_MODE_EN_BIT : 0));
+	rc = smblite_lib_masked_write(chg, CONCURRENT_MODE_CFG_REG(chg->base),
+			CONCURRENT_MODE_EN_BIT, !!enable);
 	if (rc < 0)
 		smblite_lib_err(chg, "Failed to write CONCURRENT_MODE_CFG_REG rc=%d\n",
 				rc);
@@ -606,8 +606,10 @@ static void smblite_lib_uusb_removal(struct smb_charger *chg)
 
 	chg->uusb_apsd_rerun_done = false;
 	chg->hvdcp3_detected = false;
+
 	/* Disable concurrent mode on USB removal. */
 	smblite_lib_concurrent_mode_config(chg, false);
+	chg->concurrent_mode_status = false;
 }
 
 void smblite_lib_suspend_on_debug_battery(struct smb_charger *chg)
@@ -624,6 +626,9 @@ void smblite_lib_suspend_on_debug_battery(struct smb_charger *chg)
 					rc);
 		return;
 	}
+
+	chg->is_debug_batt = val;
+
 	if (chg->suspend_input_on_debug_batt) {
 		vote(chg->usb_icl_votable, DEBUG_BOARD_VOTER, val, 0);
 		if (val) {
@@ -1334,6 +1339,34 @@ int smblite_lib_set_prop_batt_capacity(struct smb_charger *chg,
 	return 0;
 }
 
+int smblite_lib_set_prop_batt_sys_soc(struct smb_charger *chg, int val)
+{
+	int rc;
+	u8 sys_soc;
+
+	if (val < 0 || val > 100) {
+		smblite_lib_err(chg, "Invalid system soc = %d\n", val);
+		return -EINVAL;
+	}
+
+	sys_soc = DIV_ROUND_CLOSEST(val * 255, 100);
+
+	/* This is used to trigger SOC based auto-recharge */
+	rc = smblite_lib_write(chg, CHGR_QG_SOC_REG(chg->base), sys_soc);
+	if (rc < 0) {
+		smblite_lib_err(chg, "Couldn't write to CHGR_QG_SOC_REG rc=%d\n",
+				rc);
+		return rc;
+	}
+
+	rc = smblite_lib_write(chg, CHGR_QG_SOC_UPDATE_REG(chg->base), SOC_UPDATE_PCT_BIT);
+	if (rc < 0)
+		smblite_lib_err(chg, "Couldn't write to CHGR_QG_SOC_UPDATE_REG rc=%d\n",
+				rc);
+
+	return rc;
+}
+
 int smblite_lib_set_prop_batt_status(struct smb_charger *chg,
 				  const union power_supply_propval *val)
 {
@@ -1491,15 +1524,90 @@ int smblite_lib_run_aicl(struct smb_charger *chg, int type)
 	return 0;
 }
 
+static int poll_aicl_done(struct smb_charger *chg, int *settled_icl_ua)
+{
+	int rc, iteration = 20;
+	union power_supply_propval pval = {0, };
+	u8 stat;
+
+	/*
+	 * Poll for 1 sec with 50ms sleep till AICL_DONE bit
+	 * is not set.
+	 */
+	while (iteration) {
+		rc = smblite_lib_get_prop_usb_present(chg, &pval);
+		if (rc < 0) {
+			smblite_lib_err(chg, "Couldn't get USB present status rc=%d\n", rc);
+			return rc;
+		}
+
+		if (!pval.intval) {
+			smblite_lib_dbg(chg, PR_MISC, "USB removed\n");
+			return -EINVAL;
+		}
+
+		rc = smblite_lib_read(chg, AICL_STATUS_REG(chg->base), &stat);
+		if (rc < 0) {
+			smblite_lib_err(chg, "Couldn't read aicl_status rc=%d\n", rc);
+			return rc;
+		}
+
+		if (stat & AICL_DONE_BIT)
+			break;
+
+		iteration--;
+
+		msleep(50);
+	}
+
+	/* Get AICL Result */
+	rc = smblite_lib_get_prop_input_current_settled(chg, settled_icl_ua);
+	if (rc < 0) {
+		smblite_lib_err(chg, "Failed read AICL Result rc=%d\n", rc);
+		return -EINVAL;
+	}
+
+	smblite_lib_dbg(chg, PR_MISC,
+		"AICL_DONE = %s, settled_icl_ua = %d .. proceeding\n",
+			((stat & AICL_DONE_BIT) ? "True" : "False"),
+			*settled_icl_ua);
+
+	return 0;
+}
+
+static bool is_boost_en(struct smb_charger *chg)
+{
+	int rc;
+	u8 stat;
+
+	if (chg->subtype != PM5100)
+		return false;
+
+	rc = smblite_lib_read(chg, CHGR_CHG_EN_STATUS_REG(chg->base), &stat);
+	if (rc < 0)
+		smblite_lib_err(chg, "Couldn't read CHGR_EN_STATUS_REG rc=%d\n",
+				rc);
+
+	return (stat & CHARGING_DISABLED_FROM_BOOST_BIT);
+}
+
 #define CONCURRENCY_REDUCED_ICL_UA 300000
 int smblite_lib_set_concurrent_config(struct smb_charger *chg, bool enable)
 {
 	int rc = 0, icl_ua = 0, settled_icl_ua = 0, usb_present = 0;
 	union power_supply_propval pval = {0, };
+	u8 apsd_status = 0;
+	bool boost_enabled = is_boost_en(chg);
 
 	if (!is_concurrent_mode_supported(chg)) {
-		smblite_lib_dbg(chg, PR_MISC, "Concurrent Mode supported disabled\n");
-		return 0;
+		smblite_lib_dbg(chg, PR_MISC, "concurrency-mode: support disabled\n");
+		return -ENXIO;
+	}
+
+	/* Do not enable concurrency mode when connected to debug batt. */
+	if (chg->is_debug_batt) {
+		smblite_lib_dbg(chg, PR_MISC, "concurrency-mode: disabled debug board detected\n");
+		return -EPERM;
 	}
 
 	/* Exit if there is no change in state */
@@ -1522,27 +1630,48 @@ int smblite_lib_set_concurrent_config(struct smb_charger *chg, bool enable)
 			goto failure;
 		}
 
-		/* Get AICL Result */
-		rc = smblite_lib_get_prop_input_current_settled(chg, &settled_icl_ua);
-		if (rc) {
-			smblite_lib_err(chg, "Failed read AICL Result rc=%d\n", rc);
-			goto failure;
-		}
-
-		/* Return if AICL result is less than 300mA. */
-		if (settled_icl_ua <= CONCURRENCY_REDUCED_ICL_UA) {
+		/*
+		 * When boost is enabled and usb is inserted chargering will be disabled causing
+		 * AICL to be always zero, Skip calculating ICL for this.
+		 */
+		if (boost_enabled) {
 			smblite_lib_dbg(chg, PR_MISC,
-				"AICL Result too less to enable concurreny mode\n");
-			goto failure;
-		}
+				"boost is already enabled. Skipping ICL vote.\n");
+		} else {
+			/*
+			 * On charger insertion, if concurrency mode is enabled it can cause
+			 * USB_ICL to be voted of much lower value due to AICL still going
+			 * on. Prevent this by waiting for AICL to complete and then reading
+			 * the settled current.
+			 */
+			rc = poll_aicl_done(chg, &settled_icl_ua);
+			if (rc < 0) {
+				smblite_lib_dbg(chg, PR_MISC,
+						"Failed to poll on AICL_DONE\n", rc);
+				goto failure;
+			}
 
-		icl_ua = settled_icl_ua - CONCURRENCY_REDUCED_ICL_UA;
+			if (settled_icl_ua <= CONCURRENCY_REDUCED_ICL_UA) {
+				/* Return as failure if settled ICL is less than required ICL. */
+				smblite_lib_err(chg,
+					"settled_icl_ua=%d less can't enable concurrency-mode\n",
+					settled_icl_ua);
+				return -EIO;
+			}
 
-		rc = vote(chg->usb_icl_votable, CONCURRENT_MODE_VOTER, true,
-				icl_ua);
-		if (rc < 0) {
-			smblite_lib_err(chg, "Failed to vote on ICL rc=%d\n", rc);
-			goto failure;
+			/* Reduce ICL to go into concurrency mode */
+			icl_ua = settled_icl_ua - CONCURRENCY_REDUCED_ICL_UA;
+
+			rc = vote(chg->usb_icl_votable, CONCURRENT_MODE_VOTER, true,
+				  icl_ua);
+			if (rc < 0) {
+				smblite_lib_err(chg, "Failed to vote on ICL rc=%d\n", rc);
+				goto failure;
+			}
+
+			smblite_lib_dbg(chg, PR_MISC,
+					"concurrent-mode: Reduced ICL to %d for concurrency mode\n",
+					settled_icl_ua);
 		}
 
 		if (chg->hvdcp3_detected) {
@@ -1572,25 +1701,48 @@ int smblite_lib_set_concurrent_config(struct smb_charger *chg, bool enable)
 					chg->hvdcp3_detected);
 		goto out;
 	} else {
+
+		if (!usb_present) {
+			/* USB removed while concurrency was active */
+			smblite_lib_dbg(chg, PR_MISC, "USB removed: concurrency mode already disabled\n");
+			return 0;
+		}
+
 		/* Disable concurrent mode */
 		rc = smblite_lib_concurrent_mode_config(chg, false);
 		if (rc < 0)
 			goto failure;
 
-		/* Restore vbus to MAX(6V) if QC3P5 is connected */
-		if (chg->hvdcp3_detected && usb_present)
-			smblite_lib_hvdcp3_force_max_vbus(chg);
+		rc = smblite_lib_read(chg, APSD_RESULT_STATUS_REG(chg->base), &apsd_status);
+		if (rc < 0)
+			smblite_lib_err(chg, "Couldn't read APSD_RESULT_STATUS rc=%d\n",
+					rc);
+
+		/*
+		 * Try to Restore vbus to MAX(6V) only if:
+		 *	1. QC adapter is connected.
+		 *	2. USB is present.
+		 *	3. Boost is disabled : DPDM request does not take
+		 *			       effect with boost enabled.
+		 */
+		if ((apsd_status & QC_3P0_BIT) && usb_present && !boost_enabled)
+			chg->hvdcp3_detected = smblite_lib_hvdcp3_force_max_vbus(chg);
+
+		rc = smblite_lib_run_aicl(chg, RERUN_AICL);
+		if (rc < 0)
+			smblite_lib_err(chg, "Failed to rerun_aicl rc=%d\n", rc);
 
 		chg->concurrent_mode_status = false;
 		smblite_lib_dbg(chg, PR_MISC, "Concurrent Mode disabled successfully: is_hvdcp3=%d\n",
 			chg->hvdcp3_detected);
-		goto out;
+
+		return 0;
 	}
 
 failure:
 	rc = -EINVAL;
-	smblite_lib_dbg(chg, PR_MISC, "Failed to %s concurrent mode\n",
-			(enable ? "Enable" : "Disable"));
+	smblite_lib_err(chg, "Failed to %s concurrent mode, rc=%d\n",
+			(enable ? "Enable" : "Disable"), rc);
 
 out:
 	return rc;
@@ -1619,8 +1771,32 @@ int smblite_lib_get_prop_usb_present(struct smb_charger *chg,
 int smblite_lib_get_prop_usb_online(struct smb_charger *chg,
 			       union power_supply_propval *val)
 {
-	int rc = 0;
+	int rc = 0, input_present = 0;
 	u8 stat;
+
+	/*
+	 * Android plays an audio notification on USB insertion when USB_ONLINE = 1,
+	 * which on PM5100 will move the charger to BOOST again setting back USB_ONLINE = 0.
+	 * Avoid this endless loop by reporting USB_ONLINE = 1 as long as boost is enabled
+	 * while the charger is inserted.
+	 */
+	smblite_lib_is_input_present(chg, &input_present);
+	if (is_boost_en(chg) && input_present) {
+		val->intval = true;
+		smblite_lib_dbg(chg, PR_MISC,
+			"USB_ONLINE set due to boost_en and input_present\n");
+		return 0;
+	}
+
+	/*
+	 * USB_ONLINE is reported as 0 for Debug board + USB present use-case
+	 * because USE_USBIN bit is set to 0. Report USB_ONLINE = 1 for
+	 * Debug Board + USB present use-case.
+	 */
+	if (input_present && chg->is_debug_batt) {
+		val->intval = true;
+		return 0;
+	}
 
 	if (get_client_vote_locked(chg->usb_icl_votable, USER_VOTER) == 0) {
 		val->intval = false;
@@ -2044,32 +2220,72 @@ int smblite_lib_set_prop_current_max(struct smb_charger *chg,
 	int rc = 0;
 
 	smblite_lib_dbg(chg, PR_MISC,
-		"Current request from USB driver current=%dmA\n", val->intval);
-	/* ignore current request from USB for charger other than SDP */
-	if (chg->real_charger_type != POWER_SUPPLY_TYPE_USB)
-		return 0;
+		"Current request from USB driver current=%dmA, charger_type=%d\n",
+			val->intval, chg->real_charger_type);
 
-	rc = vote(chg->usb_icl_votable, USB_PSY_VOTER, true, val->intval);
-	if (rc < 0) {
-		pr_err("Couldn't vote ICL USB_PSY_VOTER rc=%d\n", rc);
-		return rc;
-	}
+	if (chg->real_charger_type == QTI_POWER_SUPPLY_TYPE_USB_FLOAT) {
+		if (val->intval == -ETIMEDOUT) {
+			if ((chg->float_cfg & FLOAT_OPTIONS_MASK)
+						== FORCE_FLOAT_SDP_CFG_BIT) {
+				/*
+				 * Confiugure USB500 mode if Float charger is
+				 * configured for SDP mode.
+				 */
+				rc = vote(chg->usb_icl_votable,
+					SW_ICL_MAX_VOTER, true, USBIN_500UA);
+				if (rc < 0)
+					smblite_lib_err(chg,
+						"Couldn't set SDP ICL rc=%d\n",
+						rc);
+				return rc;
+			}
 
-	rc = vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, false, 0);
-	if (rc < 0) {
-		pr_err("Couldn't remove SW_ICL_MAX vote rc=%d\n", rc);
-		return rc;
-	}
+			/* Set ICL to 1.5A if its configured for DCP */
+			rc = vote(chg->usb_icl_votable,
+				  SW_ICL_MAX_VOTER, true, DCP_CURRENT_UA);
+			if (rc < 0)
+				return rc;
+		} else {
+			/*
+			 * FLOAT charger detected as SDP by USB driver,
+			 * charge with the requested current and update the
+			 * real_charger_type
+			 */
+			chg->real_charger_type = POWER_SUPPLY_TYPE_USB;
 
-	/* Update TypeC Rp based current */
-	if (chg->connector_type == QTI_POWER_SUPPLY_CONNECTOR_TYPEC) {
-		update_sw_icl_max(chg, chg->real_charger_type);
-	} else if (is_flashlite_active(chg) && (val->intval >=  USBIN_400UA)) {
-		/* For Uusb based SDP port */
-		vote(chg->usb_icl_votable, FLASH_ACTIVE_VOTER, true,
-				val->intval - USBIN_300UA);
-		smblite_lib_dbg(chg, PR_MISC, "flash_active = 1, ICL set to  %d\n",
-						val->intval - USBIN_300UA);
+			rc = vote(chg->usb_icl_votable, USB_PSY_VOTER,
+						true, val->intval);
+			if (rc < 0)
+				return rc;
+			rc = vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER,
+							false, 0);
+			if (rc < 0)
+				return rc;
+		}
+	} else if (chg->real_charger_type == POWER_SUPPLY_TYPE_USB) {
+
+		rc = vote(chg->usb_icl_votable, USB_PSY_VOTER, true, val->intval);
+		if (rc < 0) {
+			pr_err("Couldn't vote ICL USB_PSY_VOTER rc=%d\n", rc);
+			return rc;
+		}
+
+		rc = vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, false, 0);
+		if (rc < 0) {
+			pr_err("Couldn't remove SW_ICL_MAX vote rc=%d\n", rc);
+			return rc;
+		}
+
+		/* Update TypeC Rp based current */
+		if (chg->connector_type == QTI_POWER_SUPPLY_CONNECTOR_TYPEC) {
+			update_sw_icl_max(chg, chg->real_charger_type);
+		} else if (is_flashlite_active(chg) && (val->intval >=  USBIN_400UA)) {
+			/* For Uusb based SDP port */
+			vote(chg->usb_icl_votable, FLASH_ACTIVE_VOTER, true,
+			     val->intval - USBIN_300UA);
+			smblite_lib_dbg(chg, PR_MISC, "flash_active = 1, ICL set to  %d\n",
+					val->intval - USBIN_300UA);
+		}
 	}
 
 	return 0;
@@ -3005,6 +3221,13 @@ static void smblite_lib_handle_hvdcp_check_timeout(struct smb_charger *chg,
 {
 	int rc = 0;
 
+	/* Stay at 5V if BOOST is enabled */
+	if (is_boost_en(chg)) {
+		smblite_lib_dbg(chg, PR_INTERRUPT,
+			"Ignoring HVDCP3 detect as boost is enabled\n");
+		return;
+	}
+
 	if (rising) {
 		if (qc_charger && !chg->hvdcp3_detected) {
 			/* Increase vbus to MAX(6V), if incremented HVDCP_3 is detected */
@@ -3630,6 +3853,43 @@ irqreturn_t smblite_usb_id_irq_handler(int irq, void *data)
 	}
 
 	smblite_lib_notify_usb_host(chg, !id_state);
+
+	return IRQ_HANDLED;
+}
+
+irqreturn_t smblite_boost_mode_active_irq_handler(int irq, void *data)
+{
+	struct smb_irq_data *irq_data = data;
+	struct smb_charger *chg = irq_data->parent_data;
+	union power_supply_propval pval = {0, };
+	bool is_qc = false, boost_enabled = is_boost_en(chg);
+	u8 apsd_status = 0;
+	int rc = 0;
+
+	rc = smblite_lib_get_prop_usb_present(chg, &pval);
+	if (rc < 0)
+		smblite_lib_dbg(chg, PR_MISC,
+				"Couldn't get USB preset status rc=%d\n", rc);
+
+	/* Try to restore VBUS to MAX(6V) once boost is disabled and USB is present. */
+	if (!boost_enabled && pval.intval) {
+		rc = smblite_lib_read(chg, APSD_RESULT_STATUS_REG(chg->base), &apsd_status);
+		if (rc < 0)
+			smblite_lib_err(chg, "Couldn't read APSD_RESULT_STATUS rc=%d\n",
+					rc);
+
+		/* Restore vbus to MAX(6V) only if QC adapter is connected */
+		if (apsd_status & QC_3P0_BIT) {
+			is_qc = true;
+			smblite_lib_rerun_apsd_if_required(chg);
+		}
+	}
+
+	smblite_lib_dbg(chg, PR_INTERRUPT, "IRQ: %s, BOOST_EN=%s, usb_present=%d, qc_adapter=%s\n",
+			irq_data->name,
+			(boost_enabled ? "True" : "False"),
+			pval.intval,
+			(is_qc ? "True" : "False"));
 
 	return IRQ_HANDLED;
 }

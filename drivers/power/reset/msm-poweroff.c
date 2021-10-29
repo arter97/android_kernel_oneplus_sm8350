@@ -46,7 +46,7 @@
 #define KASLR_OFFSET_BIT_MASK	0x00000000FFFFFFFF
 
 static int restart_mode;
-static void *restart_reason, *dload_type_addr;
+static void __iomem *restart_reason, *dload_type_addr;
 /* Download mode master kill-switch */
 static void __iomem *msm_ps_hold;
 static phys_addr_t tcsr_boot_misc_detect;
@@ -62,9 +62,9 @@ static struct kobject dload_kobj;
 
 static int in_panic;
 static int dload_type = SCM_DLOAD_FULLDUMP;
-static void *dload_mode_addr;
+static void __iomem *dload_mode_addr;
 static bool dload_mode_enabled;
-static void *emergency_dload_mode_addr;
+static void __iomem *emergency_dload_mode_addr;
 
 static bool force_warm_reboot;
 
@@ -211,10 +211,10 @@ static void free_dload_mode_mem(void)
 	iounmap(dload_mode_addr);
 }
 
-static void *map_prop_mem(const char *propname)
+static void __iomem *map_prop_mem(const char *propname)
 {
 	struct device_node *np = of_find_compatible_node(NULL, NULL, propname);
-	void *addr;
+	void __iomem *addr;
 
 	if (!np) {
 		pr_err("Unable to find DT property: %s\n", propname);
@@ -229,7 +229,7 @@ static void *map_prop_mem(const char *propname)
 }
 
 #ifdef CONFIG_RANDOMIZE_BASE
-static void *kaslr_imem_addr;
+static void __iomem *kaslr_imem_addr;
 static void store_kaslr_offset(void)
 {
 	kaslr_imem_addr = map_prop_mem(KASLR_OFFSET_PROP);

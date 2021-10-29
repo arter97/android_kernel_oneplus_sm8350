@@ -446,9 +446,25 @@ static struct qcom_cc_desc gpu_cc_direwolf_desc = {
 
 static const struct of_device_id gpu_cc_direwolf_match_table[] = {
 	{ .compatible = "qcom,direwolf-gpucc" },
+	{ .compatible = "qcom,direwolf-gpucc-v2" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, gpu_cc_direwolf_match_table);
+
+static int gpu_cc_direwolf_fixup(struct platform_device *pdev, struct regmap *regmap)
+{
+	const char *compat = NULL;
+	int compatlen;
+
+	compat = of_get_property(pdev->dev.of_node, "compatible", &compatlen);
+	if (!compat || compatlen <= 0)
+		return -EINVAL;
+
+	if (!strcmp(compat, "qcom,direwolf-gpucc-v2"))
+		gpu_cc_pll0.config->alpha = 0xA555;
+
+	return 0;
+}
 
 static int gpu_cc_direwolf_probe(struct platform_device *pdev)
 {
@@ -467,8 +483,12 @@ static int gpu_cc_direwolf_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	clk_lucid_5lpe_pll_configure(&gpu_cc_pll0, regmap, &gpu_cc_pll0_config);
-	clk_lucid_5lpe_pll_configure(&gpu_cc_pll1, regmap, &gpu_cc_pll1_config);
+	ret = gpu_cc_direwolf_fixup(pdev, regmap);
+	if (ret)
+		return ret;
+
+	clk_lucid_5lpe_pll_configure(&gpu_cc_pll0, regmap, gpu_cc_pll0.config);
+	clk_lucid_5lpe_pll_configure(&gpu_cc_pll1, regmap, gpu_cc_pll1.config);
 
 	/*
 	 * Keep the clocks always-ON

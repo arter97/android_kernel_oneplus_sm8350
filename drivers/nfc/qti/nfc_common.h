@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
 #ifndef _NFC_COMMON_H_
@@ -184,6 +184,7 @@ enum gpio_values {
 enum nfcc_chip_variant {
 	NFCC_SN100_A = 0xa3,	    /**< NFCC SN100_A */
 	NFCC_SN100_B = 0xa4,	    /**< NFCC SN100_B */
+	NFCC_SN220 = 0xc1,	/**< NFCC_SN220 */
 	NFCC_NOT_SUPPORTED = 0xFF		/**< NFCC is not supported */
 };
 

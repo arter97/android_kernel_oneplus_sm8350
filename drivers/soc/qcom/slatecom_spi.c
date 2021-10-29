@@ -44,6 +44,7 @@
 
 #define SLATE_OK_SLP_RBSC      BIT(30)
 #define SLATE_OK_SLP_S2R       BIT(31)
+#define SLATE_OK_SLP_S2D      (BIT(31) | BIT(30))
 
 #define WR_PROTOCOL_OVERHEAD              (5)
 #define WR_PROTOCOL_OVERHEAD_IN_WORDS     (2)
@@ -63,6 +64,7 @@ enum slatecom_state {
 	SLATECOM_STATE_SUSPEND = 2,
 	SLATECOM_STATE_ACTIVE = 3,
 	SLATECOM_STATE_RUNTIME_SUSPEND = 4,
+	SLATECOM_STATE_HIBERNATE = 5,
 };
 
 enum slatecom_req_type {
@@ -450,16 +452,20 @@ static void send_back_notification(uint32_t slav_status_reg,
 			pr_debug("Slate DSP DOWN\n", __func__);
 			set_slate_dsp_state(false);
 		} else if (slav_status_reg & BIT(30)) {
-			pr_debug("Slate DSP UP\n", __func__);
-			set_slate_dsp_state(true);
+			if (!(slav_status_reg & BIT(26))) {
+				pr_debug("Slate DSP UP\n", __func__);
+				set_slate_dsp_state(true);
+			}
 		}
 
 		if (slav_status_reg & BIT(25)) {
 			pr_debug("Slate BT DOWN\n", __func__);
 			set_slate_bt_state(false);
 		} else if (slav_status_reg & BIT(30)) {
-			pr_debug("Slate BT UP\n", __func__);
-			set_slate_bt_state(true);
+			if (!(slav_status_reg & BIT(25))) {
+				pr_debug("Slate BT UP\n", __func__);
+				set_slate_bt_state(true);
+			}
 		}
 
 		oem_provisioning_status = slav_status_reg & (BIT(23) | BIT(24));
@@ -567,7 +573,6 @@ static int slatecom_resume_l(void *handle)
 	mutex_lock(&slate_resume_mutex);
 	if (slate_spi->slate_state == SLATECOM_STATE_ACTIVE)
 		goto unlock;
-	enable_irq(slate_irq);
 
 	if (!(g_slav_status_reg & BIT(31))) {
 		pr_err("Slate boot is not complete, skip SPI resume\n");
@@ -1255,17 +1260,22 @@ static int slatecom_pm_resume(struct device *dev)
 	struct slate_spi_priv *spi =
 		container_of(slate_com_drv, struct slate_spi_priv, lhandle);
 
-	if (!(g_slav_status_reg & BIT(31))) {
-		pr_err("Slate boot is not complete, skip SPI resume\n");
+	if (atomic_read(&slate_is_spi_active)) {
+		pr_info("Slatecom in resume state\n");
 		return 0;
+	} else {
+		if (!(g_slav_status_reg & BIT(31))) {
+			pr_err("Slate boot is not complete, skip SPI resume\n");
+			return 0;
+		}
+		clnt_handle.slate_spi = spi;
+		atomic_set(&slate_is_spi_active, 1);
+		atomic_set(&slate_is_runtime_suspend, 0);
+		enable_irq(slate_irq);
+		ret = slatecom_resume_l(&clnt_handle);
+			pr_info("Slatecom resumed with : %d\n", ret);
+		return ret;
 	}
-	clnt_handle.slate_spi = spi;
-	atomic_set(&slate_is_spi_active, 1);
-	atomic_set(&slate_is_runtime_suspend, 0);
-	enable_irq(slate_irq);
-	ret = slatecom_resume_l(&clnt_handle);
-	pr_info("Bgcom resumed with : %d\n", ret);
-	return ret;
 }
 
 static int slatecom_pm_runtime_suspend(struct device *dev)
@@ -1283,7 +1293,11 @@ static int slatecom_pm_runtime_suspend(struct device *dev)
 
 	mutex_lock(&slate_task_mutex);
 
-	cmnd_reg |= BIT(31);
+	if (mem_sleep_current == PM_SUSPEND_MEM)
+		cmnd_reg |= SLATE_OK_SLP_S2R;
+	else
+		cmnd_reg |= SLATE_OK_SLP_RBSC;
+
 	ret = slatecom_reg_write_cmd(&clnt_handle, SLATE_CMND_REG,
 					1, &cmnd_reg);
 	if (ret == 0) {
@@ -1315,11 +1329,77 @@ static int slatecom_pm_runtime_resume(struct device *dev)
 	return ret;
 }
 
+static int slatecom_pm_freeze(struct device *dev)
+{
+	struct slate_context clnt_handle;
+	uint32_t cmnd_reg = 0;
+	struct spi_device *s_dev = to_spi_device(dev);
+	struct slate_spi_priv *slate_spi = spi_get_drvdata(s_dev);
+	int ret = 0;
+
+	clnt_handle.slate_spi = slate_spi;
+	if (slate_spi->slate_state == SLATECOM_STATE_HIBERNATE)
+		return 0;
+
+	if (slate_spi->slate_state == SLATECOM_STATE_RUNTIME_SUSPEND) {
+		slate_spi->slate_state = SLATECOM_STATE_HIBERNATE;
+		atomic_set(&slate_is_spi_active, 0);
+		atomic_set(&slate_is_runtime_suspend, 0);
+		disable_irq(slate_irq);
+		pr_info("suspended\n");
+		return 0;
+	}
+
+	if (!(g_slav_status_reg & BIT(31))) {
+		pr_err("Slate boot is not complete, skip SPI suspend\n");
+		return 0;
+	}
+
+	cmnd_reg |= SLATE_OK_SLP_S2D;
+
+	ret = slatecom_reg_write_cmd(&clnt_handle, SLATE_CMND_REG, 1, &cmnd_reg);
+	if (ret == 0) {
+		slate_spi->slate_state = SLATECOM_STATE_HIBERNATE;
+		atomic_set(&slate_is_spi_active, 0);
+		atomic_set(&slate_is_runtime_suspend, 0);
+		atomic_set(&ok_to_sleep, 1);
+		disable_irq(slate_irq);
+	}
+	pr_info("freezed with : %d\n", ret);
+	return ret;
+}
+
+static int slatecom_pm_restore(struct device *dev)
+{
+	struct slate_context clnt_handle;
+	int ret = 0;
+	struct slate_spi_priv *spi =
+		container_of(slate_com_drv, struct slate_spi_priv, lhandle);
+
+	if (atomic_read(&slate_is_spi_active)) {
+		pr_info("Slatecom in restore state\n");
+	} else {
+		if (!(g_slav_status_reg & BIT(31))) {
+			pr_err("Slate boot is not complete, skip SPI resume\n");
+			return 0;
+		}
+		clnt_handle.slate_spi = spi;
+		atomic_set(&slate_is_spi_active, 1);
+		atomic_set(&slate_is_runtime_suspend, 0);
+		enable_irq(slate_irq);
+		ret = slatecom_resume_l(&clnt_handle);
+		pr_info("Slatecom restore with : %d\n", ret);
+	}
+	return ret;
+}
+
 static const struct dev_pm_ops slatecom_pm = {
 	.runtime_suspend = slatecom_pm_runtime_suspend,
 	.runtime_resume = slatecom_pm_runtime_resume,
 	.suspend = slatecom_pm_suspend,
 	.resume = slatecom_pm_resume,
+	.freeze = slatecom_pm_freeze,
+	.restore = slatecom_pm_restore,
 };
 
 static const struct of_device_id slate_spi_of_match[] = {

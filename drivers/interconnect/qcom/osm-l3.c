@@ -169,7 +169,6 @@ static int qcom_icc_set(struct icc_node *src, struct icc_node *dst)
 	qp = to_qcom_provider(provider);
 
 	rate = dst->peak_bw;
-	rate = icc_units_to_bps(rate);
 	do_div(rate, qn->buswidth);
 
 	for (index = 0; index < qp->max_state - 1; index++) {

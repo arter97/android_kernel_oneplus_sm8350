@@ -1484,6 +1484,28 @@ config AUTO_EARLY_LAUNCH
 	 early_init user space executable file will be copied into
 	 ramdisk/early_services directory during build.
 
+config QCOM_ADSP_VOTE_SMP2P
+	bool "Send command to ADSP for unvote/vote during suspend/resume"
+	depends on QCOM_SMP2P
+	help
+		When this option is enabled, vote/unvote commands are sent to remote ADSP
+		from the local processor through the smp2p framework.
+		This driver send voting request from hlos to adsp, this prevent ADSP to
+		not go in low power mode when it is idle. HLOS send request for vote &
+		unvote during system power transition.
+		This driver can be used to manually release and acquire the ADSP vote
+		from debugfs interface.
+
+config QCOM_SECURE_HIBERNATION
+	bool "Add security support to hibernation"
+	depends on HIBERNATION
+	help
+	  Secure the hibernation snapshot by encrypting
+	  the snapshot at kernel before saving to disk.
+	  This uses GCM-AES crypto algorithm to encrypt the
+	  pages at the kernel.
+	  If not sure, say N.
+
 source "drivers/soc/qcom/icnss2/Kconfig"
 
 source "drivers/soc/qcom/gnsssirf/Kconfig"

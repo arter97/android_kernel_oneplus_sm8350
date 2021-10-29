@@ -73,6 +73,7 @@ enum print_reason {
 #define USBIN_400UA     400000
 #define USBIN_500UA     500000
 #define USBIN_900UA     900000
+#define SDP_CURRENT_UA			500000
 #define CDP_CURRENT_UA			1500000
 #define DCP_CURRENT_UA			1500000
 #define TYPEC_DEFAULT_CURRENT_UA	900000
@@ -82,8 +83,7 @@ enum print_reason {
 /* Max supported voltage 6V */
 #define HVDCP3_STEP_SIZE_UV		200000
 #define PM5100_MAX_HVDCP3_PULSES	5
-#define PM5100_HVDCP3_MAX_VOLTAGE_UV	(PM5100_MAX_HVDCP3_PULSES * \
-						HVDCP3_STEP_SIZE_UV)
+#define PM5100_HVDCP3_MAX_VOLTAGE_UV	6000000
 
 enum smb_mode {
 	PARALLEL_MASTER = 0,
@@ -128,6 +128,7 @@ enum smb_irq_index {
 	SKIP_MODE_IRQ,
 	INPUT_CURRENT_LIMITING_IRQ,
 	SWITCHER_POWER_OK_IRQ,
+	BOOST_MODE_ACTIVE_IRQ,
 	/* BATIF */
 	BAT_TEMP_IRQ,
 	BAT_THERM_OR_ID_MISSING_IRQ,
@@ -167,6 +168,13 @@ enum smb_irq_index {
 	FLASH_EN_IRQ,
 	/* END */
 	SMB_IRQ_MAX,
+};
+
+enum float_options {
+	FLOAT_DCP		= 1,
+	FLOAT_SDP		= 2,
+	DISABLE_CHARGING	= 3,
+	SUSPEND_INPUT		= 4,
 };
 
 struct apsd_result {
@@ -371,6 +379,8 @@ struct smb_charger {
 	bool			hvdcp3_detected;
 	bool			concurrent_mode_supported;
 	bool			concurrent_mode_status;
+	u8			float_cfg;
+	bool			is_debug_batt;
 
 	/* workaround flag */
 	u32			wa_flags;
@@ -424,6 +434,7 @@ irqreturn_t smblite_temp_change_irq_handler(int irq, void *data);
 irqreturn_t smblite_usbin_ov_irq_handler(int irq, void *data);
 irqreturn_t smblite_usb_id_irq_handler(int irq, void *data);
 irqreturn_t smblite_usb_source_change_irq_handler(int irq, void *data);
+irqreturn_t smblite_boost_mode_active_irq_handler(int irq, void *data);
 
 int smblite_lib_get_prop_batt_present(struct smb_charger *chg,
 				union power_supply_propval *val);
@@ -452,6 +463,7 @@ int smblite_lib_set_prop_input_suspend(struct smb_charger *chg,
 					const int val);
 int smblite_lib_set_prop_batt_capacity(struct smb_charger *chg,
 				const union power_supply_propval *val);
+int smblite_lib_set_prop_batt_sys_soc(struct smb_charger *chg, int val);
 int smblite_lib_set_prop_batt_status(struct smb_charger *chg,
 				const union power_supply_propval *val);
 int smblite_lib_set_prop_system_temp_level(struct smb_charger *chg,

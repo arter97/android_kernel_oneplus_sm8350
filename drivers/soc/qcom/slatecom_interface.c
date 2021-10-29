@@ -151,6 +151,7 @@ static	bool                     slate_bt_error;
 static  struct   slatecom_open_config_type   config_type;
 static DECLARE_COMPLETION(slate_modem_down_wait);
 static DECLARE_COMPLETION(slate_adsp_down_wait);
+static struct srcu_notifier_head slatecom_notifier_chain;
 
 static ssize_t slate_bt_state_sysfs_read
 			(struct class *class, struct class_attribute *attr, char *buf)
@@ -446,6 +447,8 @@ static int send_time_sync(struct slate_ui_data *tui_obj_msg)
 	ret = slatecom_tx_msg(dev, write_buf, tui_obj_msg->num_of_words*4);
 	if (ret < 0)
 		pr_err("send_time_data cmd failed\n");
+	else
+		pr_info("send_time_data cmd success\n");
 return ret;
 }
 
@@ -816,9 +819,13 @@ void set_slate_dsp_state(bool status)
 	if (!status) {
 		statee.e_type = SLATE_DSP_ERROR;
 		strlcpy(dspss_state, "error", BUF_SIZE);
+		srcu_notifier_call_chain(&slatecom_notifier_chain,
+					 DSP_ERROR, NULL);
 	} else {
 		statee.e_type = SLATE_DSP_READY;
 		strlcpy(dspss_state, "ready", BUF_SIZE);
+		srcu_notifier_call_chain(&slatecom_notifier_chain,
+					 DSP_READY, NULL);
 	}
 	send_uevent(&statee);
 }
@@ -832,13 +839,35 @@ void set_slate_bt_state(bool status)
 	if (!status) {
 		statee.e_type = SLATE_BT_ERROR;
 		strlcpy(btss_state, "error", BUF_SIZE);
+		srcu_notifier_call_chain(&slatecom_notifier_chain,
+					 BT_ERROR, NULL);
 	} else {
 		statee.e_type = SLATE_BT_READY;
 		strlcpy(btss_state, "ready", BUF_SIZE);
+		srcu_notifier_call_chain(&slatecom_notifier_chain,
+					 BT_READY, NULL);
 	}
 	send_uevent(&statee);
 }
 EXPORT_SYMBOL(set_slate_bt_state);
+
+void *slatecom_register_notifier(struct notifier_block *nb)
+{
+	int ret;
+
+	ret = srcu_notifier_chain_register(&slatecom_notifier_chain, nb);
+	if (ret < 0)
+		return ERR_PTR(ret);
+
+	return &slatecom_notifier_chain;
+}
+EXPORT_SYMBOL(slatecom_register_notifier);
+
+int slatecom_unregister_notifier(void *notify, struct notifier_block *nb)
+{
+	return srcu_notifier_chain_unregister(notify, nb);
+}
+EXPORT_SYMBOL(slatecom_unregister_notifier);
 
 static struct notifier_block ssr_modem_nb = {
 	.notifier_call = ssr_modem_cb,
@@ -951,6 +980,8 @@ static int __init init_slate_com_dev(void)
 
 	if (platform_driver_register(&slate_daemon_driver))
 		pr_err("%s: failed to register slate-daemon register\n", __func__);
+
+	srcu_init_notifier_head(&slatecom_notifier_chain);
 
 	return 0;
 }

@@ -75,6 +75,11 @@ enum {
 
 #define CHGR_INHIBIT_THRESHOLD_CFG_REG(base)		(base.chg_base + 0x7A)
 
+#define CHGR_QG_SOC_REG(base)			(base.chg_base + 0x84)
+
+#define CHGR_QG_SOC_UPDATE_REG(base)		(base.chg_base + 0x85)
+#define SOC_UPDATE_PCT_BIT			BIT(0)
+
 #define CHGR_FAST_CHARGE_SAFETY_TIMER_CFG_REG(base)	(base.chg_base + 0x90)
 #define FAST_CHARGE_SAFETY_TIMER_EN_BIT		BIT(3)
 #define FAST_CHARGE_SAFETY_TIMER_MASK		GENMASK(1, 0)
@@ -203,6 +208,12 @@ enum {
 #define SINGLE_DECREMENT_BIT			BIT(4)
 #define FORCE_5V_BIT				BIT(1)
 #define IDLE_BIT				BIT(0)
+
+#define USB_APSD_CFG_REG(base)			(base.usbin_base + 0x46)
+#define FLOAT_OPTIONS_MASK			GENMASK(2, 0)
+#define FLOAT_DIS_CHGING_CFG_BIT		BIT(2)
+#define SUSPEND_FLOAT_CFG_BIT			BIT(1)
+#define FORCE_FLOAT_SDP_CFG_BIT			BIT(0)
 
 /********************************
  *  TYPEC Peripheral Registers  *
