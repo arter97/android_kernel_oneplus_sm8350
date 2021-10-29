@@ -710,6 +710,8 @@ static int ssr_slate_cb(struct notifier_block *this,
 		pr_debug("Slate after shutdown\n");
 		slatee.e_type = SLATE_AFTER_POWER_DOWN;
 		send_uevent(&slatee);
+		set_slate_bt_state(false);
+		set_slate_dsp_state(false);
 		break;
 	case SUBSYS_BEFORE_POWERUP:
 		pr_debug("Slate before powerup\n");
