@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
 /*
@@ -1264,10 +1264,10 @@ static int spss_remove(struct platform_device *pdev)
 		subsys_notif_unregister_notifier(iar_notif_handle, iar_nb);
 
 	kfree(iar_nb);
-	iar_nb = 0;
+	iar_nb = NULL;
 
 	kfree(spss_utils_dev);
-	spss_utils_dev = 0;
+	spss_utils_dev = NULL;
 
 	if (cmac_mem != NULL) {
 		iounmap(cmac_mem);
