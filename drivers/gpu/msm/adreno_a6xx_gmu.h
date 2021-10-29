@@ -211,6 +211,8 @@ struct a6xx_gmu_device {
 	void __iomem *pdc_cfg_base;
 	/** @pdc_seq_base: Base address of PDC seq registers */
 	void __iomem *pdc_seq_base;
+	/** @num_oob_perfcntr: Number of active oob_perfcntr requests */
+	u32 num_oob_perfcntr;
 };
 
 /* Helper function to get to a6xx gmu device from adreno device */
