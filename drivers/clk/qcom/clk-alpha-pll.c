@@ -950,6 +950,7 @@ void clk_huayra_pll_configure(struct clk_alpha_pll *pll, struct regmap *regmap,
 	regmap_update_bits(regmap, PLL_MODE(pll),
 			 PLL_OUTCTRL, PLL_OUTCTRL);
 }
+EXPORT_SYMBOL(clk_huayra_pll_configure);
 
 static unsigned long
 alpha_huayra_pll_calc_rate(u64 prate, u32 l, u32 a)
@@ -1952,8 +1953,11 @@ static void clk_pll_restore_context(struct clk_hw *hw)
 
 	switch (type) {
 	case CLK_ALPHA_PLL_TYPE_DEFAULT:
-	case CLK_ALPHA_PLL_TYPE_HUAYRA:
 		clk_alpha_pll_configure(pll, pll->clkr.regmap,
+					pll->config);
+		break;
+	case CLK_ALPHA_PLL_TYPE_HUAYRA:
+		clk_huayra_pll_configure(pll, pll->clkr.regmap,
 					pll->config);
 		break;
 	case CLK_ALPHA_PLL_TYPE_FABIA:
