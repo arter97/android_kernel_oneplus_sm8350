@@ -2705,6 +2705,7 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 	struct platform_device *pdev = to_platform_device(dev);
 	struct ufs_qcom_host *host;
 	struct resource *res;
+	struct device_node *np = dev->of_node;
 
 	host = devm_kzalloc(dev, sizeof(*host), GFP_KERNEL);
 	if (!host) {
@@ -2761,6 +2762,16 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 			dev_err(dev, "%s: PHY get failed %d\n", __func__, err);
 			goto out_variant_clear;
 		}
+	}
+
+	/*
+	 * Check whether primary UFS boot device is probed using
+	 * primary_boot_device_probed flag, if its not set defer the probe.
+	 */
+	if ((of_property_read_bool(np, "secondary-storage")) && (!ufs_qcom_hosts[0]
+		|| !ufs_qcom_hosts[0]->hba->primary_boot_device_probed)) {
+		err = -EPROBE_DEFER;
+		goto out_variant_clear;
 	}
 
 	host->device_reset = devm_gpiod_get_optional(dev, "reset",
