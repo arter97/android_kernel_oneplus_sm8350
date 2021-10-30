@@ -42,6 +42,7 @@ static const struct smb_base_address smb_base[] = {
 		.usbin_base = 0x2900,
 		.misc_base  = 0x2c00,
 		.dcdc_base  = 0x2700,
+		.boost_base = 0x2b00,
 	},
 };
 
