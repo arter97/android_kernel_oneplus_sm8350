@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2015-2020, 2021, The Linux Foundation.
+ * Copyright (c) 2015-2020, 2021, The Linux Foundation. All rights reserved.
  * All rights reserved.
  */
 
@@ -1871,6 +1871,13 @@ static int icnss_wpss_ssr_register_notifier(struct icnss_priv *priv)
 	return ret;
 }
 
+static int icnss_slate_notifier_nb(struct notifier_block *nb,
+				   unsigned long code,
+				   void *data)
+{
+	return NOTIFY_OK;
+}
+
 static int icnss_modem_ssr_register_notifier(struct icnss_priv *priv)
 {
 	int ret = 0;
@@ -1915,6 +1922,37 @@ static int icnss_modem_ssr_unregister_notifier(struct icnss_priv *priv)
 	subsys_notif_unregister_notifier(priv->modem_notify_handler,
 					 &priv->modem_ssr_nb);
 	priv->modem_notify_handler = NULL;
+
+	return 0;
+}
+
+static int icnss_slate_ssr_register_notifier(struct icnss_priv *priv)
+{
+	int ret = 0;
+
+	priv->slate_ssr_nb.notifier_call = icnss_slate_notifier_nb;
+
+	priv->slate_notify_handler =
+		subsys_notif_register_notifier("slatefw", &priv->slate_ssr_nb);
+
+	if (IS_ERR(priv->slate_notify_handler)) {
+		ret = PTR_ERR(priv->slate_notify_handler);
+		icnss_pr_err("SLATE register notifier failed: %d\n", ret);
+	}
+
+	set_bit(ICNSS_SLATE_SSR_REGISTERED, &priv->state);
+
+	return ret;
+}
+
+static int icnss_slate_ssr_unregister_notifier(struct icnss_priv *priv)
+{
+	if (!test_and_clear_bit(ICNSS_SLATE_SSR_REGISTERED, &priv->state))
+		return 0;
+
+	subsys_notif_unregister_notifier(priv->slate_notify_handler,
+					 &priv->slate_ssr_nb);
+	priv->slate_notify_handler = NULL;
 
 	return 0;
 }
@@ -2213,6 +2251,10 @@ static int icnss_enable_recovery(struct icnss_priv *priv)
 	}
 
 	icnss_modem_ssr_register_notifier(priv);
+
+	if (priv->is_slate_rfa)
+		icnss_slate_ssr_register_notifier(priv);
+
 	if (test_bit(SSR_ONLY, &priv->ctrl_params.quirks)) {
 		icnss_pr_dbg("PDR disabled through module parameter\n");
 		return 0;
@@ -3594,6 +3636,12 @@ static int icnss_resource_parse(struct icnss_priv *priv)
 				priv->ce_irqs[i] = res->start;
 			}
 		}
+
+		if (of_property_read_bool(pdev->dev.of_node,
+					  "qcom,is_slate_rfa")) {
+			priv->is_slate_rfa = true;
+			icnss_pr_err("SLATE rfa is enabled\n");
+		}
 	} else if (priv->device_id == WCN6750_DEVICE_ID) {
 		res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
 						   "msi_addr");
@@ -4105,6 +4153,9 @@ static int icnss_remove(struct platform_device *pdev)
 	icnss_sysfs_destroy(priv);
 
 	complete_all(&priv->unblock_shutdown);
+
+	if (priv->is_slate_rfa)
+		icnss_slate_ssr_unregister_notifier(priv);
 
 	destroy_ramdump_device(priv->msa0_dump_dev);
 
