@@ -613,6 +613,13 @@ static int icnss_driver_event_server_arrive(struct icnss_priv *priv,
 
 	set_bit(ICNSS_WLFW_CONNECTED, &priv->state);
 
+	if (priv->is_slate_rfa && !test_bit(ICNSS_SLATE_UP, &priv->state)) {
+		reinit_completion(&priv->slate_boot_complete);
+		icnss_pr_dbg("Waiting for slate boot up notification, 0x%lx\n",
+			     priv->state);
+		wait_for_completion(&priv->slate_boot_complete);
+	}
+
 	ret = wlfw_ind_register_send_sync_msg(priv);
 	if (ret < 0) {
 		if (ret == -EALREADY) {
@@ -1875,6 +1882,36 @@ static int icnss_slate_notifier_nb(struct notifier_block *nb,
 				   unsigned long code,
 				   void *data)
 {
+	struct icnss_priv *priv = container_of(nb, struct icnss_priv,
+					       slate_ssr_nb);
+	int ret = 0;
+
+	icnss_pr_vdbg("Slate-subsys-notify: event %lu\n", code);
+
+	if (code == SUBSYS_AFTER_POWERUP) {
+		set_bit(ICNSS_SLATE_UP, &priv->state);
+		complete(&priv->slate_boot_complete);
+		icnss_pr_dbg("Slate boot complete, state: 0x%lx\n",
+			     priv->state);
+	} else if (code == SUBSYS_BEFORE_SHUTDOWN &&
+		   test_bit(ICNSS_SLATE_UP, &priv->state)) {
+		clear_bit(ICNSS_SLATE_UP, &priv->state);
+		if (test_bit(ICNSS_PD_RESTART, &priv->state)) {
+			icnss_pr_err("PD_RESTART in progress 0x%lx\n",
+				     priv->state);
+			goto skip_pdr;
+		}
+
+		icnss_pr_dbg("Initiating PDR 0x%lx\n", priv->state);
+		ret = icnss_trigger_recovery(&priv->pdev->dev);
+		if (ret < 0) {
+			icnss_fatal_err("Fail to trigger PDR: ret: %d, state: 0x%lx\n",
+					ret, priv->state);
+			goto skip_pdr;
+		}
+	}
+
+skip_pdr:
 	return NOTIFY_OK;
 }
 
@@ -4090,6 +4127,9 @@ static int icnss_probe(struct platform_device *pdev)
 	icnss_set_plat_priv(priv);
 
 	init_completion(&priv->unblock_shutdown);
+
+	if (priv->is_slate_rfa)
+		init_completion(&priv->slate_boot_complete);
 
 	if (priv->device_id == WCN6750_DEVICE_ID) {
 		ret = icnss_dms_init(priv);
