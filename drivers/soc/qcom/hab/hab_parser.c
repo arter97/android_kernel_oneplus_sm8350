@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2018, 2021, The Linux Foundation. All rights reserved.
  */
 #include "hab.h"
 #include <linux/of.h>
@@ -36,6 +36,21 @@ void dump_settings(struct local_vmid *settings)
 	pr_debug("self vmid is %d\n", settings->self);
 }
 
+
+#ifdef CONFIG_MSM_VHOST_HAB
+int fill_default_gvm_settings(struct local_vmid *settings, int vmid_default,
+		int mmid_start, int mmid_end)
+{
+	int32_t be = HABCFG_BE_TRUE;
+	int32_t range = 1;
+	int32_t vmremote = vmid_default;
+
+	/* default gvm always talks to host as vm0 */
+	settings->self = 0;
+	return fill_vmid_mmid_tbl(settings->vmid_mmid_list, vmremote, range,
+		mmid_start/100, (mmid_end-mmid_start)/100+1, be);
+}
+#else
 int fill_default_gvm_settings(struct local_vmid *settings, int vmid_local,
 		int mmid_start, int mmid_end)
 {
@@ -48,6 +63,7 @@ int fill_default_gvm_settings(struct local_vmid *settings, int vmid_local,
 	return fill_vmid_mmid_tbl(settings->vmid_mmid_list, vmremote, range,
 		mmid_start/100, (mmid_end-mmid_start)/100+1, be);
 }
+#endif
 
 /* device tree based parser */
 static int hab_parse_dt(struct local_vmid *settings)

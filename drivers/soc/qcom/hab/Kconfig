@@ -20,3 +20,23 @@ config MSM_HAB_DEFAULT_VMID
 	  The default HAB VMID.
 	  It will not be used when there are some other configuration sources,
 	  e.g., device tree.
+
+config MSM_VIRTIO_HAB
+	bool "Enable hab plugin for virtio hypervisor"
+	depends on VIRTIO
+	depends on MSM_HAB
+	help
+	  hab plugin for virtio devices on guest OS.
+	  The plugin running on guest OS relies on
+	  virtio queues to transport HAB messages and
+	  communicate with host OS.
+
+config MSM_VHOST_HAB
+	bool "Enable hab plugin for vhost hypervisor"
+	select VHOST
+	depends on MSM_HAB
+	help
+	  hab plugin for vhost device on host OS.
+	  The plugin running on host OS relies on
+	  vhost framework to transport HAB messages
+	  and communicate with guest OS.
