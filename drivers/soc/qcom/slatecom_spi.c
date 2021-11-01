@@ -110,6 +110,12 @@ struct event_list {
 static void *slate_com_drv;
 static uint32_t g_slav_status_reg;
 
+struct spi_slave_parameters {
+	u32 spi_cs_clk_delay;
+	u32 spi_inter_words_delay;
+};
+static struct spi_slave_parameters slv_ctrl = { 4000, 0 };
+
 /* SLATECOM client callbacks set-up */
 static void send_input_events(struct work_struct *work);
 static struct list_head cb_head = LIST_HEAD_INIT(cb_head);
@@ -1141,6 +1147,7 @@ static int slate_spi_probe(struct spi_device *spi)
 	slate_spi->spi = spi;
 	spi_set_drvdata(spi, slate_spi);
 	slate_spi_init(slate_spi);
+	spi->controller_data = &slv_ctrl;
 
 	/* SLATECOM Interrupt probe */
 	node = spi->dev.of_node;
