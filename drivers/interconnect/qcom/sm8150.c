@@ -450,7 +450,7 @@ static struct qcom_icc_node qxm_camnoc_sf_uncomp = {
 static struct qcom_icc_qosbox qnm_npu_qos = {
 	.regs = icc_qnoc_qos_regs[ICC_QNOC_QOSGEN_TYPE_RPMH],
 	.num_ports = 1,
-	.offsets = { 0x24000 },
+	.offsets = { 0x0 },
 	.config = &(struct qos_config) {
 		.prio = 0,
 		.urg_fwd = 1,
@@ -2006,6 +2006,7 @@ static struct qcom_icc_bcm bcm_cn0 = {
 static struct qcom_icc_bcm bcm_co0 = {
 	.name = "CO0",
 	.voter_idx = 0,
+	.keepalive = true,
 	.num_nodes = 1,
 	.nodes = { &qns_cdsp_mem_noc },
 };
@@ -2013,6 +2014,7 @@ static struct qcom_icc_bcm bcm_co0 = {
 static struct qcom_icc_bcm bcm_co1 = {
 	.name = "CO1",
 	.voter_idx = 0,
+	.keepalive = true,
 	.num_nodes = 1,
 	.nodes = { &qnm_npu },
 };
