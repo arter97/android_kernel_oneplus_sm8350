@@ -43,6 +43,12 @@ struct bus_vectors {
 	int ib;
 };
 
+enum ssc_core_clks {
+	SSC_CORE_CLK,
+	SSC_CORE2X_CLK,
+	SSC_NUM_CLKS
+};
+
 /**
  * @struct geni_se_device - Data structure to represent the QUPv3 Core
  * @dev:		Device pointer of the QUPv3 core.
@@ -76,6 +82,7 @@ struct bus_vectors {
  * @vote_for_bw:	To check if we have to vote for BW or BCM threashold
 			in ab/ib ICB voting.
  * @struct ssc_qup_ssr: Structure to represent SSC Qupv3 SSR Structure.
+ * @struct clk_bulk_data: Data used for bulk clk operations.
  */
 struct geni_se_device {
 	struct device *dev;
@@ -107,6 +114,7 @@ struct geni_se_device {
 	bool vote_for_bw;
 	struct se_geni_rsc wrapper_rsc;
 	struct ssc_qup_ssr ssr;
+	struct clk_bulk_data *ssc_clks;
 };
 
 #define HW_VER_MAJOR_MASK GENMASK(31, 28)
@@ -352,10 +360,18 @@ static void geni_se_ssc_qup_down(struct geni_se_device *dev)
 	struct se_geni_rsc *rsc = NULL;
 
 	dev->ssr.is_ssr_down = true;
+	if (list_empty(&dev->ssr.active_list_head)) {
+		GENI_SE_ERR(dev->log_ctx, false, NULL,
+			"%s: No Active usecase\n", __func__);
+		return;
+	}
+
 	list_for_each_entry(rsc, &dev->ssr.active_list_head,
 					rsc_ssr.active_list) {
 		rsc->rsc_ssr.force_suspend(rsc->ctrl_dev);
 	}
+	/* Disable core and core2x clk */
+	clk_bulk_disable_unprepare(SSC_NUM_CLKS, dev->ssc_clks);
 }
 
 static void geni_se_ssc_qup_up(struct geni_se_device *dev)
@@ -363,10 +379,35 @@ static void geni_se_ssc_qup_up(struct geni_se_device *dev)
 	int ret = 0;
 	struct se_geni_rsc *rsc = NULL;
 
+	if (list_empty(&dev->ssr.active_list_head)) {
+		GENI_SE_ERR(dev->log_ctx, false, NULL,
+			"%s: No Active usecase\n", __func__);
+		return;
+	}
+	/* Enable core/2x clk before TZ SCM call */
+	ret = clk_bulk_prepare_enable(SSC_NUM_CLKS, dev->ssc_clks);
+	if (ret) {
+		GENI_SE_ERR(dev->log_ctx, false, NULL,
+			"%s: corex/2x clk enable failed ret:%d\n",
+						__func__, ret);
+		return;
+	}
+
+	list_for_each_entry(rsc, &dev->ssr.active_list_head,
+					rsc_ssr.active_list) {
+		se_geni_clks_on(rsc);
+	}
+
+	/* Make SCM call, to load the TZ FW */
 	ret = qcom_scm_load_qup_fw();
 	if (ret) {
 		dev_err(dev->dev, "Unable to load firmware after SSR\n");
 		return;
+	}
+
+	list_for_each_entry(rsc, &dev->ssr.active_list_head,
+					rsc_ssr.active_list) {
+		se_geni_clks_off(rsc);
 	}
 
 	list_for_each_entry(rsc, &dev->ssr.active_list_head,
@@ -1920,6 +1961,23 @@ static int geni_se_probe(struct platform_device *pdev)
 	ret = of_property_read_string(geni_se_dev->dev->of_node,
 			"qcom,subsys-name", &geni_se_dev->ssr.subsys_name);
 	if (!ret) {
+		geni_se_dev->ssc_clks = devm_kcalloc(dev, SSC_NUM_CLKS,
+				sizeof(*geni_se_dev->ssc_clks), GFP_KERNEL);
+		if (!geni_se_dev->ssc_clks) {
+			ret = -ENOMEM;
+			dev_err(dev, "%s: Unable to allocate memmory ret:%d\n",
+					__func__, ret);
+			return ret;
+		}
+		geni_se_dev->ssc_clks[SSC_CORE_CLK].id = "corex";
+		geni_se_dev->ssc_clks[SSC_CORE2X_CLK].id = "core2x";
+		ret = devm_clk_bulk_get(dev, SSC_NUM_CLKS,
+					geni_se_dev->ssc_clks);
+		if (ret) {
+			dev_err(dev, "%s: Err getting core/2x clk:%d\n", ret);
+			return ret;
+		}
+
 		INIT_LIST_HEAD(&geni_se_dev->ssr.active_list_head);
 		ret = geni_se_ssc_qup_ssr_reg(geni_se_dev);
 		if (ret) {
