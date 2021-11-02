@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
  */
 
 #define pr_fmt(fmt) "%s: " fmt, __func__
@@ -105,6 +105,7 @@ struct lt9611 {
 	u32 hdmi_en_gpio;
 	u32 hdmi_3p3_en;
 	u32 hdmi_1p2_en;
+	u32 ls_gpio;
 
 	unsigned int num_vreg;
 	struct lt9611_vreg *vreg_config;
@@ -721,6 +722,11 @@ static int lt9611_parse_dt(struct device *dev,
 	}
 	pr_debug("reset_gpio=%d\n", pdata->reset_gpio);
 
+	pdata->ls_gpio =
+		of_get_named_gpio(np, "lt,ls-gpio", 0);
+	if (!gpio_is_valid(pdata->ls_gpio))
+		pr_debug("hdmi_ls_en gpio not specified\n");
+
 	pdata->hdmi_3p3_en =
 		of_get_named_gpio(np, "lt,hdmi-3p3-en", 0);
 	if (!gpio_is_valid(pdata->hdmi_3p3_en))
@@ -801,7 +807,7 @@ static int lt9611_gpio_configure(struct lt9611 *pdata, bool on)
 			goto hdmi_1p2_error;
 		}
 
-		ret = gpio_direction_output(pdata->reset_gpio, 0);
+		ret = gpio_direction_output(pdata->reset_gpio, 1);
 		if (ret) {
 			pr_err("lt9611 reset gpio direction failed\n");
 			goto reset_error;
@@ -850,6 +856,20 @@ static int lt9611_gpio_configure(struct lt9611 *pdata, bool on)
 				goto irq_error;
 			}
 		}
+
+		if (gpio_is_valid(pdata->ls_gpio)) {
+			ret = gpio_request(pdata->ls_gpio, "lt9611-ls-gpio");
+			if (ret) {
+				pr_err("lt9611 level shift gpio request failed\n");
+				goto irq_error;
+			}
+
+			ret = gpio_direction_output(pdata->ls_gpio, 1);
+			if (ret) {
+				pr_err("lt9611 hdmi level shift gpio direction failed\n");
+				goto ls_error;
+			}
+		}
 	} else {
 		gpio_free(pdata->irq_gpio);
 		if (gpio_is_valid(pdata->hdmi_ps_gpio))
@@ -861,6 +881,8 @@ static int lt9611_gpio_configure(struct lt9611 *pdata, bool on)
 			gpio_free(pdata->hdmi_1p2_en);
 		if (gpio_is_valid(pdata->hdmi_3p3_en))
 			gpio_free(pdata->hdmi_3p3_en);
+		if (gpio_is_valid(pdata->ls_gpio))
+			gpio_free(pdata->ls_gpio);
 	}
 
 	return ret;
@@ -880,6 +902,8 @@ hdmi_1p2_error:
 	gpio_free(pdata->hdmi_1p2_en);
 hdmi_3p3_error:
 	gpio_free(pdata->hdmi_3p3_en);
+ls_error:
+	gpio_free(pdata->ls_gpio);
 error:
 	return ret;
 }
