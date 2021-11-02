@@ -470,13 +470,13 @@ static void pt_mt_send_dummy_event(struct pt_core_data *cd,
 
 	switch (cd->gesture_id) {
 	case GESTURE_DOUBLE_TAP:
-		key_value = KEY_F1;
+		key_value = KEY_WAKEUP;
 		break;
 	case GESTURE_TWO_FINGERS_SLIDE:
-		key_value = KEY_F2;
+		key_value = KEY_WAKEUP;
 		break;
 	case GESTURE_TOUCH_DETECTED:
-		key_value = KEY_F3;
+		key_value = KEY_WAKEUP;
 		break;
 	case GESTURE_PUSH_BUTTON:
 		key_value = KEY_F4;
@@ -499,7 +499,7 @@ static void pt_mt_send_dummy_event(struct pt_core_data *cd,
 
 	if (key_value > 0) {
 		input_report_key(md->input, key_value, 1);
-		mdelay(10);
+		input_sync(md->input);
 		input_report_key(md->input, key_value, 0);
 		input_sync(md->input);
 	}
@@ -837,6 +837,7 @@ static int pt_setup_input_device(struct device *dev)
 	input_set_capability(md->input, EV_KEY, KEY_F6);
 	input_set_capability(md->input, EV_KEY, KEY_F7);
 	input_set_capability(md->input, EV_KEY, KEY_F8);
+	input_set_capability(md->input, EV_KEY, KEY_WAKEUP);
 #endif
 	return rc;
 }
