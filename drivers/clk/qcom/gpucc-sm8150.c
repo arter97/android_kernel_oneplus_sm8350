@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/clk-provider.h>
@@ -22,6 +22,11 @@
 
 static DEFINE_VDD_REGULATORS(vdd_cx, VDD_NUM, 1, vdd_corner);
 static DEFINE_VDD_REGULATORS(vdd_mx, VDD_NUM, 1, vdd_corner);
+
+static struct clk_vdd_class *gpu_cc_sm8150_regulators[] = {
+	&vdd_cx,
+	&vdd_mx,
+};
 
 enum {
 	P_BI_TCXO,
@@ -212,6 +217,7 @@ static struct clk_branch gpu_cc_cxo_clk = {
 		.enable_mask = BIT(0),
 		.hw.init = &(struct clk_init_data){
 			.name = "gpu_cc_cxo_clk",
+			.flags = CLK_DONT_HOLD_STATE,
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -269,10 +275,12 @@ static const struct regmap_config gpu_cc_sm8150_regmap_config = {
 	.fast_io = true,
 };
 
-static const struct qcom_cc_desc gpu_cc_sm8150_desc = {
+static struct qcom_cc_desc gpu_cc_sm8150_desc = {
 	.config = &gpu_cc_sm8150_regmap_config,
 	.clks = gpu_cc_sm8150_clocks,
 	.num_clks = ARRAY_SIZE(gpu_cc_sm8150_clocks),
+	.clk_regulators = gpu_cc_sm8150_regulators,
+	.num_clk_regulators = ARRAY_SIZE(gpu_cc_sm8150_regulators),
 };
 
 static const struct of_device_id gpu_cc_sm8150_match_table[] = {
@@ -310,20 +318,6 @@ static int gpu_cc_sm8150_probe(struct platform_device *pdev)
 	struct regmap *regmap;
 	int ret;
 
-	vdd_cx.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_cx");
-	if (IS_ERR(vdd_cx.regulator[0])) {
-		if (PTR_ERR(vdd_cx.regulator[0]) != -EPROBE_DEFER)
-			dev_err(&pdev->dev, "Unable to get vdd_cx regulator\n");
-		return PTR_ERR(vdd_cx.regulator[0]);
-	}
-
-	vdd_mx.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_mx");
-	if (IS_ERR(vdd_mx.regulator[0])) {
-		if (PTR_ERR(vdd_mx.regulator[0]) != -EPROBE_DEFER)
-			dev_err(&pdev->dev, "Unable to get vdd_mx regulator\n");
-		return PTR_ERR(vdd_mx.regulator[0]);
-	}
-
 	regmap = qcom_cc_map(pdev, &gpu_cc_sm8150_desc);
 	if (IS_ERR(regmap))
 		return PTR_ERR(regmap);
@@ -345,11 +339,17 @@ static int gpu_cc_sm8150_probe(struct platform_device *pdev)
 	return ret;
 }
 
+static void gpu_cc_sm8150_sync_state(struct device *dev)
+{
+	qcom_cc_sync_state(dev, &gpu_cc_sm8150_desc);
+}
+
 static struct platform_driver gpu_cc_sm8150_driver = {
 	.probe = gpu_cc_sm8150_probe,
 	.driver = {
 		.name = "gpu_cc-sm8150",
 		.of_match_table = gpu_cc_sm8150_match_table,
+		.sync_state = gpu_cc_sm8150_sync_state,
 	},
 };
 
