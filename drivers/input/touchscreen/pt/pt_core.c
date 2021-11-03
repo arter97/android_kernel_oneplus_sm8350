@@ -7666,14 +7666,29 @@ static int pt_core_sleep_(struct pt_core_data *cd)
 	cancel_work_sync(&cd->enum_work);
 	pt_stop_wd_timer(cd);
 
-	if (IS_EASY_WAKE_CONFIGURED(cd->easy_wakeup_gesture) && cd->runtime)
+	if (IS_EASY_WAKE_CONFIGURED(cd->easy_wakeup_gesture) && cd->runtime) {
 		rc = pt_put_device_into_easy_wakeup_(cd);
-	else if (cd->cpdata->flags & PT_CORE_FLAG_POWEROFF_ON_SLEEP)
+		if (rc)
+			pr_err("%s: Easy wakeup error detected :rc=%d\n", __func__, rc);
+	} else if (cd->cpdata->flags & PT_CORE_FLAG_POWEROFF_ON_SLEEP) {
+		pt_debug(cd->dev, DL_INFO,
+			"%s: Entering into power off mode:\n", __func__);
 		rc = pt_core_poweroff_device_(cd);
-	else if (cd->cpdata->flags & PT_CORE_FLAG_DEEP_STANDBY)
+		if (rc)
+			pr_err("%s: Power off error detected :rc=%d\n", __func__, rc);
+	} else if (cd->cpdata->flags & PT_CORE_FLAG_DEEP_STANDBY) {
+		pt_debug(cd->dev, DL_INFO,
+			"%s: Entering into deep standby mode:\n", __func__);
 		rc = pt_put_device_into_deep_standby_(cd);
-	else
+		if (rc)
+			pr_err("%s: Deep standby error detected :rc=%d\n", __func__, rc);
+	} else {
+		pt_debug(cd->dev, DL_INFO,
+			"%s: Entering into deep sleep mode:\n", __func__);
 		rc = pt_put_device_into_deep_sleep_(cd);
+		if (rc)
+			pr_err("%s: Deep sleep error detected :rc=%d\n", __func__, rc);
+	}
 
 	mutex_lock(&cd->system_lock);
 	cd->sleep_state = SS_SLEEP_ON;
@@ -10512,7 +10527,7 @@ static int pt_core_suspend_(struct device *dev)
 	pt_debug(dev, DL_INFO, "%s: Entering into suspend mode:\n",
 		__func__);
 	rc = pt_core_sleep(cd);
-	if (rc < 0) {
+	if (rc) {
 		pt_debug(dev, DL_ERROR, "%s: Error on sleep\n", __func__);
 		return -EAGAIN;
 	}
@@ -10621,7 +10636,12 @@ static int pt_core_resume_(struct device *dev)
 	}
 
 exit:
-	pt_core_wake(cd);
+	rc = pt_core_wake(cd);
+	if (rc) {
+		dev_err(dev, "%s: Failed to wake up: rc=%d\n",
+			__func__, rc);
+		return -EAGAIN;
+	}
 
 	return 0;
 }
