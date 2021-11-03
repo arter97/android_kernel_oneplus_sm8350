@@ -277,7 +277,7 @@ static long ps_ioctl(struct file *filp, unsigned int ui_power_state_cmd, unsigne
 		pr_debug("Inside LPM_ACTIVE %s\n", __func__);
 #ifdef CONFIG_DEEPSLEEP
 		if (mem_sleep_current == PM_SUSPEND_MEM) {
-			mem_sleep_current = PM_SUSPEND_STANDBY;
+			mem_sleep_current = PM_SUSPEND_TO_IDLE;
 			/*Release Wakeup Source*/
 			__pm_relax(notify_ws);
 		}
