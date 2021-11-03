@@ -10527,7 +10527,7 @@ static int pt_core_suspend_(struct device *dev)
 	pt_debug(dev, DL_INFO, "%s: Entering into suspend mode:\n",
 		__func__);
 	rc = pt_core_sleep(cd);
-	if (rc) {
+	if (rc < 0) {
 		pt_debug(dev, DL_ERROR, "%s: Error on sleep\n", __func__);
 		return -EAGAIN;
 	}
@@ -10537,7 +10537,7 @@ static int pt_core_suspend_(struct device *dev)
 		dev_err(dev, "%s: Failed to disable regulators: rc=%d\n",
 			__func__, rc);
 	}
-	dev_info(dev, "%s: Sayantan1: Voltage regulators disabled: rc=%d\n",
+	dev_info(dev, "%s: Voltage regulators disabled: rc=%d\n",
 		__func__, rc);
 
 	if (!IS_EASY_WAKE_CONFIGURED(cd->easy_wakeup_gesture) && !cd->runtime)
@@ -10557,7 +10557,7 @@ static int pt_core_suspend_(struct device *dev)
 			__func__);
 	}
 
-	return rc;
+	return 0;
 }
 
 /*******************************************************************************
@@ -10637,7 +10637,7 @@ static int pt_core_resume_(struct device *dev)
 
 exit:
 	rc = pt_core_wake(cd);
-	if (rc) {
+	if (rc < 0) {
 		dev_err(dev, "%s: Failed to wake up: rc=%d\n",
 			__func__, rc);
 		return -EAGAIN;
