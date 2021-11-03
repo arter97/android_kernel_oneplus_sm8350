@@ -1311,7 +1311,7 @@ static int qbg_get_battery_temp(struct qti_qbg *chip, int *temp)
 static int qbg_get_charge_counter(struct qti_qbg *chip, int *charge_count)
 {
 
-	if (is_debug_batt_id(chip) || chip->battery_missing) {
+	if (is_debug_batt_id(chip) || chip->battery_missing || chip->battery_unknown) {
 		*charge_count = -EINVAL;
 		return 0;
 	}
@@ -1362,6 +1362,7 @@ static int qbg_setup_battery(struct qti_qbg *chip)
 	u8 ocv_boost_val = 0x02;
 
 	chip->profile_loaded = false;
+	chip->battery_unknown = false;
 
 	if (!is_battery_present(chip)) {
 		qbg_dbg(chip, QBG_DEBUG_PROFILE, "Battery Missing!\n");
@@ -1384,6 +1385,13 @@ static int qbg_setup_battery(struct qti_qbg *chip)
 			rc = qbg_sdam_write(chip,
 				QBG_SDAM_BASE(chip, SDAM_CTRL0) +
 				QBG_SDAM_BHARGER_OCV_HDRM_OFFSET, &ocv_boost_val, 1);
+		}
+
+		if (!strcmp(qbg_get_battery_type(chip), DEFAULT_BATT_TYPE)) {
+			chip->batt_type_str = DEFAULT_BATT_TYPE;
+			chip->battery_unknown = true;
+			chip->soc = BATT_MISSING_SOC;
+			rc = 0;
 		}
 	}
 
@@ -2141,7 +2149,14 @@ unregister_chrdev:
 
 static int qbg_register_interrupts(struct qti_qbg *chip)
 {
-	int rc;
+	int rc = 0;
+
+	/*
+	 * Do not register for data-full to skip processing QBG
+	 * data if a valid battery is not detected
+	 */
+	if (chip->battery_unknown)
+		return rc;
 
 	rc = devm_request_threaded_irq(chip->dev, chip->irq, NULL,
 			qbg_data_full_irq_handler, IRQF_ONESHOT,
