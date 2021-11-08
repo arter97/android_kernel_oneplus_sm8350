@@ -29,6 +29,7 @@
 #include <drm/drm_file.h>
 
 #include "virtgpu_drv.h"
+#include "../../../soc/qcom/hab/hab_virtio.h"
 
 static void virtio_gpu_config_changed_work_func(struct work_struct *work)
 {
@@ -112,16 +113,24 @@ static void virtio_gpu_get_capsets(struct virtio_gpu_device *vgdev,
 
 int virtio_gpu_init(struct drm_device *dev)
 {
-	static vq_callback_t *callbacks[] = {
-		virtio_gpu_ctrl_ack, virtio_gpu_cursor_ack
+	static vq_callback_t *callbacks[4] = {
+		virtio_gpu_ctrl_ack, virtio_gpu_cursor_ack, NULL, NULL
 	};
-	static const char * const names[] = { "control", "cursor" };
-
+	static char *names[4] = { "control", "cursor", NULL, NULL };
 	struct virtio_gpu_device *vgdev;
 	/* this will expand later */
-	struct virtqueue *vqs[2];
+	struct virtqueue *vqs[4];
 	u32 num_scanouts, num_capsets;
 	int ret;
+
+	struct virtio_hab *vh = NULL;
+	int vendorq = 0;
+
+	DRM_INFO("virtio-dev original features %llX\n", dev_to_virtio(dev->dev)->features);
+#ifdef CONFIG_MSM_VIRTIO_HAB
+	/* hardcode to add vendor feature bit, until coqos can pass this feature from PVM */
+	__virtio_set_bit(dev_to_virtio(dev->dev), VIRTIO_GPU_F_VENDOR);
+#endif
 
 	if (!virtio_has_feature(dev_to_virtio(dev->dev), VIRTIO_F_VERSION_1))
 		return -ENODEV;
@@ -149,7 +158,7 @@ int virtio_gpu_init(struct drm_device *dev)
 	INIT_WORK(&vgdev->config_changed_work,
 		  virtio_gpu_config_changed_work_func);
 
-#ifdef __LITTLE_ENDIAN
+#if defined(__LITTLE_ENDIAN) && !defined(CONFIG_MSM_VIRTIO_HAB)
 	if (virtio_has_feature(vgdev->vdev, VIRTIO_GPU_F_VIRGL))
 		vgdev->has_virgl_3d = true;
 	DRM_INFO("virgl 3d acceleration %s\n",
@@ -162,13 +171,49 @@ int virtio_gpu_init(struct drm_device *dev)
 		DRM_INFO("EDID support available.\n");
 	}
 
-	ret = virtio_find_vqs(vgdev->vdev, 2, vqs, callbacks, names, NULL);
+	DRM_INFO("virtio-dev features %llX\n", vgdev->vdev->features);
+	if (virtio_has_feature(vgdev->vdev, VIRTIO_GPU_F_VENDOR)) {
+		vendorq = 1;
+
+		DRM_INFO("obtain 4 vqs\n");
+		ret = virthab_alloc(vgdev->vdev, &vh, MM_GFX, 1);
+		if (!ret)
+			pr_info("virthab alloc done\n");
+		else {
+			pr_err("failed to allocate virthab ret %d\n");
+			return ret;
+		}
+		ret = virthab_init_vqs_pre(vh);
+		if (ret)
+			return ret;
+		callbacks[2] = vh->cbs[0];
+		callbacks[3] = vh->cbs[1];
+		names[2] = vh->names[0];
+		names[3] = vh->names[1];
+		ret = virtio_find_vqs(vgdev->vdev, 4, vqs, callbacks,
+					(const char * const*)names, NULL);
+	} else {
+		DRM_INFO("no vendor vqs\n");
+		ret = virtio_find_vqs(vgdev->vdev, 2, vqs, callbacks,
+					(const char * const*)names, NULL);
+	}
+
 	if (ret) {
 		DRM_ERROR("failed to find virt queues\n");
 		goto err_vqs;
-	}
+	} else
+		pr_info("virtio GPU find vqs\n");
+
 	vgdev->ctrlq.vq = vqs[0];
 	vgdev->cursorq.vq = vqs[1];
+	if (vendorq) {
+		vh->vqs[0] = vqs[2];
+		vh->vqs[1] = vqs[3];
+		vh->vqs_offset = 2; /* this virtio device has all the vqs to itself */
+		ret = virthab_init_vqs_post(vh);
+		if (ret)
+			return ret;
+	}
 	ret = virtio_gpu_alloc_vbufs(vgdev);
 	if (ret) {
 		DRM_ERROR("failed to alloc vbufs\n");
@@ -202,6 +247,11 @@ int virtio_gpu_init(struct drm_device *dev)
 	virtio_device_ready(vgdev->vdev);
 	vgdev->vqs_ready = true;
 
+	if (vendorq) {
+		ret = virthab_queue_inbufs(vh, 1);
+		if (ret)
+			return ret;
+	}
 	if (num_capsets)
 		virtio_gpu_get_capsets(vgdev, num_capsets);
 	if (vgdev->has_edid)

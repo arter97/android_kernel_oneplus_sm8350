@@ -51,6 +51,9 @@
  */
 #define VIRTIO_GPU_F_EDID                1
 
+/* Vendor feature to allow vendor implemented logic shared with vhost driver and virtgpu-drv */
+#define VIRTIO_GPU_F_VENDOR 8
+
 enum virtio_gpu_ctrl_type {
 	VIRTIO_GPU_UNDEFINED = 0,
 

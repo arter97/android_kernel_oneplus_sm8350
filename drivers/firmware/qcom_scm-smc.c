@@ -1206,6 +1206,23 @@ int __qcom_scm_pas_shutdown(struct device *dev, u32 peripheral)
 	return ret ? : desc.res[0];
 }
 
+int __qcom_scm_pas_dsentry(struct device *dev, u32 peripheral)
+{
+	int ret;
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_PIL,
+		.cmd = QCOM_SCM_PIL_PAS_DSENTER,
+		.owner = ARM_SMCCC_OWNER_SIP,
+	};
+
+	desc.args[0] = peripheral;
+	desc.arginfo = QCOM_SCM_ARGS(1);
+
+	ret = qcom_scm_call(dev, &desc);
+
+	return ret ? : desc.res[0];
+}
+
 int __qcom_scm_pas_mss_reset(struct device *dev, bool reset)
 {
 	struct qcom_scm_desc desc = {

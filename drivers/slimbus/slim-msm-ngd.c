@@ -87,6 +87,7 @@ static int dsp_domr_notify_cb(struct notifier_block *n, unsigned long code,
 				void *_cmd);
 static int ngd_slim_qmi_svc_event_init(struct msm_slim_qmi *qmi);
 static void ngd_slim_qmi_svc_event_deinit(struct msm_slim_qmi *qmi);
+static int ngd_slim_runtime_suspend(struct device *device);
 
 static irqreturn_t ngd_slim_interrupt(int irq, void *d)
 {
@@ -1233,6 +1234,23 @@ static int ngd_set_laddr(struct slim_controller *ctrl, const u8 *ea,
 	return 0;
 }
 
+static int ngd_set_suspend(struct slim_controller *ctrl)
+{
+	struct msm_slim_ctrl *dev = slim_get_ctrldata(ctrl);
+	int ret = 0;
+
+	ret = ngd_slim_runtime_suspend(dev->dev);
+	if (ret) {
+		SLIM_INFO(dev, "%s: Failed to suspend:%d\n", __func__, ret);
+		return ret;
+	}
+
+	pm_runtime_disable(dev->dev);
+	pm_runtime_set_suspended(dev->dev);
+	pm_runtime_enable(dev->dev);
+	return ret;
+}
+
 static int ngd_get_laddr(struct slim_controller *ctrl, const u8 *ea,
 				u8 elen, u8 *laddr)
 {
@@ -1998,6 +2016,7 @@ static int ngd_slim_probe(struct platform_device *pdev)
 	dev->ctrl.clkgear = SLIM_MAX_CLK_GEAR;
 	dev->ctrl.set_laddr = ngd_set_laddr;
 	dev->ctrl.get_laddr = ngd_get_laddr;
+	dev->ctrl.suspend_slimbus = ngd_set_suspend;
 	dev->ctrl.allocbw = ngd_allocbw;
 	dev->ctrl.xfer_msg = ngd_xfer_msg;
 	dev->ctrl.xfer_user_msg = ngd_user_msg;

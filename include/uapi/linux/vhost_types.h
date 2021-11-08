@@ -99,6 +99,14 @@ struct vhost_memory {
 	struct vhost_memory_region regions[0];
 };
 
+struct vhost_config {
+	__u32 offset;
+	__u32 size;
+	__u32 flags;
+	__u32 padding;
+	__u8 *data;
+};
+
 /* VHOST_SCSI specific definitions */
 
 /*

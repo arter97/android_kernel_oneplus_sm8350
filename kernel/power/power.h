@@ -8,11 +8,11 @@
 struct swsusp_info {
 	struct new_utsname	uts;
 	u32			version_code;
-	unsigned long		num_physpages;
+	u64			num_physpages;
 	int			cpus;
-	unsigned long		image_pages;
-	unsigned long		pages;
-	unsigned long		size;
+	u64			image_pages;
+	u64			pages;
+	u64			size;
 } __aligned(PAGE_SIZE);
 
 #ifdef CONFIG_HIBERNATION

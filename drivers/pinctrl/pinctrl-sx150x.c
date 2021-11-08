@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2019, 2021, The Linux Foundation. All rights reserved.
  *
  * Copyright (c) 2016, BayLibre, SAS. All rights reserved.
  * Author: Neil Armstrong <narmstrong@baylibre.com>
@@ -15,7 +15,7 @@
 
 #include <linux/regmap.h>
 #include <linux/i2c.h>
-#include <linux/init.h>
+#include <linux/module.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/mutex.h>
@@ -1296,3 +1296,5 @@ static int __init sx150x_init(void)
 	return i2c_add_driver(&sx150x_driver);
 }
 subsys_initcall(sx150x_init);
+
+MODULE_LICENSE("GPL v2");

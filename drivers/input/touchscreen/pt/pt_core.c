@@ -45,6 +45,10 @@
 
 #define PT_STATUS_STR_LEN (50)
 
+#if defined(CONFIG_DRM)
+static struct drm_panel *active_panel;
+#endif
+
 MODULE_FIRMWARE(PT_FW_FILE_NAME);
 
 static const char *pt_driver_core_name = PT_CORE_NAME;
@@ -7662,16 +7666,10 @@ static int pt_core_sleep_(struct pt_core_data *cd)
 	cancel_work_sync(&cd->enum_work);
 	pt_stop_wd_timer(cd);
 
-	if (IS_EASY_WAKE_CONFIGURED(cd->easy_wakeup_gesture))
+	if (IS_EASY_WAKE_CONFIGURED(cd->easy_wakeup_gesture) && cd->runtime)
 		rc = pt_put_device_into_easy_wakeup_(cd);
-	else if (cd->cpdata->flags & PT_CORE_FLAG_POWEROFF_ON_SLEEP) {
-		pt_debug(cd->dev, DL_INFO,
-			"%s: Entering into poweroff mode:\n", __func__);
+	else if (cd->cpdata->flags & PT_CORE_FLAG_POWEROFF_ON_SLEEP)
 		rc = pt_core_poweroff_device_(cd);
-		if (rc < 0)
-			pr_err("%s: Poweroff error detected :rc=%d\n",
-				__func__, rc);
-	}
 	else if (cd->cpdata->flags & PT_CORE_FLAG_DEEP_STANDBY)
 		rc = pt_put_device_into_deep_standby_(cd);
 	else
@@ -8407,7 +8405,7 @@ static int pt_read_input(struct pt_core_data *cd)
 	 */
 	mutex_lock(&cd->system_lock);
 
-	if (IS_EASY_WAKE_CONFIGURED(cd->easy_wakeup_gesture)) {
+	if (IS_EASY_WAKE_CONFIGURED(cd->easy_wakeup_gesture) && cd->runtime) {
 		if (cd->sleep_state == SS_SLEEP_ON) {
 			mutex_unlock(&cd->system_lock);
 			if (!dev->power.is_suspended)
@@ -9494,7 +9492,7 @@ static int pt_core_wake_(struct pt_core_data *cd)
 	mutex_unlock(&cd->system_lock);
 
 	if (!(cd->cpdata->flags & PT_CORE_FLAG_SKIP_RESUME)) {
-		if (IS_EASY_WAKE_CONFIGURED(cd->easy_wakeup_gesture))
+		if (IS_EASY_WAKE_CONFIGURED(cd->easy_wakeup_gesture) && cd->runtime)
 			rc = pt_core_wake_device_from_easy_wake_(cd);
 		else if (cd->cpdata->flags & PT_CORE_FLAG_POWEROFF_ON_SLEEP) {
 			pt_debug(cd->dev, DL_INFO,
@@ -10444,6 +10442,9 @@ static int pt_core_rt_suspend(struct device *dev)
 	if (cd->cpdata->flags & PT_CORE_FLAG_SKIP_RUNTIME)
 		return 0;
 
+	if (cd->sleep_state == SS_SLEEP_OFF)
+		cd->runtime = 1;
+
 	rc = pt_core_sleep(cd);
 	if (rc < 0) {
 		pt_debug(dev, DL_ERROR, "%s: Error on sleep\n", __func__);
@@ -10480,6 +10481,9 @@ static int pt_core_rt_resume(struct device *dev)
 		pt_debug(dev, DL_ERROR, "%s: Error on wake\n", __func__);
 		return -EAGAIN;
 	}
+
+	if (cd->sleep_state == SS_SLEEP_OFF)
+		cd->runtime = 0;
 
 	return 0;
 }
@@ -10521,7 +10525,7 @@ static int pt_core_suspend_(struct device *dev)
 	dev_info(dev, "%s: Sayantan1: Voltage regulators disabled: rc=%d\n",
 		__func__, rc);
 
-	if (!IS_EASY_WAKE_CONFIGURED(cd->easy_wakeup_gesture))
+	if (!IS_EASY_WAKE_CONFIGURED(cd->easy_wakeup_gesture) && !cd->runtime)
 		return 0;
 
 	/* Required to prevent interrupts before bus awake */
@@ -10592,7 +10596,7 @@ static int pt_core_resume_(struct device *dev)
 	dev_info(dev, "%s: Voltage regulator enabled: rc=%d\n",
 		__func__, rc);
 
-	if (!IS_EASY_WAKE_CONFIGURED(cd->easy_wakeup_gesture))
+	if (!IS_EASY_WAKE_CONFIGURED(cd->easy_wakeup_gesture) && !cd->runtime)
 		goto exit;
 
 	/*
@@ -12391,6 +12395,112 @@ static void pt_setup_early_suspend(struct pt_core_data *cd)
 	cd->es.resume = pt_late_resume;
 
 	register_early_suspend(&cd->es);
+}
+#elif defined(CONFIG_DRM)
+
+/*******************************************************************************
+ * FUNCTION: drm_notifier_callback
+ *
+ * SUMMARY: Call back function for DRM notifier to allow to call
+ * resume/suspend attention list.
+ *
+ * RETURN:
+ *   0 = success
+ *
+ * PARAMETERS:
+ *  *self   - pointer to notifier_block structure
+ *   event  - event type of fb notifier
+ *  *data   - pointer to fb_event structure
+ ******************************************************************************/
+static int drm_notifier_callback(struct notifier_block *self,
+		unsigned long event, void *data)
+{
+	struct pt_core_data *cd =
+		container_of(self, struct pt_core_data, fb_notifier);
+	struct drm_panel_notifier *evdata = data;
+	int *blank;
+
+	pt_debug(cd->dev, DL_INFO, "%s: DRM notifier called!\n", __func__);
+
+	if (!evdata)
+		goto exit;
+
+	if (!(event == DRM_PANEL_EARLY_EVENT_BLANK ||
+		event == DRM_PANEL_EVENT_BLANK)) {
+		pt_debug(cd->dev, DL_INFO, "%s: Event(%lu) do not need process\n",
+			__func__, event);
+		goto exit;
+	}
+
+	blank = evdata->data;
+	pt_debug(cd->dev, DL_INFO, "%s: DRM event:%lu,blank:%d", __func__, event, *blank);
+	if (*blank == DRM_PANEL_BLANK_UNBLANK) {
+		pt_debug(cd->dev, DL_INFO, "%s: UNBLANK!\n", __func__);
+		if (event == DRM_PANEL_EARLY_EVENT_BLANK) {
+			pt_debug(cd->dev, DL_INFO, "%s: resume: event = %lu, not care\n",
+				__func__, event);
+		} else if (event == DRM_PANEL_EVENT_BLANK) {
+			if (cd->fb_state != FB_ON) {
+				call_atten_cb(cd, PT_ATTEN_RESUME, 0);
+#if defined(CONFIG_PM_SLEEP)
+				pt_debug(cd->dev, DL_INFO, "%s: Resume notifier called!\n",
+					__func__);
+				if (cd->cpdata->flags & PT_CORE_FLAG_SKIP_RUNTIME)
+					pt_core_resume_(cd->dev);
+#endif
+				cd->fb_state = FB_ON;
+				pt_debug(cd->dev, DL_INFO, "%s: Resume notified!\n", __func__);
+			}
+		}
+	} else if (*blank == DRM_PANEL_BLANK_LP) {
+		pt_debug(cd->dev, DL_INFO, "%s: LOWPOWER!\n", __func__);
+		if (event == DRM_PANEL_EARLY_EVENT_BLANK) {
+			if (cd->fb_state != FB_OFF) {
+#if defined(CONFIG_PM_SLEEP)
+				pt_debug(cd->dev, DL_INFO, "%s: Suspend notifier called!\n",
+					__func__);
+				if (cd->cpdata->flags & PT_CORE_FLAG_SKIP_RUNTIME)
+					pt_core_suspend_(cd->dev);
+#endif
+				call_atten_cb(cd, PT_ATTEN_SUSPEND, 0);
+				cd->fb_state = FB_OFF;
+				pt_debug(cd->dev, DL_INFO, "%s: Suspend notified!\n", __func__);
+			}
+		} else if (event == DRM_PANEL_EVENT_BLANK) {
+			pt_debug(cd->dev, DL_INFO, "%s: suspend: event = %lu, not care\n",
+				__func__, event);
+		}
+	} else {
+		pt_debug(cd->dev, DL_INFO, "%s: DRM BLANK(%d) do not need process\n",
+			__func__, *blank);
+	}
+exit:
+	return 0;
+}
+
+/*******************************************************************************
+ * FUNCTION: pt_setup_drm_notifier
+ *
+ * SUMMARY: Set up call back function into drm notifier.
+ *
+ * PARAMETERS:
+ *  *cd   - pointer to core data
+ ******************************************************************************/
+static void pt_setup_drm_notifier(struct pt_core_data *cd)
+{
+	cd->fb_state = FB_ON;
+	cd->fb_notifier.notifier_call = drm_notifier_callback;
+	pt_debug(cd->dev, DL_INFO, "%s: Setting up drm notifier\n", __func__);
+
+	if (!active_panel)
+		pt_debug(cd->dev, DL_ERROR,
+			"%s: Active panel not registered!\n", __func__);
+
+	if (active_panel &&
+		drm_panel_notifier_register(active_panel,
+			&cd->fb_notifier) < 0)
+		pt_debug(cd->dev, DL_ERROR,
+			"%s: Register notifier failed!\n", __func__);
 }
 #elif defined(CONFIG_FB)
 /*******************************************************************************
@@ -16949,6 +17059,7 @@ int pt_probe(const struct pt_bus_ops *ops, struct device *dev,
 	cd->watchdog_enabled           = 0;
 	cd->startup_retry_count        = 0;
 	cd->core_probe_complete        = 0;
+	cd->runtime                    = 0;
 	cd->fw_system_mode             = FW_SYS_MODE_BOOT;
 	cd->pip_cmd_timeout            = PT_PIP_CMD_DEFAULT_TIMEOUT;
 	cd->pip_cmd_timeout_default    = PT_PIP_CMD_DEFAULT_TIMEOUT;
@@ -17061,6 +17172,11 @@ int pt_probe(const struct pt_bus_ops *ops, struct device *dev,
 
 	/* Set platform easywake value */
 	cd->easy_wakeup_gesture = cd->cpdata->easy_wakeup_gesture;
+
+#ifdef CONFIG_DRM
+	/* Setup active dsi panel */
+	active_panel = cd->cpdata->active_panel;
+#endif
 
 	/* Set platform panel_id value */
 	cd->panel_id_support = cd->cpdata->panel_id_support;
@@ -17298,6 +17414,9 @@ skip_enum:
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	pt_setup_early_suspend(cd);
+#elif defined(CONFIG_DRM)
+	pt_debug(dev, DL_ERROR, "%s: Probe: Setup drm notifier\n", __func__);
+	pt_setup_drm_notifier(cd);
 #elif defined(CONFIG_FB)
 	pt_setup_fb_notifier(cd);
 #endif
@@ -17408,6 +17527,9 @@ int pt_release(struct pt_core_data *cd)
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	unregister_early_suspend(&cd->es);
+#elif defined(CONFIG_DRM)
+	if (active_panel)
+		drm_panel_notifier_unregister(active_panel, &cd->fb_notifier);
 #elif defined(CONFIG_FB)
 	fb_unregister_client(&cd->fb_notifier);
 #endif

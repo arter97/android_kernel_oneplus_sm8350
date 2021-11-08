@@ -7,6 +7,7 @@
 #include <linux/dma-buf.h>
 #include <linux/highmem.h>
 #include <linux/fs.h>
+#include <soc/qcom/secure_buffer.h>
 
 #ifndef pgprot_writebackcache
 #define pgprot_writebackcache(_prot)	(_prot)
@@ -116,7 +117,8 @@ static int hgsl_mem_mmap(struct dma_buf *dmabuf, struct vm_area_struct *vma)
 	uint32_t cache_mode;
 	int ret;
 
-	if (vma == NULL)
+	if ((vma == NULL) ||
+	    (mem_node->flags & GSL_MEMFLAGS_PROTECTED))
 		return -EINVAL;
 
 	page_count = vma_pages(vma);
@@ -175,8 +177,63 @@ static void hgsl_free_pages(struct hgsl_mem_node *mem_node)
 	mem_node->page_count = 0;
 }
 
+static int hgsl_lock_pages(struct hgsl_mem_node *mem_node)
+{
+	struct sg_table *sgt = hgsl_get_sgt_internal(mem_node);
+	struct scatterlist *sg;
+	int src_vmid = VMID_HLOS;
+	int dest_vmid = VMID_CP_PIXEL;
+	int dest_perms = PERM_READ | PERM_WRITE;
+	int ret;
+	int i;
+
+	if (IS_ERR(sgt))
+		return PTR_ERR(sgt);
+
+	ret = hyp_assign_table(sgt, &src_vmid, 1, &dest_vmid, &dest_perms, 1);
+	if (ret) {
+		LOGE("Failed to assign sgt %d", ret);
+		hgsl_put_sgt_internal(mem_node);
+		return ret;
+	}
+
+	for_each_sg(sgt->sgl, sg, sgt->nents, i)
+		SetPagePrivate(sg_page(sg));
+
+	return 0;
+}
+
+static int hgsl_unlock_pages(struct hgsl_mem_node *mem_node)
+{
+	struct sg_table *sgt = mem_node->sgt;
+	struct scatterlist *sg;
+	int src_vmid = VMID_CP_PIXEL;
+	int dest_vmid = VMID_HLOS;
+	int dest_perms = PERM_READ | PERM_WRITE | PERM_EXEC;
+	int ret;
+	int i;
+
+	if (!sgt)
+		return -EINVAL;
+
+	ret = hyp_assign_table(sgt, &src_vmid, 1, &dest_vmid, &dest_perms, 1);
+	if (ret)
+		goto out;
+
+	for_each_sg(sgt->sgl, sg, sgt->nents, i)
+		ClearPagePrivate(sg_page(sg));
+
+out:
+	mem_node->dma_buf = NULL;
+	hgsl_put_sgt_internal(mem_node);
+	return ret;
+}
+
 static void hgsl_mem_free_actual(struct hgsl_mem_node *mem_node)
 {
+	if (mem_node->flags & GSL_MEMFLAGS_PROTECTED)
+		hgsl_unlock_pages(mem_node);
+
 	hgsl_free_pages(mem_node);
 	hgsl_free(mem_node->pages);
 	hgsl_free(mem_node);
@@ -205,6 +262,9 @@ static void *hgsl_mem_dma_buf_vmap(struct dma_buf *dmabuf)
 {
 	struct hgsl_mem_node *mem_node = dmabuf->priv;
 
+	if (mem_node->flags & GSL_MEMFLAGS_PROTECTED)
+		return ERR_PTR(-EINVAL);
+
 	mutex_lock(&hgsl_map_global_lock);
 	if (IS_ERR_OR_NULL(mem_node->vmapping))
 		mem_node->vmapping = vmap(mem_node->pages,
@@ -222,6 +282,9 @@ static void *hgsl_mem_dma_buf_vmap(struct dma_buf *dmabuf)
 static void hgsl_mem_dma_buf_vunmap(struct dma_buf *dmabuf, void *vaddr)
 {
 	struct hgsl_mem_node *mem_node = dmabuf->priv;
+
+	if (mem_node->flags & GSL_MEMFLAGS_PROTECTED)
+		return;
 
 	mutex_lock(&hgsl_map_global_lock);
 	if (!mem_node->vmap_count)
@@ -371,6 +434,9 @@ int hgsl_mem_cache_op(struct device *dev, struct hgsl_mem_node *mem_node,
 	if (!dev || !mem_node)
 		return -EINVAL;
 
+	if (mem_node->flags & GSL_MEMFLAGS_PROTECTED)
+		return -EINVAL;
+
 	cache_mode = mem_node->flags & GSL_MEMFLAGS_CACHEMODE_MASK;
 	switch (cache_mode) {
 	case GSL_MEMFLAGS_WRITETHROUGH:
@@ -474,6 +540,7 @@ static int hgsl_export_dma_buf_fd(struct hgsl_mem_node *mem_node)
 	}
 	get_dma_buf(dma_buf);
 	mem_node->fd = fd;
+
 	return 0;
 }
 
@@ -512,12 +579,16 @@ int hgsl_sharedmem_alloc(struct device *dev, uint32_t sizebytes,
 	mem_node->memtype = GSL_USER_MEM_TYPE_ASHMEM;
 	mem_node->memdesc.size = requested_size;
 
-	if (requested_pcount == 0)
-		ret = hgsl_export_dma_buf_fd(mem_node);
-	else
-		ret = -ENOMEM;
+	if (requested_pcount != 0)
+		return -ENOMEM;
 
-	return ret;
+	if (flags & GSL_MEMFLAGS_PROTECTED) {
+		ret = hgsl_lock_pages(mem_node);
+		if (ret)
+			return ret;
+	}
+
+	return hgsl_export_dma_buf_fd(mem_node);
 }
 
 void hgsl_sharedmem_free(struct hgsl_mem_node *mem_node)
@@ -526,9 +597,6 @@ void hgsl_sharedmem_free(struct hgsl_mem_node *mem_node)
 		return;
 
 	hgsl_put_sgt(mem_node, true);
-
-	if (mem_node->sgt_refcount)
-		LOGW("sgt_refcount %d", mem_node->sgt_refcount);
 
 	if (mem_node->dma_buf)
 		dma_buf_put(mem_node->dma_buf);

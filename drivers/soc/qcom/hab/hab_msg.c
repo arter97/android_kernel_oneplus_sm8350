@@ -7,7 +7,7 @@
 
 static int hab_rx_queue_empty(struct virtual_channel *vchan)
 {
-	int ret;
+	int ret = 0;
 	int irqs_disabled = irqs_disabled();
 
 	hab_spin_lock(&vchan->rx_lock, irqs_disabled);

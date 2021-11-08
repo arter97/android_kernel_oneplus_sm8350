@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/kernel.h>
@@ -916,6 +916,21 @@ int slim_get_logical_addr(struct slim_device *sb, const u8 *e_addr,
 	return ret;
 }
 EXPORT_SYMBOL(slim_get_logical_addr);
+
+/*
+ * slim_vote_for_suspend : initiate immediate suspend.
+ * @sb: client handle requesting the address.
+ * return zero in case of suspended success.
+ */
+int slim_vote_for_suspend(struct slim_device *sb)
+{
+	struct slim_controller *ctrl = sb->ctrl;
+
+	if (!ctrl)
+		return -EINVAL;
+	return ctrl->suspend_slimbus(ctrl);
+}
+EXPORT_SYMBOL(slim_vote_for_suspend);
 
 static int slim_ele_access_sanity(struct slim_ele_access *msg, int oper,
 				u8 *rbuf, const u8 *wbuf, u8 len)

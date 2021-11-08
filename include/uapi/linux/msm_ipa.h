@@ -46,6 +46,8 @@
  */
 #define IPAHAL_NAT_INVALID_PROTOCOL   0xFF
 
+#define IPA_ETH_API_VER 2
+
 /**
  * commands supported by IPA driver
  */
@@ -300,6 +302,8 @@
 /* IPA Linux mhip instance stats structures */
 #define IPA_LNX_MHIP_INSTANCE_INFO_STRUCT_LEN (16 + 112 + 120)
 #define IPA_LNX_MHIP_INST_STATS_STRUCT_LEN (8 + 248)
+/* IPA Linux consolidated stats structure */
+#define IPA_LNX_CONSOLIDATED_STATS_STRUCT_LEN (8 + 48)
 /* IPA Linux Instance allocation info structures */
 #define IPA_LNX_EACH_INST_ALLOC_INFO_STRUCT_LEN (24 + 12 + 12 + 16)
 #define IPA_LNX_STATS_ALL_INFO_STRUCT_LEN (32 + 128 + 128 + 128)
@@ -2565,10 +2569,13 @@ struct ipa_ioc_nat_pdn_entry {
  * struct ipa_ioc_vlan_iface_info - add vlan interface
  * @name: interface name
  * @vlan_id: VLAN ID
+ * @add_vlan_done: VLAN config done flag
  */
 struct ipa_ioc_vlan_iface_info {
 	char name[IPA_RESOURCE_NAME_MAX];
 	uint16_t vlan_id;
+#define IPACM_RESTART_FUNCTIONALITY
+	uint8_t add_vlan_done;
 };
 
 /**

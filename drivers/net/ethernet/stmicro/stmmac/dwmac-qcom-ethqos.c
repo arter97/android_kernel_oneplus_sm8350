@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 // Copyright (c) 2018-19 Linaro Limited
+/* Copyright (c) 2021, The Linux Foundation. All rights reserved. */
 
 #include <linux/module.h>
 #include <linux/of.h>
@@ -216,8 +217,10 @@ void dwmac_qcom_program_avb_algorithm(struct stmmac_priv *priv,
 	ETHQOSDBG("\n");
 
 	if (copy_from_user(&l_avb_struct, (void __user *)u_avb_struct,
-			   sizeof(struct dwmac_qcom_avb_algorithm)))
+			   sizeof(struct dwmac_qcom_avb_algorithm))) {
 		ETHQOSERR("Failed to fetch AVB Struct\n");
+		return;
+	}
 
 	if (priv->speed == SPEED_1000)
 		avb_params = &l_avb_struct.speed1000params;
@@ -228,10 +231,15 @@ void dwmac_qcom_program_avb_algorithm(struct stmmac_priv *priv,
 	 * 2 for CLASS B traffic
 	 * Configure right channel accordingly
 	 */
-	if (l_avb_struct.qinx == 1)
+	if (l_avb_struct.qinx == 1) {
 		l_avb_struct.qinx = CLASS_A_TRAFFIC_TX_CHANNEL;
-	else if (l_avb_struct.qinx == 2)
+	} else if (l_avb_struct.qinx == 2) {
 		l_avb_struct.qinx = CLASS_B_TRAFFIC_TX_CHANNEL;
+	} else {
+		ETHQOSERR("Invalid index [%u] in AVB struct from user\n",
+			  l_avb_struct.qinx);
+		return;
+	}
 
 	priv->plat->tx_queues_cfg[l_avb_struct.qinx].mode_to_use =
 		MTL_QUEUE_AVB;
@@ -1965,8 +1973,11 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	}
 
 	res = platform_get_resource(ethqos->pdev, IORESOURCE_MEM, 0);
-	if (!res)
+	if (!res) {
 		ETHQOSERR("get emac-base resource failed\n");
+		ret = -ENOMEM;
+		goto err_clk;
+	}
 
 	ethqos->emac_mem_size = resource_size(res);
 

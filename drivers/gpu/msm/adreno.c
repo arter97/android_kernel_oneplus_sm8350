@@ -3546,11 +3546,14 @@ static void adreno_power_stats(struct kgsl_device *device,
 
 	memset(stats, 0, sizeof(*stats));
 
-	if (adreno_is_a619_holi(adreno_dev))
+	if (adreno_is_a619_holi(adreno_dev)) {
 		adreno_read_gmu_wrapper(adreno_dev,
 			adreno_dev->perfctr_pwr_lo, &val);
-	else
+	} else {
+		if (!test_bit(KGSL_PWRFLAGS_CLK_ON, &device->pwrctrl.power_flags))
+			return;
 		kgsl_regread(device, adreno_dev->perfctr_pwr_lo, &val);
+	}
 
 	if (busy->gpu_busy)
 		gpu_busy = (val >= busy->gpu_busy) ? val - busy->gpu_busy :
@@ -4017,31 +4020,35 @@ static int adreno_remove(struct platform_device *pdev)
 }
 
 /*
- * Secure buffers cannot be preserved during hibernation.
- * Issue hyp_assign call to assign non-used internal secure
+ * Issue hyp_assign call to assign non-used internal/userspace secure
  * buffers to kernel.
- * This function will fail if there is an active secure context
- * since we cannot remove the content from user secure buffer.
  */
 static int adreno_secure_pt_hibernate(struct adreno_device *adreno_dev)
 {
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
+	struct kgsl_process_private *process;
+	struct kgsl_mem_entry *entry;
 	struct kgsl_global_memdesc *md;
-	struct kgsl_context *context;
 	struct kgsl_memdesc *memdesc;
-	struct sg_table *sgt;
-	int ret;
+	int ret, id;
 
-	read_lock(&device->context_lock);
-	idr_for_each_entry(&device->context_idr, context, ret) {
-		if (context->flags & KGSL_CONTEXT_SECURE) {
-			read_unlock(&device->context_lock);
-			pr_context(device, context,
-				"Secure context is active, cannot hibernate secure PT\n");
-			return -EBUSY;
+	read_lock(&kgsl_driver.proclist_lock);
+	list_for_each_entry(process, &kgsl_driver.process_list, list) {
+		idr_for_each_entry(&process->mem_idr, entry, id) {
+			memdesc = &entry->memdesc;
+			if (!kgsl_memdesc_is_secured(memdesc) ||
+				(memdesc->flags & KGSL_MEMFLAGS_USERMEM_ION))
+				continue;
+
+			read_unlock(&kgsl_driver.proclist_lock);
+
+			if (kgsl_unlock_sgt(memdesc->sgt))
+				dev_err(device->dev, "kgsl_unlock_sgt failed\n");
+
+			read_lock(&kgsl_driver.proclist_lock);
 		}
 	}
-	read_unlock(&device->context_lock);
+	read_unlock(&kgsl_driver.proclist_lock);
 
 	list_for_each_entry(md, &device->globals, node) {
 		memdesc = &md->memdesc;
@@ -4060,8 +4067,7 @@ fail:
 	list_for_each_entry(md, &device->globals, node) {
 		memdesc = &md->memdesc;
 		if (kgsl_memdesc_is_secured(memdesc)) {
-			sgt = memdesc->sgt;
-			if (!PagePrivate(sg_page(sgt->sgl)))
+			if (!PagePrivate(sg_page(memdesc->sgt->sgl)))
 				kgsl_lock_sgt(memdesc->sgt, memdesc->size);
 		}
 	}
@@ -4072,9 +4078,11 @@ fail:
 static int adreno_secure_pt_restore(struct adreno_device *adreno_dev)
 {
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
+	struct kgsl_process_private *process;
+	struct kgsl_mem_entry *entry;
 	struct kgsl_memdesc *memdesc;
 	struct kgsl_global_memdesc *md;
-	int ret;
+	int ret, id;
 
 	list_for_each_entry(md, &device->globals, node) {
 		memdesc = &md->memdesc;
@@ -4086,6 +4094,27 @@ static int adreno_secure_pt_restore(struct adreno_device *adreno_dev)
 			}
 		}
 	}
+
+	read_lock(&kgsl_driver.proclist_lock);
+	list_for_each_entry(process, &kgsl_driver.process_list, list) {
+		idr_for_each_entry(&process->mem_idr, entry, id) {
+			memdesc = &entry->memdesc;
+			if (!kgsl_memdesc_is_secured(memdesc) ||
+				(memdesc->flags & KGSL_MEMFLAGS_USERMEM_ION))
+				continue;
+
+			read_unlock(&kgsl_driver.proclist_lock);
+
+			ret = kgsl_lock_sgt(memdesc->sgt, memdesc->size);
+			if (ret) {
+				dev_err(device->dev, "kgsl_lock_sgt failed ret %d\n", ret);
+				return ret;
+			}
+
+			read_lock(&kgsl_driver.proclist_lock);
+		}
+	}
+	read_unlock(&kgsl_driver.proclist_lock);
 
 	return 0;
 }

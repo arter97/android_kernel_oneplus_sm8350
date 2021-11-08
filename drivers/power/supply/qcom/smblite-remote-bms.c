@@ -395,6 +395,10 @@ static void rx_data_work(struct work_struct *work)
 	if (!rc)
 		pr_debug("Finished processing rx buf from remote-fg\n");
 
+	/* Notify Clients so that they pick-up latest data from QBG */
+	if (bms->batt_psy)
+		power_supply_changed(bms->batt_psy);
+
 out:
 	mutex_unlock(&bms->rx_lock);
 	vote(bms->awake_votable, REMOTE_FG_VOTER, false, 0);

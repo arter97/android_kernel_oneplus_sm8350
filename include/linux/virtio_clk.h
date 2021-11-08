@@ -40,6 +40,6 @@ struct virtio_clk_msg {
 #define VIRTIO_CLK_T_ROUND_RATE	4
 #define VIRTIO_CLK_T_RESET	5
 #define VIRTIO_CLK_T_SET_FLAGS	6
-#define VIRTIO_CLK_T_SET_PARENT	7
+#define VIRTIO_CLK_T_SET_PARENT	8
 
 #endif /* _LINUX_VIRTIO_CLK_H */

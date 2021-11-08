@@ -2046,7 +2046,7 @@ asmlinkage __visible int swsusp_save(void)
 
 	nr_pages += nr_highmem;
 	nr_copy_pages = nr_pages;
-	nr_meta_pages = DIV_ROUND_UP(nr_pages * sizeof(long), PAGE_SIZE);
+	nr_meta_pages = DIV_ROUND_UP(nr_pages * sizeof(u64), PAGE_SIZE);
 
 	pr_info("Hibernation image created (%d pages copied)\n", nr_pages);
 
@@ -2101,16 +2101,16 @@ static int init_header(struct swsusp_info *info)
  * PFNs corresponding to set bits in @bm are stored in the area of memory
  * pointed to by @buf (1 page at a time).
  */
-static inline void pack_pfns(unsigned long *buf, struct memory_bitmap *bm)
+static inline void pack_pfns(u64 *buf, struct memory_bitmap *bm)
 {
 	int j;
 
-	for (j = 0; j < PAGE_SIZE / sizeof(long); j++) {
+	for (j = 0; j < PAGE_SIZE / sizeof(u64); j++) {
 		buf[j] = memory_bm_next_pfn(bm);
 		if (unlikely(buf[j] == BM_END_OF_MAP))
 			break;
 		/* Save page key for data page (s390 only). */
-		page_key_read(buf + j);
+		page_key_read((unsigned long *)buf + j);
 	}
 }
 

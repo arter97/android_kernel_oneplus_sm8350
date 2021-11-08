@@ -554,71 +554,6 @@ static int glink_slatecom_send_intent_req_ack(struct glink_slatecom *glink,
 	return 0;
 }
 
-static int glink_slatecom_send_data(struct glink_slatecom_channel *channel,
-			       void *data, int chunk_size, int left_size,
-			       struct glink_slatecom_rx_intent *intent, bool wait)
-{
-	struct glink_slatecom *glink = channel->glink;
-	struct {
-		struct glink_slatecom_msg msg;
-		__le32 chunk_size;
-		__le32 left_size;
-		uint64_t addr;
-	} __packed req;
-
-	CH_INFO(channel, "chunk:%d, left:%d\n", chunk_size, left_size);
-
-	memset(&req, 0, sizeof(req));
-	if (intent->offset)
-		req.msg.cmd = cpu_to_le16(SLATECOM_CMD_TX_DATA_CONT);
-	else
-		req.msg.cmd = cpu_to_le16(SLATECOM_CMD_TX_DATA);
-
-	req.msg.param1 = cpu_to_le16(channel->lcid);
-	req.msg.param2 = cpu_to_le32(intent->id);
-	req.chunk_size = cpu_to_le32(chunk_size);
-	req.left_size = cpu_to_le32(left_size);
-	req.addr = 0;
-
-	mutex_lock(&glink->tx_lock);
-	while (glink_slatecom_tx_avail(glink) < sizeof(req)/WORD_SIZE) {
-		if (!wait) {
-			mutex_unlock(&glink->tx_lock);
-			return -EAGAIN;
-		}
-
-		if (atomic_read(&glink->in_reset)) {
-			mutex_unlock(&glink->tx_lock);
-			return -EINVAL;
-		}
-
-		if (!glink->sent_read_notify) {
-			glink->sent_read_notify = true;
-			glink_slatecom_send_read_notify(glink);
-		}
-
-		/* Wait without holding the tx_lock */
-		mutex_unlock(&glink->tx_lock);
-
-		usleep_range(TX_WAIT_US, TX_WAIT_US + 50);
-
-		mutex_lock(&glink->tx_lock);
-
-		if (glink_slatecom_tx_avail(glink) >= sizeof(req)/WORD_SIZE)
-			glink->sent_read_notify = false;
-	}
-
-	slatecom_ahb_write(glink->slatecom_handle,
-	(uint32_t)(size_t)(intent->addr + intent->offset),
-	ALIGN(chunk_size, WORD_SIZE)/WORD_SIZE, data);
-
-	intent->offset += chunk_size;
-	glink_slatecom_tx_write(glink, &req, sizeof(req));
-
-	mutex_unlock(&glink->tx_lock);
-	return 0;
-}
-
 static void glink_slatecom_handle_intent_req_ack(struct glink_slatecom *glink,
 					    unsigned int cid, bool granted)
 {
@@ -705,60 +640,6 @@ static void glink_slatecom_handle_intent_req(struct glink_slatecom *glink,
 	glink_slatecom_send_intent_req_ack(glink, channel, !!intent);
 }
 
-static int glink_slatecom_send_short(struct glink_slatecom_channel *channel,
-				void *data, int len,
-				struct glink_slatecom_rx_intent *intent,
-				bool wait)
-{
-	struct glink_slatecom *glink = channel->glink;
-	struct {
-		struct glink_slatecom_msg msg;
-		u8 data[SHORT_SIZE];
-	} __packed req;
-
-	CH_INFO(channel, "intent offset:%d len:%d\n", intent->offset, len);
-
-	req.msg.cmd = cpu_to_le16(SLATECOM_CMD_TX_SHORT_DATA);
-	req.msg.param1 = cpu_to_le16(channel->lcid);
-	req.msg.param2 = cpu_to_le32(intent->id);
-	req.msg.param3 = cpu_to_le32(len);
-	req.msg.param4 = cpu_to_be32(0);
-	memcpy(req.data, data, len);
-
-	mutex_lock(&glink->tx_lock);
-	while (glink_slatecom_tx_avail(glink) < sizeof(req)/WORD_SIZE) {
-
-		if (!wait) {
-			mutex_unlock(&glink->tx_lock);
-			return -EAGAIN;
-		}
-
-		if (atomic_read(&glink->in_reset)) {
-			mutex_unlock(&glink->tx_lock);
-			return -EINVAL;
-		}
-
-		if (!glink->sent_read_notify) {
-			glink->sent_read_notify = true;
-			glink_slatecom_send_read_notify(glink);
-		}
-
-		/* Wait without holding the tx_lock */
-		mutex_unlock(&glink->tx_lock);
-
-		usleep_range(TX_WAIT_US, TX_WAIT_US + 50);
-
-		mutex_lock(&glink->tx_lock);
-
-		if (glink_slatecom_tx_avail(glink) >= sizeof(req)/WORD_SIZE)
-			glink->sent_read_notify = false;
-	}
-	glink_slatecom_tx_write(glink, &req, sizeof(req));
-
-	mutex_unlock(&glink->tx_lock);
-	return 0;
-}
-
 static int glink_slatecom_request_intent(struct glink_slatecom *glink,
 				    struct glink_slatecom_channel *channel,
 				    size_t size)
@@ -788,6 +669,12 @@ static int glink_slatecom_request_intent(struct glink_slatecom *glink,
 		ret = -ETIMEDOUT;
 	}
 
+	if (!channel->intent_req_result) {
+		dev_err(glink->dev, "intent request not granted for lcid\n");
+		ret = -EAGAIN;
+		goto unlock;
+	}
+
 	ret = wait_for_completion_timeout(&channel->intent_alloc_comp, 10 * HZ);
 	if (!ret) {
 		dev_err(glink->dev, "intent request alloc timed out\n");
@@ -801,13 +688,117 @@ unlock:
 	return ret;
 }
 
+static int glink_slatecom_send_final(struct glink_slatecom_channel *channel,
+				void *data, int len,
+				struct glink_slatecom_rx_intent *intent,
+				bool wait)
+{
+	struct glink_slatecom *glink = channel->glink;
+	int size = len;
+	int chunk_size = 0;
+	int left_size = 0;
+	void *short_data;
+	u32 command_size = 0;
+	struct {
+		struct glink_slatecom_msg msg;
+		__le32 chunk_size;
+		__le32 left_size;
+		uint64_t addr;
+	} __packed req_data;
+
+	struct {
+		struct glink_slatecom_msg msg;
+		u8 data[SHORT_SIZE];
+	} __packed req_short;
+
+	memset(&req_data, 0, sizeof(req_data));
+
+	CH_INFO(channel, "size:%d, wait:%d\n", len, wait);
+	if (len <= SHORT_SIZE)
+		size = 0;
+	else if (size & (XPRT_ALIGNMENT - 1))
+		size = ALIGN(len - SHORT_SIZE, XPRT_ALIGNMENT);
+
+	if (size) {
+		chunk_size = size;
+		left_size = len - size;
+
+		if (intent->offset)
+			req_data.msg.cmd = cpu_to_le16(SLATECOM_CMD_TX_DATA_CONT);
+		else
+			req_data.msg.cmd = cpu_to_le16(SLATECOM_CMD_TX_DATA);
+
+		req_data.msg.param1 = cpu_to_le16(channel->lcid);
+		req_data.msg.param2 = cpu_to_le32(intent->id);
+		req_data.chunk_size = cpu_to_le32(chunk_size);
+		req_data.left_size = cpu_to_le32(left_size);
+		req_data.addr = 0;
+		command_size += sizeof(req_data)/WORD_SIZE;
+	}
+
+	short_data = (char *)data + size;
+	size = len - size;
+	if (size) {
+		req_short.msg.cmd = cpu_to_le16(SLATECOM_CMD_TX_SHORT_DATA);
+		req_short.msg.param1 = cpu_to_le16(channel->lcid);
+		req_short.msg.param2 = cpu_to_le32(intent->id);
+		req_short.msg.param3 = cpu_to_le32(size);
+		req_short.msg.param4 = cpu_to_be32(0);
+		memcpy(req_short.data, short_data, size);
+		command_size += sizeof(req_short)/WORD_SIZE;
+	}
+
+	mutex_lock(&glink->tx_lock);
+	while (glink_slatecom_tx_avail(glink) < command_size) {
+		if (!wait) {
+			mutex_unlock(&glink->tx_lock);
+			CH_INFO(channel, "failed, please retry size:%d, wait:%d\n", len, wait);
+			return -EAGAIN;
+		}
+
+		if (atomic_read(&glink->in_reset)) {
+			mutex_unlock(&glink->tx_lock);
+			return -EINVAL;
+		}
+
+		if (!glink->sent_read_notify) {
+			glink->sent_read_notify = true;
+			glink_slatecom_send_read_notify(glink);
+		}
+
+		/* Wait without holding the tx_lock */
+		mutex_unlock(&glink->tx_lock);
+
+		usleep_range(TX_WAIT_US, TX_WAIT_US + 50);
+
+		mutex_lock(&glink->tx_lock);
+
+		if (glink_slatecom_tx_avail(glink) >= command_size)
+			glink->sent_read_notify = false;
+	}
+
+	if (chunk_size) {
+		slatecom_ahb_write(glink->slatecom_handle,
+		(uint32_t)(size_t)(intent->addr + intent->offset),
+		ALIGN(chunk_size, WORD_SIZE)/WORD_SIZE, data);
+
+		intent->offset += chunk_size;
+		glink_slatecom_tx_write(glink, &req_data, sizeof(req_data));
+	}
+
+	if (size)
+		glink_slatecom_tx_write(glink, &req_short, sizeof(req_short));
+
+	mutex_unlock(&glink->tx_lock);
+	return 0;
+}
+
 static int __glink_slatecom_send(struct glink_slatecom_channel *channel,
 			    void *data, int len, bool wait)
 {
 	struct glink_slatecom *glink = channel->glink;
 	struct glink_slatecom_rx_intent *intent = NULL;
 	struct glink_slatecom_rx_intent *tmp;
-	int size = len;
 	int iid = 0;
 	int ret = 0;
 
@@ -845,22 +836,7 @@ static int __glink_slatecom_send(struct glink_slatecom_channel *channel,
 			goto tx_exit;
 	}
 
-	if (len <= SHORT_SIZE)
-		size = 0;
-	else if (size & (XPRT_ALIGNMENT - 1))
-		size = ALIGN(len - SHORT_SIZE, XPRT_ALIGNMENT);
-
-	if (size) {
-		ret = glink_slatecom_send_data(channel, data, size, len - size,
-					  intent, wait);
-		if (ret)
-			goto tx_exit;
-	}
-
-	data = (char *)data + size;
-	size = len - size;
-	if (size)
-		ret = glink_slatecom_send_short(channel, data, size, intent, wait);
+	ret = glink_slatecom_send_final(channel, data, len, intent, wait);
 
 tx_exit:
 	/* Mark intent available if we failed */
@@ -1240,11 +1216,12 @@ static void glink_slatecom_destroy_ept(struct rpmsg_endpoint *ept)
 	unsigned long flags;
 
 	spin_lock_irqsave(&channel->recv_lock, flags);
+	if (!channel->ept.cb) {
+		spin_unlock_irqrestore(&channel->recv_lock, flags);
+		return;
+	}
 	channel->ept.cb = NULL;
 	spin_unlock_irqrestore(&channel->recv_lock, flags);
-
-	/* Decouple the potential rpdev from the channel */
-	channel->rpdev = NULL;
 
 	glink_slatecom_send_close_req(glink, channel);
 }
@@ -1273,6 +1250,7 @@ static void glink_slatecom_rx_close(struct glink_slatecom *glink, unsigned int r
 		return;
 	CH_INFO(channel, "\n");
 
+	/* Decouple the potential rpdev from the channel */
 	if (channel->rpdev) {
 		strlcpy(chinfo.name, channel->name, sizeof(chinfo.name));
 		chinfo.src = RPMSG_ADDR_ANY;
@@ -1280,6 +1258,7 @@ static void glink_slatecom_rx_close(struct glink_slatecom *glink, unsigned int r
 
 		rpmsg_unregister_device(glink->dev, &chinfo);
 	}
+	channel->rpdev = NULL;
 
 	glink_slatecom_send_close_ack(glink, channel->rcid);
 
@@ -1294,6 +1273,7 @@ static void glink_slatecom_rx_close(struct glink_slatecom *glink, unsigned int r
 static void glink_slatecom_rx_close_ack(struct glink_slatecom *glink,
 							unsigned int lcid)
 {
+	struct rpmsg_channel_info chinfo;
 	struct glink_slatecom_channel *channel;
 
 	mutex_lock(&glink->idr_lock);
@@ -1307,6 +1287,16 @@ static void glink_slatecom_rx_close_ack(struct glink_slatecom *glink,
 	idr_remove(&glink->lcids, channel->lcid);
 	channel->lcid = 0;
 	mutex_unlock(&glink->idr_lock);
+
+	/* Decouple the potential rpdev from the channel */
+	if (channel->rpdev) {
+		strlcpy(chinfo.name, channel->name, sizeof(chinfo.name));
+		chinfo.src = RPMSG_ADDR_ANY;
+		chinfo.dst = RPMSG_ADDR_ANY;
+
+		rpmsg_unregister_device(glink->dev, &chinfo);
+	}
+	channel->rpdev = NULL;
 
 	kref_put(&channel->refcount, glink_slatecom_channel_release);
 }
