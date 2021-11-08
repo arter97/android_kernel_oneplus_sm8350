@@ -52,9 +52,11 @@ static int glink_probe_ssr_cb(struct notifier_block *this,
 
 	switch (code) {
 	case SUBSYS_AFTER_POWERUP:
+	case SUBSYS_AFTER_DS_EXIT:
 		einfo->register_fn(einfo);
 		break;
 	case SUBSYS_AFTER_SHUTDOWN:
+	case SUBSYS_AFTER_DS_ENTRY:
 		einfo->unregister_fn(einfo);
 		break;
 	default:
