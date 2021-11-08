@@ -17,6 +17,7 @@
 #include <linux/devfreq.h>
 #include <linux/cpu.h>
 #include <linux/blk-mq.h>
+#include <linux/nvmem-consumer.h>
 
 #include "ufshcd.h"
 #include "ufshcd-pltfrm.h"
@@ -2688,6 +2689,38 @@ static void ufs_qcom_parse_pm_level(struct ufs_hba *hba)
 	}
 }
 
+void ufs_qcom_read_nvmem_cell(struct ufs_qcom_host *host)
+{
+	size_t len;
+	int *data;
+
+	host->nvmem_cell = nvmem_cell_get(host->hba->dev, "ufs_dev");
+	if (IS_ERR(host->nvmem_cell)) {
+		dev_info(host->hba->dev, "(%s) Failed to get nvmem cell\n", __func__);
+		return;
+	}
+
+	data = nvmem_cell_read(host->nvmem_cell, &len);
+	if (IS_ERR(data)) {
+		dev_info(host->hba->dev, "(%s) Failed to read from nvmem\n", __func__);
+		goto cell_put;
+	}
+
+	host->limit_phy_submode = *data;
+
+	if (!!host->limit_phy_submode)
+		dev_info(host->hba->dev, "(%s) UFS device is 3.x\n",
+						__func__);
+	else
+		dev_info(host->hba->dev, "(%s) UFS device is 2.x\n",
+						__func__);
+
+	kfree(data);
+
+cell_put:
+	nvmem_cell_put(host->nvmem_cell);
+}
+
 /**
  * ufs_qcom_init - bind phy with controller
  * @hba: host controller instance
@@ -2854,6 +2887,15 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 			goto out_disable_vddp;
 		}
 	}
+
+	host->limit_phy_submode = UFS_QCOM_LIMIT_PHY_SUBMODE;
+	host->ufs_dev_types = 0;
+	of_property_read_u32(np, "ufs-dev-types", &host->ufs_dev_types);
+	if (host->ufs_dev_types >= 2) {
+		/* Find the UFS device type */
+		ufs_qcom_read_nvmem_cell(host);
+	}
+
 
 	err = ufs_qcom_init_lane_clks(host);
 	if (err)
@@ -3430,16 +3472,18 @@ static void ufs_qcom_parse_limits(struct ufs_qcom_host *host)
 	host->limit_tx_pwm_gear = UFS_QCOM_LIMIT_PWMGEAR_TX;
 	host->limit_rx_pwm_gear = UFS_QCOM_LIMIT_PWMGEAR_RX;
 	host->limit_rate = UFS_QCOM_LIMIT_HS_RATE;
-	host->limit_phy_submode = UFS_QCOM_LIMIT_PHY_SUBMODE;
 
 	of_property_read_u32(np, "limit-tx-hs-gear", &host->limit_tx_hs_gear);
 	of_property_read_u32(np, "limit-rx-hs-gear", &host->limit_rx_hs_gear);
 	of_property_read_u32(np, "limit-tx-pwm-gear", &host->limit_tx_pwm_gear);
 	of_property_read_u32(np, "limit-rx-pwm-gear", &host->limit_rx_pwm_gear);
 	of_property_read_u32(np, "limit-rate", &host->limit_rate);
-	of_property_read_u32(np, "limit-phy-submode", &host->limit_phy_submode);
 #if defined(CONFIG_SCSI_UFSHCD_QTI)
+	if (host->ufs_dev_types == 0)
+		of_property_read_u32(np, "limit-phy-submode", &host->limit_phy_submode);
 	host->hba->limit_phy_submode = host->limit_phy_submode;
+#else
+	of_property_read_u32(np, "limit-phy-submode", &host->limit_phy_submode);
 #endif
 }
 
