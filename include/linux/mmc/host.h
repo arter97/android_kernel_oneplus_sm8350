@@ -600,6 +600,10 @@ struct mmc_host {
 #if defined(CONFIG_SDC_QTI)
 	atomic_t active_reqs;
 #endif
+
+#if defined(CONFIG_SDC_QTI)
+	bool			crash_on_err;
+#endif
 	unsigned long		private[0] ____cacheline_aligned;
 };
 

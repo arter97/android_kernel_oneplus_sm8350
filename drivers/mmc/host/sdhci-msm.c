@@ -4186,10 +4186,37 @@ static ssize_t dbg_state_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(dbg_state);
 
+static ssize_t crash_on_err_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct sdhci_host *host = dev_get_drvdata(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%c\n", (host->mmc->crash_on_err) ? 'Y' : 'N');
+}
+
+static ssize_t crash_on_err_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	struct sdhci_host *host = dev_get_drvdata(dev);
+	unsigned char input;
+
+	if (sscanf(buf, "%c", &input) != 1)
+		return -EINVAL;
+
+	if (input == 'Y')
+		host->mmc->crash_on_err = true;
+	else
+		host->mmc->crash_on_err = false;
+	return count;
+}
+static DEVICE_ATTR_RW(crash_on_err);
+
 static struct attribute *sdhci_msm_sysfs_attrs[] = {
 	&dev_attr_err_state.attr,
 	&dev_attr_err_stats.attr,
 	&dev_attr_dbg_state.attr,
+	&dev_attr_crash_on_err.attr,
 	NULL
 };
 
