@@ -3697,6 +3697,15 @@ static int msm_geni_serial_get_ver_info(struct uart_port *uport)
 			msm_port->ver_info.hw_minor_ver,
 			msm_port->ver_info.hw_step_ver);
 
+	/* GSI mode changes */
+	msm_port->gsi_mode = geni_read_reg(uport->membase,
+				GENI_IF_FIFO_DISABLE_RO) & FIFO_IF_DISABLE;
+	dev_info(uport->dev, "gsi_mode:%d\n", msm_port->gsi_mode);
+	if (msm_port->gsi_mode) {
+		msm_port->gsi = devm_kzalloc(uport->dev,
+					sizeof(*msm_port->gsi), GFP_KERNEL);
+	}
+
 	msm_geni_serial_enable_interrupts(uport);
 exit_ver_info:
 	if (!msm_port->is_console)
@@ -4026,14 +4035,6 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 
 	dev_info(&pdev->dev, "Serial port%d added.FifoSize %d is_console%d\n",
 				line, uport->fifosize, is_console);
-
-	dev_port->gsi_mode = geni_read_reg(uport->membase,
-				GENI_IF_FIFO_DISABLE_RO) & FIFO_IF_DISABLE;
-	dev_err(uport->dev, "gsi_mode:%d\n", dev_port->gsi_mode);
-	if (dev_port->gsi_mode) {
-		dev_port->gsi = devm_kzalloc(uport->dev,
-					sizeof(*dev_port->gsi), GFP_KERNEL);
-	}
 
 	device_create_file(uport->dev, &dev_attr_loopback);
 	device_create_file(uport->dev, &dev_attr_xfer_mode);
