@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/of.h>
@@ -13,6 +13,7 @@
 #include <linux/rpmsg/qcom_glink.h>
 #include <linux/rpmsg.h>
 #include <linux/ipc_logging.h>
+#include <soc/qcom/msm_glink_ssr.h>
 
 #define MSM_SSR_LOG_PAGE_CNT 4
 static void *ssr_ilc;
@@ -68,6 +69,9 @@ struct glink_ssr {
 	struct kref refcount;
 };
 
+static struct rpmsg_endpoint *rpm_ept;
+static u32 sequence_num;
+
 static void glink_ssr_release(struct kref *ref)
 {
 	struct glink_ssr *ssr = container_of(ref, struct glink_ssr,
@@ -93,6 +97,28 @@ static void glink_ssr_ssr_unreg_work(struct work_struct *work)
 	kref_put(&ssr->refcount, glink_ssr_release);
 }
 
+void glink_ssr_notify_rpm(void)
+{
+	struct do_cleanup_msg msg;
+	int ret;
+
+	sequence_num = sequence_num + 1;
+	memset(&msg, 0, sizeof(msg));
+	msg.command = cpu_to_le32(GLINK_SSR_DO_CLEANUP);
+	msg.seq_num = cpu_to_le32(sequence_num);
+	msg.name_len = cpu_to_le32(strlen("apss"));
+	strlcpy(msg.name, "apss", sizeof(msg.name));
+
+	MSM_SSR_INFO("%s: notify of %s Deep Sleep seq_num:%d\n",
+		   "rpm", "apss", sequence_num);
+
+	ret = rpmsg_send(rpm_ept, &msg, sizeof(msg));
+	if (ret)
+		pr_err("fail to send do cleanup to rpm for APSS SSR %d\n",
+			ret);
+}
+EXPORT_SYMBOL(glink_ssr_notify_rpm);
+
 static int glink_ssr_ssr_cb(struct notifier_block *this,
 			    unsigned long code, void *data)
 {
@@ -101,6 +127,7 @@ static int glink_ssr_ssr_cb(struct notifier_block *this,
 	struct device *dev;
 	struct do_cleanup_msg msg;
 	int ret;
+	const char *name;
 
 	kref_get(&ssr->refcount);
 	mutex_lock(&ssr_lock);
@@ -108,8 +135,18 @@ static int glink_ssr_ssr_cb(struct notifier_block *this,
 	if (!dev || !ssr->ept)
 		goto out;
 
-	if (code == SUBSYS_AFTER_SHUTDOWN || code == SUBSYS_POWERUP_FAILURE) {
+	if (code == SUBSYS_AFTER_SHUTDOWN || code == SUBSYS_POWERUP_FAILURE ||
+		code == SUBSYS_AFTER_DS_ENTRY || code == SUBSYS_DS_EXIT_FAIL) {
+
+		name = dev->parent->of_node->name;
+		if (!strcmp(name, "rpm-glink")) {
+			if (ssr->seq_num < sequence_num)
+				ssr->seq_num = sequence_num;
+			sequence_num = sequence_num + 1;
+		}
+
 		ssr->seq_num++;
+
 		reinit_completion(&ssr->completion);
 
 		memset(&msg, 0, sizeof(msg));
@@ -228,6 +265,8 @@ static void glink_ssr_init_notify(struct glink_ssr *ssr)
 static int glink_ssr_probe(struct rpmsg_device *rpdev)
 {
 	struct glink_ssr *ssr;
+	struct device_node *node;
+	struct device *dev;
 
 	ssr = kzalloc(sizeof(*ssr), GFP_KERNEL);
 	if (!ssr)
@@ -240,6 +279,13 @@ static int glink_ssr_probe(struct rpmsg_device *rpdev)
 
 	ssr->dev = &rpdev->dev;
 	ssr->ept = rpdev->ept;
+
+	dev = rpdev->dev.parent;
+	node = dev->of_node;
+	if (!strcmp(node->name, "rpm-glink")) {
+		sequence_num = 0;
+		rpm_ept = rpdev->ept;
+	}
 
 	ssr_ilc = ipc_log_context_create(MSM_SSR_LOG_PAGE_CNT,
 				   "glink_ssr", 0);
