@@ -41,6 +41,9 @@ static  dev_t ps_dev;
 struct kobject *kobj_ref;
 static ktime_t start_time;
 static struct wakeup_source *notify_ws;
+const static char *adsp_subsys = "adsp";
+const static char *mdsp_subsys = "modem";
+static int ignore_ssr;
 
 #ifdef CONFIG_DEEPSLEEP
 struct suspend_stats stats;
@@ -109,7 +112,6 @@ static int start_timer(void)
 
 	start_time = ktime_get();
 	start_time_ms = ktime_to_ms(start_time);
-	pr_debug("Suspend Start Time: %lld ms\n", start_time_ms);
 
 	do {
 		end_time = ktime_get();
@@ -117,8 +119,51 @@ static int start_timer(void)
 			return 0;
 	} while ((start_time_ms + WAIT_TIME_MS) > ktime_to_ms(end_time));
 
-	pr_debug("Suspend Time Out: %lld ms\n", ktime_to_ms(end_time));
 	return retval;
+}
+
+static int subsys_suspend(const char *subsystem, uint32_t *ui_obj_msg)
+{
+	int ret = 0;
+	uint32_t state = *ui_obj_msg;
+
+	switch (state) {
+	case SUBSYS_DEEPSLEEP:
+		ret = subsystem_ds_entry(subsystem);
+		break;
+	case SUBSYS_HIBERNATE:
+		ignore_ssr = 1;
+		ret = subsystem_s2d_entry(subsystem);
+		ignore_ssr = 0;
+		break;
+	default:
+		pr_err("Invalid subsys suspend state\n");
+		ret = -1;
+		break;
+	}
+	return ret;
+}
+
+static int subsys_resume(const char *subsystem, uint32_t *ui_obj_msg)
+{
+	int ret = 0;
+	uint32_t state = *ui_obj_msg;
+
+	switch (state) {
+	case SUBSYS_DEEPSLEEP:
+		ret = subsystem_ds_exit(subsystem);
+		break;
+	case SUBSYS_HIBERNATE:
+		ignore_ssr = 1;
+		ret = subsystem_s2d_exit(subsystem);
+		ignore_ssr = 0;
+		break;
+	default:
+		pr_err("Invalid subsys suspend exit state\n");
+		ret = -1;
+		break;
+	}
+	return ret;
 }
 
 static int powerstate_pm_notifier(struct notifier_block *nb, unsigned long event, void *unused)
@@ -150,7 +195,6 @@ static int powerstate_pm_notifier(struct notifier_block *nb, unsigned long event
 				pr_info("Deep Sleep Aborted Due to Failed Freeze, Re-trying\n");
 				ret = start_timer();
 				if (ret < 0) {
-					pr_err("Deep Sleep Enter Timed Out\n");
 					/*Take Wakeup Source*/
 					__pm_stay_awake(notify_ws);
 					pse.event = EXIT_DEEP_SLEEP;
@@ -270,6 +314,7 @@ static int ps_release(struct inode *inode, struct file *file)
 static long ps_ioctl(struct file *filp, unsigned int ui_power_state_cmd, unsigned long arg)
 {
 	int ret = 0;
+	uint32_t ui_obj_msg;
 
 	switch (ui_power_state_cmd) {
 
@@ -293,7 +338,6 @@ static long ps_ioctl(struct file *filp, unsigned int ui_power_state_cmd, unsigne
 
 		ret = start_timer();
 		if (ret < 0) {
-			pr_err("Deep Sleep Enter Timed Out\n");
 			/*Take Wakeup Source*/
 			__pm_stay_awake(notify_ws);
 		}
@@ -307,19 +351,59 @@ static long ps_ioctl(struct file *filp, unsigned int ui_power_state_cmd, unsigne
 #endif
 	case MODEM_SUSPEND:
 		pr_debug("Modem Subsys Suspend %s\n", __func__);
+		if (copy_from_user(&ui_obj_msg, (void __user *)arg,
+					sizeof(ui_obj_msg))) {
+			pr_err("The copy from user failed - modem suspend\n");
+			ret = -EFAULT;
+		}
+
 		/*To Modem subsys*/
+		ret = subsys_suspend(mdsp_subsys, &ui_obj_msg);
+		if (ret != 0)
+			pr_err("Modem subsys suspend failure\n");
 		break;
 	case ADSP_SUSPEND:
 		pr_debug("ADSP Subsys Suspend %s\n", __func__);
+		if (copy_from_user(&ui_obj_msg, (void __user *)arg,
+					sizeof(ui_obj_msg))) {
+			pr_err("The copy from user failed - adsp suspend\n");
+			ret = -EFAULT;
+		}
+
 		/*To ADSP subsys*/
+		ret = subsys_suspend(adsp_subsys, &ui_obj_msg);
+		if (ret != 0)
+			pr_err("ADSP subsys suspend failure\n");
 		break;
 	case MODEM_EXIT:
 		pr_debug("Modem Subsys Suspend Exit %s\n", __func__);
+		if (copy_from_user(&ui_obj_msg, (void __user *)arg,
+					sizeof(ui_obj_msg))) {
+			pr_err("The copy from user failed - modem suspend exit\n");
+			ret = -EFAULT;
+		}
+
 		/*To Modem subsys*/
+		ret = subsys_resume(mdsp_subsys, &ui_obj_msg);
+		if (ret != 0) {
+			pr_err("MDSP subsys exit failure\n");
+			ret = subsystem_restart(mdsp_subsys);
+		}
 		break;
 	case ADSP_EXIT:
 		pr_debug("ADSP Subsys Suspend Exit %s\n", __func__);
+		if (copy_from_user(&ui_obj_msg, (void __user *)arg,
+					sizeof(ui_obj_msg))) {
+			pr_err("The copy from user failed - adsp suspend exit\n");
+			ret = -EFAULT;
+		}
+
 		/*To ADSP subsys*/
+		ret = subsys_resume(adsp_subsys, &ui_obj_msg);
+		if (ret != 0) {
+			pr_err("ADSP subsys exit failure\n");
+			ret = subsystem_restart(adsp_subsys);
+		}
 		break;
 	default:
 		ret = -ENOIOCTLCMD;
@@ -416,16 +500,20 @@ static int ssr_modem_cb(struct notifier_block *this, unsigned long opcode, void 
 	switch (opcode) {
 	case SUBSYS_BEFORE_SHUTDOWN:
 		pr_info("MODEM_BEFORE_SHUTDOWN\n");
-		modeme.event = MDSP_BEFORE_POWERDOWN;
-		send_uevent(&modeme);
+		if (ignore_ssr != 1) {
+			modeme.event = MDSP_BEFORE_POWERDOWN;
+			send_uevent(&modeme);
+		}
 		break;
 	case SUBSYS_AFTER_POWERUP:
 		pr_info("MODEM_AFTER_POWERUP\n");
-		modeme.event = MDSP_AFTER_POWERUP;
-		send_uevent(&modeme);
+		if (ignore_ssr != 1) {
+			modeme.event = MDSP_AFTER_POWERUP;
+			send_uevent(&modeme);
+		}
 		break;
 	default:
-		pr_debug("Unknown SSR MODEM State\n");
+		pr_debug("Default MDSP SSR\n");
 		break;
 	}
 	return NOTIFY_DONE;
@@ -438,16 +526,20 @@ static int ssr_adsp_cb(struct notifier_block *this, unsigned long opcode, void *
 	switch (opcode) {
 	case SUBSYS_BEFORE_SHUTDOWN:
 		pr_info("ADSP_BEFORE_SHUTDOWN\n");
-		adspe.event = ADSP_BEFORE_POWERDOWN;
-		send_uevent(&adspe);
+		if (ignore_ssr != 1) {
+			adspe.event = ADSP_BEFORE_POWERDOWN;
+			send_uevent(&adspe);
+		}
 		break;
 	case SUBSYS_AFTER_POWERUP:
 		pr_info("ADSP_AFTER_POWERUP\n");
-		adspe.event = ADSP_AFTER_POWERUP;
-		send_uevent(&adspe);
+		if (ignore_ssr != 1) {
+			adspe.event = ADSP_AFTER_POWERUP;
+			send_uevent(&adspe);
+		}
 		break;
 	default:
-		pr_debug("Unknown SSR ADSP State\n");
+		pr_debug("Default ADSP SSR\n");
 		break;
 	}
 	return NOTIFY_DONE;
