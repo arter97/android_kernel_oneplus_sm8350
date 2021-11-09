@@ -1,5 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-/* Copyright (c) 2018-2021, The Linux Foundation. All rights reserved. */
+/* Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+ */
 
 #ifndef _CNSS_BUS_H
 #define _CNSS_BUS_H
@@ -19,8 +21,8 @@
 #define QCN7605_DEVICE_ID		0x1102
 #define QCA6490_VENDOR_ID		0x17CB
 #define QCA6490_DEVICE_ID		0x1103
-#define WCN7850_VENDOR_ID		0x17CB
-#define WCN7850_DEVICE_ID		0x1107
+#define KIWI_VENDOR_ID			0x17CB
+#define KIWI_DEVICE_ID			0x1107
 
 enum cnss_dev_bus_type cnss_get_dev_bus_type(struct device *dev);
 enum cnss_dev_bus_type cnss_get_bus_type(struct cnss_plat_data *plat_priv);
