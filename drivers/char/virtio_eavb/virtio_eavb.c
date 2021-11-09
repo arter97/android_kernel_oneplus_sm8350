@@ -640,8 +640,11 @@ static int send_msg(struct virtio_eavb_priv *priv, struct fe_msg *msg)
 
 	rsp = msg->rxbuf;
 	if (rsp) {
-		LOG_EAVB(LEVEL_DEBUG, "msgid %d, result = %d\n",
+		if (rsp->result) {
+			LOG_EAVB(LEVEL_ERR, "msgid %d, result = %d\n",
 			msg->msgid, rsp->result);
+			return -EINVAL;
+		}
 	}
 	return ret;
 }
