@@ -1635,7 +1635,8 @@ static int msm_pinctrl_hibernation_suspend(void)
 
 	/* All normal gpios will have common registers, first save them */
 	for (i = 0; i < soc->ngpios; i++) {
-		if (!test_bit(i, pctrl->chip.valid_mask))
+		if (msm_gpio_needs_valid_mask(pctrl) &&
+				!test_bit(i, pctrl->chip.valid_mask))
 			continue;
 		pgroup = &soc->groups[i];
 		pctrl->gpio_regs[i].ctl_reg =
@@ -1681,7 +1682,8 @@ static void msm_pinctrl_hibernation_resume(void)
 
 	/* Restore normal gpios */
 	for (i = 0; i < soc->ngpios; i++) {
-		if (!test_bit(i, pctrl->chip.valid_mask))
+		if (msm_gpio_needs_valid_mask(pctrl) &&
+				!test_bit(i, pctrl->chip.valid_mask))
 			continue;
 		pgroup = &soc->groups[i];
 		msm_writel_ctl(pctrl->gpio_regs[i].ctl_reg,
