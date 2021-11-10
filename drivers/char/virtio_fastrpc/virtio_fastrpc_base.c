@@ -25,8 +25,8 @@
 #include <linux/of.h>
 #include <soc/qcom/subsystem_notif.h>
 #include <soc/qcom/subsystem_restart.h>
-#include "adsprpc_compat.h"
-#include "adsprpc_shared.h"
+#include "../adsprpc_compat.h"
+#include "../adsprpc_shared.h"
 
 #define VIRTIO_ID_FASTRPC				34
 /* indicates remote invoke with buffer attributes is supported */
