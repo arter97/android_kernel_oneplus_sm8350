@@ -909,7 +909,7 @@ static int qcom_wdt_init(struct msm_watchdog_data *wdog_dd,
 	atomic_notifier_chain_register(&panic_notifier_list,
 				       &wdog_dd->panic_blk);
 	qcom_wdt_register_die_notifier(wdog_dd);
-	wdog_dd->restart_blk.priority = 255;
+	wdog_dd->restart_blk.priority = 150;
 	wdog_dd->restart_blk.notifier_call = restart_wdog_handler;
 	register_restart_handler(&wdog_dd->restart_blk);
 	mutex_init(&wdog_dd->disable_lock);
