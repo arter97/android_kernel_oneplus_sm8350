@@ -707,7 +707,6 @@ static int ssr_slate_cb(struct notifier_block *this,
 	case SUBSYS_BEFORE_SHUTDOWN:
 		pr_debug("Slate before shutdown\n");
 		slatee.e_type = SLATE_BEFORE_POWER_DOWN;
-		slatecom_slatedown_handler();
 		slatecom_set_spi_state(SLATECOM_SPI_BUSY);
 		send_uevent(&slatee);
 		queue_work(dev->slatecom_wq, &dev->slatecom_down_work);
@@ -715,6 +714,7 @@ static int ssr_slate_cb(struct notifier_block *this,
 	case SUBSYS_AFTER_SHUTDOWN:
 		pr_debug("Slate after shutdown\n");
 		slatee.e_type = SLATE_AFTER_POWER_DOWN;
+		slatecom_slatedown_handler();
 		send_uevent(&slatee);
 		set_slate_bt_state(false);
 		set_slate_dsp_state(false);
