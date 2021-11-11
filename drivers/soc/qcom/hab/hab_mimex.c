@@ -191,12 +191,21 @@ static int habmem_export_vchan(struct uhab_context *ctx,
 	struct hab_export_ack expected_ack = {0};
 	struct hab_header header = HAB_HEADER_INITIALIZER;
 
+	if (sizebytes > (uint32_t)HAB_HEADER_SIZE_MASK) {
+		pr_err("exp message too large, %u bytes, max is %d\n",
+			sizebytes, HAB_HEADER_SIZE_MASK);
+		return -EINVAL;
+	}
+
 	exp = idr_find(&vchan->pchan->expid_idr, export_id);
 	if (!exp) {
 		pr_err("export vchan failed: exp_id %d, pchan %s\n",
 				export_id, vchan->pchan->name);
 		return -EINVAL;
 	}
+
+	pr_debug("sizebytes including exp_desc: %u = %zu + %d\n",
+		sizebytes, sizeof(*exp), payload_size);
 
 	HAB_HEADER_SET_SIZE(header, sizebytes);
 	HAB_HEADER_SET_TYPE(header, HAB_PAYLOAD_TYPE_EXPORT);
