@@ -91,4 +91,13 @@ int a6xx_rgmu_restart(struct kgsl_device *device);
  */
 void a6xx_rgmu_snapshot(struct adreno_device *adreno_dev,
 	struct kgsl_snapshot *snapshot);
+
+/**
+ * a6xx_rgmu_gx_is_on() - Check if GX is on using pwr status register
+ * @adreno_dev: Pointer to the adreno device
+ *
+ * This check should only be performed if the keepalive bit is set or it
+ * can be guaranteed that the power state of the GPU will remain unchanged
+ */
+bool a6xx_rgmu_gx_is_on(struct adreno_device *adreno_dev);
 #endif
