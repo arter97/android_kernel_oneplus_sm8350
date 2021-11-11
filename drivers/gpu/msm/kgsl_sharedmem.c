@@ -22,8 +22,6 @@
 
 static bool sharedmem_noretry_flag;
 
-static DEFINE_MUTEX(kernel_map_global_lock);
-
 #define MEMTYPE(_type, _name) { \
 	.type = _type, \
 	.attr = { .name = _name, .mode = 0444 } \
@@ -482,7 +480,7 @@ static vm_fault_t kgsl_paged_vmfault(struct kgsl_memdesc *memdesc,
 
 static void kgsl_paged_unmap_kernel(struct kgsl_memdesc *memdesc)
 {
-	mutex_lock(&kernel_map_global_lock);
+	mutex_lock(&kgsl_driver.kernel_map_mutex);
 	if (!memdesc->hostptr) {
 		/* If already unmapped the refcount should be 0 */
 		WARN_ON(memdesc->hostptr_count);
@@ -496,7 +494,7 @@ static void kgsl_paged_unmap_kernel(struct kgsl_memdesc *memdesc)
 	atomic_long_sub(memdesc->size, &kgsl_driver.stats.vmalloc);
 	memdesc->hostptr = NULL;
 done:
-	mutex_unlock(&kernel_map_global_lock);
+	mutex_unlock(&kgsl_driver.kernel_map_mutex);
 }
 
 #if IS_ENABLED(CONFIG_QCOM_SECURE_BUFFER)
@@ -569,7 +567,7 @@ static int kgsl_paged_map_kernel(struct kgsl_memdesc *memdesc)
 	if (memdesc->size > ULONG_MAX)
 		return -ENOMEM;
 
-	mutex_lock(&kernel_map_global_lock);
+	mutex_lock(&kgsl_driver.kernel_map_mutex);
 	if ((!memdesc->hostptr) && (memdesc->pages != NULL)) {
 		pgprot_t page_prot = pgprot_writecombine(PAGE_KERNEL);
 
@@ -585,7 +583,7 @@ static int kgsl_paged_map_kernel(struct kgsl_memdesc *memdesc)
 	if (memdesc->hostptr)
 		memdesc->hostptr_count++;
 
-	mutex_unlock(&kernel_map_global_lock);
+	mutex_unlock(&kgsl_driver.kernel_map_mutex);
 
 	return ret;
 }

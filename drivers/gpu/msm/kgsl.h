@@ -127,6 +127,7 @@ struct kgsl_driver {
 	struct mutex process_mutex;
 	rwlock_t proclist_lock;
 	struct mutex devlock;
+	struct mutex kernel_map_mutex;
 	struct {
 		atomic_long_t vmalloc;
 		atomic_long_t vmalloc_max;
@@ -441,6 +442,8 @@ long kgsl_ioctl_timeline_fence_get(struct kgsl_device_private *dev_priv,
 long kgsl_ioctl_timeline_signal(struct kgsl_device_private *dev_priv,
 		unsigned int cmd, void *data);
 long kgsl_ioctl_timeline_destroy(struct kgsl_device_private *dev_priv,
+		unsigned int cmd, void *data);
+long kgsl_ioctl_drawctxt_set_shadow_mem(struct kgsl_device_private *dev_priv,
 		unsigned int cmd, void *data);
 
 void kgsl_mem_entry_destroy(struct kref *kref);
