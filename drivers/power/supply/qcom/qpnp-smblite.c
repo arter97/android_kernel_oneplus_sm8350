@@ -1701,6 +1701,7 @@ static void smblite_disable_interrupts(struct smb_charger *chg)
 		if (smblite_irqs[i].irq > 0) {
 			if (smblite_irqs[i].wake)
 				disable_irq_wake(smblite_irqs[i].irq);
+			irq_set_status_flags(smblite_irqs[i].irq, IRQ_DISABLE_UNLAZY);
 			disable_irq(smblite_irqs[i].irq);
 		}
 	}
