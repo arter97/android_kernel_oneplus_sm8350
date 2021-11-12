@@ -229,7 +229,7 @@ int fastrpc_mmap_remove(struct fastrpc_file *fl, uintptr_t va,
 }
 
 void fastrpc_mmap_free(struct fastrpc_file *fl,
-		struct fastrpc_mmap *map)
+		struct fastrpc_mmap *map, uint32_t flags)
 {
 	struct fastrpc_apps *me = fl->apps;
 
@@ -237,10 +237,16 @@ void fastrpc_mmap_free(struct fastrpc_file *fl,
 		return;
 
 	if (map->flags == ADSP_MMAP_HEAP_ADDR ||
-				map->flags == ADSP_MMAP_REMOTE_HEAP_ADDR)
+				map->flags == ADSP_MMAP_REMOTE_HEAP_ADDR) {
 		dev_err(me->dev, "%s ADSP_MMAP_HEAP_ADDR is not supported\n",
 				__func__);
-	hlist_del_init(&map->hn);
+	} else {
+		map->refs--;
+		if (!map->refs)
+			hlist_del_init(&map->hn);
+		if (map->refs > 0 && !flags)
+			return;
+	}
 	if (!IS_ERR_OR_NULL(map->table))
 		dma_buf_unmap_attachment(map->attach, map->table,
 				DMA_BIDIRECTIONAL);
@@ -253,7 +259,7 @@ void fastrpc_mmap_free(struct fastrpc_file *fl,
 }
 
 int fastrpc_mmap_find(struct fastrpc_file *fl, int fd,
-		uintptr_t va, size_t len, int mflags,
+		uintptr_t va, size_t len, int mflags, int refs,
 		struct fastrpc_mmap **ppmap)
 {
 	struct fastrpc_apps *me = fl->apps;
@@ -271,6 +277,11 @@ int fastrpc_mmap_find(struct fastrpc_file *fl, int fd,
 			if (va >= map->va &&
 				va + len <= map->va + map->len &&
 				map->fd == fd) {
+				if (refs) {
+					if (map->refs + 1 == INT_MAX)
+						return -ETOOMANYREFS;
+					map->refs++;
+				}
 				match = map;
 				break;
 			}
@@ -292,6 +303,9 @@ int fastrpc_mmap_create(struct fastrpc_file *fl, int fd,
 	unsigned long flags;
 	struct scatterlist *sgl = NULL;
 
+	if (!fastrpc_mmap_find(fl, fd, va, len, mflags, 1, ppmap))
+		return 0;
+
 	map = kzalloc(sizeof(*map), GFP_KERNEL);
 	VERIFY(err, !IS_ERR_OR_NULL(map));
 	if (err)
@@ -299,6 +313,7 @@ int fastrpc_mmap_create(struct fastrpc_file *fl, int fd,
 
 	INIT_HLIST_NODE(&map->hn);
 	map->flags = mflags;
+	map->refs = 1;
 	map->fl = fl;
 	map->fd = fd;
 	if (mflags == ADSP_MMAP_HEAP_ADDR ||
@@ -346,6 +361,6 @@ int fastrpc_mmap_create(struct fastrpc_file *fl, int fd,
 	*ppmap = map;
 bail:
 	if (err && map)
-		fastrpc_mmap_free(fl, map);
+		fastrpc_mmap_free(fl, map, 0);
 	return err;
 }

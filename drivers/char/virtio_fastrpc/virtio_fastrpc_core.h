@@ -29,11 +29,12 @@
 
 #define NUM_CHANNELS			4 /* adsp, mdsp, slpi, cdsp0*/
 #define NUM_DEVICES			2 /* adsprpc-smd, adsprpc-smd-secure */
-#define PAYLOAD_OFFSET			16
+#define M_FDLIST			16
 #define MINOR_NUM_DEV			0
 #define MINOR_NUM_SECURE_DEV		1
 #define ADSP_MMAP_HEAP_ADDR		4
 #define ADSP_MMAP_REMOTE_HEAP_ADDR	8
+#define FASTRPC_DMAHANDLE_NOMAP		16
 #define ADSP_MMAP_ADD_PAGES		0x1000
 
 #define INIT_FILELEN_MAX		(2*1024*1024)
@@ -146,6 +147,11 @@ struct fastrpc_file {
 struct virt_fastrpc_buf {
 	u64 pv;		/* buffer physical address, 0 for non-ION buffer */
 	u64 len;	/* buffer length */
+};
+
+struct virt_fastrpc_dmahandle {
+	u32 fd;
+	u32 offset;
 };
 
 struct fastrpc_invoke_ctx {
