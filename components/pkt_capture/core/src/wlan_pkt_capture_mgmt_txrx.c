@@ -426,41 +426,15 @@ pkt_capture_mgmt_rx_data_cb(struct wlan_objmgr_psoc *psoc,
 			    enum mgmt_frame_type frm_type)
 {
 	struct mon_rx_status txrx_status = {0};
-	struct pkt_psoc_priv *psoc_priv;
 	struct ieee80211_frame *wh;
 	tpSirMacFrameCtl pfc;
 	qdf_nbuf_t nbuf;
 	int buf_len;
 	struct wlan_objmgr_vdev *vdev;
 
-	psoc_priv = pkt_capture_psoc_get_priv(psoc);
-	if (!psoc_priv) {
-		pkt_capture_err("psoc priv is NULL");
+	if (!(pkt_capture_get_pktcap_mode(psoc) & PKT_CAPTURE_MODE_MGMT_ONLY)) {
+		qdf_nbuf_free(wbuf);
 		return QDF_STATUS_E_FAILURE;
-	}
-
-	pfc = (tpSirMacFrameCtl)(qdf_nbuf_data(wbuf));
-
-	if (pfc->type == SIR_MAC_CTRL_FRAME  &&
-	    !psoc_priv->frame_filter.ctrl_rx_frame_filter)
-		goto exit;
-
-	if (pfc->type == SIR_MAC_MGMT_FRAME  &&
-	    !psoc_priv->frame_filter.mgmt_rx_frame_filter)
-		goto exit;
-
-	if (pfc->type == SIR_MAC_MGMT_FRAME) {
-		if (pfc->subType == SIR_MAC_MGMT_BEACON) {
-			if (psoc_priv->frame_filter.mgmt_rx_frame_filter &
-			    PKT_CAPTURE_MGMT_CONNECT_NO_BEACON)
-				goto exit;
-		} else {
-			if (!((psoc_priv->frame_filter.mgmt_rx_frame_filter &
-			    PKT_CAPTURE_MGMT_FRAME_TYPE_ALL) ||
-			    (psoc_priv->frame_filter.mgmt_rx_frame_filter &
-			    PKT_CAPTURE_MGMT_CONNECT_NO_BEACON)))
-				goto exit;
-		}
 	}
 
 	buf_len = qdf_nbuf_len(wbuf);
@@ -526,9 +500,6 @@ pkt_capture_mgmt_rx_data_cb(struct wlan_objmgr_psoc *psoc,
 		pkt_capture_mgmtpkt_process(psoc, &txrx_status, nbuf, 0))
 		qdf_nbuf_free(nbuf);
 
-	return QDF_STATUS_SUCCESS;
-exit:
-	qdf_nbuf_free(wbuf);
 	return QDF_STATUS_SUCCESS;
 }
 
