@@ -80,12 +80,10 @@ struct pkt_capture_vdev_priv {
  * @psoc: pointer to psoc object
  * @cfg_param: INI config params for packet capture
  * @cb_obj: struct contaning callback pointers
- * @frame_filter: struct contaning packet capture filter
  */
 struct pkt_psoc_priv {
 	struct wlan_objmgr_psoc *psoc;
 	struct pkt_capture_cfg cfg_param;
 	struct pkt_capture_callbacks cb_obj;
-	struct pkt_capture_frame_filter frame_filter;
 };
 #endif /* End  of _WLAN_PKT_CAPTURE_PRIV_STRUCT_H_ */
