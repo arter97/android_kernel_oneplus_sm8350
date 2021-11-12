@@ -173,25 +173,6 @@ enum pkt_capture_mode
 pkt_capture_get_pktcap_mode(struct wlan_objmgr_psoc *psoc);
 
 /**
- * pkt_capture_set_pktcap_config - Set packet capture config
- * @psoc: pointer to psoc object
- * @config: config to be set
- *
- * Return: None
- */
-void pkt_capture_set_pktcap_config(struct wlan_objmgr_psoc *psoc,
-				   enum pkt_capture_config config);
-
-/**
- * pkt_capture_get_pktcap_config - Get packet capture config
- * @psoc: pointer to psoc object
- *
- * Return: config value
- */
-enum pkt_capture_config
-pkt_capture_get_pktcap_config(struct wlan_objmgr_psoc *psoc);
-
-/**
  * pkt_capture_drop_nbuf_list() - drop an nbuf list
  * @buf_list: buffer list to be dropepd
  *

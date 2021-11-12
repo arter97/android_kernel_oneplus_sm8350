@@ -686,65 +686,6 @@ pkt_capture_get_pktcap_mode(struct wlan_objmgr_psoc *psoc)
 	return mode;
 }
 
-void pkt_capture_set_pktcap_config(struct wlan_objmgr_psoc *psoc,
-				   enum pkt_capture_config config)
-{
-	struct pkt_capture_vdev_priv *vdev_priv;
-	struct wlan_objmgr_vdev *vdev;
-
-	if (!psoc) {
-		pkt_capture_err("psoc is NULL");
-		return;
-	}
-
-	vdev = wlan_objmgr_get_vdev_by_opmode_from_psoc(psoc,
-							QDF_STA_MODE,
-							WLAN_PKT_CAPTURE_ID);
-	if (!vdev) {
-		pkt_capture_err("vdev is NULL");
-		return;
-	}
-
-	vdev_priv = pkt_capture_vdev_get_priv(vdev);
-	if (vdev_priv)
-		vdev_priv->cb_ctx->pkt_capture_config = config;
-	else
-		pkt_capture_err("vdev_priv is NULL");
-
-	wlan_objmgr_vdev_release_ref(vdev, WLAN_PKT_CAPTURE_ID);
-}
-
-enum pkt_capture_config
-pkt_capture_get_pktcap_config(struct wlan_objmgr_psoc *psoc)
-{
-	enum pkt_capture_config config = 0;
-	struct pkt_capture_vdev_priv *vdev_priv;
-	struct wlan_objmgr_vdev *vdev;
-
-	if (!psoc) {
-		pkt_capture_err("psoc is NULL");
-		return 0;
-	}
-
-	if (!pkt_capture_get_mode(psoc))
-		return 0;
-
-	vdev = wlan_objmgr_get_vdev_by_opmode_from_psoc(psoc,
-							QDF_STA_MODE,
-							WLAN_PKT_CAPTURE_ID);
-	if (!vdev)
-		return 0;
-
-	vdev_priv = pkt_capture_vdev_get_priv(vdev);
-	if (!vdev_priv)
-		pkt_capture_err("vdev_priv is NULL");
-	else
-		config = vdev_priv->cb_ctx->pkt_capture_config;
-
-	wlan_objmgr_vdev_release_ref(vdev, WLAN_PKT_CAPTURE_ID);
-	return config;
-}
-
 /**
  * pkt_capture_callback_ctx_create() - Create packet capture callback context
  * @vdev_priv: pointer to packet capture vdev priv obj
@@ -1045,8 +986,6 @@ QDF_STATUS pkt_capture_set_filter(struct pkt_capture_frame_filter frame_filter,
 	enum pkt_capture_mode mode = PACKET_CAPTURE_MODE_DISABLE;
 	struct dp_soc *soc;
 	QDF_STATUS status;
-	enum pkt_capture_config config = 0;
-	bool check_enable_beacon = 0;
 
 	if (!vdev) {
 		pkt_capture_err("vdev is NULL");
@@ -1095,34 +1034,9 @@ QDF_STATUS pkt_capture_set_filter(struct pkt_capture_frame_filter frame_filter,
 		psoc_priv->frame_filter.connected_beacon_interval =
 			frame_filter.connected_beacon_interval;
 
-	if (psoc_priv->frame_filter.mgmt_tx_frame_filter)
+	if (psoc_priv->frame_filter.mgmt_tx_frame_filter ||
+	    psoc_priv->frame_filter.mgmt_rx_frame_filter)
 		mode |= PACKET_CAPTURE_MODE_MGMT_ONLY;
-
-	if (psoc_priv->frame_filter.mgmt_rx_frame_filter &
-	    PKT_CAPTURE_MGMT_FRAME_TYPE_ALL) {
-		mode |= PACKET_CAPTURE_MODE_MGMT_ONLY;
-		config |= 1 << PACKET_CAPTURE_CONFIG_BEACON_ENABLE;
-		config |= 1 << PACKET_CAPTURE_CONFIG_OFF_CHANNEL_BEACON_ENABLE;
-	} else {
-		if (psoc_priv->frame_filter.mgmt_rx_frame_filter &
-		    PKT_CAPTURE_MGMT_CONNECT_NO_BEACON) {
-			mode |= PACKET_CAPTURE_MODE_MGMT_ONLY;
-			config |= 1 << PACKET_CAPTURE_CONFIG_NO_BEACON_ENABLE;
-		} else {
-			check_enable_beacon = 1;
-		}
-	}
-
-	if (check_enable_beacon) {
-		if (psoc_priv->frame_filter.mgmt_rx_frame_filter &
-		    PKT_CAPTURE_MGMT_CONNECT_BEACON)
-			config |= 1 << PACKET_CAPTURE_CONFIG_BEACON_ENABLE;
-
-		if (psoc_priv->frame_filter.mgmt_rx_frame_filter &
-		    PKT_CAPTURE_MGMT_CONNECT_SCAN_BEACON)
-			config |= 1 <<
-				PACKET_CAPTURE_CONFIG_OFF_CHANNEL_BEACON_ENABLE;
-	}
 
 	if (psoc_priv->frame_filter.data_tx_frame_filter ||
 	    psoc_priv->frame_filter.data_rx_frame_filter)
@@ -1136,22 +1050,6 @@ QDF_STATUS pkt_capture_set_filter(struct pkt_capture_frame_filter frame_filter,
 		}
 		soc = wlan_psoc_get_dp_handle(psoc);
 		soc->wlan_cfg_ctx->pkt_capture_mode = mode;
-	}
-
-	if (psoc_priv->frame_filter.ctrl_tx_frame_filter ||
-	    psoc_priv->frame_filter.ctrl_rx_frame_filter)
-		config |= 1 << PACKET_CAPTURE_CONFIG_TRIGGER_ENABLE;
-
-	if (psoc_priv->frame_filter.data_rx_frame_filter &
-	    PKT_CAPTURE_DATA_FRAME_QOS_NULL)
-		config |= 1 << PACKET_CAPTURE_CONFIG_QOS_ENABLE;
-
-	if (config != pkt_capture_get_pktcap_config(psoc)) {
-		status = tgt_pkt_capture_send_config(vdev, config);
-		if (QDF_IS_STATUS_ERROR(status)) {
-			pkt_capture_err("packet capture send config failed");
-			return status;
-		}
 	}
 
 	return QDF_STATUS_SUCCESS;

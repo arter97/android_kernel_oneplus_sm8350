@@ -79,7 +79,7 @@ static QDF_STATUS
 target_if_set_packet_capture_config
 			(struct wlan_objmgr_psoc *psoc,
 			 uint8_t vdev_id,
-			 enum pkt_capture_config config_value)
+			 enum pkt_capture_trigger_qos_config config_value)
 {
 	wmi_unified_t wmi_handle = lmac_get_wmi_unified_hdl(psoc);
 	QDF_STATUS status = QDF_STATUS_E_FAILURE;
@@ -98,9 +98,7 @@ target_if_set_packet_capture_config
 	param.param_value = (uint32_t)config_value;
 
 	status = wmi_unified_vdev_set_param_send(wmi_handle, &param);
-	if (QDF_IS_STATUS_SUCCESS(status))
-		ucfg_pkt_capture_set_pktcap_config(psoc, config_value);
-	else
+	if (QDF_IS_STATUS_ERROR(status))
 		pkt_capture_err("failed to set packet capture config");
 
 	return status;
@@ -110,7 +108,7 @@ static QDF_STATUS
 target_if_set_packet_capture_config
 			(struct wlan_objmgr_psoc *psoc,
 			 uint8_t vdev_id,
-			 enum pkt_capture_config config_value)
+			 enum pkt_capture_trigger_qos_config config_value)
 {
 	return QDF_STATUS_SUCCESS;
 }
