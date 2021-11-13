@@ -9,6 +9,7 @@
 #define trace_kgsl_a5xx_irq_status(...) ((void)0)
 #define trace_kgsl_active_count(...) ((void)0)
 #define trace_kgsl_aux_command(...) ((void)0)
+#define trace_kgsl_bcl_clock_throttling(...) ((void)0)
 #define trace_kgsl_buslevel(...) ((void)0)
 #define trace_kgsl_bus(...) ((void)0)
 #define trace_kgsl_clk(...) ((void)0)
