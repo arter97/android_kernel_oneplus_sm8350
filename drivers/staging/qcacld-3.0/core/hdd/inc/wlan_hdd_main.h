@@ -2216,6 +2216,9 @@ struct hdd_context {
 	qdf_work_t twt_en_dis_work;
 #endif
 	bool dump_in_progress;
+#ifdef THERMAL_STATS_SUPPORT
+	bool is_therm_stats_in_progress;
+#endif
 };
 
 /**
@@ -3349,6 +3352,20 @@ int hdd_update_acs_timer_reason(struct hdd_adapter *adapter, uint8_t reason);
  */
 void hdd_switch_sap_channel(struct hdd_adapter *adapter, uint8_t channel,
 			    bool forced);
+
+/**
+ * hdd_switch_sap_chan_freq() - Move SAP to the given channel
+ * @adapter: AP adapter
+ * @chan_freq: Channel frequency
+ * @forced: Force to switch channel, ignore SCC/MCC check
+ *
+ * Moves the SAP interface by invoking the function which
+ * executes the callback to perform channel switch using (E)CSA.
+ *
+ * Return: None
+ */
+void hdd_switch_sap_chan_freq(struct hdd_adapter *adapter, qdf_freq_t chan_freq,
+			      bool forced);
 
 #if defined(FEATURE_WLAN_CH_AVOID)
 void hdd_unsafe_channel_restart_sap(struct hdd_context *hdd_ctx);

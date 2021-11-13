@@ -174,22 +174,22 @@ pkt_capture_get_pktcap_mode(struct wlan_objmgr_psoc *psoc);
 
 /**
  * pkt_capture_set_pktcap_config - Set packet capture config
- * @psoc: pointer to psoc object
+ * @vdev: pointer to vdev object
  * @config: config to be set
  *
  * Return: None
  */
-void pkt_capture_set_pktcap_config(struct wlan_objmgr_psoc *psoc,
+void pkt_capture_set_pktcap_config(struct wlan_objmgr_vdev *vdev,
 				   enum pkt_capture_config config);
 
 /**
  * pkt_capture_get_pktcap_config - Get packet capture config
- * @psoc: pointer to psoc object
+ * @vdev: pointer to vdev object
  *
  * Return: config value
  */
 enum pkt_capture_config
-pkt_capture_get_pktcap_config(struct wlan_objmgr_psoc *psoc);
+pkt_capture_get_pktcap_config(struct wlan_objmgr_vdev *vdev);
 
 /**
  * pkt_capture_drop_nbuf_list() - drop an nbuf list
@@ -252,12 +252,12 @@ pkt_capture_get_pktcap_mode_v2(void);
  * @soc: dp_soc handle
  * @event: wdi event
  * @log_data: nbuf data
- * @vdev_id: vdev id
+ * @peer_id: peer id
  * @status: status
  *
  * Return: None
  */
 void pkt_capture_callback(void *soc, enum WDI_EVENT event, void *log_data,
-			  u_int16_t vdev_id, uint32_t status);
+			  u_int16_t peer_id, uint32_t status);
 #endif
 #endif /* end of _WLAN_PKT_CAPTURE_MAIN_H_ */

@@ -122,22 +122,22 @@ ucfg_pkt_capture_get_pktcap_mode(struct wlan_objmgr_psoc *psoc);
 
 /**
  * ucfg_pkt_capturee_set_pktcap_config - Set packet capture config
- * @psoc: pointer to psoc object
+ * @vdev: pointer to vdev object
  * @config: config to be set
  *
  * Return: None
  */
-void ucfg_pkt_capture_set_pktcap_config(struct wlan_objmgr_psoc *psoc,
+void ucfg_pkt_capture_set_pktcap_config(struct wlan_objmgr_vdev *vdev,
 					enum pkt_capture_config config);
 
 /**
  * ucfg_pkt_capture_get_pktcap_config - Get packet capture config
- * @psoc: pointer to psoc object
+ * @vdev: pointer to vdev object
  *
  * Return: config value
  */
 enum pkt_capture_config
-ucfg_pkt_capture_get_pktcap_config(struct wlan_objmgr_psoc *psoc);
+ucfg_pkt_capture_get_pktcap_config(struct wlan_objmgr_vdev *vdev);
 
 /**
  * ucfg_pkt_capture_process_mgmt_tx_data() - process management tx packets
@@ -353,13 +353,13 @@ ucfg_pkt_capture_get_pktcap_mode(struct wlan_objmgr_psoc *psoc)
 }
 
 static inline
-void ucfg_pkt_capture_set_pktcap_config(struct wlan_objmgr_psoc *psoc,
+void ucfg_pkt_capture_set_pktcap_config(struct wlan_objmgr_vdev *vdev,
 					enum pkt_capture_config config)
 {
 }
 
 static inline enum pkt_capture_config
-ucfg_pkt_capture_get_pktcap_config(struct wlan_objmgr_psoc *psoc)
+ucfg_pkt_capture_get_pktcap_config(struct wlan_objmgr_vdev *vdev)
 {
 	return 0;
 }

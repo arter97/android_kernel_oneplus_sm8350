@@ -151,7 +151,7 @@ pkt_capture_get_pktcap_mode_v2()
 	if (!vdev_priv)
 		pkt_capture_err("vdev_priv is NULL");
 	else
-		mode = vdev_priv->cb_ctx->pkt_capture_mode;
+		mode = vdev_priv->cfg_params.pkt_capture_mode;
 
 	return mode;
 }
@@ -359,7 +359,7 @@ pkt_capture_process_tx_data(void *soc, void *log_data, u_int16_t vdev_id,
 
 	if (qdf_unlikely(qdf_nbuf_headroom(netbuf) < txcap_hdr_size)) {
 		netbuf = qdf_nbuf_realloc_headroom(netbuf,
-							   txcap_hdr_size);
+						   txcap_hdr_size);
 		if (!netbuf) {
 			QDF_TRACE(QDF_MODULE_ID_PKT_CAPTURE,
 				  QDF_TRACE_LEVEL_ERROR,
@@ -403,29 +403,29 @@ pkt_capture_is_frame_filter_set(qdf_nbuf_t buf,
 	enum pkt_capture_data_frame_type data_frame_type =
 		PKT_CAPTURE_DATA_FRAME_TYPE_ALL;
 
-	if (qdf_nbuf_is_ipv4_arp_pkt(buf))
+	if (qdf_nbuf_is_ipv4_arp_pkt(buf)) {
 		data_frame_type = PKT_CAPTURE_DATA_FRAME_TYPE_ARP;
-	else if (qdf_nbuf_is_ipv4_eapol_pkt(buf))
+	} else if (qdf_nbuf_is_ipv4_eapol_pkt(buf)) {
 		data_frame_type = PKT_CAPTURE_DATA_FRAME_TYPE_EAPOL;
-	else if (qdf_nbuf_data_is_tcp_syn(buf))
+	} else if (qdf_nbuf_data_is_tcp_syn(buf)) {
 		data_frame_type =
 			PKT_CAPTURE_DATA_FRAME_TYPE_TCP_SYN;
-	else if (qdf_nbuf_data_is_tcp_syn_ack(buf))
+	} else if (qdf_nbuf_data_is_tcp_syn_ack(buf)) {
 		data_frame_type =
 			PKT_CAPTURE_DATA_FRAME_TYPE_TCP_SYNACK;
-	else if (qdf_nbuf_data_is_tcp_syn(buf))
+	} else if (qdf_nbuf_data_is_tcp_syn(buf)) {
 		data_frame_type =
 			PKT_CAPTURE_DATA_FRAME_TYPE_TCP_FIN;
-	else if (qdf_nbuf_data_is_tcp_syn_ack(buf))
+	} else if (qdf_nbuf_data_is_tcp_syn_ack(buf)) {
 		data_frame_type =
 			PKT_CAPTURE_DATA_FRAME_TYPE_TCP_FINACK;
-	else if (qdf_nbuf_data_is_tcp_ack(buf))
+	} else if (qdf_nbuf_data_is_tcp_ack(buf)) {
 		data_frame_type =
 			PKT_CAPTURE_DATA_FRAME_TYPE_TCP_ACK;
-	else if (qdf_nbuf_data_is_tcp_rst(buf))
+	} else if (qdf_nbuf_data_is_tcp_rst(buf)) {
 		data_frame_type =
 			PKT_CAPTURE_DATA_FRAME_TYPE_TCP_RST;
-	else if (qdf_nbuf_is_ipv4_pkt(buf)) {
+	} else if (qdf_nbuf_is_ipv4_pkt(buf)) {
 		if (qdf_nbuf_is_ipv4_dhcp_pkt(buf))
 			data_frame_type =
 				PKT_CAPTURE_DATA_FRAME_TYPE_DHCPV4;
@@ -469,26 +469,25 @@ pkt_capture_is_frame_filter_set(qdf_nbuf_t buf,
 }
 
 void pkt_capture_callback(void *soc, enum WDI_EVENT event, void *log_data,
-			  u_int16_t vdev_id, uint32_t status)
+			  u_int16_t peer_id, uint32_t status)
 {
 	uint8_t bssid[QDF_MAC_ADDR_SIZE];
 	struct wlan_objmgr_vdev *vdev;
-	struct wlan_objmgr_psoc *obj_mgr_psoc;
-	struct pkt_psoc_priv *psoc_priv;
+	struct pkt_capture_vdev_priv *vdev_priv;
 	struct pkt_capture_frame_filter *frame_filter;
+	uint16_t vdev_id = 0;
 
 	vdev = pkt_capture_get_vdev();
 	if (!vdev)
 		return;
 
-	obj_mgr_psoc = wlan_vdev_get_psoc(vdev);
-	psoc_priv = pkt_capture_psoc_get_priv(obj_mgr_psoc);
-	if (!psoc_priv) {
-		pkt_capture_err("psoc_priv is NULL");
+	vdev_priv = pkt_capture_vdev_get_priv(vdev);
+	if (!vdev_priv) {
+		pkt_capture_err("vdev priv is NULL");
 		return;
 	}
 
-	frame_filter = &psoc_priv->frame_filter;
+	frame_filter = &vdev_priv->frame_filter;
 
 	switch (event) {
 	case WDI_EVENT_PKT_CAPTURE_TX_DATA:
@@ -653,22 +652,22 @@ enum pkt_capture_mode pkt_capture_get_mode(struct wlan_objmgr_psoc *psoc)
 
 bool pkt_capture_is_tx_mgmt_enable(struct wlan_objmgr_pdev *pdev)
 {
-	struct pkt_psoc_priv *psoc_priv;
-	struct wlan_objmgr_psoc *psoc;
+	struct pkt_capture_vdev_priv *vdev_priv;
+	struct wlan_objmgr_vdev *vdev;
 
-	psoc = wlan_pdev_get_psoc(pdev);
-	if (!psoc) {
-		pkt_capture_err("psoc is NULL");
+	vdev = pkt_capture_get_vdev();
+	if (!vdev) {
+		pkt_capture_err("vdev is NULL");
 		return false;
 	}
 
-	psoc_priv = pkt_capture_psoc_get_priv(psoc);
-	if (!psoc_priv) {
-		pkt_capture_err("psoc priv is NULL");
+	vdev_priv = pkt_capture_vdev_get_priv(vdev);
+	if (!vdev_priv) {
+		pkt_capture_err("vdev_priv is NULL");
 		return false;
 	}
 
-	if (!(psoc_priv->frame_filter.mgmt_tx_frame_filter &
+	if (!(vdev_priv->frame_filter.mgmt_tx_frame_filter &
 	    PKT_CAPTURE_MGMT_FRAME_TYPE_ALL))
 		return false;
 
@@ -827,7 +826,7 @@ void pkt_capture_set_pktcap_mode(struct wlan_objmgr_psoc *psoc,
 
 	vdev_priv = pkt_capture_vdev_get_priv(vdev);
 	if (vdev_priv)
-		vdev_priv->cb_ctx->pkt_capture_mode = mode;
+		vdev_priv->cfg_params.pkt_capture_mode = mode;
 	else
 		pkt_capture_err("vdev_priv is NULL");
 
@@ -859,26 +858,17 @@ pkt_capture_get_pktcap_mode(struct wlan_objmgr_psoc *psoc)
 	if (!vdev_priv)
 		pkt_capture_err("vdev_priv is NULL");
 	else
-		mode = vdev_priv->cb_ctx->pkt_capture_mode;
+		mode = vdev_priv->cfg_params.pkt_capture_mode;
 
 	wlan_objmgr_vdev_release_ref(vdev, WLAN_PKT_CAPTURE_ID);
 	return mode;
 }
 
-void pkt_capture_set_pktcap_config(struct wlan_objmgr_psoc *psoc,
+void pkt_capture_set_pktcap_config(struct wlan_objmgr_vdev *vdev,
 				   enum pkt_capture_config config)
 {
 	struct pkt_capture_vdev_priv *vdev_priv;
-	struct wlan_objmgr_vdev *vdev;
 
-	if (!psoc) {
-		pkt_capture_err("psoc is NULL");
-		return;
-	}
-
-	vdev = wlan_objmgr_get_vdev_by_opmode_from_psoc(psoc,
-							QDF_STA_MODE,
-							WLAN_PKT_CAPTURE_ID);
 	if (!vdev) {
 		pkt_capture_err("vdev is NULL");
 		return;
@@ -886,31 +876,17 @@ void pkt_capture_set_pktcap_config(struct wlan_objmgr_psoc *psoc,
 
 	vdev_priv = pkt_capture_vdev_get_priv(vdev);
 	if (vdev_priv)
-		vdev_priv->cb_ctx->pkt_capture_config = config;
+		vdev_priv->cfg_params.pkt_capture_config = config;
 	else
 		pkt_capture_err("vdev_priv is NULL");
-
-	wlan_objmgr_vdev_release_ref(vdev, WLAN_PKT_CAPTURE_ID);
 }
 
 enum pkt_capture_config
-pkt_capture_get_pktcap_config(struct wlan_objmgr_psoc *psoc)
+pkt_capture_get_pktcap_config(struct wlan_objmgr_vdev *vdev)
 {
 	enum pkt_capture_config config = 0;
 	struct pkt_capture_vdev_priv *vdev_priv;
-	struct wlan_objmgr_vdev *vdev;
 
-	if (!psoc) {
-		pkt_capture_err("psoc is NULL");
-		return 0;
-	}
-
-	if (!pkt_capture_get_mode(psoc))
-		return 0;
-
-	vdev = wlan_objmgr_get_vdev_by_opmode_from_psoc(psoc,
-							QDF_STA_MODE,
-							WLAN_PKT_CAPTURE_ID);
 	if (!vdev)
 		return 0;
 
@@ -918,9 +894,8 @@ pkt_capture_get_pktcap_config(struct wlan_objmgr_psoc *psoc)
 	if (!vdev_priv)
 		pkt_capture_err("vdev_priv is NULL");
 	else
-		config = vdev_priv->cb_ctx->pkt_capture_config;
+		config = vdev_priv->cfg_params.pkt_capture_config;
 
-	wlan_objmgr_vdev_release_ref(vdev, WLAN_PKT_CAPTURE_ID);
 	return config;
 }
 
@@ -1219,10 +1194,10 @@ void pkt_capture_record_channel(struct wlan_objmgr_vdev *vdev)
 QDF_STATUS pkt_capture_set_filter(struct pkt_capture_frame_filter frame_filter,
 				  struct wlan_objmgr_vdev *vdev)
 {
-	struct pkt_psoc_priv *psoc_priv;
+	struct pkt_capture_vdev_priv *vdev_priv;
 	struct wlan_objmgr_psoc *psoc;
 	enum pkt_capture_mode mode = PACKET_CAPTURE_MODE_DISABLE;
-	struct dp_soc *soc;
+	ol_txrx_soc_handle soc;
 	QDF_STATUS status;
 	enum pkt_capture_config config = 0;
 	bool check_enable_beacon = 0, send_bcn = 0;
@@ -1234,84 +1209,95 @@ QDF_STATUS pkt_capture_set_filter(struct pkt_capture_frame_filter frame_filter,
 		return QDF_STATUS_E_FAILURE;
 	}
 
+	vdev_priv = pkt_capture_vdev_get_priv(vdev);
+	if (!vdev_priv) {
+		pkt_capture_err("vdev_priv is NULL");
+		return QDF_STATUS_E_FAILURE;
+	}
+
 	psoc = wlan_vdev_get_psoc(vdev);
-	psoc_priv = pkt_capture_psoc_get_priv(psoc);
-	if (!psoc_priv) {
-		pkt_capture_err("psoc_priv is NULL");
+	if (!psoc) {
+		pkt_capture_err("psoc is NULL");
+		return QDF_STATUS_E_FAILURE;
+	}
+
+	soc = cds_get_context(QDF_MODULE_ID_SOC);
+	if (!soc) {
+		pkt_capture_err("Invalid soc");
 		return QDF_STATUS_E_FAILURE;
 	}
 
 	if (frame_filter.vendor_attr_to_set &
 	    BIT(PKT_CAPTURE_ATTR_SET_MONITOR_MODE_DATA_TX_FRAME_TYPE))
-		psoc_priv->frame_filter.data_tx_frame_filter =
+		vdev_priv->frame_filter.data_tx_frame_filter =
 			frame_filter.data_tx_frame_filter;
 
 	if (frame_filter.vendor_attr_to_set &
 	    BIT(PKT_CAPTURE_ATTR_SET_MONITOR_MODE_DATA_RX_FRAME_TYPE))
-		psoc_priv->frame_filter.data_rx_frame_filter =
+		vdev_priv->frame_filter.data_rx_frame_filter =
 			frame_filter.data_rx_frame_filter;
 
 	if (frame_filter.vendor_attr_to_set &
 	    BIT(PKT_CAPTURE_ATTR_SET_MONITOR_MODE_MGMT_TX_FRAME_TYPE))
-		psoc_priv->frame_filter.mgmt_tx_frame_filter =
+		vdev_priv->frame_filter.mgmt_tx_frame_filter =
 			frame_filter.mgmt_tx_frame_filter;
 
 	if (frame_filter.vendor_attr_to_set &
 	    BIT(PKT_CAPTURE_ATTR_SET_MONITOR_MODE_MGMT_RX_FRAME_TYPE))
-		psoc_priv->frame_filter.mgmt_rx_frame_filter =
+		vdev_priv->frame_filter.mgmt_rx_frame_filter =
 			frame_filter.mgmt_rx_frame_filter;
 
 	if (frame_filter.vendor_attr_to_set &
 	    BIT(PKT_CAPTURE_ATTR_SET_MONITOR_MODE_CTRL_TX_FRAME_TYPE))
-		psoc_priv->frame_filter.ctrl_tx_frame_filter =
+		vdev_priv->frame_filter.ctrl_tx_frame_filter =
 			frame_filter.ctrl_tx_frame_filter;
 
 	if (frame_filter.vendor_attr_to_set &
 	    BIT(PKT_CAPTURE_ATTR_SET_MONITOR_MODE_CTRL_RX_FRAME_TYPE))
-		psoc_priv->frame_filter.ctrl_rx_frame_filter =
+		vdev_priv->frame_filter.ctrl_rx_frame_filter =
 			frame_filter.ctrl_rx_frame_filter;
 
 	if (frame_filter.vendor_attr_to_set &
 	    BIT(PKT_CAPTURE_ATTR_SET_MONITOR_MODE_CONNECTED_BEACON_INTERVAL)) {
 		if (frame_filter.connected_beacon_interval !=
-		    psoc_priv->frame_filter.connected_beacon_interval) {
-			psoc_priv->frame_filter.connected_beacon_interval =
-					frame_filter.connected_beacon_interval;
+		    vdev_priv->frame_filter.connected_beacon_interval) {
+			vdev_priv->frame_filter.connected_beacon_interval =
+				frame_filter.connected_beacon_interval;
 			send_bcn = 1;
 		}
 	}
 
-	if (psoc_priv->frame_filter.mgmt_tx_frame_filter)
+	if (vdev_priv->frame_filter.mgmt_tx_frame_filter)
 		mode |= PACKET_CAPTURE_MODE_MGMT_ONLY;
 
-	if (psoc_priv->frame_filter.mgmt_rx_frame_filter &
+	if (vdev_priv->frame_filter.mgmt_rx_frame_filter &
 	    PKT_CAPTURE_MGMT_FRAME_TYPE_ALL) {
 		mode |= PACKET_CAPTURE_MODE_MGMT_ONLY;
-		config |= 1 << PACKET_CAPTURE_CONFIG_BEACON_ENABLE;
-		config |= 1 << PACKET_CAPTURE_CONFIG_OFF_CHANNEL_BEACON_ENABLE;
+		config |= PACKET_CAPTURE_CONFIG_BEACON_ENABLE;
+		config |= PACKET_CAPTURE_CONFIG_OFF_CHANNEL_BEACON_ENABLE;
 	} else {
-		if (psoc_priv->frame_filter.mgmt_rx_frame_filter &
+		if (vdev_priv->frame_filter.mgmt_rx_frame_filter &
 		    PKT_CAPTURE_MGMT_CONNECT_NO_BEACON) {
 			mode |= PACKET_CAPTURE_MODE_MGMT_ONLY;
-			config |= 1 << PACKET_CAPTURE_CONFIG_NO_BEACON_ENABLE;
+			config |= PACKET_CAPTURE_CONFIG_NO_BEACON_ENABLE;
 		} else {
 			check_enable_beacon = 1;
 		}
 	}
 
 	if (check_enable_beacon) {
-		if (psoc_priv->frame_filter.mgmt_rx_frame_filter &
+		if (vdev_priv->frame_filter.mgmt_rx_frame_filter &
 		    PKT_CAPTURE_MGMT_CONNECT_BEACON)
-			config |= 1 << PACKET_CAPTURE_CONFIG_BEACON_ENABLE;
+			config |= PACKET_CAPTURE_CONFIG_BEACON_ENABLE;
 
-		if (psoc_priv->frame_filter.mgmt_rx_frame_filter &
+		if (vdev_priv->frame_filter.mgmt_rx_frame_filter &
 		    PKT_CAPTURE_MGMT_CONNECT_SCAN_BEACON)
-			config |= 1 <<
+			config |=
 				PACKET_CAPTURE_CONFIG_OFF_CHANNEL_BEACON_ENABLE;
 	}
 
-	if (psoc_priv->frame_filter.data_tx_frame_filter ||
-	    psoc_priv->frame_filter.data_rx_frame_filter)
+	if (vdev_priv->frame_filter.data_tx_frame_filter ||
+	    vdev_priv->frame_filter.data_rx_frame_filter)
 		mode |= PACKET_CAPTURE_MODE_DATA_ONLY;
 
 	if (mode != pkt_capture_get_pktcap_mode(psoc)) {
@@ -1320,19 +1306,20 @@ QDF_STATUS pkt_capture_set_filter(struct pkt_capture_frame_filter frame_filter,
 			pkt_capture_err("Unable to send packet capture mode");
 			return status;
 		}
-		soc = wlan_psoc_get_dp_handle(psoc);
-		soc->wlan_cfg_ctx->pkt_capture_mode = mode;
+
+		if (mode & PACKET_CAPTURE_MODE_DATA_ONLY)
+			cdp_set_pkt_capture_mode(soc, true);
 	}
 
-	if (psoc_priv->frame_filter.ctrl_tx_frame_filter ||
-	    psoc_priv->frame_filter.ctrl_rx_frame_filter)
-		config |= 1 << PACKET_CAPTURE_CONFIG_TRIGGER_ENABLE;
+	if (vdev_priv->frame_filter.ctrl_tx_frame_filter ||
+	    vdev_priv->frame_filter.ctrl_rx_frame_filter)
+		config |= PACKET_CAPTURE_CONFIG_TRIGGER_ENABLE;
 
-	if (psoc_priv->frame_filter.data_rx_frame_filter &
+	if (vdev_priv->frame_filter.data_rx_frame_filter &
 	    PKT_CAPTURE_DATA_FRAME_QOS_NULL)
-		config |= 1 << PACKET_CAPTURE_CONFIG_QOS_ENABLE;
+		config |= PACKET_CAPTURE_CONFIG_QOS_ENABLE;
 
-	if (config != pkt_capture_get_pktcap_config(psoc)) {
+	if (config != pkt_capture_get_pktcap_config(vdev)) {
 		status = tgt_pkt_capture_send_config(vdev, config);
 		if (QDF_IS_STATUS_ERROR(status)) {
 			pkt_capture_err("packet capture send config failed");
@@ -1352,16 +1339,20 @@ QDF_STATUS pkt_capture_set_filter(struct pkt_capture_frame_filter frame_filter,
 					      WLAN_MLME_CFG_BEACON_INTERVAL,
 					      &bcn_interval);
 
-		nth_beacon_value =
-			psoc_priv->frame_filter.connected_beacon_interval /
-			bcn_interval;
+		if (bcn_interval) {
+			nth_beacon_value =
+				vdev_priv->
+				frame_filter.connected_beacon_interval /
+				bcn_interval;
 
-		status = tgt_pkt_capture_send_beacon_interval(vdev,
-							      nth_beacon_value);
+			status = tgt_pkt_capture_send_beacon_interval(
+							vdev,
+							nth_beacon_value);
 
-		if (QDF_IS_STATUS_ERROR(status)) {
-			pkt_capture_err("Unable to send beacon interval to fw");
-			return status;
+			if (QDF_IS_STATUS_ERROR(status)) {
+				pkt_capture_err("send beacon interval fail");
+				return status;
+			}
 		}
 	}
 	return QDF_STATUS_SUCCESS;

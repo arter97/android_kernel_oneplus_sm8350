@@ -14989,30 +14989,52 @@ get_usable_channel_policy[QCA_WLAN_VENDOR_ATTR_USABLE_CHANNELS_MAX + 1] = {
 };
 
 #ifdef WLAN_FEATURE_PKT_CAPTURE
+
+/* Short name for QCA_NL80211_VENDOR_SUBCMD_SET_MONITOR_MODE command */
+
+#define SET_MONITOR_MODE_CONFIG_MAX \
+	QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_MAX
+#define SET_MONITOR_MODE_INVALID \
+	QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_INVALID
+#define SET_MONITOR_MODE_DATA_TX_FRAME_TYPE \
+	QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_DATA_TX_FRAME_TYPE
+#define SET_MONITOR_MODE_DATA_RX_FRAME_TYPE \
+	QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_DATA_RX_FRAME_TYPE
+#define SET_MONITOR_MODE_MGMT_TX_FRAME_TYPE \
+	QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_MGMT_TX_FRAME_TYPE
+#define SET_MONITOR_MODE_MGMT_RX_FRAME_TYPE \
+	QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_MGMT_RX_FRAME_TYPE
+#define SET_MONITOR_MODE_CTRL_TX_FRAME_TYPE \
+	QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_CTRL_TX_FRAME_TYPE
+#define SET_MONITOR_MODE_CTRL_RX_FRAME_TYPE \
+	QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_CTRL_RX_FRAME_TYPE
+#define SET_MONITOR_MODE_CONNECTED_BEACON_INTERVAL \
+	QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_CONNECTED_BEACON_INTERVAL
+
 static const struct nla_policy
-set_monitor_mode_policy[QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_MAX + 1] = {
-	[QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_INVALID] = {
+set_monitor_mode_policy[SET_MONITOR_MODE_CONFIG_MAX + 1] = {
+	[SET_MONITOR_MODE_INVALID] = {
 		.type = NLA_U32
 	},
-	[QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_DATA_TX_FRAME_TYPE] = {
+	[SET_MONITOR_MODE_DATA_TX_FRAME_TYPE] = {
 		.type = NLA_U32
 	},
-	[QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_DATA_RX_FRAME_TYPE] = {
+	[SET_MONITOR_MODE_DATA_RX_FRAME_TYPE] = {
 		.type = NLA_U32
 	},
-	[QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_MGMT_TX_FRAME_TYPE] = {
+	[SET_MONITOR_MODE_MGMT_TX_FRAME_TYPE] = {
 		.type = NLA_U32
 	},
-	[QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_MGMT_RX_FRAME_TYPE] = {
+	[SET_MONITOR_MODE_MGMT_RX_FRAME_TYPE] = {
 		.type = NLA_U32
 	},
-	[QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_CTRL_TX_FRAME_TYPE] = {
+	[SET_MONITOR_MODE_CTRL_TX_FRAME_TYPE] = {
 		.type = NLA_U32
 	},
-	[QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_CTRL_RX_FRAME_TYPE] = {
+	[SET_MONITOR_MODE_CTRL_RX_FRAME_TYPE] = {
 		.type = NLA_U32
 	},
-	[QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_CONNECTED_BEACON_INTERVAL] = {
+	[SET_MONITOR_MODE_CONNECTED_BEACON_INTERVAL] = {
 		.type = NLA_U32
 	},
 };
@@ -15464,6 +15486,7 @@ static int wlan_hdd_cfg80211_get_usable_channel(struct wiphy *wiphy,
 #endif
 
 #ifdef WLAN_FEATURE_PKT_CAPTURE
+
 /**
  * hdd_monitor_mode_configure - Process monitor mode configuration
  * operation in the received vendor command
@@ -15482,75 +15505,74 @@ static int hdd_monitor_mode_configure(struct hdd_adapter *adapter,
 
 	QDF_STATUS status;
 
-	hdd_enter();
+	hdd_enter_dev(adapter->dev);
 
-	vdev = hdd_objmgr_get_vdev(adapter);
-
+	vdev = hdd_objmgr_get_vdev(adapter);;
 	if (!vdev)
+		return QDF_STATUS_E_INVAL;
+
+	if (tb[SET_MONITOR_MODE_INVALID])
 		return QDF_STATUS_E_FAILURE;
 
-	if (tb[QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_INVALID])
-		return QDF_STATUS_E_FAILURE;
-
-	if (tb[QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_DATA_TX_FRAME_TYPE] &&
-	    nla_get_u32(tb[QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_DATA_TX_FRAME_TYPE]) <
+	if (tb[SET_MONITOR_MODE_DATA_TX_FRAME_TYPE] &&
+	    nla_get_u32(tb[SET_MONITOR_MODE_DATA_TX_FRAME_TYPE]) <
 	    PACKET_CAPTURE_DATA_MAX_FILTER) {
 		frame_filter.data_tx_frame_filter =
-			nla_get_u32(tb[QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_DATA_TX_FRAME_TYPE]);
+			nla_get_u32(tb[SET_MONITOR_MODE_DATA_TX_FRAME_TYPE]);
 		frame_filter.vendor_attr_to_set =
-			BIT(QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_DATA_TX_FRAME_TYPE);
+			BIT(SET_MONITOR_MODE_DATA_TX_FRAME_TYPE);
 	}
 
-	if (tb[QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_DATA_RX_FRAME_TYPE] &&
-	    nla_get_u32(tb[QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_DATA_RX_FRAME_TYPE]) <
+	if (tb[SET_MONITOR_MODE_DATA_RX_FRAME_TYPE] &&
+	    nla_get_u32(tb[SET_MONITOR_MODE_DATA_RX_FRAME_TYPE]) <
 	    PACKET_CAPTURE_DATA_MAX_FILTER) {
 		frame_filter.data_rx_frame_filter =
-			nla_get_u32(tb[QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_DATA_RX_FRAME_TYPE]);
+			nla_get_u32(tb[SET_MONITOR_MODE_DATA_RX_FRAME_TYPE]);
 		frame_filter.vendor_attr_to_set |=
-			BIT(QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_DATA_RX_FRAME_TYPE);
+			BIT(SET_MONITOR_MODE_DATA_RX_FRAME_TYPE);
 	}
 
-	if (tb[QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_MGMT_TX_FRAME_TYPE] &&
-	    nla_get_u32(tb[QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_MGMT_TX_FRAME_TYPE]) <
+	if (tb[SET_MONITOR_MODE_MGMT_TX_FRAME_TYPE] &&
+	    nla_get_u32(tb[SET_MONITOR_MODE_MGMT_TX_FRAME_TYPE]) <
 	    PACKET_CAPTURE_MGMT_MAX_FILTER) {
 		frame_filter.mgmt_tx_frame_filter =
-			nla_get_u32(tb[QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_MGMT_TX_FRAME_TYPE]);
+			nla_get_u32(tb[SET_MONITOR_MODE_MGMT_TX_FRAME_TYPE]);
 		frame_filter.vendor_attr_to_set |=
-			BIT(QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_MGMT_TX_FRAME_TYPE);
+			BIT(SET_MONITOR_MODE_MGMT_TX_FRAME_TYPE);
 	}
 
-	if (tb[QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_MGMT_RX_FRAME_TYPE] &&
-	    nla_get_u32(tb[QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_MGMT_RX_FRAME_TYPE]) <
+	if (tb[SET_MONITOR_MODE_MGMT_RX_FRAME_TYPE] &&
+	    nla_get_u32(tb[SET_MONITOR_MODE_MGMT_RX_FRAME_TYPE]) <
 	    PACKET_CAPTURE_MGMT_MAX_FILTER) {
 		frame_filter.mgmt_rx_frame_filter =
-			nla_get_u32(tb[QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_MGMT_RX_FRAME_TYPE]);
+			nla_get_u32(tb[SET_MONITOR_MODE_MGMT_RX_FRAME_TYPE]);
 		frame_filter.vendor_attr_to_set |=
-			BIT(QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_MGMT_RX_FRAME_TYPE);
+			BIT(SET_MONITOR_MODE_MGMT_RX_FRAME_TYPE);
 	}
 
-	if (tb[QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_CTRL_TX_FRAME_TYPE] &&
-	    nla_get_u32(tb[QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_CTRL_TX_FRAME_TYPE]) <
+	if (tb[SET_MONITOR_MODE_CTRL_TX_FRAME_TYPE] &&
+	    nla_get_u32(tb[SET_MONITOR_MODE_CTRL_TX_FRAME_TYPE]) <
 	    PACKET_CAPTURE_CTRL_MAX_FILTER) {
 		frame_filter.ctrl_tx_frame_filter =
-			nla_get_u32(tb[QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_CTRL_TX_FRAME_TYPE]);
+			nla_get_u32(tb[SET_MONITOR_MODE_CTRL_TX_FRAME_TYPE]);
 		frame_filter.vendor_attr_to_set |=
-			BIT(QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_CTRL_TX_FRAME_TYPE);
+			BIT(SET_MONITOR_MODE_CTRL_TX_FRAME_TYPE);
 	}
 
-	if (tb[QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_CTRL_RX_FRAME_TYPE] &&
-	    nla_get_u32(tb[QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_CTRL_RX_FRAME_TYPE]) <
+	if (tb[SET_MONITOR_MODE_CTRL_RX_FRAME_TYPE] &&
+	    nla_get_u32(tb[SET_MONITOR_MODE_CTRL_RX_FRAME_TYPE]) <
 	    PACKET_CAPTURE_CTRL_MAX_FILTER) {
 		frame_filter.ctrl_rx_frame_filter =
-			nla_get_u32(tb[QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_CTRL_RX_FRAME_TYPE]);
+			nla_get_u32(tb[SET_MONITOR_MODE_CTRL_RX_FRAME_TYPE]);
 		frame_filter.vendor_attr_to_set |=
-			BIT(QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_CTRL_RX_FRAME_TYPE);
+			BIT(SET_MONITOR_MODE_CTRL_RX_FRAME_TYPE);
 	}
 
-	if (tb[QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_CONNECTED_BEACON_INTERVAL]) {
+	if (tb[SET_MONITOR_MODE_CONNECTED_BEACON_INTERVAL]) {
 		frame_filter.connected_beacon_interval =
-			nla_get_u32(tb[QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_CONNECTED_BEACON_INTERVAL]);
+			nla_get_u32(tb[SET_MONITOR_MODE_CONNECTED_BEACON_INTERVAL]);
 		frame_filter.vendor_attr_to_set |=
-			BIT(QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_CONNECTED_BEACON_INTERVAL);
+			BIT(SET_MONITOR_MODE_CONNECTED_BEACON_INTERVAL);
 	}
 
 	hdd_debug("Monitor mode config %s data tx %d data rx %d mgmt tx %d mgmt rx %d ctrl tx %d ctrl rx %d beacon interval %d\n",
@@ -15560,7 +15582,7 @@ static int hdd_monitor_mode_configure(struct hdd_adapter *adapter,
 		  frame_filter.ctrl_rx_frame_filter, frame_filter.connected_beacon_interval);
 
 	status = ucfg_pkt_capture_set_filter(frame_filter, vdev);
-	hdd_objmgr_put_vdev(vdev);
+	hdd_objmgr_put_vdev(adapter->vdev);
 
 	hdd_exit();
 
@@ -15587,17 +15609,13 @@ __wlan_hdd_cfg80211_set_monitor_mode(struct wiphy *wiphy,
 	struct net_device *dev = wdev->netdev;
 	struct hdd_adapter *adapter = WLAN_HDD_GET_PRIV_PTR(dev);
 	struct hdd_context *hdd_ctx  = wiphy_priv(wiphy);
-	struct nlattr *tb[QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_MAX + 1];
+	struct nlattr *tb[SET_MONITOR_MODE_CONFIG_MAX + 1];
 	int errno;
 
 	if (hdd_get_conparam() == QDF_GLOBAL_FTM_MODE) {
 		hdd_err("Command not allowed in FTM mode");
 		return -EPERM;
 	}
-
-	errno = wlan_hdd_validate_context(hdd_ctx);
-	if (errno)
-		return errno;
 
 	if (!ucfg_pkt_capture_get_mode(hdd_ctx->psoc))
 		return QDF_STATUS_E_FAILURE;
@@ -15606,7 +15624,7 @@ __wlan_hdd_cfg80211_set_monitor_mode(struct wiphy *wiphy,
 	if (errno)
 		return errno;
 
-	if (wlan_cfg80211_nla_parse(tb, QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_MAX,
+	if (wlan_cfg80211_nla_parse(tb, SET_MONITOR_MODE_CONFIG_MAX,
 				    data, data_len, set_monitor_mode_policy)) {
 		hdd_err("invalid monitor attr");
 		return -EINVAL;
@@ -15633,6 +15651,8 @@ static int wlan_hdd_cfg80211_set_monitor_mode(struct wiphy *wiphy,
 	int errno;
 	struct osif_vdev_sync *vdev_sync;
 
+	hdd_enter_dev(wdev->netdev);
+
 	errno = osif_vdev_sync_op_start(wdev->netdev, &vdev_sync);
 	if (errno)
 		return errno;
@@ -15642,8 +15662,21 @@ static int wlan_hdd_cfg80211_set_monitor_mode(struct wiphy *wiphy,
 
 	osif_vdev_sync_op_stop(vdev_sync);
 
+	hdd_exit();
+
 	return errno;
 }
+
+#undef SET_MONITOR_MODE_CONFIG_MAX
+#undef SET_MONITOR_MODE_INVALID
+#undef SET_MONITOR_MODE_DATA_TX_FRAME_TYPE
+#undef SET_MONITOR_MODE_DATA_RX_FRAME_TYPE
+#undef SET_MONITOR_MODE_MGMT_TX_FRAME_TYPE
+#undef SET_MONITOR_MODE_MGMT_RX_FRAME_TYPE
+#undef SET_MONITOR_MODE_CTRL_TX_FRAME_TYPE
+#undef SET_MONITOR_MODE_CTRL_RX_FRAME_TYPE
+#undef SET_MONITOR_MODE_CONNECTED_BEACON_INTERVAL
+
 #endif
 
 /**
