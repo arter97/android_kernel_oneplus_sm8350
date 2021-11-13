@@ -491,13 +491,13 @@
  *     hardware and thus passing such frames over the monitor interface is left
  *     to the respective designs.
  *
- *     Also, this monitor mode is governed to behave accordingly in suspend/resume
- *     states. If the firmware handles any of such frames in suspend state without
- *     waking up the host and if the monitor mode is configured to notify all such
- *     frames, then the firmware is expected to resume the host and forward the
- *     respective frames to the monitor interface. Please note that such a request
- *     to get the frames over the monitor interface will have a definite power
- *     implications.
+ *     Also, this monitor mode is governed to behave accordingly in
+ *     suspend/resume states. If the firmware handles any of such frames
+ *     in suspend state without waking up the host and if the monitor mode
+ *     is configured to notify all such frames, then the firmware is expected
+ *     to resume the host and forward the respective frames to the monitor
+ *     interface. Please note that such a request to get the frames over the
+ *     monitor interface will have a definite power implications.
  */
 
 enum qca_nl80211_vendor_subcmds {
@@ -11044,7 +11044,9 @@ enum qca_wlan_vendor_attr_usable_channels {
  */
 enum qca_wlan_vendor_monitor_data_frame_type {
 	QCA_WLAN_VENDOR_MONITOR_DATA_FRAME_TYPE_ALL = BIT(0),
-	/* valid only if QCA_WLAN_VENDOR_MONITOR_DATA_FRAME_TYPE_ALL is not set */
+
+	/* valid only if QCA_WLAN_VENDOR_MONITOR_DATA_FRAME_TYPE_ALL is
+	not set */
 	QCA_WLAN_VENDOR_MONITOR_DATA_FRAME_TYPE_ARP = BIT(1),
 	QCA_WLAN_VENDOR_MONITOR_DATA_FRAME_TYPE_DHCPV4 = BIT(2),
 	QCA_WLAN_VENDOR_MONITOR_DATA_FRAME_TYPE_DHCPV6 = BIT(3),
@@ -11126,10 +11128,10 @@ enum qca_wlan_vendor_monitor_ctrl_frame_type {
  * Represents the tx data packet type to be monitored (u32). These ctrl packets
  * are represented by enum qca_wlan_vendor_monitor_ctrl_frame_type.
  *
- * @QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_CONNECTED_BEACON_INTERVAL: u32 attribute,
- * An interval only for the connected beacon interval, which expects that the
- * connected BSSID's beacons shall be sent on the monitor interface only on this
- * specific interval.
+ * @QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_CONNECTED_BEACON_INTERVAL:
+ * u32 attribute, An interval only for the connected beacon interval, which
+ * expects that the connected BSSID's beacons shall be sent on the monitor
+ * interface only on this specific interval.
  */
 enum qca_wlan_vendor_attr_set_monitor_mode {
 	QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_INVALID = 0,
