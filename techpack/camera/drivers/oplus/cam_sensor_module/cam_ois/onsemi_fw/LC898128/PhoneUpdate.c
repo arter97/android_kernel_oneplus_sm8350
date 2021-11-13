@@ -210,7 +210,9 @@ UINT_8 PmemUpdate128( DOWNLOAD_TBL_EXT* ptr )
 		UlNum = 2;
 		for(j=0 ; j < BURST_LENGTH_UC; j++){
 			data[UlNum] =  *NcDataVal++;
-			if( ( j % 5) == 4)	TRACE("\n");
+			if( ( j % 5) == 4) {
+				TRACE("\n");
+			}
 			UlNum++;
 		}
 		
