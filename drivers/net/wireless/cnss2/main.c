@@ -2052,7 +2052,7 @@ void cnss_unregister_subsys(struct cnss_plat_data *plat_priv)
 	subsys_unregister(subsys_info->subsys_device);
 }
 
-static void *cnss_create_ramdump_device(struct cnss_plat_data *plat_priv)
+__maybe_unused static void *cnss_create_ramdump_device(struct cnss_plat_data *plat_priv)
 {
 	struct cnss_subsys_info *subsys_info = &plat_priv->subsys_info;
 
@@ -2060,7 +2060,7 @@ static void *cnss_create_ramdump_device(struct cnss_plat_data *plat_priv)
 				     subsys_info->subsys_desc.dev);
 }
 
-static void cnss_destroy_ramdump_device(struct cnss_plat_data *plat_priv,
+__maybe_unused static void cnss_destroy_ramdump_device(struct cnss_plat_data *plat_priv,
 					void *ramdump_dev)
 {
 	destroy_ramdump_device(ramdump_dev);
