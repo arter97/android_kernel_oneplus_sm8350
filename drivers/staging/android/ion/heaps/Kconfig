@@ -85,3 +85,10 @@ config PANIC_ON_MSM_ION_HEAPS_FAILURE
 	msm ion heap probe fails. This can happen when any invalid heap id,
 	heap types are added in device tree. Panic ensures early detection
 	of such changes.
+
+config DEBUG_ION_TRACK_HEAP_MEM
+	bool "Track total memory allocated in each ION heap"
+	help
+	  Add support to track the total amount of memory allocated by each ION
+	  heap. This information makes it easier to identify if an ION client is
+	  responsible for a memory leak.

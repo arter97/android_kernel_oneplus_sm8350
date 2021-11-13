@@ -484,10 +484,16 @@ int crypto_qti_derive_raw_secret(void *priv_data,
 		err = -EINVAL;
 		return err;
 	}
+	if (wrapped_key_size > 64)
+		err = crypto_qti_derive_raw_secret_platform(ice_entry,
+							    wrapped_key,
+							    wrapped_key_size,
+							    secret,
+							    secret_size);
+	else
+		memcpy(secret, wrapped_key, secret_size);
 
-	return crypto_qti_derive_raw_secret_platform(ice_entry,
-				wrapped_key, wrapped_key_size,
-				secret, secret_size);
+	return err;
 }
 EXPORT_SYMBOL(crypto_qti_derive_raw_secret);
 
@@ -950,6 +956,9 @@ static int crypto_qti_ice_enable_setup(struct ice_device *ice_dev)
 					__func__, ice_dev);
 			goto out;
 		}
+	} else {
+		pr_info("%s: No need to get regulator\n", __func__);
+		ret = 0;
 	}
 
 	/* Setup Clocks */

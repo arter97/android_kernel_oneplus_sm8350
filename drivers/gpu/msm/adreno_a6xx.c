@@ -92,7 +92,7 @@ static u32 a6xx_ifpc_pwrup_reglist[] = {
 	A6XX_CP_AHB_CNTL,
 };
 
-/* Applicable to a620, a642l, a650 and a660 */
+/* Applicable to a620, a642, a642l, a650 and a660 */
 static u32 a650_pwrup_reglist[] = {
 	A6XX_CP_PROTECT_REG + 47,          /* Programmed for infinite span */
 	A6XX_TPL1_BICUBIC_WEIGHTS_TABLE_0,
@@ -101,6 +101,7 @@ static u32 a650_pwrup_reglist[] = {
 	A6XX_TPL1_BICUBIC_WEIGHTS_TABLE_3,
 	A6XX_TPL1_BICUBIC_WEIGHTS_TABLE_4,
 	A6XX_UCHE_CMDQ_CONFIG,
+	A6XX_SP_DBG_ECO_CNTL,
 };
 
 static u32 a615_pwrup_reglist[] = {
@@ -537,11 +538,11 @@ static void a6xx_set_secvid(struct kgsl_device *device)
 
 	kgsl_regwrite(device, A6XX_RBBM_SECVID_TSB_CNTL, 0x0);
 	kgsl_regwrite(device, A6XX_RBBM_SECVID_TSB_TRUSTED_BASE_LO,
-		lower_32_bits(KGSL_IOMMU_SECURE_BASE(&device->mmu)));
+		lower_32_bits(device->mmu.secure_base));
 	kgsl_regwrite(device, A6XX_RBBM_SECVID_TSB_TRUSTED_BASE_HI,
-		upper_32_bits(KGSL_IOMMU_SECURE_BASE(&device->mmu)));
+		upper_32_bits(device->mmu.secure_base));
 	kgsl_regwrite(device, A6XX_RBBM_SECVID_TSB_TRUSTED_SIZE,
-		KGSL_IOMMU_SECURE_SIZE);
+		device->mmu.secure_size);
 
 	if (ADRENO_QUIRK(ADRENO_DEVICE(device), ADRENO_QUIRK_SECVID_SET_ONCE))
 		set = true;
@@ -583,19 +584,21 @@ void a6xx_start(struct adreno_device *adreno_dev)
 	unsigned int rgb565_predicator = 0;
 	static bool patch_reglist;
 
-	/* Enable 64 bit addressing */
-	kgsl_regwrite(device, A6XX_CP_ADDR_MODE_CNTL, 0x1);
-	kgsl_regwrite(device, A6XX_VSC_ADDR_MODE_CNTL, 0x1);
-	kgsl_regwrite(device, A6XX_GRAS_ADDR_MODE_CNTL, 0x1);
-	kgsl_regwrite(device, A6XX_RB_ADDR_MODE_CNTL, 0x1);
-	kgsl_regwrite(device, A6XX_PC_ADDR_MODE_CNTL, 0x1);
-	kgsl_regwrite(device, A6XX_HLSQ_ADDR_MODE_CNTL, 0x1);
-	kgsl_regwrite(device, A6XX_VFD_ADDR_MODE_CNTL, 0x1);
-	kgsl_regwrite(device, A6XX_VPC_ADDR_MODE_CNTL, 0x1);
-	kgsl_regwrite(device, A6XX_UCHE_ADDR_MODE_CNTL, 0x1);
-	kgsl_regwrite(device, A6XX_SP_ADDR_MODE_CNTL, 0x1);
-	kgsl_regwrite(device, A6XX_TPL1_ADDR_MODE_CNTL, 0x1);
-	kgsl_regwrite(device, A6XX_RBBM_SECVID_TSB_ADDR_MODE_CNTL, 0x1);
+	if (adreno_support_64bit(adreno_dev)) {
+		/* Enable 64 bit addressing */
+		kgsl_regwrite(device, A6XX_CP_ADDR_MODE_CNTL, 0x1);
+		kgsl_regwrite(device, A6XX_VSC_ADDR_MODE_CNTL, 0x1);
+		kgsl_regwrite(device, A6XX_GRAS_ADDR_MODE_CNTL, 0x1);
+		kgsl_regwrite(device, A6XX_RB_ADDR_MODE_CNTL, 0x1);
+		kgsl_regwrite(device, A6XX_PC_ADDR_MODE_CNTL, 0x1);
+		kgsl_regwrite(device, A6XX_HLSQ_ADDR_MODE_CNTL, 0x1);
+		kgsl_regwrite(device, A6XX_VFD_ADDR_MODE_CNTL, 0x1);
+		kgsl_regwrite(device, A6XX_VPC_ADDR_MODE_CNTL, 0x1);
+		kgsl_regwrite(device, A6XX_UCHE_ADDR_MODE_CNTL, 0x1);
+		kgsl_regwrite(device, A6XX_SP_ADDR_MODE_CNTL, 0x1);
+		kgsl_regwrite(device, A6XX_TPL1_ADDR_MODE_CNTL, 0x1);
+		kgsl_regwrite(device, A6XX_RBBM_SECVID_TSB_ADDR_MODE_CNTL, 0x1);
+	}
 
 	/* Set up VBIF registers from the GPU core definition */
 	adreno_reglist_write(adreno_dev, a6xx_core->vbif,
@@ -667,6 +670,10 @@ void a6xx_start(struct adreno_device *adreno_dev)
 	/* Setting the primFifo thresholds values */
 	kgsl_regwrite(device, A6XX_PC_DBG_ECO_CNTL,
 		a6xx_core->prim_fifo_threshold);
+
+	if (adreno_is_a642(adreno_dev) || adreno_is_a642l(adreno_dev) ||
+		adreno_is_a660v2(adreno_dev))
+		kgsl_regrmw(device, A6XX_SP_DBG_ECO_CNTL, 0x6, (0x3 << 1));
 
 	/* Set the AHB default slave response to "ERROR" */
 	kgsl_regwrite(device, A6XX_CP_AHB_CNTL, 0x1);
@@ -1196,7 +1203,7 @@ int a6xx_rb_start(struct adreno_device *adreno_dev)
 	 * Take the GPU out of secure mode. Try the zap shader if it is loaded,
 	 * otherwise just try to write directly to the secure control register
 	 */
-	if (!adreno_dev->zap_loaded)
+	if (!adreno_dev->zap_handle)
 		kgsl_regwrite(device, A6XX_RBBM_SECVID_TRUST_CNTL, 0);
 	else {
 		cmds = adreno_ringbuffer_allocspace(rb, 2);
@@ -1311,10 +1318,9 @@ static int64_t a6xx_read_throttling_counters(struct adreno_device *adreno_dev)
 	u32 a, b, c;
 	struct adreno_busy_data *busy = &adreno_dev->busy_data;
 
-	if (!adreno_dev->lm_enabled)
+	if (!(adreno_dev->lm_enabled || adreno_dev->bcl_enabled))
 		return 0;
 
-	/* The counters are selected in a6xx_gmu_enable_lm() */
 	a = counter_delta(device, A6XX_GMU_CX_GMU_POWER_COUNTER_XOCLK_1_L,
 		&busy->throttle_cycles[0]);
 
@@ -1324,6 +1330,10 @@ static int64_t a6xx_read_throttling_counters(struct adreno_device *adreno_dev)
 	c = counter_delta(device, A6XX_GMU_CX_GMU_POWER_COUNTER_XOCLK_3_L,
 		&busy->throttle_cycles[2]);
 
+	if (adreno_dev->bcl_enabled) {
+		trace_kgsl_bcl_clock_throttling(a, b, c);
+		return 0;
+	}
 
 	/*
 	 * The adjustment is the number of cycles lost to throttling, which

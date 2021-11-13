@@ -3073,8 +3073,8 @@ static int qg_load_battery_profile(struct qpnp_qg *chip)
 				chip->batt_id_ohm / 1000, NULL);
 	}
 
-	if (IS_ERR(profile_node)) {
-		rc = PTR_ERR(profile_node);
+	if (IS_ERR_OR_NULL(profile_node)) {
+		rc = profile_node ? PTR_ERR(profile_node) : -EINVAL;
 		pr_err("Failed to detect valid QG battery profile %d\n", rc);
 		return rc;
 	}
@@ -4385,7 +4385,7 @@ static int qg_parse_dt(struct qpnp_qg *chip)
 	else
 		chip->dt.esr_low_temp_threshold = (int)temp;
 
-	rc = of_property_read_u32(node, "qcom,shutdown_soc_threshold", &temp);
+	rc = of_property_read_u32(node, "qcom,shutdown-soc-threshold", &temp);
 	if (rc < 0)
 		chip->dt.shutdown_soc_threshold = -EINVAL;
 	else

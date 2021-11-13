@@ -182,6 +182,9 @@ struct msm_pinctrl_soc_data {
 	const struct msm_spare_tlmm *spare_regs;
 	unsigned int nspare_regs;
 	struct msm_dir_conn *dir_conn;
+#ifdef CONFIG_HIBERNATION
+	u32 *dir_conn_addr;
+#endif
 };
 
 extern const struct dev_pm_ops msm_pinctrl_dev_pm_ops;

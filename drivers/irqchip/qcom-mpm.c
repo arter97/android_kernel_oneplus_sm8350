@@ -573,6 +573,14 @@ static const struct of_device_id mpm_gic_chip_data_table[] = {
 		.data = mpm_qcs405_gic_chip_data,
 	},
 	{
+		.compatible = "qcom,mpm-gic-scuba",
+		.data = mpm_scuba_gic_chip_data,
+	},
+	{
+		.compatible = "qcom,mpm-gic-bengal",
+		.data = mpm_bengal_gic_chip_data,
+	},
+	{
 		.compatible = "qcom,mpm-gic-blair",
 		.data = mpm_blair_gic_chip_data,
 	},

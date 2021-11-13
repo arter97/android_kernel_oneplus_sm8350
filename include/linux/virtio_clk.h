@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-/* Copyright (c) 2019-2020, The Linux Foundation. All rights reserved. */
+/* Copyright (c) 2019-2021, The Linux Foundation. All rights reserved. */
 
 #ifndef _LINUX_VIRTIO_CLK_H
 #define _LINUX_VIRTIO_CLK_H
@@ -40,5 +40,6 @@ struct virtio_clk_msg {
 #define VIRTIO_CLK_T_ROUND_RATE	4
 #define VIRTIO_CLK_T_RESET	5
 #define VIRTIO_CLK_T_SET_FLAGS	6
+#define VIRTIO_CLK_T_SET_PARENT	7
 
 #endif /* _LINUX_VIRTIO_CLK_H */

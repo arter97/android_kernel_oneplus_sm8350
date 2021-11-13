@@ -21,12 +21,14 @@
 #include <linux/regmap.h>
 #include <linux/regulator/driver.h>
 #include <linux/slab.h>
+#include <linux/suspend.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
 #include <linux/qpnp/qpnp-pbs.h>
 
 /* status register definitions in HAPTICS_CFG module */
-#define HAP_CFG_REVISION2_REG			0x01
+#define HAP_CFG_REVISION1_REG			0x00
+
 #define HAP_CFG_V1				0x1
 #define HAP_CFG_V2				0x2
 #define HAP_CFG_V3				0x3
@@ -367,6 +369,7 @@ enum pmic_type {
 
 enum wa_flags {
 	TOGGLE_CAL_RC_CLK = BIT(0),
+	TOGGLE_MODULE_EN = BIT(1),
 };
 
 static const char * const src_str[] = {
@@ -518,6 +521,7 @@ struct haptics_chip {
 	u32				hbst_addr_base;
 	u32				wa_flags;
 	u8				cfg_revision;
+	u8				cfg_rev1;
 	u8				ptn_revision;
 	u8				hpwr_intf_ctl;
 	u16				hbst_revision;
@@ -1492,6 +1496,33 @@ static int haptics_open_loop_drive_config(struct haptics_chip *chip, bool en)
 	return rc;
 }
 
+static int haptics_module_enable(struct haptics_chip *chip, bool enable)
+{
+	u8 val;
+	int rc;
+
+	val = enable ? HAPTICS_EN_BIT : 0;
+	rc = haptics_write(chip, chip->cfg_addr_base,
+		HAP_CFG_EN_CTL_REG, &val, 1);
+	if (rc < 0)
+		return rc;
+
+	dev_dbg(chip->dev, "haptics module %s\n",
+			enable ? "enabled" : "disabled");
+	return 0;
+}
+
+static int haptics_toggle_module_enable(struct haptics_chip *chip)
+{
+	int rc;
+
+	rc = haptics_module_enable(chip, false);
+	if (rc < 0)
+		return rc;
+
+	return haptics_module_enable(chip, true);
+}
+
 static int haptics_enable_play(struct haptics_chip *chip, bool en)
 {
 	struct haptics_play_info *play = &chip->play;
@@ -1529,10 +1560,15 @@ static int haptics_enable_play(struct haptics_chip *chip, bool en)
 
 	if (play->pattern_src == FIFO) {
 		rc = haptics_boost_vreg_enable(chip, en);
-		if (rc < 0)
+		if (rc < 0) {
 			dev_err(chip->dev, "Notify vreg %s failed, rc=%d\n",
 					en ? "enabling" : "disabling", rc);
+			return rc;
+		}
 	}
+
+	if ((chip->wa_flags & TOGGLE_MODULE_EN) && !en)
+		rc = haptics_toggle_module_enable(chip);
 
 	return rc;
 }
@@ -1874,33 +1910,6 @@ static void haptics_fifo_empty_irq_config(struct haptics_chip *chip,
 		disable_irq_nosync(chip->fifo_empty_irq);
 		chip->fifo_empty_irq_en = false;
 	}
-}
-
-static int haptics_module_enable(struct haptics_chip *chip, bool enable)
-{
-	u8 val;
-	int rc;
-
-	val = enable ? HAPTICS_EN_BIT : 0;
-	rc = haptics_write(chip, chip->cfg_addr_base,
-		HAP_CFG_EN_CTL_REG, &val, 1);
-	if (rc < 0)
-		return rc;
-
-	dev_dbg(chip->dev, "haptics module %s\n",
-			enable ? "enabled" : "disabled");
-	return 0;
-}
-
-static int haptics_toggle_module_enable(struct haptics_chip *chip)
-{
-	int rc;
-
-	rc = haptics_module_enable(chip, false);
-	if (rc < 0)
-		return rc;
-
-	return haptics_module_enable(chip, true);
 }
 
 static int haptics_set_fifo(struct haptics_chip *chip, struct fifo_cfg *fifo)
@@ -2605,6 +2614,8 @@ static int haptics_config_wa(struct haptics_chip *chip)
 		chip->wa_flags |= TOGGLE_CAL_RC_CLK;
 		break;
 	case PM5100:
+		if (!chip->cfg_rev1)
+			chip->wa_flags |= TOGGLE_MODULE_EN;
 		break;
 	default:
 		dev_err(chip->dev, "PMIC type %d does not match\n",
@@ -3868,11 +3879,13 @@ static int haptics_get_revision(struct haptics_chip *chip)
 	u8 val[2];
 
 	rc = haptics_read(chip, chip->cfg_addr_base,
-			HAP_CFG_REVISION2_REG, val, 1);
+			HAP_CFG_REVISION1_REG, val, 2);
 	if (rc < 0)
 		return rc;
 
-	chip->cfg_revision = val[0];
+	chip->cfg_rev1 = val[0];
+	chip->cfg_revision = val[1];
+
 	rc = haptics_read(chip, chip->ptn_addr_base,
 			HAP_PTN_REVISION2_REG, val, 1);
 	if (rc < 0)
@@ -4720,17 +4733,50 @@ static int haptics_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static void haptics_ds_suspend_config(struct device *dev)
+{
+	struct haptics_chip *chip = dev_get_drvdata(dev);
+
+	if (chip->fifo_empty_irq > 0)
+		devm_free_irq(dev, chip->fifo_empty_irq, chip);
+}
+
+static int haptics_ds_resume_config(struct device *dev)
+{
+	struct haptics_chip *chip = dev_get_drvdata(dev);
+	int rc = 0;
+
+	rc = haptics_hw_init(chip);
+	if (rc < 0) {
+		dev_err(chip->dev, "Initialize HW failed, rc = %d\n", rc);
+		return rc;
+	}
+
+	if (chip->fifo_empty_irq > 0) {
+		rc = devm_request_threaded_irq(chip->dev, chip->fifo_empty_irq,
+					NULL, fifo_empty_irq_handler,
+					IRQF_ONESHOT, "fifo-empty", chip);
+		if (rc < 0) {
+			dev_err(chip->dev, "request fifo-empty IRQ failed, rc=%d\n",
+					rc);
+			return rc;
+		}
+
+		disable_irq_nosync(chip->fifo_empty_irq);
+		chip->fifo_empty_irq_en = false;
+	}
+
+	return rc;
+}
+
 #ifdef CONFIG_PM_SLEEP
-static int haptics_suspend(struct device *dev)
+static int haptics_suspend_config(struct device *dev)
 {
 	struct haptics_chip *chip = dev_get_drvdata(dev);
 	struct haptics_play_info *play = &chip->play;
 	int rc;
 
 	return 0;
-
-	if (chip->cfg_revision == HAP_CFG_V1)
-		return 0;
 
 	mutex_lock(&play->lock);
 	if ((play->pattern_src == FIFO) &&
@@ -4762,6 +4808,26 @@ static int haptics_suspend(struct device *dev)
 	return haptics_module_enable(chip, false);
 }
 
+static int haptics_suspend(struct device *dev)
+{
+	struct haptics_chip *chip = dev_get_drvdata(dev);
+	int rc = 0;
+
+	if (chip->cfg_revision == HAP_CFG_V1)
+		return 0;
+
+	rc = haptics_suspend_config(dev);
+	if (rc < 0)
+		return rc;
+
+#ifdef CONFIG_DEEPSLEEP
+	if (mem_sleep_current == PM_SUSPEND_MEM)
+		haptics_ds_suspend_config(dev);
+#endif
+
+	return 0;
+}
+
 static int haptics_resume(struct device *dev)
 {
 	struct haptics_chip *chip = dev_get_drvdata(dev);
@@ -4771,12 +4837,50 @@ static int haptics_resume(struct device *dev)
 	if (chip->cfg_revision == HAP_CFG_V1)
 		return 0;
 
+#ifdef CONFIG_DEEPSLEEP
+	if (mem_sleep_current == PM_SUSPEND_MEM) {
+		int rc = 0;
+
+		rc = haptics_ds_resume_config(dev);
+		if (rc < 0)
+			return rc;
+	}
+#endif
+
 	return haptics_module_enable(chip, true);
 }
 #endif
 
+static int haptics_freeze(struct device *dev)
+{
+	int rc = 0;
+
+	rc = haptics_suspend_config(dev);
+	if (rc < 0)
+		return rc;
+
+	haptics_ds_suspend_config(dev);
+
+	return 0;
+}
+
+static int haptics_restore(struct device *dev)
+{
+	struct haptics_chip *chip = dev_get_drvdata(dev);
+	int rc = 0;
+
+	rc = haptics_ds_resume_config(dev);
+	if (rc < 0)
+		return rc;
+
+	return haptics_module_enable(chip, true);
+}
+
 static const struct dev_pm_ops haptics_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(haptics_suspend, haptics_resume)
+	.suspend = haptics_suspend,
+	.resume = haptics_resume,
+	.freeze = haptics_freeze,
+	.restore = haptics_restore,
 };
 
 static const struct of_device_id haptics_match_table[] = {

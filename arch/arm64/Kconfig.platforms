@@ -261,6 +261,14 @@ config ARCH_SA6155
 	  SA6155 chipset. If you do not wish to build a kernel that
 	  runs on this chipset or if you are unsure, say 'N' here.
 
+config ARCH_SM6150
+	bool "Enable Support for Qualcomm Technologies, Inc. SM6155"
+	depends on ARCH_QCOM
+	help
+	  This enables support for the Qualcomm Technologies, Inc.'s
+	  SM6150 chipset. If you do not wish to build a kernel that
+	  runs on this chipset or if you are unsure, say 'N' here.
+
 config ARCH_DIREWOLF
 	bool "Enable Support for Qualcomm Technologies, Inc. DIREWOLF AU"
 	depends on ARCH_QCOM
@@ -276,6 +284,22 @@ config ARCH_SCUBA
 	help
 	  This enables support for the Qualcomm Technologies, Inc.'s
 	  SCUBA chipset. If you do not wish to build a kernel that
+	  runs on this chipset or if you are unsure, say 'N' here.
+
+config ARCH_BENGAL
+	bool "Enable Support for Qualcomm Technologies, Inc. BENGAL"
+	depends on ARCH_QCOM
+	help
+	  This enables support for the Qualcomm Technologies, Inc.'s
+	  BENGAL chipset. If you do not wish to build a kernel that
+	  runs on this chipset or if you are unsure, say 'N' here.
+
+config ARCH_LEMANS
+	bool "Enable Support for Qualcomm Technologies, Inc. LEMANS"
+	depends on ARCH_QCOM
+	help
+	  This enables support for the Qualcomm Technologies, Inc.'s
+	  LEMANS chipset. If you do not wish to build a kernel that
 	  runs on this chipset or if you are unsure, say 'N' here.
 
 config ARCH_REALTEK
@@ -396,6 +420,15 @@ config ARCH_SA2150P
 	help
 	  This configuration option enables support to build kernel for
 	  SA2150P SoC.
+	  If you do not wish to build a kernel that runs on this chipset,
+	  say 'N' here.
+
+config ARCH_SA410M
+	bool "Enable Support for Qualcomm Technologies, Inc. SA410M"
+	depends on ARCH_QCOM
+	help
+	  This configuration option enables support to build kernel for
+	  SA410M SoC.
 	  If you do not wish to build a kernel that runs on this chipset,
 	  say 'N' here.
 

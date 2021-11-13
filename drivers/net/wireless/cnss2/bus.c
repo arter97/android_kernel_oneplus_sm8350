@@ -24,17 +24,22 @@ enum cnss_dev_bus_type cnss_get_bus_type(struct cnss_plat_data *plat_priv)
 	int ret;
 	struct device *dev;
 	enum cnss_dev_bus_type bus_type = CNSS_BUS_NONE;
+	u32 bus_type_dt = CNSS_BUS_NONE;
 
 	if (plat_priv->is_converged_dt) {
 		dev = &plat_priv->plat_dev->dev;
 		ret = of_property_read_u32(dev->of_node, "qcom,bus-type",
-					   &bus_type);
-		if (!ret && bus_type <= CNSS_BUS_USB)
-			cnss_pr_dbg("Got bus type[%u] from dt\n", bus_type);
+					   &bus_type_dt);
+		if (!ret)
+			if (bus_type_dt < CNSS_BUS_MAX)
+				cnss_pr_dbg("Got bus type[%u] from dt\n",
+					    bus_type_dt);
+			else
+				bus_type_dt = CNSS_BUS_NONE;
 		else
 			cnss_pr_err("No bus type for converged dt\n");
 
-		return bus_type;
+		return bus_type_dt;
 	}
 
 	/* Get bus type according to device id if it's not converged DT */
@@ -520,7 +525,7 @@ int cnss_bus_recover_link_down(struct cnss_plat_data *plat_priv)
 }
 
 int cnss_bus_debug_reg_read(struct cnss_plat_data *plat_priv, u32 offset,
-			    u32 *val)
+			    u32 *val, bool raw_access)
 {
 	if (!plat_priv)
 		return -ENODEV;
@@ -528,7 +533,7 @@ int cnss_bus_debug_reg_read(struct cnss_plat_data *plat_priv, u32 offset,
 	switch (plat_priv->bus_type) {
 	case CNSS_BUS_PCI:
 		return cnss_pci_debug_reg_read(plat_priv->bus_priv, offset,
-					       val);
+					       val, raw_access);
 	default:
 		cnss_pr_dbg("Unsupported bus type: %d\n",
 			    plat_priv->bus_type);
@@ -537,7 +542,7 @@ int cnss_bus_debug_reg_read(struct cnss_plat_data *plat_priv, u32 offset,
 }
 
 int cnss_bus_debug_reg_write(struct cnss_plat_data *plat_priv, u32 offset,
-			     u32 val)
+			     u32 val, bool raw_access)
 {
 	if (!plat_priv)
 		return -ENODEV;
@@ -545,7 +550,7 @@ int cnss_bus_debug_reg_write(struct cnss_plat_data *plat_priv, u32 offset,
 	switch (plat_priv->bus_type) {
 	case CNSS_BUS_PCI:
 		return cnss_pci_debug_reg_write(plat_priv->bus_priv, offset,
-						val);
+						val, raw_access);
 	default:
 		cnss_pr_dbg("Unsupported bus type: %d\n",
 			    plat_priv->bus_type);

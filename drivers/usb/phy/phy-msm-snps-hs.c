@@ -66,6 +66,9 @@
 #define REFCLK_SEL_MASK				(0x3 << 0)
 #define REFCLK_SEL_DEFAULT			(0x2 << 0)
 
+#define USB2_PHY_USB_PHY_PWRDOWN_CTRL		(0xa4)
+#define PWRDOWN_B				BIT(0)
+
 #define USB2PHY_USB_PHY_RTUNE_SEL		(0xb4)
 #define RTUNE_SEL				BIT(0)
 
@@ -569,6 +572,9 @@ suspend:
 			if (!phy->dpdm_enable) {
 				if (!(phy->phy.flags & EUD_SPOOF_DISCONNECT)) {
 					dev_dbg(uphy->dev, "turning off clocks/ldo\n");
+					msm_usb_write_readback(phy->base,
+						USB2_PHY_USB_PHY_PWRDOWN_CTRL,
+						PWRDOWN_B, 0);
 					msm_hsphy_enable_clocks(phy, false);
 					msm_hsphy_enable_power(phy, false);
 				}
@@ -719,6 +725,14 @@ static int msm_hsphy_dpdm_regulator_disable(struct regulator_dev *rdev)
 	mutex_lock(&phy->phy_lock);
 	if (phy->dpdm_enable) {
 		if (!phy->cable_connected) {
+			/*
+			 * Phy reset is needed in case multiple instances
+			 * of HSPHY exists with shared power supplies. This
+			 * reset is to bring out the PHY from high-Z state
+			 * and avoid extra current consumption.
+			 *
+			 */
+			msm_hsphy_reset(phy);
 			msm_hsphy_enable_clocks(phy, false);
 			ret = msm_hsphy_enable_power(phy, false);
 			if (ret < 0) {

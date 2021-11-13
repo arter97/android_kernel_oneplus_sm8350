@@ -268,8 +268,10 @@ void dump_stack_minidump(u64 sp)
 
 	is_vmap_stack = IS_ENABLED(CONFIG_VMAP_STACK);
 
+#ifdef CONFIG_ARM64
 	if (sp < MODULES_END || sp > -256UL)
 		sp = current_stack_pointer;
+#endif
 
 	/*
 	 * Since stacks are now allocated with vmalloc, the translation to

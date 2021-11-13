@@ -475,5 +475,7 @@
 #define GCC_USB4PHY_PHY_PRIM_BCR				74
 #define GCC_USB_PHY_CFG_AHB2PHY_BCR				75
 #define GCC_VIDEO_BCR						76
+#define GCC_VIDEO_AXI0_CLK_ARES					77
+#define GCC_VIDEO_AXI1_CLK_ARES					78
 
 #endif

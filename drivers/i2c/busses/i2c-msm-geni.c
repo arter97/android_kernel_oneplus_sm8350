@@ -24,6 +24,7 @@
 #include <linux/pinctrl/consumer.h>
 #include <linux/slab.h>
 #include <soc/qcom/boot_stats.h>
+#include <linux/suspend.h>
 
 #define SE_I2C_TX_TRANS_LEN		(0x26C)
 #define SE_I2C_RX_TRANS_LEN		(0x270)
@@ -171,7 +172,7 @@ struct geni_i2c_clk_fld {
 
 static struct geni_i2c_clk_fld geni_i2c_clk_map[] = {
 	{KHz(100), 7, 10, 11, 26},
-	{KHz(400), 2,  5, 12, 24},
+	{KHz(400), 2,  7, 10, 24},
 	{KHz(1000), 1, 3,  9, 18},
 };
 
@@ -1405,6 +1406,20 @@ static int geni_i2c_remove(struct platform_device *pdev)
 
 static int geni_i2c_resume_early(struct device *device)
 {
+#ifdef CONFIG_DEEPSLEEP
+	if (mem_sleep_current == PM_SUSPEND_MEM)
+		gi2c->se_mode = UNINITIALIZED;
+#endif
+	GENI_SE_DBG(gi2c->ipcl, false, gi2c->dev, "%s\n", __func__);
+	return 0;
+}
+
+static int geni_i2c_hib_resume_noirq(struct device *device)
+{
+	struct geni_i2c_dev *gi2c = dev_get_drvdata(device);
+
+	GENI_SE_DBG(gi2c->ipcl, false, gi2c->dev, "%s\n", __func__);
+	gi2c->se_mode = UNINITIALIZED;
 	return 0;
 }
 
@@ -1535,6 +1550,9 @@ static const struct dev_pm_ops geni_i2c_pm_ops = {
 	.resume_early		= geni_i2c_resume_early,
 	.runtime_suspend	= geni_i2c_runtime_suspend,
 	.runtime_resume		= geni_i2c_runtime_resume,
+	.freeze                 = geni_i2c_suspend_late,
+	.restore                = geni_i2c_hib_resume_noirq,
+	.thaw			= geni_i2c_hib_resume_noirq,
 };
 
 static const struct of_device_id geni_i2c_dt_match[] = {

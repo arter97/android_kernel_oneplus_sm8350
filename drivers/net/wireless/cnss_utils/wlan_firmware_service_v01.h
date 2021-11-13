@@ -810,6 +810,7 @@ struct wlfw_host_cap_req_msg_v01 {
 	u8 wlan_enable_delay_valid;
 	u32 wlan_enable_delay;
 };
+
 #define WLFW_HOST_CAP_REQ_MSG_V01_MAX_MSG_LEN 396
 extern struct qmi_elem_info wlfw_host_cap_req_msg_v01_ei[];
 

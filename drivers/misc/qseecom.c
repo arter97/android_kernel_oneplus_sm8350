@@ -478,6 +478,10 @@ static int __qseecom_scm_call2_locked(uint32_t smc_id, struct scm_desc *desc)
 	int retry_count = 0;
 
 	do {
+		if (!desc) {
+			pr_err("Invalid descriptor\n");
+			return -EINVAL;
+		}
 		ret = qcom_scm_qseecom_call_noretry(smc_id, desc);
 		if ((ret == -EBUSY) || (desc && (desc->ret[0] == -QSEE_RESULT_FAIL_APP_BUSY))) {
 			mutex_unlock(&app_access_lock);
@@ -3743,8 +3747,8 @@ static int __qseecom_send_cmd(struct qseecom_dev_handle *data,
 				(uint32_t)(__qseecom_uvirt_to_kphys(
 				data, (uintptr_t)req->resp_buf));
 		} else {
-			send_data_req.req_ptr = (uintptr_t)req->cmd_req_buf;
-			send_data_req.rsp_ptr = (uintptr_t)req->resp_buf;
+			send_data_req.req_ptr = (uint32_t)(uintptr_t)req->cmd_req_buf;
+			send_data_req.rsp_ptr = (uint32_t)(uintptr_t)req->resp_buf;
 		}
 
 		send_data_req.req_len = req->cmd_req_len;
@@ -6156,6 +6160,7 @@ static int __qseecom_generate_and_save_key(struct qseecom_dev_handle *data,
 	if (ret)
 		return ret;
 
+	resp.result = QSEOS_RESULT_INCOMPLETE;
 	ret = qseecom_scm_call(SCM_SVC_TZSCHEDULER, 1,
 				ireq, sizeof(struct qseecom_key_generate_ireq),
 				&resp, sizeof(resp));
@@ -6216,6 +6221,7 @@ static int __qseecom_delete_saved_key(struct qseecom_dev_handle *data,
 	if (ret)
 		return ret;
 
+	resp.result = QSEOS_RESULT_INCOMPLETE;
 	ret = qseecom_scm_call(SCM_SVC_TZSCHEDULER, 1,
 				ireq, sizeof(struct qseecom_key_delete_ireq),
 				&resp, sizeof(struct qseecom_command_scm_resp));
@@ -6283,6 +6289,7 @@ static int __qseecom_set_clear_ce_key(struct qseecom_dev_handle *data,
 			return ret;
 	}
 
+	resp.result = QSEOS_RESULT_INCOMPLETE;
 	ret = qseecom_scm_call(SCM_SVC_TZSCHEDULER, 1,
 				ireq, sizeof(struct qseecom_key_select_ireq),
 				&resp, sizeof(struct qseecom_command_scm_resp));
@@ -6360,6 +6367,7 @@ static int __qseecom_update_current_key_user_info(
 	if (ret)
 		return ret;
 
+	resp.result = QSEOS_RESULT_INCOMPLETE;
 	ret = qseecom_scm_call(SCM_SVC_TZSCHEDULER, 1,
 		ireq, sizeof(struct qseecom_key_userinfo_update_ireq),
 		&resp, sizeof(struct qseecom_command_scm_resp));
@@ -9740,7 +9748,8 @@ static int qseecom_suspend(struct platform_device *pdev, pm_message_t state)
 
 	mutex_unlock(&clk_access_lock);
 	mutex_unlock(&qsee_bw_mutex);
-	cancel_work_sync(&qseecom.bw_inactive_req_ws);
+	if (qseecom.support_bus_scaling)
+		cancel_work_sync(&qseecom.bw_inactive_req_ws);
 
 	return 0;
 }

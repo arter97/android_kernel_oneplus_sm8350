@@ -32,6 +32,11 @@ enum qg_chg_iio_channels {
 	SMB5_QG_CYCLE_COUNT,
 	SMB5_QG_CHARGE_FULL_DESIGN,
 	SMB5_QG_TIME_TO_FULL_NOW,
+	SMB5_QG_TIME_TO_EMPTY_NOW,
+	SMB5_QG_NOMINAL_CAPACITY,
+	SMB5_QG_LEARNED_CAPACITY,
+	SMB5_QG_SOH,
+	SMB5_QG_MAX,
 };
 
 enum cp_iio_channels {
@@ -201,6 +206,7 @@ static const struct smb5_iio_prop_channels smb5_chans_pmic[] = {
 	SMB5_CHAN_ACTIVITY("battery_force_recharge", FORCE_RECHARGE)
 	SMB5_CHAN_ACTIVITY("battery_fcc_stepper_enable", FCC_STEPPER_ENABLE)
 	SMB5_CHAN_INDEX("usb_typec_accessory_mode", TYPEC_ACCESSORY_MODE)
+	SMB5_CHAN_ACTIVITY("battery_sys_soc", SYS_SOC)
 };
 
 struct iio_channel **get_ext_channels(struct device *dev,

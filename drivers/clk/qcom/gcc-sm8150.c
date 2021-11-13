@@ -19,6 +19,7 @@
 #include "clk-branch.h"
 #include "clk-rcg.h"
 #include "clk-regmap.h"
+#include "clk-pm.h"
 #include "reset.h"
 #include "vdd-level-sm8150.h"
 
@@ -4032,6 +4033,11 @@ static struct clk_branch gcc_video_xo_clk = {
 	},
 };
 
+static struct critical_clk_offset critical_clk_list[] = {
+	{ .offset = 0x4d110, .mask = 0x3 },
+	{ .offset = 0x71028, .mask = 0x3 },
+};
+
 static struct clk_regmap *gcc_sm8150_clocks[] = {
 	[GPLL0] = &gpll0.clkr,
 	[GPLL0_OUT_EVEN] = &gpll0_out_even.clkr,
@@ -4314,12 +4320,14 @@ static const struct regmap_config gcc_sm8150_regmap_config = {
 	.fast_io	= true,
 };
 
-static const struct qcom_cc_desc gcc_sm8150_desc = {
+static struct qcom_cc_desc gcc_sm8150_desc = {
 	.config = &gcc_sm8150_regmap_config,
 	.clks = gcc_sm8150_clocks,
 	.num_clks = ARRAY_SIZE(gcc_sm8150_clocks),
 	.resets = gcc_sm8150_resets,
 	.num_resets = ARRAY_SIZE(gcc_sm8150_resets),
+	.critical_clk_en = critical_clk_list,
+	.num_critical_clk = ARRAY_SIZE(critical_clk_list),
 };
 
 static const struct of_device_id gcc_sm8150_match_table[] = {
@@ -4401,6 +4409,10 @@ static int gcc_sm8150_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Failed to register GCC clocks\n");
 		return ret;
 	}
+
+	ret = register_qcom_clks_pm(pdev, false, &gcc_sm8150_desc);
+	if (ret)
+		dev_err(&pdev->dev, "Failed to register for pm ops\n");
 
 	dev_info(&pdev->dev, "Registered GCC clocks\n");
 

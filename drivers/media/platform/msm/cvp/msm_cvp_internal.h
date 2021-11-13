@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
  */
 
 #ifndef _MSM_CVP_INTERNAL_H_
@@ -288,6 +288,7 @@ struct msm_cvp_core {
 	bool trigger_ssr;
 	u64 ssr_sess_cnt;
 	unsigned long curr_freq;
+	unsigned long orig_core_sum;
 	struct cvp_cycle_info dyn_clk;
 	atomic64_t kernel_trans_id;
 };

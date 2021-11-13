@@ -22,6 +22,7 @@ enum {
 	WEST
 };
 
+#define NUM_TILES	4
 #define HMSS_WEST	0x000BB000
 #define HMSS_EAST	0x000B7000
 #define HMSS_NORTH	0x000BC000
@@ -1514,23 +1515,35 @@ static const struct msm_pingroup sm8150_groups[] = {
 
 static const struct msm_gpio_wakeirq_map sm8150_pdc_map[] = {
 	{ 3, 31 }, { 5, 32 }, { 8, 33 }, { 9, 34 }, { 10, 100 },
-	{ 24, 37 }, { 26, 38 }, { 27, 41 }, { 28, 42 }, { 30, 39 },
-	{ 37, 44 }, { 38, 30 }, { 39, 118 }, { 41, 47 }, { 42, 48 },
-	{ 47, 49 }, { 48, 51 }, { 49, 53 }, { 50, 52 }, { 51, 116 },
-	{ 54, 55 }, { 55, 56 }, { 56, 57 }, { 58, 58 }, { 60, 60 },
+	{ 12, 104 }, { 24, 37 }, { 26, 38 }, { 27, 41 }, { 28, 42 },
+	{ 30, 39 }, { 36, 43 }, { 37, 44 }, { 38, 30 }, { 39, 118 },
+	{ 41, 47 }, { 42, 48 }, { 46, 50 }, { 47, 49 }, { 48, 51 },
+	{ 49, 53 }, { 50, 52 }, { 51, 116 }, { 53, 54 }, { 54, 55 },
+	{ 55, 56 }, { 56, 57 }, { 58, 58 }, { 60, 60 }, { 61, 61 },
 	{ 68, 62 }, { 70, 63 }, { 76, 71 }, { 77, 66 }, { 81, 64 },
-	{ 86, 67 }, { 87, 84 }, { 88, 117 }, { 90, 69 }, { 91, 70 },
-	{ 95, 72 }, { 96, 73 }, { 97, 74 }, { 101, 40 }, { 103, 77 },
-	{ 108, 79 }, { 112, 80 }, { 113, 81 }, { 114, 82 }, { 117, 85 },
-	{ 119, 87 }, { 120, 88 }, { 121, 89 }, { 122, 90 }, { 123, 91 },
+	{ 83, 65 }, { 86, 67 }, { 87, 84 }, { 88, 117 }, { 90, 69 },
+	{ 91, 70 }, { 93, 75 }, { 95, 72 }, { 96, 73 }, { 97, 74 },
+	{ 101, 40 }, { 103, 77 }, { 104, 78 }, { 108, 79 }, { 112, 80 },
+	{ 113, 81 }, { 114, 82 }, { 117, 85 }, { 118, 101 }, { 119, 87 },
+	{ 120, 88 }, { 121, 89 }, { 122, 90 }, { 123, 91 }, { 124, 92 },
 	{ 125, 93 }, { 129, 94 }, { 132, 105 }, { 133, 83 }, { 134, 36 },
-	{ 142, 103 }, { 144, 115 }, { 147, 102 }, { 150, 107 }, { 152, 108 },
+	{ 136, 97 }, { 142, 103 }, { 144, 115 }, { 147, 102 }, { 150, 107 },
+	{ 152, 108 }, { 153, 109 },
 };
 
 static struct msm_dir_conn sm8150_dir_conn[] = {
 	  {-1, 0}, {-1, 0}, {-1, 0}, {-1, 0}, {-1, 0},
 	  {-1, 0}, {-1, 0}, {-1, 0}, {-1, 0}
 };
+
+#ifdef CONFIG_HIBERNATION
+static u32 tile_dir_conn_addr[NUM_TILES] = {
+	[0] =   HMSS_NORTH,
+	[1] =   HMSS_SOUTH,
+	[2] =   HMSS_EAST,
+	[3] =   HMSS_WEST
+};
+#endif
 
 static struct msm_pinctrl_soc_data sm8150_pinctrl = {
 	.pins = sm8150_pins,
@@ -1545,6 +1558,9 @@ static struct msm_pinctrl_soc_data sm8150_pinctrl = {
 	.wakeirq_map = sm8150_pdc_map,
 	.nwakeirq_map = ARRAY_SIZE(sm8150_pdc_map),
 	.dir_conn = sm8150_dir_conn,
+#ifdef CONFIG_HIBERNATION
+	.dir_conn_addr = tile_dir_conn_addr,
+#endif
 };
 
 static int sm8150_pinctrl_gpio_irq_map_probe(struct platform_device *pdev)
@@ -1583,6 +1599,37 @@ static int sm8150_pinctrl_gpio_irq_map_probe(struct platform_device *pdev)
 	return 0;
 }
 
+static int sm8150_pinctrl_dirconn_list_probe(struct platform_device *pdev)
+{
+	int ret, n, dirconn_list_count, m;
+	struct device_node *np = pdev->dev.of_node;
+
+	n = of_property_count_elems_of_size(np, "qcom,dirconn-list",
+					sizeof(u32));
+	if (n <= 0 || n % 2)
+		return -EINVAL;
+
+	m = ARRAY_SIZE(sm8150_dir_conn) - 1;
+
+	dirconn_list_count = n / 2;
+
+	for (n = 0; n < dirconn_list_count; n++) {
+		ret = of_property_read_u32_index(np, "qcom,dirconn-list",
+						n * 2 + 0,
+						&sm8150_dir_conn[m].gpio);
+		if (ret)
+			return ret;
+		ret = of_property_read_u32_index(np, "qcom,dirconn-list",
+						n * 2 + 1,
+						&sm8150_dir_conn[m].irq);
+		if (ret)
+			return ret;
+		m--;
+	}
+
+	return 0;
+}
+
 static int sm8150_pinctrl_probe(struct platform_device *pdev)
 {
 	int len, ret;
@@ -1592,6 +1639,15 @@ static int sm8150_pinctrl_probe(struct platform_device *pdev)
 		if (ret) {
 			dev_err(&pdev->dev,
 				"Unable to parse GPIO IRQ map\n");
+			return ret;
+		}
+	}
+
+	if (of_find_property(pdev->dev.of_node, "qcom,dirconn-list", &len)) {
+		ret = sm8150_pinctrl_dirconn_list_probe(pdev);
+		if (ret) {
+			dev_err(&pdev->dev,
+				"Unable to parse Direct Connect List\n");
 			return ret;
 		}
 	}

@@ -1189,9 +1189,10 @@ static int mhi_uci_client_release(struct inode *mhi_inode,
 				list_del_init(&ureq->list);
 				ureq->is_stale = true;
 				uci_log(UCI_DBG_VERBOSE,
-					"Adding back req for chan %d to free list\n",
+					"Add back req for chan %d to list\n",
 					ureq->chan);
-				list_add_tail(&ureq->list, &uci_handle->req_list);
+				list_add_tail(&ureq->list,
+					&uci_handle->req_list);
 				count++;
 			}
 		}
@@ -2094,7 +2095,7 @@ static void mhi_uci_at_ctrl_client_cb(struct mhi_dev_client_cb_data *cb_data)
 		mhi_dev_close_channel(client->out_handle);
 		mhi_dev_close_channel(client->in_handle);
 
-		/* Add back reqs from in-use list, if any, to free list */
+		/* Add back reqs in-use list, if any, to free list */
 		if (!(client->f_flags & O_SYNC)) {
 			while (!(list_empty(&client->in_use_list))) {
 				ureq = container_of(client->in_use_list.next,

@@ -873,6 +873,9 @@ static int process_cdsp_request_thread(void *data)
 		if (result)
 			continue;
 
+		if (!req)
+			break;
+
 		msg = &req->msg;
 
 		if (msg && (msg->feature_id == SYSMON_CDSP_FEATURE_RM_RX) &&

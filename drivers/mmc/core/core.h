@@ -35,6 +35,8 @@ struct mmc_bus_ops {
 #if defined(CONFIG_SDC_QTI)
 	int (*change_bus_speed)(struct mmc_host *host, unsigned long *freq);
 #endif
+	int (*pre_hibernate)(struct mmc_host *host);
+	int (*post_hibernate)(struct mmc_host *host);
 };
 
 void mmc_attach_bus(struct mmc_host *host, const struct mmc_bus_ops *ops);

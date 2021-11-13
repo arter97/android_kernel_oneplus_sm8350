@@ -755,6 +755,7 @@
 #define A6XX_UCHE_CMDQ_CONFIG               0xE3C
 
 /* SP registers */
+#define A6XX_SP_DBG_ECO_CNTL                0xAE00
 #define A6XX_SP_ADDR_MODE_CNTL              0xAE01
 #define A6XX_SP_NC_MODE_CNTL                0xAE02
 #define A6XX_SP_PERFCTR_SP_SEL_0            0xAE10

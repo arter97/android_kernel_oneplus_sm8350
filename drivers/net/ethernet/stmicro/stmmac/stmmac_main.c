@@ -99,6 +99,7 @@ MODULE_PARM_DESC(eee_timer, "LPI tx expiration time in msec");
 #define DWC_ETH_QOS_MICREL_INTR_LEVEL 0x4000
 #define PHY_ID_KSZ9031		0x00221620
 #define MICREL_PHY_ID PHY_ID_KSZ9031
+#define PHY_ID_KSZ9131		0x00221640
 
 /* By default the driver will use the ring mode to manage tx and rx descriptors,
  * but allow user to force to use the chain instead of the ring
@@ -301,6 +302,29 @@ static inline u32 stmmac_rx_dirty(struct stmmac_priv *priv, u32 queue)
 }
 
 /**
+ * stmmac_hw_fix_mac_speed - callback for speed selection
+ * @priv: driver private structure
+ * Description: on some platforms (e.g. ST), some HW system configuration
+ * registers have to be set according to the link speed negotiated.
+ */
+static inline void stmmac_hw_fix_mac_speed(struct stmmac_priv *priv)
+{
+	if (likely(priv->plat->fix_mac_speed)) {
+		if (priv->plat->mac2mac_en) {
+			priv->plat->fix_mac_speed(priv->plat->bsp_priv,
+					priv->speed);
+			return;
+		}
+		if (priv->phydev->link)
+			priv->plat->fix_mac_speed(priv->plat->bsp_priv,
+						  priv->speed);
+		else
+			priv->plat->fix_mac_speed(priv->plat->bsp_priv,
+						  SPEED_10);
+	}
+}
+
+/**
  * stmmac_enable_eee_mode - check and enter in LPI mode
  * @priv: driver private structure
  * Description: this function is to verify and enter in LPI mode in case of
@@ -364,6 +388,11 @@ static void stmmac_eee_ctrl_timer(struct timer_list *t)
 bool stmmac_eee_init(struct stmmac_priv *priv)
 {
 	int tx_lpi_timer = priv->tx_lpi_timer;
+
+	if (priv->phydev && ((priv->phydev->phy_id &
+	     priv->phydev->drv->phy_id_mask)
+	     == PHY_ID_KSZ9131))
+		return false;
 
 	/* Using PCS we cannot dial with the phy registers at this stage
 	 * so we do not support extra feature like EEE.
@@ -972,7 +1001,7 @@ static void stmmac_mac_link_up(struct phylink_config *config,
 		stmmac_set_eee_pls(priv, priv->hw, true);
 	}
 #ifdef CONFIG_QGKI_MSM_BOOT_TIME_MARKER
-	if ((phy && phy->link == 1) && !priv->boot_kpi) {
+	if (!priv->boot_kpi) {
 		place_marker("M - Ethernet is Ready.Link is UP");
 		priv->boot_kpi = true;
 	}
@@ -1070,7 +1099,20 @@ static int stmmac_init_phy(struct net_device *dev)
 			return -ENODEV;
 		}
 		ret = phylink_connect_phy(priv->phylink, priv->phydev);
-		if (priv->plat->phy_intr_en_extn_stm) {
+
+		if (!priv->plat->mac2mac_en) {
+			if (((priv->phydev->phy_id &
+			    priv->phydev->drv->phy_id_mask) == MICREL_PHY_ID) &&
+				!priv->plat->phy_intr_en) {
+				ret = priv->plat->phy_intr_enable(priv);
+				if (ret)
+					pr_alert("qcom-ethqos: Unable to enable PHY interrupt\n");
+				else
+					priv->plat->phy_intr_en = true;
+			}
+		}
+
+		if (priv->plat->phy_intr_en_extn_stm && priv->plat->phy_intr_en) {
 			priv->phydev->irq = PHY_IGNORE_INTERRUPT;
 			priv->phydev->interrupts =  PHY_INTERRUPT_ENABLED;
 			if (priv->phydev->drv->ack_interrupt &&
@@ -2727,6 +2769,27 @@ static void stmmac_hw_teardown(struct net_device *dev)
 	clk_disable_unprepare(priv->plat->clk_ptp_ref);
 }
 
+void stmmac_mac2mac_adjust_link(int speed, struct stmmac_priv *priv)
+{
+	u32 ctrl = readl_relaxed(priv->ioaddr + MAC_CTRL_REG);
+
+	ctrl &= ~priv->hw->link.speed_mask;
+
+	if (speed == SPEED_1000) {
+		ctrl |= priv->hw->link.speed1000;
+		priv->speed = SPEED_1000;
+	} else if (speed == SPEED_100) {
+		ctrl |= priv->hw->link.speed100;
+		priv->speed = SPEED_100;
+	} else {
+		ctrl |= priv->hw->link.speed10;
+		priv->speed = SPEED_10;
+	}
+
+	stmmac_hw_fix_mac_speed(priv);
+	writel_relaxed(ctrl, priv->ioaddr + MAC_CTRL_REG);
+}
+
 /**
  *  stmmac_open - open entry point of the driver
  *  @dev : pointer to the device structure.
@@ -2743,9 +2806,10 @@ static int stmmac_open(struct net_device *dev)
 	u32 chan;
 	int ret;
 
-	if (priv->hw->pcs != STMMAC_PCS_RGMII &&
-	    priv->hw->pcs != STMMAC_PCS_TBI &&
-	    priv->hw->pcs != STMMAC_PCS_RTBI) {
+	if (!priv->plat->mac2mac_en &&
+	    (priv->hw->pcs != STMMAC_PCS_RGMII &&
+	     priv->hw->pcs != STMMAC_PCS_TBI &&
+	     priv->hw->pcs != STMMAC_PCS_RTBI)) {
 		ret = stmmac_init_phy(dev);
 		if (ret) {
 			netdev_err(priv->dev,
@@ -2801,7 +2865,11 @@ static int stmmac_open(struct net_device *dev)
 	else
 		priv->rx_coal_frames = STMMAC_RX_FRAMES;
 
-	phylink_start(priv->phylink);
+	if (!priv->plat->mac2mac_en)
+		phylink_start(priv->phylink);
+
+	if (!priv->phy_irq_enabled)
+		priv->plat->phy_irq_enable(priv);
 
 	/* Request the IRQ lines */
 	ret = request_irq(dev->irq, stmmac_interrupt,
@@ -2840,6 +2908,13 @@ static int stmmac_open(struct net_device *dev)
 	stmmac_enable_all_queues(priv);
 	netif_tx_start_all_queues(priv->dev);
 
+	if (priv->plat->mac2mac_en) {
+		stmmac_mac2mac_adjust_link(priv->plat->mac2mac_rgmii_speed,
+					   priv);
+		priv->plat->mac2mac_link = true;
+		netif_carrier_on(dev);
+	}
+
 	return 0;
 
 lpiirq_error:
@@ -2848,7 +2923,8 @@ lpiirq_error:
 wolirq_error:
 	free_irq(dev->irq, dev);
 irq_error:
-	phylink_stop(priv->phylink);
+	if (!priv->plat->mac2mac_en)
+		phylink_stop(priv->phylink);
 	if (!priv->tx_coal_timer_disable) {
 		for (chan = 0; chan < priv->plat->tx_queues_to_use; chan++)
 			del_timer_sync(&priv->tx_queue[chan].txtimer);
@@ -2857,7 +2933,8 @@ irq_error:
 init_error:
 	free_dma_desc_resources(priv);
 dma_desc_error:
-	phylink_disconnect_phy(priv->phylink);
+	if (!priv->plat->mac2mac_en)
+		phylink_disconnect_phy(priv->phylink);
 	return ret;
 }
 
@@ -2872,9 +2949,14 @@ static int stmmac_release(struct net_device *dev)
 	struct stmmac_priv *priv = netdev_priv(dev);
 	u32 chan;
 
+	if (priv->phy_irq_enabled)
+		priv->plat->phy_irq_disable(priv);
+
 	/* Stop and disconnect the PHY */
-	phylink_stop(priv->phylink);
-	phylink_disconnect_phy(priv->phylink);
+	if (!priv->plat->mac2mac_en) {
+		phylink_stop(priv->phylink);
+		phylink_disconnect_phy(priv->phylink);
+	}
 
 	stmmac_disable_all_queues(priv);
 
@@ -4065,7 +4147,8 @@ static int stmmac_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 	case SIOCGMIIPHY:
 	case SIOCGMIIREG:
 	case SIOCSMIIREG:
-		ret = phylink_mii_ioctl(priv->phylink, rq, cmd);
+		if (!priv->plat->mac2mac_en)
+			ret = phylink_mii_ioctl(priv->phylink, rq, cmd);
 		break;
 	case SIOCSHWTSTAMP:
 		ret = stmmac_hwtstamp_set(dev, rq);
@@ -4781,7 +4864,8 @@ int stmmac_dvr_probe(struct device *device,
 
 	stmmac_check_pcs_mode(priv);
 
-	if (priv->hw->pcs != STMMAC_PCS_RGMII  &&
+	if (!priv->plat->mac2mac_en &&
+	    priv->hw->pcs != STMMAC_PCS_RGMII  &&
 	    priv->hw->pcs != STMMAC_PCS_TBI &&
 	    priv->hw->pcs != STMMAC_PCS_RTBI) {
 		/* MDIO bus Registration */
@@ -4793,8 +4877,9 @@ int stmmac_dvr_probe(struct device *device,
 			goto error_mdio_register;
 		}
 	}
+	if (!priv->plat->mac2mac_en)
+		ret = stmmac_phy_setup(priv);
 
-	ret = stmmac_phy_setup(priv);
 	if (ret) {
 		netdev_err(ndev, "failed to setup phy (%d)\n", ret);
 		goto error_phy_setup;
@@ -4818,7 +4903,8 @@ int stmmac_dvr_probe(struct device *device,
 	return ret;
 
 error_netdev_register:
-	phylink_destroy(priv->phylink);
+	if (!priv->plat->mac2mac_en)
+		phylink_destroy(priv->phylink);
 error_phy_setup:
 	if (priv->hw->pcs != STMMAC_PCS_RGMII &&
 	    priv->hw->pcs != STMMAC_PCS_TBI &&
@@ -4861,7 +4947,8 @@ int stmmac_dvr_remove(struct device *dev)
 #ifdef CONFIG_DEBUG_FS
 	stmmac_exit_fs(ndev);
 #endif
-	phylink_destroy(priv->phylink);
+	if (!priv->plat->mac2mac_en)
+		phylink_destroy(priv->phylink);
 	if (priv->plat->stmmac_rst)
 		reset_control_assert(priv->plat->stmmac_rst);
 	clk_disable_unprepare(priv->plat->pclk);
@@ -4893,11 +4980,13 @@ int stmmac_suspend(struct device *dev)
 	if (!ndev || !netif_running(ndev))
 		return 0;
 
-	phylink_mac_change(priv->phylink, false);
+	if (!priv->plat->mac2mac_en)
+		phylink_mac_change(priv->phylink, false);
 
 #ifdef CONFIG_DWMAC_QCOM_ETHQOS
 	rtnl_lock();
-	phylink_stop(priv->phylink);
+	if (!priv->plat->mac2mac_en)
+		phylink_stop(priv->phylink);
 	rtnl_unlock();
 #endif
 	mutex_lock(&priv->lock);
@@ -4906,8 +4995,10 @@ int stmmac_suspend(struct device *dev)
 
 	stmmac_disable_all_queues(priv);
 
-	for (chan = 0; chan < priv->plat->tx_queues_to_use; chan++)
-		del_timer_sync(&priv->tx_queue[chan].txtimer);
+	if (!priv->tx_coal_timer_disable) {
+		for (chan = 0; chan < priv->plat->tx_queues_to_use; chan++)
+			del_timer_sync(&priv->tx_queue[chan].txtimer);
+	}
 
 	if (priv->eee_enabled) {
 		priv->tx_path_in_lpi_mode = false;
@@ -4925,7 +5016,8 @@ int stmmac_suspend(struct device *dev)
 		mutex_unlock(&priv->lock);
 #ifndef CONFIG_DWMAC_QCOM_ETHQOS
 		rtnl_lock();
-		phylink_stop(priv->phylink);
+		if (!priv->plat->mac2mac_en)
+			phylink_stop(priv->phylink);
 		rtnl_unlock();
 #endif
 		mutex_lock(&priv->lock);
@@ -5032,16 +5124,24 @@ int stmmac_resume(struct device *dev)
 #ifndef CONFIG_DWMAC_QCOM_ETHQOS
 	if (!device_may_wakeup(priv->device)) {
 		rtnl_lock();
-		phylink_start(priv->phylink);
+		if (!priv->plat->mac2mac_en)
+			phylink_start(priv->phylink);
 		rtnl_unlock();
 	}
 #endif
 #ifdef CONFIG_DWMAC_QCOM_ETHQOS
 		rtnl_lock();
-		phylink_start(priv->phylink);
+		if (!priv->plat->mac2mac_en)
+			phylink_start(priv->phylink);
 		rtnl_unlock();
 #endif
-	phylink_mac_change(priv->phylink, true);
+	if (!priv->plat->mac2mac_en) {
+		phylink_mac_change(priv->phylink, true);
+	} else {
+		stmmac_mac2mac_adjust_link(priv->plat->mac2mac_rgmii_speed,
+					   priv);
+		netif_carrier_on(ndev);
+	}
 
 	netif_device_attach(ndev);
 

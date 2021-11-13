@@ -24,6 +24,8 @@
 #define SCM_HAS_CORE_CLK	BIT(0)
 #define SCM_HAS_IFACE_CLK	BIT(1)
 #define SCM_HAS_BUS_CLK		BIT(2)
+#define SCM_LOAD_QUP_FW_ARG	0x7E7E7E7E
+#define SCM_AUTH_GSI_QUP_PROC	0x13
 
 struct qcom_scm {
 	struct device *dev;
@@ -35,6 +37,9 @@ struct qcom_scm {
 
 	u64 dload_mode_addr;
 };
+
+enum qcom_scm_custom_reset_type qcom_scm_custom_reset_type;
+EXPORT_SYMBOL(qcom_scm_custom_reset_type);
 
 static struct qcom_scm *__scm;
 
@@ -516,6 +521,15 @@ int qcom_scm_restore_sec_cfg(u32 device_id, u32 spare)
 }
 EXPORT_SYMBOL(qcom_scm_restore_sec_cfg);
 
+int qcom_scm_load_qup_fw(void)
+{
+	struct device *dev = __scm ? __scm->dev : NULL;
+
+	return __qcom_scm_restore_sec_cfg(dev, SCM_AUTH_GSI_QUP_PROC,
+						SCM_LOAD_QUP_FW_ARG);
+}
+EXPORT_SYMBOL(qcom_scm_load_qup_fw);
+
 int qcom_scm_iommu_secure_ptbl_size(u32 spare, size_t *size)
 {
 	return __qcom_scm_iommu_secure_ptbl_size(__scm->dev, spare, size);
@@ -843,6 +857,14 @@ int qcom_scm_clear_ice_key(uint32_t index,  unsigned int food)
 }
 EXPORT_SYMBOL(qcom_scm_clear_ice_key);
 
+int qcom_scm_derive_raw_secret(phys_addr_t paddr_key, size_t key_size,
+			       phys_addr_t paddr_secret, size_t secret_size)
+{
+	return __qcom_scm_derive_raw_secret(__scm->dev, paddr_key, key_size,
+					    paddr_secret, secret_size);
+}
+EXPORT_SYMBOL(qcom_scm_derive_raw_secret);
+
 /**
  * qcom_scm_hdcp_available() - Check if secure environment supports HDCP.
  *
@@ -1110,8 +1132,13 @@ static int qcom_scm_do_restart(struct notifier_block *this, unsigned long event,
 {
 	struct qcom_scm *scm = container_of(this, struct qcom_scm, restart_nb);
 
-	if (reboot_mode == REBOOT_WARM)
+	if (reboot_mode == REBOOT_WARM &&
+		qcom_scm_custom_reset_type == QCOM_SCM_RST_NONE)
 		__qcom_scm_reboot(scm->dev);
+
+	if (qcom_scm_custom_reset_type > QCOM_SCM_RST_NONE &&
+			qcom_scm_custom_reset_type < QCOM_SCM_RST_MAX)
+		__qcom_scm_custom_reboot(scm->dev, qcom_scm_custom_reset_type);
 
 	return NOTIFY_OK;
 }

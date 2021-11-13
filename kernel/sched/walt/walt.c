@@ -122,7 +122,7 @@ __read_mostly unsigned int sysctl_sched_asym_cap_sibling_freq_match_pct = 100;
 __read_mostly unsigned int sysctl_sched_asym_cap_sibling_freq_match_en;
 static cpumask_t asym_freq_match_cpus = CPU_MASK_NONE;
 
-__read_mostly unsigned int sched_ravg_hist_size = 5;
+static __read_mostly unsigned int sched_ravg_hist_size = 5;
 
 static __read_mostly unsigned int sched_io_is_busy = 1;
 
@@ -135,10 +135,10 @@ unsigned int sysctl_sched_dynamic_ravg_window_enable = (HZ == 250);
 
 /* Window size (in ns) */
 __read_mostly unsigned int sched_ravg_window = DEFAULT_SCHED_RAVG_WINDOW;
-__read_mostly unsigned int new_sched_ravg_window = DEFAULT_SCHED_RAVG_WINDOW;
+static __read_mostly unsigned int new_sched_ravg_window = DEFAULT_SCHED_RAVG_WINDOW;
 
 static DEFINE_SPINLOCK(sched_ravg_window_lock);
-u64 sched_ravg_window_change_time;
+static u64 sched_ravg_window_change_time;
 
 /*
  * A after-boot constant divisor for cpu_util_freq_walt() to apply the load
@@ -148,8 +148,8 @@ static __read_mostly unsigned int walt_cpu_util_freq_divisor;
 
 /* Initial task load. Newly created tasks are assigned this load. */
 unsigned int __read_mostly sched_init_task_load_windows;
-unsigned int __read_mostly sched_init_task_load_windows_scaled;
-unsigned int __read_mostly sysctl_sched_init_task_load_pct = 15;
+static unsigned int __read_mostly sched_init_task_load_windows_scaled;
+static unsigned int __read_mostly sysctl_sched_init_task_load_pct = 15;
 
 unsigned int max_possible_capacity = 1024; /* max(rq->max_possible_capacity) */
 unsigned int
@@ -173,7 +173,7 @@ static const unsigned int top_tasks_bitmap_size =
  * This governs what load needs to be used when reporting CPU busy time
  * to the cpufreq governor.
  */
-__read_mostly unsigned int sysctl_sched_freq_reporting_policy;
+static __read_mostly unsigned int sysctl_sched_freq_reporting_policy;
 
 static int __init set_sched_ravg_window(char *str)
 {
@@ -203,7 +203,7 @@ static int __init set_sched_predl(char *str)
 }
 early_param("sched_predl", set_sched_predl);
 
-__read_mostly unsigned int walt_scale_demand_divisor;
+static __read_mostly unsigned int walt_scale_demand_divisor;
 #define scale_demand(d) ((d)/walt_scale_demand_divisor)
 
 #define SCHED_PRINT(arg)        printk_deferred("%s=%llu", #arg, arg)
@@ -781,7 +781,7 @@ static inline struct walt_sched_cluster *cpu_cluster(int cpu)
 	return cpu_rq(cpu)->wrq.cluster;
 }
 
-void update_cluster_load_subtractions(struct task_struct *p,
+static void update_cluster_load_subtractions(struct task_struct *p,
 					int cpu, u64 ws, bool new_task)
 {
 	struct walt_sched_cluster *cluster = cpu_cluster(cpu);
@@ -1008,7 +1008,7 @@ void fixup_busy_time(struct task_struct *p, int new_cpu)
 
 	new_task = is_new_task(p);
 	/* Protected by rq_lock */
-	grp = p->wts.grp;
+	grp = rcu_dereference(p->wts.grp);
 
 	/*
 	 * For frequency aggregation, we continue to do migration fixups
@@ -1258,7 +1258,7 @@ static inline u32 calc_pred_demand(struct task_struct *p)
  * if the task current window busy time exceeds the predicted
  * demand, update it here to reflect the task needs.
  */
-void update_task_pred_demand(struct rq *rq, struct task_struct *p, int event)
+static void update_task_pred_demand(struct rq *rq, struct task_struct *p, int event)
 {
 	u32 new, old;
 	u16 new_scaled;
@@ -1301,7 +1301,7 @@ void update_task_pred_demand(struct rq *rq, struct task_struct *p, int event)
 	p->wts.pred_demand_scaled = new_scaled;
 }
 
-void clear_top_tasks_bitmap(unsigned long *bitmap)
+static void clear_top_tasks_bitmap(unsigned long *bitmap)
 {
 	memset(bitmap, 0, top_tasks_bitmap_size);
 	__set_bit(NUM_LOAD_INDICES, bitmap);
@@ -1459,11 +1459,6 @@ static void rollover_task_window(struct task_struct *p, bool full_window)
 		p->wts.active_time += task_rq(p)->wrq.prev_window_size;
 }
 
-void sched_set_io_is_busy(int val)
-{
-	sched_io_is_busy = val;
-}
-
 static inline int cpu_is_waiting_on_io(struct rq *rq)
 {
 	if (!sched_io_is_busy)
@@ -1607,7 +1602,7 @@ static void update_cpu_busy_time(struct task_struct *p, struct rq *rq,
 	if (!account_busy_for_cpu_time(rq, p, irqtime, event))
 		goto done;
 
-	grp = p->wts.grp;
+	grp = rcu_dereference(p->wts.grp);
 	if (grp) {
 		struct group_cpu_time *cpu_time = &rq->wrq.grp_time;
 
@@ -2296,7 +2291,7 @@ void mark_task_starting(struct task_struct *p)
  * Task groups whose aggregate demand on a cpu is more than
  * sched_group_upmigrate need to be up-migrated if possible.
  */
-unsigned int __read_mostly sched_group_upmigrate = 20000000;
+static unsigned int __read_mostly sched_group_upmigrate = 20000000;
 unsigned int __read_mostly sysctl_sched_group_upmigrate_pct = 100;
 
 /*
@@ -2304,7 +2299,7 @@ unsigned int __read_mostly sysctl_sched_group_upmigrate_pct = 100;
  * demand to less than sched_group_downmigrate before they are "down"
  * migrated.
  */
-unsigned int __read_mostly sched_group_downmigrate = 19000000;
+static unsigned int __read_mostly sched_group_downmigrate = 19000000;
 unsigned int __read_mostly sysctl_sched_group_downmigrate_pct = 95;
 
 static inline void walt_update_group_thresholds(void)
@@ -2721,7 +2716,7 @@ static void transfer_busy_time(struct rq *rq,
  */
 unsigned int __read_mostly sysctl_sched_coloc_downmigrate_ns;
 
-struct walt_related_thread_group
+static struct walt_related_thread_group
 			*related_thread_groups[MAX_NUM_CGROUP_COLOC_ID];
 static LIST_HEAD(active_related_thread_groups);
 static DEFINE_RWLOCK(related_thread_group_lock);
@@ -2918,15 +2913,16 @@ err:
 
 static void remove_task_from_group(struct task_struct *p)
 {
-	struct walt_related_thread_group *grp = p->wts.grp;
+	struct walt_related_thread_group *grp;
 	struct rq *rq;
 	int empty_group = 1;
 	struct rq_flags rf;
 
+	grp = rcu_dereference(p->wts.grp);
 	raw_spin_lock(&grp->lock);
 
 	rq = __task_rq_lock(p, &rf);
-	transfer_busy_time(rq, p->wts.grp, p, REM_TASK);
+	transfer_busy_time(rq, grp, p, REM_TASK);
 	list_del_init(&p->wts.grp_list);
 	rcu_assign_pointer(p->wts.grp, NULL);
 	__task_rq_unlock(rq, &rf);
@@ -3417,7 +3413,7 @@ static void walt_update_irqload(struct rq *rq)
  * Runs in hard-irq context. This should ideally run just after the latest
  * window roll-over.
  */
-void walt_irq_work(struct irq_work *irq_work)
+static void walt_irq_work(struct irq_work *irq_work)
 {
 	struct walt_sched_cluster *cluster;
 	struct rq *rq;

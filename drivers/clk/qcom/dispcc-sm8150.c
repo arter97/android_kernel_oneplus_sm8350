@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/clk-provider.h>
@@ -19,6 +19,7 @@
 #include "clk-branch.h"
 #include "clk-rcg.h"
 #include "clk-regmap.h"
+#include "clk-pm.h"
 #include "common.h"
 #include "clk-regmap-divider.h"
 #include "vdd-level-sm8150.h"
@@ -1513,10 +1514,16 @@ static const struct regmap_config disp_cc_sm8150_regmap_config = {
 	.fast_io = true,
 };
 
-static const struct qcom_cc_desc disp_cc_sm8150_desc = {
+static struct critical_clk_offset critical_clk_list[] = {
+	{ .offset = DISP_CC_MISC_CMD, .mask = 0x10 },
+};
+
+static struct qcom_cc_desc disp_cc_sm8150_desc = {
 	.config = &disp_cc_sm8150_regmap_config,
 	.clks = disp_cc_sm8150_clocks,
 	.num_clks = ARRAY_SIZE(disp_cc_sm8150_clocks),
+	.critical_clk_en = critical_clk_list,
+	.num_critical_clk = ARRAY_SIZE(critical_clk_list),
 };
 
 static const struct of_device_id disp_cc_sm8150_match_table[] = {
@@ -1612,6 +1619,10 @@ static int disp_cc_sm8150_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Failed to register DISP CC clocks\n");
 		goto destroy_pm_clk;
 	}
+
+	ret = register_qcom_clks_pm(pdev, false, &disp_cc_sm8150_desc);
+	if (ret)
+		dev_err(&pdev->dev, "Failed to register for pm ops\n");
 
 	dev_info(&pdev->dev, "Registered DISP CC clocks\n");
 

@@ -138,7 +138,7 @@ static size_t store_threshold(struct kobject *kobj, struct attribute *attr,
 
 	return count;
 }
-CORE_HANG_ATTR(threshold, 0644, show_threshold, store_threshold);
+static CORE_HANG_ATTR(threshold, 0644, show_threshold, store_threshold);
 
 static ssize_t show_pmu_event_sel(struct kobject *kobj, struct attribute *attr,
 			char *buf)
@@ -183,7 +183,7 @@ static size_t store_pmu_event_sel(struct kobject *kobj, struct attribute *attr,
 	hang_dev->pmu_event_sel = pmu_event_sel;
 	return count;
 }
-CORE_HANG_ATTR(pmu_event_sel, 0644, show_pmu_event_sel, store_pmu_event_sel);
+static CORE_HANG_ATTR(pmu_event_sel, 0644, show_pmu_event_sel, store_pmu_event_sel);
 
 static ssize_t show_enable(struct kobject *kobj, struct attribute *attr,
 				char *buf)
@@ -231,7 +231,7 @@ static size_t store_enable(struct kobject *kobj, struct attribute *attr,
 
 	return count;
 }
-CORE_HANG_ATTR(enable, 0644, show_enable, store_enable);
+static CORE_HANG_ATTR(enable, 0644, show_enable, store_enable);
 
 static struct attribute *hang_attrs[] = {
 	&hang_attr_threshold.attr,

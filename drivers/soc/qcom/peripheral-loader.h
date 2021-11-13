@@ -46,6 +46,7 @@ struct pil_priv {
 	phys_addr_t base_addr;
 	phys_addr_t region_start;
 	phys_addr_t region_end;
+	void *region;
 	bool is_region_allocated;
 	struct pil_image_info __iomem *info;
 	int id;

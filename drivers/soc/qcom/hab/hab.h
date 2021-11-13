@@ -62,6 +62,12 @@ enum hab_payload_type {
 /* make sure concascaded name is less than this value */
 #define MAX_VMID_NAME_SIZE 30
 
+/*
+ * The maximum value of payload_count in struct export_desc
+ * Max u32_t size_bytes from hab_ioctl.h(0xFFFFFFFF) / page size(0x1000)
+ */
+#define MAX_EXP_PAYLOAD_COUNT 0xFFFFF
+
 #define HABCFG_FILE_SIZE_MAX   256
 #define HABCFG_MMID_AREA_MAX   (MM_ID_MAX/100)
 
@@ -616,6 +622,6 @@ int dump_hab_open(void);
 void dump_hab_close(void);
 int dump_hab_buf(void *buf, int size);
 void hab_pipe_read_dump(struct physical_channel *pchan);
-void dump_hab(void);
-void dump_hab_wq(void *hyp_data);
+void dump_hab(int mmid);
+void dump_hab_wq(struct physical_channel *pchan);
 #endif /* __HAB_H */

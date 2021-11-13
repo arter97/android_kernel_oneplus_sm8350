@@ -17,16 +17,6 @@ struct profiler_bw_cntrs_req {
 	uint32_t cmd;
 };
 
-struct compat_profiler_bw_cntrs_req {
-	compat_uint_t llcc_total;
-	compat_uint_t llcc_rd;
-	compat_uint_t llcc_wr;
-	compat_uint_t cabo_total;
-	compat_uint_t cabo_rd;
-	compat_uint_t cabo_wr;
-	compat_uint_t cmd;
-};
-
 /* Error types */
 enum tz_bw_svc_err {
 	E_BW_SUCCESS = 0,       /* Operation successful    */
@@ -46,9 +36,6 @@ enum tz_bw_svc_err {
 
 #define PROFILER_IOCTL_GET_BW_INFO \
 	_IOWR(PROFILER_IOC_MAGIC, 1, struct profiler_bw_cntrs_req)
-
-#define COMPAT_PROFILER_IOCTL_GET_BW_INFO \
-	_IOWR(PROFILER_IOC_MAGIC, 1, struct compat_profiler_bw_cntrs_req)
 
 /* Command types */
 enum tz_bw_svc_cmd {

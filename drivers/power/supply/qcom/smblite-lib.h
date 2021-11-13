@@ -19,6 +19,7 @@
 #include <linux/qti_power_supply.h>
 #include "storm-watch.h"
 #include "battery.h"
+#include "smblite-remote-bms.h"
 
 enum print_reason {
 	PR_INTERRUPT	= BIT(0),
@@ -60,6 +61,10 @@ enum print_reason {
 
 #define ITERM_LIMITS_MA			10000
 #define ADC_CHG_ITERM_MASK		32767
+#define PM5100_MAX_LIMITS_MA		2000
+#define PM5100_ADC_CHG_ITERM_MULT	16384
+#define PM5100_RAW_ITERM(iterm)					\
+		div_s64(((int64_t)iterm * PM5100_ADC_CHG_ITERM_MULT), 1000)
 
 #define USBIN_25UA	25000
 #define USBIN_100UA     100000
@@ -68,6 +73,7 @@ enum print_reason {
 #define USBIN_400UA     400000
 #define USBIN_500UA     500000
 #define USBIN_900UA     900000
+#define SDP_CURRENT_UA			500000
 #define CDP_CURRENT_UA			1500000
 #define DCP_CURRENT_UA			1500000
 #define TYPEC_DEFAULT_CURRENT_UA	900000
@@ -77,8 +83,7 @@ enum print_reason {
 /* Max supported voltage 6V */
 #define HVDCP3_STEP_SIZE_UV		200000
 #define PM5100_MAX_HVDCP3_PULSES	5
-#define PM5100_HVDCP3_MAX_VOLTAGE_UV	(PM5100_MAX_HVDCP3_PULSES * \
-						HVDCP3_STEP_SIZE_UV)
+#define PM5100_HVDCP3_MAX_VOLTAGE_UV	6000000
 
 enum smb_mode {
 	PARALLEL_MASTER = 0,
@@ -97,6 +102,7 @@ enum {
 	BOOST_BACK_WA			= BIT(0),
 	WEAK_ADAPTER_WA			= BIT(1),
 	FLASH_DIE_TEMP_DERATE_WA	= BIT(2),
+	HDC_ICL_REDUCTION_WA		= BIT(3),
 };
 
 enum jeita_cfg_stat {
@@ -122,6 +128,7 @@ enum smb_irq_index {
 	SKIP_MODE_IRQ,
 	INPUT_CURRENT_LIMITING_IRQ,
 	SWITCHER_POWER_OK_IRQ,
+	BOOST_MODE_ACTIVE_IRQ,
 	/* BATIF */
 	BAT_TEMP_IRQ,
 	BAT_THERM_OR_ID_MISSING_IRQ,
@@ -161,6 +168,13 @@ enum smb_irq_index {
 	FLASH_EN_IRQ,
 	/* END */
 	SMB_IRQ_MAX,
+};
+
+enum float_options {
+	FLOAT_DCP		= 1,
+	FLOAT_SDP		= 2,
+	DISABLE_CHARGING	= 3,
+	SUSPEND_INPUT		= 4,
 };
 
 struct apsd_result {
@@ -266,6 +280,7 @@ struct smb_charger {
 	struct iio_channel	**iio_chan_list_qg;
 	struct iio_channel	**iio_chan_list_smb_parallel;
 	struct class            qcom_class;
+	struct smblite_remote_bms	remote_bms;
 	int			*debug_mask;
 	enum smb_mode		mode;
 	u8			subtype;
@@ -364,6 +379,8 @@ struct smb_charger {
 	bool			hvdcp3_detected;
 	bool			concurrent_mode_supported;
 	bool			concurrent_mode_status;
+	u8			float_cfg;
+	bool			is_debug_batt;
 
 	/* workaround flag */
 	u32			wa_flags;
@@ -383,6 +400,7 @@ struct smb_charger {
 	bool			flash_init_done;
 	bool			flash_active;
 	u32			irq_status;
+	bool			is_fg_remote;
 };
 
 int smblite_lib_read(struct smb_charger *chg, u16 addr, u8 *val);
@@ -416,6 +434,7 @@ irqreturn_t smblite_temp_change_irq_handler(int irq, void *data);
 irqreturn_t smblite_usbin_ov_irq_handler(int irq, void *data);
 irqreturn_t smblite_usb_id_irq_handler(int irq, void *data);
 irqreturn_t smblite_usb_source_change_irq_handler(int irq, void *data);
+irqreturn_t smblite_boost_mode_active_irq_handler(int irq, void *data);
 
 int smblite_lib_get_prop_batt_present(struct smb_charger *chg,
 				union power_supply_propval *val);
@@ -437,12 +456,14 @@ int smblite_lib_get_prop_system_temp_level_max(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblite_lib_get_prop_batt_iterm(struct smb_charger *chg,
 				union power_supply_propval *val);
+int smblite_lib_set_prop_batt_iterm(struct smb_charger *chg, int iterm_ma);
 int smblite_lib_get_prop_input_suspend(struct smb_charger *chg,
 					int *val);
 int smblite_lib_set_prop_input_suspend(struct smb_charger *chg,
 					const int val);
 int smblite_lib_set_prop_batt_capacity(struct smb_charger *chg,
 				const union power_supply_propval *val);
+int smblite_lib_set_prop_batt_sys_soc(struct smb_charger *chg, int val);
 int smblite_lib_set_prop_batt_status(struct smb_charger *chg,
 				const union power_supply_propval *val);
 int smblite_lib_set_prop_system_temp_level(struct smb_charger *chg,
@@ -510,5 +531,6 @@ int smblite_lib_get_fcc(struct smb_chg_param *param, u8 val_raw);
 int smblite_lib_set_fcc(struct smb_chg_param *param, int val_u, u8 *val_raw);
 int smblite_lib_set_concurrent_config(struct smb_charger *chg, bool enable);
 bool is_concurrent_mode_supported(struct smb_charger *chg);
+void smblite_lib_hvdcp_detect_enable(struct smb_charger *chg, bool enable);
 
 #endif /* __SMBLITE_LIB_H */

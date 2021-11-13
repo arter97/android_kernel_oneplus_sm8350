@@ -14,7 +14,7 @@
 #include <linux/slab.h>
 
 static char *xbl_log_buf;
-size_t xbl_log_size;
+static size_t xbl_log_size;
 
 static ssize_t xbl_log_show(struct file *fp,
 		struct kobject *kobj, struct bin_attribute *bin_attr,

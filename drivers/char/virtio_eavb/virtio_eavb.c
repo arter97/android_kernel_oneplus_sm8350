@@ -38,14 +38,19 @@
 static unsigned int log_level = LEVEL_INFO;
 
 static char *prix[] = {"", "debug", "info", "error"};
+static void log_eavb(int level, const char *fmt, ...)
+{
+	va_list args;
+
+	if ((level) >= log_level) {
+		va_start(args, fmt);
+		vprintk(fmt, args);
+		va_end(args);
+	}
+}
 #define LOG_EAVB(level, format, args...) \
-do { \
-	if ((level) >= log_level) { \
-		pr_info("eavb: pid %.8x: %s: %s(%d) "format, \
-			current->pid, prix[0x3 & (level)], \
-			__func__, __LINE__, ## args); \
-	} \
-} while (0)
+log_eavb(level, "eavb: pid %.8x: %s: %s(%d) "format, \
+current->pid, prix[0x3 & (level)], __func__, __LINE__, ## args)
 
 #define ASSERT(x) \
 do { \
@@ -1258,6 +1263,7 @@ static int qavb_transmit(struct eavb_file *fl, void __user *buf)
 	ASSERT(sizeof(vmsg->data) == sizeof(transmit.data));
 	memcpy(&vmsg->data, &transmit.data, sizeof(vmsg->data));
 
+	vmsg->mapping_size = mapping->size;
 	vmsg->data.gpa = get_mapping_phyaddr(mapping, transmit.data.pbuf);
 	LOG_EAVB(LEVEL_DEBUG, "pass phy address 0x%llx\n", vmsg->data.gpa);
 	LOG_EAVB(LEVEL_DEBUG, "stream%d (ctx 0x%llx, idx %d)\n",

@@ -90,8 +90,8 @@ static void mhi_dev_event_msi_cb(void *req);
 static void mhi_dev_cmd_event_msi_cb(void *req);
 
 static int mhi_dev_alloc_cmd_ack_buf_req(struct mhi_dev *mhi);
-
 static int mhi_dev_ring_init(struct mhi_dev *dev);
+
 
 static struct mhi_dev_uevent_info channel_state_info[MHI_MAX_CHANNELS];
 static DECLARE_COMPLETION(read_from_host);
@@ -487,7 +487,7 @@ static int mhi_dev_send_multiple_tr_events(struct mhi_dev *mhi, int evnt_ring,
 		 * Take Channel ring event lock to prevent sending
 		 * completion command while the channel is getting
 		 * reset/stopped.
-		 * Abort sending completion event if channel has moved to
+		 * Abort ssending completion event if channel has moved to
 		 * stopped state.
 		 */
 		mutex_lock(&ch->ring->event_lock);
@@ -1896,7 +1896,8 @@ static void mhi_dev_process_reset_cmd(struct mhi_dev *mhi, int ch_id)
 	rc = mhi_dev_send_cmd_comp_event(mhi,
 				MHI_CMD_COMPL_CODE_SUCCESS);
 	if (rc)
-		pr_err("Error sending command completion event\n");
+		mhi_log(MHI_MSG_VERBOSE,
+			"Error sending command completion event\n");
 
 	ch->reset_pending = false;
 }
@@ -2331,6 +2332,7 @@ static bool mhi_dev_check_channel_interrupt(struct mhi_dev *mhi)
 		/* Process channel status whose mask is enabled */
 		chintr_value = (mhi->chdb[i].status & mhi->chdb[i].mask);
 		if (chintr_value) {
+			pending_work = true;
 			mhi_log(MHI_MSG_VERBOSE,
 				"processing id: %d, ch interrupt 0x%x\n",
 							i, chintr_value);
@@ -2732,10 +2734,11 @@ static int mhi_dev_cache_host_cfg(struct mhi_dev *mhi)
 
 	if (!mhi->ring) {
 		mhi->ring = devm_kcalloc(&pdev->dev,
-				(mhi->cfg.channels + mhi->cfg.event_rings+1),
+				(mhi->cfg.channels + mhi->cfg.event_rings + 1),
 				sizeof(struct mhi_dev_ring),
 				GFP_KERNEL);
 		if (!mhi->ring) {
+			pr_err("no memory while allocating ring ctx\n");
 			rc = -ENOMEM;
 			goto exit;
 		}
@@ -2793,7 +2796,7 @@ static int mhi_dev_cache_host_cfg(struct mhi_dev *mhi)
 
 	rc = mhi_dev_ring_init(mhi);
 	if (rc) {
-		mhi_log(MHI_MSG_VERBOSE, "MHI dev ring init failed\n");
+		pr_err("MHI dev ring init failed\n");
 		goto exit;
 	}
 
@@ -2844,26 +2847,17 @@ exit:
 			(sizeof(struct mhi_dev_ring) *
 			(mhi->cfg.channels + mhi->cfg.event_rings + 1)));
 	}
-	if (mhi->cmd_ctx_cache) {
+	if (mhi->cmd_ctx_cache)
 		dma_free_coherent(&pdev->dev,
 			sizeof(struct mhi_dev_cmd_ctx),
 			mhi->cmd_ctx_cache,
 			mhi->cmd_ctx_cache_dma_handle);
-		mhi_log(MHI_MSG_INFO,
-			"MEM_DEALLOC: size:%d CMD_CTX_CACHE\n",
-			sizeof(struct mhi_dev_cmd_ctx));
-	}
-	if (mhi->ev_ctx_cache) {
+	if (mhi->ev_ctx_cache)
 		dma_free_coherent(&pdev->dev,
 			sizeof(struct mhi_dev_ev_ctx) *
 			mhi->cfg.event_rings,
 			mhi->ev_ctx_cache,
 			mhi->ev_ctx_cache_dma_handle);
-		mhi_log(MHI_MSG_INFO,
-			"MEM_DEALLOC: size:%d EV_CTX_CACHE\n",
-			sizeof(struct mhi_dev_ev_ctx) *
-			mhi->cfg.event_rings);
-	}
 	return rc;
 }
 

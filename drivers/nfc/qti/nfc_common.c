@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/of_gpio.h>
@@ -942,6 +942,10 @@ err_nfcc_reset_failed:
 	case NFCC_SN100_B:
 		pr_debug("%s: ## NFCC == SN100x ##\n", __func__);
 		break;
+	case NFCC_SN220:
+		/* SN220 is not supported yet */
+		pr_debug("%s: ## NFCC == SN220x ## Not Supported\n", __func__);
+		goto err_nfcc_hw_check;
 	default:
 		pr_err("%s: - NFCC HW not Supported\n", __func__);
 		break;

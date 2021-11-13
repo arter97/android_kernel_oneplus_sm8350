@@ -1564,11 +1564,11 @@ static void a5xx_start(struct adreno_device *adreno_dev)
 	if (device->mmu.secured) {
 		kgsl_regwrite(device, A5XX_RBBM_SECVID_TSB_CNTL, 0x0);
 		kgsl_regwrite(device, A5XX_RBBM_SECVID_TSB_TRUSTED_BASE_LO,
-			lower_32_bits(KGSL_IOMMU_SECURE_BASE(&device->mmu)));
+			lower_32_bits(device->mmu.secure_base));
 		kgsl_regwrite(device, A5XX_RBBM_SECVID_TSB_TRUSTED_BASE_HI,
-			upper_32_bits(KGSL_IOMMU_SECURE_BASE(&device->mmu)));
+			upper_32_bits(device->mmu.secure_base));
 		kgsl_regwrite(device, A5XX_RBBM_SECVID_TSB_TRUSTED_SIZE,
-			KGSL_IOMMU_SECURE_SIZE);
+			device->mmu.secure_size);
 	}
 
 	a5xx_preemption_start(adreno_dev);
@@ -1726,10 +1726,11 @@ static int a5xx_microcode_load(struct adreno_device *adreno_dev)
 	if (!device->mmu.secured)
 		return 0;
 
-	if (adreno_dev->zap_loaded && !(ADRENO_FEATURE(adreno_dev,
+	if (adreno_dev->zap_handle && !(ADRENO_FEATURE(adreno_dev,
 		ADRENO_CPZ_RETENTION)))
 		return a5xx_zap_shader_resume(device);
 
+	/* Load the zap shader firmware through PIL if its available */
 	return adreno_zap_shader_load(adreno_dev, a5xx_core->zap_name);
 }
 
@@ -1948,7 +1949,7 @@ static int a5xx_rb_start(struct adreno_device *adreno_dev)
 	 * Try to execute the zap shader if it exists, otherwise just try
 	 * directly writing to the control register
 	 */
-	if (!adreno_dev->zap_loaded)
+	if (!adreno_dev->zap_handle)
 		kgsl_regwrite(device, A5XX_RBBM_SECVID_TRUST_CNTL, 0);
 	else {
 		cmds = adreno_ringbuffer_allocspace(rb, 2);

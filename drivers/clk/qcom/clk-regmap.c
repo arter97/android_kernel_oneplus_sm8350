@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2014, 2019-2020 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014, 2019-2021 The Linux Foundation. All rights reserved.
  */
 
 #include <linux/device.h>
@@ -193,7 +193,7 @@ EXPORT_SYMBOL(clk_post_change_regmap);
 int clk_prepare_regmap(struct clk_hw *hw)
 {
 	struct clk_regmap *rclk = to_clk_regmap(hw);
-	int rate = clk_hw_get_rate(hw);
+	unsigned long rate = clk_hw_get_rate(hw);
 	int vdd_level;
 
 	if (!rclk->vdd_data.vdd_class)
@@ -328,3 +328,16 @@ void clk_runtime_put_regmap(struct clk_regmap *rclk)
 		pm_runtime_put_sync(rclk->dev);
 }
 EXPORT_SYMBOL(clk_runtime_put_regmap);
+
+void clk_restore_critical_clocks(struct device *dev)
+{
+	struct qcom_cc_desc *desc = dev_get_drvdata(dev);
+	struct regmap *regmap = dev_get_regmap(dev, NULL);
+	struct critical_clk_offset *cclks = desc->critical_clk_en;
+	int i;
+
+	for (i = 0; i < desc->num_critical_clk; i++)
+		regmap_update_bits(regmap, cclks[i].offset, cclks[i].mask,
+					 cclks[i].mask);
+}
+EXPORT_SYMBOL(clk_restore_critical_clocks);

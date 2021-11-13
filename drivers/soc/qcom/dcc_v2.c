@@ -158,9 +158,50 @@ struct dcc_drvdata {
 	uint32_t		*nr_config;
 	uint32_t		nr_link_list;
 	uint8_t			curr_list;
-	uint8_t			cti_trig;
+	uint8_t			*cti_trig;
 	uint8_t			loopoff;
 };
+
+static void dcc_sram_memset(const struct device *dev, void __iomem *dst,
+			    int c, size_t count)
+{
+	u64 qc = (u8)c;
+
+	qc |= qc << 8;
+	qc |= qc << 16;
+
+	if (!count || !IS_ALIGNED((unsigned long)dst, 4)
+	    || !IS_ALIGNED((unsigned long)count, 4)) {
+		dev_err(dev,
+			"Target address or size not aligned with 4 bytes\n");
+		return;
+	}
+
+	while (count >= 4) {
+		__raw_writel(qc, dst);
+		dst += 4;
+		count -= 4;
+	}
+}
+
+static int dcc_sram_memcpy(void *to, const void __iomem *from,
+							size_t count)
+{
+	if (!count || (!IS_ALIGNED((unsigned long)from, 4) ||
+			!IS_ALIGNED((unsigned long)to, 4) ||
+			!IS_ALIGNED((unsigned long)count, 4))) {
+		return -EINVAL;
+	}
+
+	while (count >= 4) {
+		*(unsigned int *)to = __raw_readl(from);
+		to += 4;
+		from += 4;
+		count -= 4;
+	}
+
+	return 0;
+}
 
 static uint32_t dcc_offset_conv(struct dcc_drvdata *drvdata, uint32_t off)
 {
@@ -555,7 +596,7 @@ static int __dcc_ll_cfg(struct dcc_drvdata *drvdata, int curr_list)
 	return 0;
 overstep:
 	ret = -EINVAL;
-	memset_io(drvdata->ram_base, 0, drvdata->ram_size);
+	dcc_sram_memset(drvdata->dev, drvdata->ram_base, 0, drvdata->ram_size);
 	dev_err(drvdata->dev, "DCC SRAM oversteps, 0x%x (0x%x)\n",
 		sram_offset, drvdata->ram_size);
 err:
@@ -634,7 +675,7 @@ static int dcc_enable(struct dcc_drvdata *drvdata)
 	mutex_lock(&drvdata->mutex);
 
 	if (!is_dcc_enabled(drvdata)) {
-		memset_io(drvdata->ram_base, 0xDE, drvdata->ram_size);
+		dcc_sram_memset(drvdata->dev, drvdata->ram_base, 0xDE, drvdata->ram_size);
 	}
 
 	for (list = 0; list < drvdata->nr_link_list; list++) {
@@ -695,7 +736,7 @@ static int dcc_enable(struct dcc_drvdata *drvdata)
 		}
 
 		/* 5. Configure trigger */
-		dcc_writel(drvdata, BIT(9) | ((drvdata->cti_trig << 8) |
+		dcc_writel(drvdata, BIT(9) | ((drvdata->cti_trig[list] << 8) |
 			   (drvdata->data_sink[list] << 4) |
 			   (drvdata->func_type[list])), DCC_LL_CFG(list));
 	}
@@ -723,7 +764,7 @@ static void dcc_disable(struct dcc_drvdata *drvdata)
 		dcc_writel(drvdata, 0, DCC_LL_LOCK(curr_list));
 		drvdata->enable[curr_list] = false;
 	}
-	memset_io(drvdata->ram_base, 0, drvdata->ram_size);
+	dcc_sram_memset(drvdata->dev, drvdata->ram_base, 0, drvdata->ram_size);
 	drvdata->ram_cfg = 0;
 	drvdata->ram_start = 0;
 	mutex_unlock(&drvdata->mutex);
@@ -1449,7 +1490,7 @@ static ssize_t cti_trig_show(struct device *dev,
 {
 	struct dcc_drvdata *drvdata = dev_get_drvdata(dev);
 
-	return scnprintf(buf, PAGE_SIZE, "%d\n", drvdata->cti_trig);
+	return scnprintf(buf, PAGE_SIZE, "%d\n", drvdata->cti_trig[drvdata->curr_list]);
 }
 
 static ssize_t cti_trig_store(struct device *dev,
@@ -1477,9 +1518,11 @@ static ssize_t cti_trig_store(struct device *dev,
 	}
 
 	if (val)
-		drvdata->cti_trig = 1;
+		drvdata->cti_trig[drvdata->curr_list] = 1;
 	else
-		drvdata->cti_trig = 0;
+		drvdata->cti_trig[drvdata->curr_list] = 0;
+
+	ret = size;
 out:
 	mutex_unlock(&drvdata->mutex);
 	return ret;
@@ -1535,6 +1578,7 @@ static ssize_t dcc_sram_read(struct file *file, char __user *data,
 {
 	unsigned char *buf;
 	struct dcc_drvdata *drvdata = file->private_data;
+	int ret;
 
 	/* EOF check */
 	if (drvdata->ram_size <= *ppos)
@@ -1548,7 +1592,13 @@ static ssize_t dcc_sram_read(struct file *file, char __user *data,
 	if (!buf)
 		return -ENOMEM;
 
-	memcpy_fromio(buf, (drvdata->ram_base + *ppos), len);
+	ret = dcc_sram_memcpy(buf, (drvdata->ram_base + *ppos), len);
+	if (ret) {
+		dev_err(drvdata->dev,
+			"Target address or size not aligned with 4 bytes\n");
+		kfree(buf);
+		return ret;
+	}
 
 	if (copy_to_user(data, buf, len)) {
 		dev_err(drvdata->dev,
@@ -1821,6 +1871,10 @@ static int dcc_probe(struct platform_device *pdev)
 			sizeof(uint32_t), GFP_KERNEL);
 	if (!drvdata->nr_config)
 		return -ENOMEM;
+	drvdata->cti_trig = devm_kzalloc(dev, drvdata->nr_link_list *
+			sizeof(uint8_t), GFP_KERNEL);
+	if (!drvdata->cti_trig)
+		return -ENOMEM;
 	drvdata->cfg_head = devm_kzalloc(dev, drvdata->nr_link_list *
 			sizeof(struct list_head), GFP_KERNEL);
 	if (!drvdata->cfg_head)
@@ -1831,7 +1885,7 @@ static int dcc_probe(struct platform_device *pdev)
 		drvdata->nr_config[i] = 0;
 	}
 
-	memset_io(drvdata->ram_base, 0, drvdata->ram_size);
+	dcc_sram_memset(drvdata->dev, drvdata->ram_base, 0, drvdata->ram_size);
 
 	drvdata->curr_list = DCC_INVALID_LINK_LIST;
 

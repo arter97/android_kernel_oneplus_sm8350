@@ -9,6 +9,7 @@
 #include <linux/genhd.h>
 #include <linux/device.h>
 #include <linux/of.h>
+#include <linux/of_device.h>
 #define PATH_SIZE	32
 #define SLOT_STR_LENGTH 3
 #define MAX_STR_SIZE 255
@@ -17,6 +18,27 @@ static char active_slot[SLOT_STR_LENGTH];
 static char backup_slot[SLOT_STR_LENGTH];
 static int dp_enabled;
 static char final_name[MAX_STR_SIZE];
+
+static void update_firmware_node_status(void)
+{
+	struct device_node *node;
+
+	node = of_find_compatible_node(NULL, NULL, "android,vendor");
+	if (node) {
+		static struct property newstatus = {
+			.name = "status",
+			.value = "disabled",
+			.length = sizeof("disabled"),
+		};
+
+		of_update_property(node, &newstatus);
+		of_node_put(node);
+		return;
+	}
+
+	pr_err("android,vendor is missing\n");
+}
+
 static int __init set_slot_suffix(char *str)
 {
 	if (str) {
@@ -33,6 +55,12 @@ __setup("androidboot.slot_suffix=", set_slot_suffix);
 static void get_slot_updated_name(char *name)
 {
 	int length = strlen(name);
+	static int update_state;
+
+	if ((!update_state) && dp_enabled) {
+		update_firmware_node_status();
+		update_state++;
+	}
 
 	memset(final_name, '\0', MAX_STR_SIZE);
 	strlcpy(final_name, name, MAX_STR_SIZE);
@@ -86,6 +114,7 @@ static int rename_blk_dev_init(void)
 		index++;
 	}
 out:
+	of_node_put(node);
 	return  0;
 }
 

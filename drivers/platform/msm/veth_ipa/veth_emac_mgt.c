@@ -37,69 +37,17 @@ MODULE_LICENSE("GPL v2");
 int veth_alloc_emac_export_mem(
 	struct veth_emac_export_mem *veth_emac_mem, struct veth_ipa_dev *pdata)
 {
-	phys_addr_t  tx_desc_mem_paddr;
-	phys_addr_t  rx_desc_mem_paddr;
 	phys_addr_t  tx_buf_mem_paddr;
 	phys_addr_t  rx_buf_mem_paddr;
 	phys_addr_t  tx_buf_pool_paddr;
 	phys_addr_t  rx_buf_pool_paddr;
+	int ret = 0;
 
-	int i = 0;
-
-	VETH_IPA_DEBUG("%s - begin %p, %p\n", __func__, pdata, veth_emac_mem);
-	/* Allocate TX DESC */
-	veth_emac_mem->tx_desc_mem_va = dma_alloc_coherent(&pdata->pdev->dev,
-		sizeof(struct s_TX_NORMAL_DESC) * VETH_TX_DESC_CNT,
-		&tx_desc_mem_paddr,
-		GFP_KERNEL | GFP_DMA);
-
-	if (!veth_emac_mem->tx_desc_mem_va) {
-		VETH_IPA_DEBUG("%s: No memory\n", __func__);
-		goto free_tx_desc_mem_va;
-		//return -ENOMEM;
+	ret = dma_set_mask_and_coherent(&pdata->pdev->dev, DMA_BIT_MASK(64));
+	if (ret) {
+		VETH_IPA_DEBUG("%s: dma mask set failed\n", __func__);
+		return -ENOMEM;
 	}
-
-	veth_emac_mem->tx_desc_mem_paddr = tx_desc_mem_paddr;
-
-	VETH_IPA_DEBUG("%s: TX desc base mem allocated %p\n",
-		__func__, veth_emac_mem->tx_desc_mem_va);
-	VETH_IPA_DEBUG("%s: physical addr: tx desc mem 0x%x\n",
-		__func__, veth_emac_mem->tx_desc_mem_paddr);
-
-	for (i = 0; i < VETH_TX_DESC_CNT; i++) {
-		veth_emac_mem->tx_desc_ring_base[i] =
-			veth_emac_mem->tx_desc_mem_paddr +
-			(i * sizeof(struct s_TX_NORMAL_DESC));
-		VETH_IPA_DEBUG(
-			"%s: veth_emac_mem->tx_desc_ring_base [i] 0x%x\n",
-			__func__, i, veth_emac_mem->tx_desc_ring_base[i]);
-	}
-	//Allocate RX DESC
-	veth_emac_mem->rx_desc_mem_va = dma_alloc_coherent(&pdata->pdev->dev,
-		sizeof(struct s_RX_NORMAL_DESC) * VETH_RX_DESC_CNT,
-		&rx_desc_mem_paddr,
-		GFP_KERNEL | GFP_DMA);
-
-	if (!veth_emac_mem->rx_desc_mem_va) {
-		VETH_IPA_DEBUG("%s: No memory\n", __func__);
-		goto free_rx_desc_mem_va;
-	}
-
-	VETH_IPA_DEBUG("%s: RX desc mem allocated %p\n",
-		__func__, veth_emac_mem->rx_desc_mem_va);
-	veth_emac_mem->rx_desc_mem_paddr = rx_desc_mem_paddr;
-
-	for (i = 0; i < VETH_RX_DESC_CNT; i++) {
-		veth_emac_mem->rx_desc_ring_base[i] =
-			veth_emac_mem->rx_desc_mem_paddr +
-			(i * sizeof(struct s_RX_NORMAL_DESC));
-		VETH_IPA_DEBUG(
-			"%s: veth_emac_mem->rx_desc_ring_base [i] 0x%x\n",
-			__func__, i, veth_emac_mem->rx_desc_ring_base[i]);
-	}
-
-	VETH_IPA_DEBUG("%s: physical addr: rx desc mem 0x%x\n",
-		__func__, veth_emac_mem->rx_desc_mem_paddr);
 
 	//Allocate TX Buffers
 	veth_emac_mem->tx_buf_mem_va = dma_alloc_coherent(&pdata->pdev->dev,
@@ -185,17 +133,6 @@ free_tx_buf_mem_va:
 		VETH_ETH_FRAME_LEN_IPA * VETH_TX_DESC_CNT,
 		veth_emac_mem->tx_buf_mem_va,
 		tx_buf_mem_paddr);
-free_rx_desc_mem_va:
-	dma_free_coherent(&pdata->pdev->dev,
-		sizeof(struct s_RX_NORMAL_DESC) * VETH_RX_DESC_CNT,
-		veth_emac_mem->rx_desc_mem_va,
-		rx_desc_mem_paddr);
-
-free_tx_desc_mem_va:
-	dma_free_coherent(&pdata->pdev->dev,
-		sizeof(struct s_TX_NORMAL_DESC) * VETH_TX_DESC_CNT,
-		veth_emac_mem->tx_desc_mem_va,
-		tx_desc_mem_paddr);
 	return -ENOMEM;
 }
 
@@ -235,26 +172,6 @@ int veth_alloc_emac_dealloc_mem(
 			veth_emac_mem->tx_buf_mem_paddr);
 	} else {
 		VETH_IPA_ERROR("%s: TX buf not available", __func__);
-	}
-
-	if (veth_emac_mem->rx_desc_mem_va) {
-		VETH_IPA_DEBUG("%s: Freeing RX desc mem", __func__);
-		dma_free_coherent(&pdata->pdev->dev,
-			sizeof(struct s_TX_NORMAL_DESC) * VETH_TX_DESC_CNT,
-			veth_emac_mem->rx_desc_mem_va,
-			veth_emac_mem->rx_desc_mem_paddr);
-	} else {
-		VETH_IPA_ERROR("%s: RX desc mem not available", __func__);
-	}
-
-	if (veth_emac_mem->tx_desc_mem_va) {
-		VETH_IPA_DEBUG("%s: Freeing TX desc mem", __func__);
-		dma_free_coherent(&pdata->pdev->dev,
-			sizeof(struct s_RX_NORMAL_DESC) * VETH_RX_DESC_CNT,
-			veth_emac_mem->tx_desc_mem_va,
-			veth_emac_mem->tx_desc_mem_paddr);
-	} else {
-		VETH_IPA_ERROR("%s: TX desc mem not available", __func__);
 	}
 
 	if (veth_emac_mem->rx_buff_pool_base_va) {
@@ -367,82 +284,6 @@ err:
 }
 
 
-/** veth_emac_ipa_hab_export_tx_desc() - This API is called
- *  for exporting the TX desc memory to BE driver in QNX host
- *  @vcid: The virtual channel ID between BE and FE driver
- *
- *  @veth_emac_mem - Contains the virtual and physical addresses
- *  of the exported memory
- */
-static int veth_emac_ipa_hab_export_tx_desc(
-	int vc_id, struct veth_emac_export_mem *veth_emac_mem,
-	struct veth_ipa_dev *pdata)
-{
-	int ret = 0;
-	/*export the memory*/
-	VETH_IPA_DEBUG("%s: Export TX desc memory TO VC_ID %d\n",
-		__func__, vc_id);
-	VETH_IPA_DEBUG("%s: veth_emac_mem->tx_desc_mem_va  %p\n",
-		__func__, veth_emac_mem->tx_desc_mem_va);
-	VETH_IPA_DEBUG("%s: size  %d\n",
-		__func__, sizeof(struct s_TX_NORMAL_DESC) * VETH_TX_DESC_CNT);
-	ret = habmm_export(vc_id,
-			veth_emac_mem->tx_desc_mem_va,
-			sizeof(struct s_TX_NORMAL_DESC) * VETH_TX_DESC_CNT,
-			&veth_emac_mem->exp_id.tx_desc_exp_id, 0);
-
-	if (ret) {
-		VETH_IPA_ERROR("%s: Export failed %d returned, export id %d\n",
-			__func__, ret, veth_emac_mem->exp_id.tx_desc_exp_id);
-		ret = -1;
-		goto err;
-	}
-
-	VETH_IPA_DEBUG("%s: Export memory location %p\n",
-		__func__, veth_emac_mem->tx_desc_mem_va);
-
-	return ret;
-err:
-	veth_alloc_emac_dealloc_mem(veth_emac_mem, pdata);
-	return ret;
-}
-
-/** veth_emac_ipa_hab_export_rx_desc() - This API is called for
- *  exporting the RX desc memory to BE driver in QNX host
- *  @vcid: The virtual channel ID between BE and FE driver
- *
- *  @veth_emac_mem - Contains the virtual and physical addresses
- *  of the exported memory
- */
-static int veth_emac_ipa_hab_export_rx_desc(
-	int vc_id, struct veth_emac_export_mem *veth_emac_mem,
-	struct veth_ipa_dev *pdata)
-{
-	int ret = 0;
-
-	VETH_IPA_DEBUG("%s: Export RX desc memory TO VC_ID %d\n",
-		__func__, vc_id);
-	ret = habmm_export(vc_id,
-			   veth_emac_mem->rx_desc_mem_va,
-			   sizeof(struct s_RX_NORMAL_DESC) * VETH_RX_DESC_CNT,
-			   &veth_emac_mem->exp_id.rx_desc_exp_id,
-			   0);
-
-	if (ret) {
-		VETH_IPA_ERROR("%s: Export failed %d returned, export id %d\n",
-			__func__, ret, veth_emac_mem->exp_id.rx_desc_exp_id);
-		ret = -1;
-		goto err;
-	}
-
-	VETH_IPA_DEBUG("%s: Export RX desc memory location %p\n",
-		__func__, veth_emac_mem->rx_desc_mem_va);
-	return ret;
-
-err:
-	veth_alloc_emac_dealloc_mem(veth_emac_mem, pdata);
-	return ret;
-}
 
 
 /** veth_emac_ipa_hab_export_tx_buf() - This API is called for
@@ -631,9 +472,6 @@ int veth_emac_ipa_send_exp_id(
 			&veth_emac_mem->exp_id,
 			sizeof(veth_emac_mem->exp_id),
 			NO_FLAGS);
-	VETH_IPA_INFO("Sent export ids to the backend driver");
-	VETH_IPA_INFO("TX Descriptor export id sent %x",
-			veth_emac_mem->exp_id.tx_desc_exp_id);
 	if (ret) {
 		VETH_IPA_ERROR("%s: Send failed %d returned\n",
 		__func__,
@@ -649,25 +487,6 @@ int veth_emac_init(struct veth_emac_export_mem *veth_emac_mem,
 {
 	int ret = 0;
 
-	ret = veth_emac_ipa_hab_export_tx_desc(veth_emac_mem->vc_id,
-						veth_emac_mem,
-						pdata);
-
-	if (ret < 0) {
-		VETH_IPA_ERROR(
-			"HAB export of TX desc mem failed, returning error");
-		return -ENOMEM;
-	}
-
-	ret = veth_emac_ipa_hab_export_rx_desc(veth_emac_mem->vc_id,
-						veth_emac_mem,
-						pdata);
-
-	if (ret < 0) {
-		VETH_IPA_ERROR(
-			"HAB export of RX desc mem failed, returning error");
-		return -ENOMEM;
-	}
 
 	ret = veth_emac_ipa_hab_export_tx_buf(veth_emac_mem->vc_id,
 						veth_emac_mem,

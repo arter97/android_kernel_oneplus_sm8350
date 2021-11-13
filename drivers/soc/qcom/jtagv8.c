@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2014-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2021, The Linux Foundation. All rights reserved.
  *
  */
 
@@ -37,8 +37,8 @@
 #define BMVAL(val, lsb, msb)	((val & BM(lsb, msb)) >> lsb)
 #define BVAL(val, n)		((val & BIT(n)) >> n)
 
-#ifdef CONFIG_ARM64
 #define ARM_DEBUG_ARCH_V8_8	(0x8)
+#ifdef CONFIG_ARM64
 #define ARM_DEBUG_ARCH_V8	(0x6)
 #endif
 

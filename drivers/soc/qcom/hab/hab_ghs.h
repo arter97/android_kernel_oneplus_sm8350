@@ -1,13 +1,13 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
  */
 #ifndef __HAB_GHS_H
 #define __HAB_GHS_H
 
 #include "hab_ghs_os.h"
 
-#define GIPC_RECV_BUFF_SIZE_BYTES   (32*1024)
+#define GIPC_RECV_BUFF_SIZE_BYTES   (48*1024)
 
 struct ghs_vdev {
 	int be;

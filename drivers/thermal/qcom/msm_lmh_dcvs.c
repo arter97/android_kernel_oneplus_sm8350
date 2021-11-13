@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
 #define pr_fmt(fmt) "%s:%s " fmt, KBUILD_MODNAME, __func__
@@ -82,8 +82,8 @@ struct limits_dcvs_hw {
 	struct regulator *isens_reg[2];
 };
 
-LIST_HEAD(lmh_dcvs_hw_list);
-DEFINE_MUTEX(lmh_dcvs_list_access);
+static LIST_HEAD(lmh_dcvs_hw_list);
+static DEFINE_MUTEX(lmh_dcvs_list_access);
 
 static void limits_dcvs_get_freq_limits(struct limits_dcvs_hw *hw)
 {
@@ -392,6 +392,7 @@ static int limits_dcvs_probe(struct platform_device *pdev)
 		goto probe_exit;
 	}
 	limits_isens_vref_ldo_init(pdev, hw);
+	sysfs_attr_init(&hw->lmh_freq_attr.attr);
 	hw->lmh_freq_attr.attr.name = "lmh_freq_limit";
 	hw->lmh_freq_attr.show = lmh_freq_limit_show;
 	hw->lmh_freq_attr.attr.mode = 0444;

@@ -13,6 +13,7 @@
 #define PERPH_SUBTYPE_OFFSET	0x05
 #define SUBTYPE_MASK		GENMASK(7, 0)
 #define INT_RT_STS_OFFSET	0x10
+#define REVID_REVISION4		0x103
 
 /********************************
  *  CHGR Peripheral Registers  *
@@ -74,6 +75,11 @@ enum {
 
 #define CHGR_INHIBIT_THRESHOLD_CFG_REG(base)		(base.chg_base + 0x7A)
 
+#define CHGR_QG_SOC_REG(base)			(base.chg_base + 0x84)
+
+#define CHGR_QG_SOC_UPDATE_REG(base)		(base.chg_base + 0x85)
+#define SOC_UPDATE_PCT_BIT			BIT(0)
+
 #define CHGR_FAST_CHARGE_SAFETY_TIMER_CFG_REG(base)	(base.chg_base + 0x90)
 #define FAST_CHARGE_SAFETY_TIMER_EN_BIT		BIT(3)
 #define FAST_CHARGE_SAFETY_TIMER_MASK		GENMASK(1, 0)
@@ -127,6 +133,10 @@ enum {
 #define CHGR_JEITA_COOL_THRESHOLD_REG(base)		(base.batif_base + 0x88)
 #define CHGR_JEITA_COLD_THRESHOLD_REG(base)		(base.batif_base + 0x8A)
 
+#define BATIF_PULLDOWN_VPH_CONTROL(base)		(base.batif_base + 0x55)
+#define PULLDOWN_VPH_SW_EN_BIT			BIT(1)
+#define PULLDOWN_VPH_HW_EN_BIT			BIT(0)
+#define BATIF_PULLDOWN_VPH_SEL_MASK		GENMASK(1, 0)
 
 /********************************
  *  USBIN Peripheral Registers  *
@@ -139,6 +149,10 @@ enum {
 #define USBIN_UV_RT_STS_BIT			BIT(2)
 #define USBIN_COLLAPSE_RT_STS_BIT		BIT(1)
 #define USBIN_PLUGIN_RT_STS_BIT			BIT(0)
+
+#define USBIN_QC23_EN_REG(base)			(base.usbin_base + 0x48)
+#define HVDCP_EN_BIT				BIT(2)
+#define HVDCP_NO_AUTH_QC3_CFG_BIT		BIT(0)
 
 #define USBIN_ICL_OPTIONS_REG(base)			(base.usbin_base + 0x50)
 #define USBIN_MODE_CHG_BIT			BIT(2)
@@ -192,10 +206,14 @@ enum {
 #define CMD_HVDCP_REG(base)			(base.usbin_base + 0x4a)
 #define SINGLE_INCREMENT_BIT			BIT(5)
 #define SINGLE_DECREMENT_BIT			BIT(4)
-#define FORCE_12V_BIT				BIT(3)
-#define FORCE_9V_BIT				BIT(2)
 #define FORCE_5V_BIT				BIT(1)
 #define IDLE_BIT				BIT(0)
+
+#define USB_APSD_CFG_REG(base)			(base.usbin_base + 0x46)
+#define FLOAT_OPTIONS_MASK			GENMASK(2, 0)
+#define FLOAT_DIS_CHGING_CFG_BIT		BIT(2)
+#define SUSPEND_FLOAT_CFG_BIT			BIT(1)
+#define FORCE_FLOAT_SDP_CFG_BIT			BIT(0)
 
 /********************************
  *  TYPEC Peripheral Registers  *

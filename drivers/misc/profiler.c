@@ -46,14 +46,18 @@ static int bw_profiling_command(const void *req)
 	size_t req_size = 0, rsp_size = 0;
 	struct qtee_shm bw_shm = {0};
 
+	if (!req) {
+		pr_err("Invalid request buffer pointer\n");
+		return -EINVAL;
+	}
 	rsp = &((struct tz_bw_svc_buf *)req)->bwresp;
+	if (!rsp) {
+		pr_err("Invalid response buffer pointer\n");
+		return -EINVAL;
+	}
 	rsp_size = sizeof(struct tz_bw_svc_resp);
 	req_size = ((struct tz_bw_svc_buf *)req)->req_size;
 
-	if (!req || !rsp) {
-		pr_err("Invalid buffer pointer\n");
-		return -EINVAL;
-	}
 	qseos_cmd_id = *(uint32_t *)req;
 
 	ret = qtee_shmbridge_allocate_shm(PAGE_ALIGN(req_size + rsp_size), &bw_shm);
@@ -204,52 +208,6 @@ static int profiler_open(struct inode *inode, struct file *file)
 	return ret;
 }
 
-static int compat_get_profiler_bw_info(
-		struct compat_profiler_bw_cntrs_req __user *data32,
-		struct profiler_bw_cntrs_req __user *data)
-{
-	compat_uint_t val = 0;
-	int err = 0;
-	int i = 0;
-
-	for (i = 0; i < (sizeof(struct profiler_bw_cntrs_req))
-						/sizeof(uint32_t) - 1; ++i) {
-		err |= get_user(val, (compat_uint_t *)data32 + i);
-		err |= put_user(val, (uint32_t *)data + i);
-	}
-
-	return err;
-}
-
-static int compat_put_profiler_bw_info(
-		struct compat_profiler_bw_cntrs_req __user *data32,
-		struct profiler_bw_cntrs_req __user *data)
-{
-	compat_uint_t val = 0;
-	int err = 0;
-	int i = 0;
-
-	for (i = 0; i < (sizeof(struct profiler_bw_cntrs_req))
-						/sizeof(uint32_t) - 1; ++i) {
-		err |= get_user(val, (uint32_t *)data + i);
-		err |= put_user(val, (compat_uint_t *)data32 + i);
-	}
-
-	return err;
-}
-
-static unsigned int convert_cmd(unsigned int cmd)
-{
-	switch (cmd) {
-	case COMPAT_PROFILER_IOCTL_GET_BW_INFO:
-		return PROFILER_IOCTL_GET_BW_INFO;
-
-	default:
-		return cmd;
-	}
-}
-
-
 static long profiler_ioctl(struct file *file,
 		unsigned int cmd, unsigned long arg)
 {
@@ -288,8 +246,11 @@ static int profiler_release(struct inode *inode, struct file *file)
 
 static const struct file_operations profiler_fops = {
 	.owner = THIS_MODULE,
-	.unlocked_ioctl = profiler_ioctl,
 	.open = profiler_open,
+	.unlocked_ioctl = profiler_ioctl,
+#ifdef CONFIG_COMPAT
+	 .compat_ioctl = profiler_ioctl,
+#endif
 	.release = profiler_release
 };
 

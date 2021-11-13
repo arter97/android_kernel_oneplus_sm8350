@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -190,7 +190,6 @@ static const struct freq_tbl ftbl_npu_cc_cal_dp_clk_src[] = {
 };
 
 static const struct freq_tbl ftbl_npu_cc_cal_dp_clk_src_sm8150_v2[] = {
-	F(125000000, P_NPU_CC_CRC_DIV, 1, 0, 0),
 	F(300000000, P_NPU_CC_CRC_DIV, 1, 0, 0),
 	F(400000000, P_NPU_CC_CRC_DIV, 1, 0, 0),
 	F(487000000, P_NPU_CC_CRC_DIV, 1, 0, 0),
@@ -622,7 +621,7 @@ static int npu_cc_sm8150_fixup(struct platform_device *pdev,
 	return 0;
 }
 
-struct regulator *vdd_gdsc;
+static struct regulator *vdd_gdsc;
 
 static int enable_npu_crc(struct regmap *regmap)
 {

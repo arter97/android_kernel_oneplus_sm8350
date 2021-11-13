@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2021 The Linux Foundation. All rights reserved.
  */
 
 #ifndef MSM_ADRENO_DEVFREQ_H
@@ -12,6 +12,7 @@
 #define ADRENO_DEVFREQ_NOTIFY_SUBMIT	1
 #define ADRENO_DEVFREQ_NOTIFY_RETIRE	2
 #define ADRENO_DEVFREQ_NOTIFY_IDLE	3
+#define ADRENO_DEVFREQ_NOTIFY_REINIT	4
 
 #define DEVFREQ_FLAG_WAKEUP_MAXFREQ	0x2
 #define DEVFREQ_FLAG_FAST_HINT		0x4

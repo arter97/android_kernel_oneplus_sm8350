@@ -581,6 +581,15 @@ config QCOM_SOCINFO
 	 Say yes here to support the Qualcomm socinfo driver, providing
 	 information about the SoC to user space.
 
+config QCOM_SOCINFO_DT
+	tristate "Qualcomm Technologies, Inc. DT based socinfo driver"
+	select SOC_BUS
+	help
+	 Say yes here to support the Qualcomm Technologies, Inc. device tree
+	 based socinfo driver, providing information about the SoC to
+	 user space. The driver gets the soc information from device tree.
+	 If unsure, say no.
+
 config QCOM_WCNSS_CTRL
 	tristate "Qualcomm WCNSS control driver"
 	depends on ARCH_QCOM || COMPILE_TEST
@@ -596,14 +605,51 @@ config QCOM_DCC_V2
          driver provides interface to configure DCC block and read back
          captured data from DCC's internal SRAM.
 
+config SDX_EXT_IPC
+	tristate "QCOM external ipc driver"
+	help
+	  This enables the module to help modem communicate with external
+	  Application processor connected to Qualcomm Technologies, Inc
+	  modem chipset. The modem and APQ can understand each other's
+	  state by reading ipc gpios.
+
+	  If unsure, say N.
+
+config QTI_NOTIFY_SIDEBAND
+	tristate "QCOM sideband signalling helper"
+	help
+	  This provides helper APIs and a header file through which
+	  transport layer driver can talk to the sideband driver to
+	  assert appropriate sideband signal.
+
+	  If unsure, say N.
+
 config QCOM_MINIDUMP
 	tristate "QCOM Minidump Support"
-	depends on QCOM_SMEM && POWER_RESET_MSM
 	help
-	  This enables minidump feature. It allows various clients to
+	  This enables minidump framework. It allows various clients to
 	  register to dump their state at system bad state (panic/WDT,etc.,).
 	  Minidump would dump all registered entries, only when DLOAD mode
 	  is enabled.
+
+config QCOM_MINIDUMP_SMEM
+	tristate "QCOM Minidump SMEM Support"
+	depends on QCOM_MINIDUMP && QCOM_SMEM
+	default y
+	help
+	  This enables minidump smem transport layer.
+	  If minidump and smem are enabled,
+	  this config option shall be enabled by
+	  default.
+
+config QCOM_MINIDUMP_MMIO
+	tristate "QTI Minidump MMIO Support"
+	depends on QCOM_MINIDUMP
+	help
+	  This enables MMIO minidump transport layer.
+	  If the target emulates minidump smem as shadow registers, say yes to
+	  enable minidump feature.
+	  If unsure, say no.
 
 config QCOM_DYN_MINIDUMP_STACK
 	bool "QTI Dynamic Minidump Stack Registration Support"
@@ -824,6 +870,26 @@ config QTI_PMIC_PON_LOG
 	  some Qualcomm Technologies, Inc. PMIC devices.  This driver is useful
 	  when debugging unexpected power-off scenarios.
 
+config QTI_PMIC_LPM
+	tristate "QTI PMIC LPM support"
+	depends on MFD_SPMI_PMIC
+	help
+	  Say Y here to enable the Qualcomm Technologies, Inc. low power mode
+	  driver which reports the entry and exit of PMIC's low power modes
+	  DeepSleep/Hibernate/TWM to a companion chip through the SDAM
+	  interface.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called qti-pmic-lpm.
+
+config MSM_ADSP_LOADER
+	tristate "ADSP loader support"
+	help
+	  Enable ADSP image loader.
+	  The ADSP loader brings ADSP out of reset
+	  for platforms that have ADSP.
+	  Say M if you want to enable this module.
+
 config MSM_CDSP_LOADER
 	tristate "CDSP loader support"
 	help
@@ -870,6 +936,14 @@ config MSM_PM_LEGACY
 	  cores and l2 low power modes. It interface with
 	  various system driver and put the cores into
 	  low power modes.
+
+config SILENT_MODE
+	bool "Driver support for  Silent mode feature on QCOM Chipsets"
+	help
+	  Enables the support for Silent mode for QCOM chipsets. This feature
+	  monitors a chosen external interface, ex: GPIO, when signalled a
+	  state change, will update /sys/power/pm_kernelsilentmode attribute to
+	  indicate the state transition from silent to non-silent.
 
 config QTI_PLH_SCMI_CLIENT
 	tristate "Qualcomm Technologies Inc. SCMI client driver for PLH"
@@ -1225,7 +1299,7 @@ config QCOM_HYP_CORE_CTL
 
 config QTI_CRYPTO_COMMON
 	tristate "Enable common crypto functionality used for FBE"
-	depends on SCSI_UFS_CRYPTO_QTI
+	depends on SCSI_UFS_CRYPTO_QTI || MMC_CQHCI_CRYPTO_QTI
 	help
 	 Say 'Y' to enable the common crypto implementation to be used by
 	 different storage layers such as UFS and EMMC for file based hardware
@@ -1246,9 +1320,10 @@ config QTI_CRYPTO_FDE
 	depends on QTI_CRYPTO_COMMON
 	help
 	 Say 'Y' to enable hardware Full Disk Encryption implementation to be used by
-	 different storage layers such as UFS. Enabling the FDE will reserve one slot
-	 of KSM(Key Slot Manager) for the FDE. Making one less slot available for FBE
-	 (File based encryption) in case both encryption mechanism are enabled on device.
+	 different storage layers such as UFS or eMMC. Enabling the FDE will reserve
+	 one slot of KSM(Key Slot Manager) for the FDE. Making one less slot available
+	 for FBE(File based encryption) in case both encryption mechanism are enabled
+	 on device.
 
 config QTI_CRYPTO_VIRTUALIZATION
 	tristate "Enable hypervysor to be used for FBE"
@@ -1312,6 +1387,32 @@ config MSM_SLATECOM_INTERFACE
 		from hardware. Hardware will provide access to read
 		registers and read/write AHB memory in the device.
 
+config MSM_SLATECOM_RPMSG
+       tristate "Provide support for slate control GLINK channel"
+       depends on MSM_SLATECOM_INTERFACE
+       help
+         MSM_SLATECOM_RPMSG informs SLATECOM_INTERFACE driver if GLINK channel
+         has been opened by remote processor. It doesn't maintain state machine
+         and is probed when Slate opens channel and removed when the channel is
+         closed by remote processor.
+
+config MSM_SLATERSB
+        bool "Provide support for rsb events on Slate"
+        help
+          SLATERSB communicates to SLATE over rpmsg driver for RSB configuration
+          and enable/disable on device power state change.Add slate rsb driver
+          which is use to configure rsb on slate.Slate rsb driver uses glink
+          to communicate with slate
+
+config MSM_SLATERSB_RPMSG
+        bool "Provide support for slate events to RSB"
+        depends on MSM_SLATERSB
+        help
+          SLATERSB-RPMSG informs SLATERSB driver if GLINK channel has been
+          opened by remote processor. It doesn't maintain state machine
+          and is probed when SLATE opens channel and removed when the
+          channel is closed by remote processor.
+
 config QCOM_AOP_SET_DDR
 	tristate "Sysfs to communicate with AOP using QMP protocol"
 	help
@@ -1346,15 +1447,54 @@ config MSM_SEB_RPMSG
 	  and is probed when Slate opens channel and removed when the
 	  channel is closed by remote processor.
 
-config SDX_EXT_IPC
-	tristate "QCOM external ipc driver"
+config DEEPSLEEP
+	bool "Deep Sleep or Suspend-to-RAM sleep state"
 	help
-      This enables the module to help modem communicate with external
-      Application processor connected to Qualcomm Technologies, Inc
-      modem chipset. The modem and APQ can understand each other's
-      state by reading ipc gpios.
+		Set this option to enable Deep Sleep. Deep Sleep is Suspend-to-RAM
+		sleep state, in which entire system is put in a low-power state,
+		except for memory, so that exit from this state can happen in shorter
+		duration.
 
-      If unsure, say N.
+config POWER_STATE
+	depends on DEEPSLEEP || HIBERNATION
+	bool "Power State driver support for Deep Sleep and Hibernate"
+	help
+		This option enables Power State Driver which is the kernel component
+		for supporting deep sleep and hibernate. Create a power_state device
+		node for user space communication. User space client can open device
+		node for communication required for handling deep sleep and hibernate
+		modes.
+
+config MSM_PIL_SSR_SLATE
+	tristate "MSM Subsystem SLATE Support"
+	depends on MSM_PIL && MSM_SUBSYSTEM_RESTART
+	help
+	  Support for booting and shutting down SLATE SOC which is
+	  an external SOC. This driver communicates with SLATE SOC
+	  via pair of IPC GPIOs for inward and outward signals between MSM
+	  and SLATE SOC.
+
+config AUTO_EARLY_LAUNCH
+	tristate "Auto Early Service Launch Driver"
+	depends on DEVTMPFS_MOUNT
+	help
+	 This driver is used to launch early services from kernel using
+	 call_usermodehelper(). Executing early services binary placed in
+	 ramdisk.
+	 early_init user space executable file will be copied into
+	 ramdisk/early_services directory during build.
+
+config QCOM_ADSP_VOTE_SMP2P
+	bool "Send command to ADSP for unvote/vote during suspend/resume"
+	depends on QCOM_SMP2P
+	help
+		When this option is enabled, vote/unvote commands are sent to remote ADSP
+		from the local processor through the smp2p framework.
+		This driver send voting request from hlos to adsp, this prevent ADSP to
+		not go in low power mode when it is idle. HLOS send request for vote &
+		unvote during system power transition.
+		This driver can be used to manually release and acquire the ADSP vote
+		from debugfs interface.
 
 source "drivers/soc/qcom/icnss2/Kconfig"
 

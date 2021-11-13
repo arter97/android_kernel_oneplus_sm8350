@@ -207,6 +207,10 @@ struct a6xx_gmu_device {
 	void __iomem *rdpm_mx_virt;
 	/** @log_stream_enable: GMU log streaming enable */
 	bool log_stream_enable;
+	/** @pdc_cfg_base: Base address of PDC cfg registers */
+	void __iomem *pdc_cfg_base;
+	/** @pdc_seq_base: Base address of PDC seq registers */
+	void __iomem *pdc_seq_base;
 	/** @num_oob_perfcntr: Number of active oob_perfcntr requests */
 	u32 num_oob_perfcntr;
 };

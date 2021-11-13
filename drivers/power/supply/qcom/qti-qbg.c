@@ -7,6 +7,7 @@
 
 #include <linux/cdev.h>
 #include <linux/device.h>
+#include <linux/debugfs.h>
 #include <linux/errno.h>
 #include <linux/iio/iio.h>
 #include <linux/iio/consumer.h>
@@ -169,6 +170,52 @@ int qbg_write(struct qti_qbg *chip, u32 addr, u8 *val, int len)
 	return 0;
 }
 
+static bool is_chan_valid(struct qti_qbg *chip, enum qbg_ext_iio_channels chan)
+{
+	int rc;
+
+	if (IS_ERR(chip->ext_iio_chans[chan]))
+		return false;
+
+	if (!chip->ext_iio_chans[chan]) {
+		chip->ext_iio_chans[chan] = iio_channel_get(chip->dev,
+					qbg_ext_iio_chan_name[chan]);
+		if (IS_ERR(chip->ext_iio_chans[chan])) {
+			rc = PTR_ERR(chip->ext_iio_chans[chan]);
+			if (rc == -EPROBE_DEFER)
+				chip->ext_iio_chans[chan] = NULL;
+
+			pr_err("Failed to get IIO channel %s, rc=%d\n",
+				qbg_ext_iio_chan_name[chan], rc);
+			return false;
+		}
+	}
+
+	return true;
+}
+
+static int qbg_read_iio_chan(struct qti_qbg *chip, enum qbg_ext_iio_channels chan,
+				int *val)
+{
+	int rc;
+
+	if (is_chan_valid(chip, chan)) {
+		rc = iio_read_channel_processed(chip->ext_iio_chans[chan], val);
+		return (rc < 0) ? rc : 0;
+	}
+
+	return -EINVAL;
+}
+
+static int qbg_write_iio_chan(struct qti_qbg *chip, enum qbg_ext_iio_channels chan,
+				int val)
+{
+	if (is_chan_valid(chip, chan))
+		return iio_write_channel_raw(chip->ext_iio_chans[chan], val);
+
+	return -EINVAL;
+}
+
 static void qbg_notify_charger(struct qti_qbg *chip)
 {
 	union power_supply_propval prop = {0, };
@@ -195,12 +242,26 @@ static void qbg_notify_charger(struct qti_qbg *chip)
 		return;
 	}
 
-	pr_debug("Notified charger on float voltage:%d uV and FCC:%d mA\n",
-			chip->float_volt_uv, chip->fastchg_curr_ma);
+	if (chip->default_iterm_ma != -EINVAL) {
+		prop.intval = chip->default_iterm_ma;
+		rc = power_supply_set_property(chip->batt_psy,
+				POWER_SUPPLY_PROP_CHARGE_TERM_CURRENT, &prop);
+		if (rc < 0) {
+			pr_err("Failed to set charge_current_max property on batt_psy, rc=%d\n",
+				rc);
+			return;
+		}
+	}
+
+	pr_debug("Notified charger on float voltage:%d uV and FCC:%d mA iterm:%d mA\n",
+			chip->float_volt_uv, chip->fastchg_curr_ma, chip->default_iterm_ma);
 }
 
 static bool is_batt_available(struct qti_qbg *chip)
 {
+	int rc;
+	union power_supply_propval prop = {0, };
+
 	if (chip->batt_psy)
 		return true;
 
@@ -211,7 +272,97 @@ static bool is_batt_available(struct qti_qbg *chip)
 	/* batt_psy is initialized, set the fcc and fv */
 	qbg_notify_charger(chip);
 
+	/*
+	 * Read termination current from charger,
+	 * Use it to configure iterm after recharge upon USB removal.
+	 */
+	rc = power_supply_get_property(chip->batt_psy,
+			POWER_SUPPLY_PROP_CHARGE_TERM_CURRENT, &prop);
+	if (!rc)
+		chip->default_iterm_ma = prop.intval;
+
 	return true;
+}
+
+static bool is_usb_available(struct qti_qbg *chip)
+{
+	if (chip->usb_psy)
+		return true;
+
+	chip->usb_psy = power_supply_get_by_name("usb");
+	if (!chip->usb_psy)
+		return false;
+
+	return true;
+}
+
+#define DEFAULT_RECHARGE_SOC 95
+static int qbg_charge_full_update(struct qti_qbg *chip)
+{
+	union power_supply_propval prop = {0, };
+	int rc, recharge_soc, health, val;
+
+	/* Nothing to process */
+	if (!chip->charger_present || !chip->charge_done)
+		return 0;
+
+	rc = power_supply_get_property(chip->batt_psy,
+			POWER_SUPPLY_PROP_HEALTH, &prop);
+	if (rc < 0) {
+		pr_err("Failed to get battery health, rc=%d\n", rc);
+		return rc;
+	}
+	health = prop.intval;
+
+	rc = qbg_read_iio_chan(chip, RECHARGE_SOC, &val);
+	if (rc < 0 || val < 0) {
+		pr_debug("Failed to get recharge-soc, rc=%d\n", rc);
+		recharge_soc = DEFAULT_RECHARGE_SOC;
+	} else {
+		recharge_soc = val;
+	}
+	chip->recharge_soc = recharge_soc;
+
+qbg_dbg(chip, QBG_DEBUG_STATUS, "msoc=%d sys_soc:%d charge_done:%d charge_status=%d recharge_soc=%d in_recharge:%u\n",
+			chip->soc, chip->sys_soc, chip->charge_done,
+			chip->charge_status, chip->recharge_soc, chip->in_recharge);
+
+	if (chip->charge_status == POWER_SUPPLY_STATUS_CHARGING) {
+		/* Charger is charging in recharge */
+		return 0;
+	}
+
+	/* System SOC has not dropped below recharge SOC to trigger recharge */
+	if (chip->sys_soc > recharge_soc)
+		return 0;
+
+	if (!chip->in_recharge) {
+		if (chip->recharge_vflt_delta_mv && chip->recharge_vflt_delta_mv != -EINVAL) {
+			prop.intval = (chip->float_volt_uv) - (chip->recharge_vflt_delta_mv * 1000);
+			rc = power_supply_set_property(chip->batt_psy,
+					POWER_SUPPLY_PROP_VOLTAGE_MAX, &prop);
+			if (rc < 0) {
+				pr_err("Failed to set recharge voltage_max property on batt_psy, rc=%d\n",
+					rc);
+				return rc;
+			}
+		}
+
+		if (chip->recharge_iterm_ma && chip->recharge_iterm_ma != -EINVAL) {
+			prop.intval = chip->recharge_iterm_ma;
+			prop.intval = (-1 * prop.intval);
+			rc = power_supply_set_property(chip->batt_psy,
+					POWER_SUPPLY_PROP_CHARGE_TERM_CURRENT, &prop);
+			if (rc < 0) {
+				pr_err("Failed to set recharge charge_term_current property on batt_psy, rc=%d\n",
+					rc);
+				return rc;
+			}
+		}
+		chip->in_recharge = true;
+	}
+
+	return rc;
 }
 
 static void status_change_work(struct work_struct *work)
@@ -219,9 +370,12 @@ static void status_change_work(struct work_struct *work)
 	struct qti_qbg *chip = container_of(work, struct qti_qbg,
 						status_change_work);
 	union power_supply_propval prop = {0, };
-	int rc;
+	int rc, val, charger_present = 0;
 
 	if (!is_batt_available(chip))
+		return;
+
+	if (!is_usb_available(chip))
 		return;
 
 	rc = power_supply_get_property(chip->batt_psy,
@@ -230,6 +384,45 @@ static void status_change_work(struct work_struct *work)
 		pr_err("Failed to get charge-type, rc=%d\n", rc);
 	else
 		chip->charge_type = prop.intval;
+
+	rc = power_supply_get_property(chip->batt_psy,
+			POWER_SUPPLY_PROP_STATUS, &prop);
+	if (rc < 0)
+		pr_err("Failed to get charger status, rc=%d\n", rc);
+	else
+		chip->charge_status = prop.intval;
+
+	rc = qbg_read_iio_chan(chip, CHARGE_DONE, &val);
+	if (rc < 0)
+		pr_err("Failed to get charge done status, rc=%d\n", rc);
+	else
+		chip->charge_done = val;
+
+	rc = power_supply_get_property(chip->usb_psy,
+			POWER_SUPPLY_PROP_PRESENT, &prop);
+	if (rc < 0)
+		pr_err("Failed to get charger present, rc=%d\n", rc);
+	else
+		charger_present = prop.intval;
+
+	qbg_dbg(chip, QBG_DEBUG_STATUS, "charge_status=%d charge_done=%d charger_present:%d\n",
+			chip->charge_status, chip->charge_done, chip->charger_present);
+
+	/*
+	 * Set FCC and iterm back to default value on charger removal
+	 * as they could have been updated during recharge.
+	 */
+	if (chip->charger_present && !charger_present) {
+		qbg_notify_charger(chip);
+		chip->in_recharge = false;
+	}
+	chip->charger_present = charger_present;
+
+	rc = qbg_charge_full_update(chip);
+	if (rc < 0) {
+		pr_err("Failed in charge full update, rc=%d\n", rc);
+		return;
+	}
 }
 
 static int qbg_get_fifo_count(struct qti_qbg *chip, u32 *fifo_count)
@@ -292,8 +485,13 @@ static void process_udata_work(struct work_struct *work)
 				chip->udata.param[QBG_PARAM_SYS_SOC].valid ?
 				chip->udata.param[QBG_PARAM_SYS_SOC].data : -EINVAL);
 
-		if (chip->udata.param[QBG_PARAM_SYS_SOC].valid)
+		if (chip->udata.param[QBG_PARAM_SYS_SOC].valid) {
 			chip->sys_soc = chip->udata.param[QBG_PARAM_SYS_SOC].data;
+
+			rc = qbg_write_iio_chan(chip, SYS_SOC, chip->sys_soc);
+			if (rc < 0)
+				pr_err("Failed to write battery sys_soc, rc=%d\n", rc);
+		}
 
 		chip->soc = chip->udata.param[QBG_PARAM_SOC].data;
 	}
@@ -932,8 +1130,8 @@ static int qbg_load_battery_profile(struct qti_qbg *chip)
 
 	profile_node = of_batterydata_get_best_profile(chip->batt_node,
 			chip->batt_id_ohm / 1000, NULL);
-	if (IS_ERR(profile_node)) {
-		rc = PTR_ERR(profile_node);
+	if (IS_ERR_OR_NULL(profile_node)) {
+		rc = profile_node ? PTR_ERR(profile_node) : -EINVAL;
 		pr_err("Failed to detect valid QBG battery profile, rc=%d\n",
 			rc);
 		goto out;
@@ -1081,6 +1279,23 @@ static int qbg_get_battery_current(struct qti_qbg *chip, int *ibat_ua)
 	acc2_data = buf[0] | (buf[1] << 8);
 	*ibat_ua = ((int16_t)acc2_data) * IBATT_10A_LSB * ICHG_FS_10A;
 	*ibat_ua = *ibat_ua / TEN_NANO_TO_MICRO;
+
+	return 0;
+}
+
+static int qbg_get_battery_temp(struct qti_qbg *chip, int *temp)
+{
+	int rc;
+
+	if (!chip->batt_temp_chan)
+		return -EINVAL;
+
+	rc = iio_read_channel_processed(chip->batt_temp_chan, temp);
+	if (rc < 0) {
+		pr_err("Failed to read BATT_TEMP over ADC, rc=%d\n", rc);
+		return rc;
+	}
+	chip->tbat = *temp;
 
 	return 0;
 }
@@ -1331,7 +1546,7 @@ static int qbg_iio_read_raw(struct iio_dev *indio_dev,
 		rc = qbg_get_battery_capacity(chip, val1);
 		break;
 	case PSY_IIO_TEMP:
-		*val1 = chip->tbat;
+		rc = qbg_get_battery_temp(chip, val1);
 		break;
 	case PSY_IIO_VOLTAGE_MAX:
 		*val1 = chip->float_volt_uv;
@@ -1373,10 +1588,10 @@ static int qbg_iio_read_raw(struct iio_dev *indio_dev,
 		*val1 = chip->charge_cycle_count;
 		break;
 	case PSY_IIO_CHARGE_FULL:
-		*val1 = chip->learned_capacity;
+		*val1 = chip->learned_capacity * MILLI_TO_MICRO;
 		break;
 	case PSY_IIO_CHARGE_FULL_DESIGN:
-		*val1 = chip->nominal_capacity;
+		*val1 = chip->nominal_capacity * MILLI_TO_MICRO;
 		break;
 	default:
 		pr_err_ratelimited("Unsupported property %d\n", chan->channel);
@@ -1527,6 +1742,68 @@ static int qbg_get_sample_time_us(struct qti_qbg *chip)
 
 	return rc;
 }
+
+static ssize_t qbg_context_show(struct class *c,
+				struct class_attribute *attr, char *buf)
+{
+	struct qti_qbg *chip = container_of(c, struct qti_qbg, qbg_class);
+	int count;
+
+	if (!chip)
+		return -ENODEV;
+
+	if (!chip->context_count) {
+		qbg_dbg(chip, QBG_DEBUG_DEVICE, "Empty context buffer, nothing to show\n");
+		return 0;
+	}
+
+	mutex_lock(&chip->context_lock);
+	memcpy(buf, chip->context, chip->context_count);
+	count = chip->context_count;
+	chip->context_count = 0;
+	memset(chip->context, 0, QBG_CONTEXT_LOCAL_BUF_SIZE);
+	mutex_unlock(&chip->context_lock);
+
+	return count;
+}
+
+static ssize_t qbg_context_store(struct class *c,
+					struct class_attribute *attr,
+					const char *buf, size_t count)
+{
+	struct qti_qbg *chip = container_of(c, struct qti_qbg, qbg_class);
+
+	if (!chip)
+		return -ENODEV;
+
+	if (count > QBG_CONTEXT_LOCAL_BUF_SIZE) {
+		qbg_dbg(chip, QBG_DEBUG_DEVICE, "Context dump is greater than %d bytes\n",
+				QBG_CONTEXT_LOCAL_BUF_SIZE);
+		return -EINVAL;
+	}
+
+	if (!chip->context) {
+		chip->context = devm_kcalloc(chip->dev, 1,
+						QBG_CONTEXT_LOCAL_BUF_SIZE,
+						GFP_KERNEL);
+		if (!chip->context)
+			return -ENOMEM;
+	}
+
+	mutex_lock(&chip->context_lock);
+	memcpy(chip->context, buf, count);
+	chip->context_count = count;
+	mutex_unlock(&chip->context_lock);
+
+	return count;
+}
+static CLASS_ATTR_RW(qbg_context);
+
+static struct attribute *qbg_class_attrs[] = {
+	&class_attr_qbg_context.attr,
+	NULL,
+};
+ATTRIBUTE_GROUPS(qbg_class);
 
 static ssize_t qbg_device_read(struct file *file, char __user *buf, size_t count,
 			  loff_t *ppos)
@@ -1825,14 +2102,15 @@ static int qbg_register_device(struct qti_qbg *chip)
 		goto unregister_chrdev;
 	}
 
-	chip->qbg_class = class_create(THIS_MODULE, "qbg");
-	if (IS_ERR_OR_NULL(chip->qbg_class)) {
-		pr_err("Failed to create qbg class\n");
-		rc = -EINVAL;
+	chip->qbg_class.name = "qbg";
+	chip->qbg_class.class_groups = qbg_class_groups;
+	rc = class_register(&chip->qbg_class);
+	if (rc < 0) {
+		pr_err("Failed to create qbg_class rc=%d\n", rc);
 		goto delete_cdev;
 	}
 
-	chip->qbg_device = device_create(chip->qbg_class, NULL, chip->dev_no,
+	chip->qbg_device = device_create(&chip->qbg_class, NULL, chip->dev_no,
 					NULL, "qbg");
 	if (IS_ERR(chip->qbg_device)) {
 		pr_err("Failed to create qbg_device\n");
@@ -1845,7 +2123,7 @@ static int qbg_register_device(struct qti_qbg *chip)
 	return 0;
 
 destroy_class:
-	class_destroy(chip->qbg_class);
+	class_unregister(&chip->qbg_class);
 delete_cdev:
 	cdev_del(&chip->qbg_cdev);
 unregister_chrdev:
@@ -1867,6 +2145,32 @@ static int qbg_register_interrupts(struct qti_qbg *chip)
 
 	return rc;
 }
+
+#ifdef CONFIG_DEBUG_FS
+static void qbg_create_debugfs(struct qti_qbg *chip)
+{
+	struct dentry *entry;
+
+	pr_err("%s:%u\n", __func__, __LINE__);
+	chip->dfs_root = debugfs_create_dir("qbg", NULL);
+	if (IS_ERR_OR_NULL(chip->dfs_root)) {
+		pr_err("Failed to create debugfs directory rc=%ld\n",
+				(long)chip->dfs_root);
+		return;
+	}
+
+	entry = debugfs_create_u32("debug_mask", 0600, chip->dfs_root,
+			&qbg_debug_mask);
+	if (IS_ERR_OR_NULL(entry)) {
+		pr_err("Failed to create debug_mask rc=%ld\n", (long)entry);
+		debugfs_remove_recursive(chip->dfs_root);
+	}
+}
+#else
+static void qbg_create_debugfs(struct qti_qbg *chip)
+{
+}
+#endif
 
 static int qbg_parse_sdam_dt(struct qti_qbg *chip, struct device_node *node)
 {
@@ -1899,6 +2203,9 @@ static int qbg_parse_sdam_dt(struct qti_qbg *chip, struct device_node *node)
 #define QBG_DEFAULT_VPH_MIN_MV				2700
 #define QBG_DEFAULT_ITERM_MA				100
 #define QBG_DEFAULT_RCONN_MOHM				0
+#define QBG_DEFAULT_RECHARGE_ITERM_MA			150
+#define QBG_DEFAULT_RECHARGE_SOC_DELTA			5
+#define QBG_DEFAULT_RECHARGE_VFLT_DELTA			100
 static int qbg_parse_dt(struct qti_qbg *chip)
 {
 	struct device_node *node = chip->dev->of_node;
@@ -1936,6 +2243,21 @@ static int qbg_parse_dt(struct qti_qbg *chip)
 	if (!rc)
 		chip->rconn_mohm = val;
 
+	chip->recharge_iterm_ma = QBG_DEFAULT_RECHARGE_ITERM_MA;
+	rc = of_property_read_u32(node, "qcom,recharge-iterm-ma", &val);
+	if (!rc)
+		chip->recharge_iterm_ma = -1 * val;
+
+	chip->recharge_soc = 100 - QBG_DEFAULT_RECHARGE_SOC_DELTA;
+	rc = of_property_read_u32(node, "qcom,recharge-soc-delta", &val);
+	if (!rc)
+		chip->recharge_soc = 100 - val;
+
+	chip->recharge_vflt_delta_mv = QBG_DEFAULT_RECHARGE_VFLT_DELTA;
+	rc = of_property_read_u32(node, "qcom,recharge-vflt-delta", &val);
+	if (!rc)
+		chip->recharge_vflt_delta_mv = val;
+
 	return 0;
 }
 
@@ -1954,6 +2276,13 @@ static int qti_qbg_probe(struct platform_device *pdev)
 	chip->dev = &pdev->dev;
 	chip->indio_dev = indio_dev;
 
+	chip->ext_iio_chans = devm_kcalloc(chip->dev,
+				ARRAY_SIZE(qbg_ext_iio_chan_name),
+				sizeof(*chip->ext_iio_chans),
+				GFP_KERNEL);
+	if (!chip->ext_iio_chans)
+		return -ENOMEM;
+
 	chip->regmap = dev_get_regmap(pdev->dev.parent, NULL);
 	if (!chip->regmap) {
 		dev_err(&pdev->dev, "Failed to get regmap\n");
@@ -1971,11 +2300,13 @@ static int qti_qbg_probe(struct platform_device *pdev)
 	INIT_WORK(&chip->udata_work, process_udata_work);
 	mutex_init(&chip->fifo_lock);
 	mutex_init(&chip->data_lock);
+	mutex_init(&chip->context_lock);
 	dev_set_drvdata(chip->dev, chip);
 	init_waitqueue_head(&chip->qbg_wait_q);
 
 	chip->debug_mask = &qbg_debug_mask;
 
+	chip->default_iterm_ma = -EINVAL;
 	chip->soc = INT_MIN;
 	chip->batt_soc = INT_MIN;
 	chip->sys_soc = INT_MIN;
@@ -2015,6 +2346,8 @@ static int qti_qbg_probe(struct platform_device *pdev)
 		chip->batt_temp_chan = NULL;
 		return rc;
 	}
+
+	qbg_create_debugfs(chip);
 
 	chip->rtc = rtc_class_open(CONFIG_RTC_HCTOSYS_DEVICE);
 	if (chip->rtc == NULL)
@@ -2078,8 +2411,10 @@ static int qti_qbg_remove(struct platform_device *pdev)
 	cancel_work_sync(&chip->udata_work);
 	mutex_destroy(&chip->fifo_lock);
 	mutex_destroy(&chip->data_lock);
+	mutex_destroy(&chip->context_lock);
 	cdev_del(&chip->qbg_cdev);
 	unregister_chrdev_region(chip->dev_no, 1);
+	class_unregister(&chip->qbg_class);
 
 	return 0;
 }

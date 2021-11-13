@@ -294,10 +294,17 @@ static int cvp_readjust_clock(struct msm_cvp_core *core,
 	unsigned long lo_freq = 0;
 	u32 j;
 
-	dprintk(CVP_PWR,
-		"%s:%d - %d - avg_cycles %u > hi_tresh %u\n",
-		__func__, __LINE__, i, avg_cycles,
-		core->dyn_clk.hi_ctrl_lim[i]);
+	tbl = core->resources.allowed_clks_tbl;
+	tbl_size = core->resources.allowed_clks_tbl_size;
+	cvp_min_rate = tbl[0].clock_rate;
+	cvp_max_rate = tbl[tbl_size - 1].clock_rate;
+
+	if (!((avg_cycles > core->dyn_clk.hi_ctrl_lim[i] &&
+			 core->curr_freq != cvp_max_rate) ||
+			(avg_cycles <= core->dyn_clk.lo_ctrl_lim[i] &&
+			 core->curr_freq != cvp_min_rate))) {
+		return rc;
+	}
 
 	core->curr_freq = ((avg_cycles * core->dyn_clk.sum_fps[i]) << 1)/3;
 	dprintk(CVP_PWR,
@@ -307,11 +314,6 @@ static int cvp_readjust_clock(struct msm_cvp_core *core,
 		avg_cycles,
 		core->dyn_clk.sum_fps[i],
 		core->curr_freq);
-
-	tbl = core->resources.allowed_clks_tbl;
-	tbl_size = core->resources.allowed_clks_tbl_size;
-	cvp_min_rate = tbl[0].clock_rate;
-	cvp_max_rate = tbl[tbl_size - 1].clock_rate;
 
 	if (core->curr_freq > cvp_max_rate) {
 		core->curr_freq = cvp_max_rate;
@@ -327,6 +329,14 @@ static int cvp_readjust_clock(struct msm_cvp_core *core,
 				break;
 		core->curr_freq = tbl[j].clock_rate;
 		lo_freq = tbl[j-1].clock_rate;
+	}
+
+	if (core->orig_core_sum > core->curr_freq) {
+		dprintk(CVP_PWR,
+			"%s - %d - Cancel readjust, core %u, freq %u\n",
+			__func__, i, core->orig_core_sum, core->curr_freq);
+		core->curr_freq = tmp;
+		return rc;
 	}
 
 	dprintk(CVP_PWR,
@@ -428,13 +438,10 @@ static int cvp_check_clock(struct msm_cvp_inst *inst,
 				&& core->dyn_clk.hi_ctrl_lim[i] != 0) {
 				u32 avg_cycles =
 					core->dyn_clk.cycle[i].total>>3;
-				if ((avg_cycles > core->dyn_clk.hi_ctrl_lim[i])
-				    || (avg_cycles <=
-					 core->dyn_clk.lo_ctrl_lim[i])) {
-					rc = cvp_readjust_clock(core,
-								avg_cycles,
-								i);
-				}
+
+				rc = cvp_readjust_clock(core,
+							avg_cycles,
+							i);
 			}
 		}
 	}
@@ -481,13 +488,24 @@ static int cvp_fence_proc(struct msm_cvp_inst *inst,
 	timeout = msecs_to_jiffies(CVP_MAX_WAIT_TIME);
 	rc = cvp_wait_process_message(inst, sq, &ktid, timeout,
 				(struct cvp_kmd_hfi_packet *)&hdr);
-	if (get_msg_size((struct cvp_hfi_msg_session_hdr *) &hdr)
-		== sizeof(struct cvp_hfi_msg_session_hdr_ext)) {
+
+	/* Only FD support dcvs at certain FW */
+	if (!msm_cvp_dcvs_disable &&
+		get_msg_size((struct cvp_hfi_msg_session_hdr *) &hdr)
+			== sizeof(struct cvp_hfi_msg_session_hdr_ext)) {
 		struct cvp_hfi_msg_session_hdr_ext *fhdr =
 			(struct cvp_hfi_msg_session_hdr_ext *)&hdr;
-		dprintk(CVP_HFI, "busy cycle 0x%x, total 0x%x\n",
+		struct msm_cvp_core *core = inst->core;
+
+		dprintk(CVP_PWR, "busy cycle %d, total %d\n",
 			fhdr->busy_cycles, fhdr->total_cycles);
-		clock_check = true;
+
+		if (core && (core->dyn_clk.sum_fps[HFI_HW_FDU] ||
+			core->dyn_clk.sum_fps[HFI_HW_MPU] ||
+			core->dyn_clk.sum_fps[HFI_HW_OD] ||
+			core->dyn_clk.sum_fps[HFI_HW_ICA])) {
+			clock_check = true;
+		}
 	}
 	hfi_err = hdr.error_type;
 	if (rc) {
@@ -943,6 +961,7 @@ static int adjust_bw_freqs(void)
 
 	tmp = core->curr_freq;
 	core->curr_freq = core_sum;
+	core->orig_core_sum = core_sum;
 	rc = msm_cvp_set_clocks(core);
 	if (rc) {
 		dprintk(CVP_ERR,

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2002,2007-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2002,2007-2021, The Linux Foundation. All rights reserved.
  */
 #ifndef __KGSL_SHAREDMEM_H
 #define __KGSL_SHAREDMEM_H
@@ -71,6 +71,9 @@ void kgsl_sharedmem_uninit_sysfs(void);
 void kgsl_get_memory_usage(char *str, size_t len, uint64_t memflags);
 
 void kgsl_free_secure_page(struct page *page);
+
+int kgsl_lock_sgt(struct sg_table *sgt, u64 size);
+int kgsl_unlock_sgt(struct sg_table *sgt);
 
 struct page *kgsl_alloc_secure_page(void);
 

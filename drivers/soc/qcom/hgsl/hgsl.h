@@ -10,6 +10,8 @@
 #include <linux/dma-buf.h>
 #include <linux/spinlock.h>
 #include <linux/sync_file.h>
+#include "hgsl_hyp.h"
+#include "hgsl_memory.h"
 
 #define HGSL_TIMELINE_NAME_LEN 64
 
@@ -17,20 +19,34 @@
 struct qcom_hgsl;
 struct hgsl_hsync_timeline;
 
+#pragma pack(push, 4)
+struct shadow_ts {
+	unsigned int sop;
+	unsigned int unused1;
+	unsigned int eop;
+	unsigned int unused2;
+	unsigned int reserved[6];
+};
+#pragma pack(pop)
+
 /**
  * HGSL context define
  **/
 struct hgsl_context {
+	struct hgsl_priv *priv;
 	uint32_t context_id;
-	struct dma_buf *shadow_dma;
-	void *shadow_vbase;
-	uint32_t shadow_sop_off;
-	uint32_t shadow_eop_off;
+	uint32_t devhandle;
+	uint32_t flags;
+	struct shadow_ts *shadow_ts;
 	wait_queue_head_t wait_q;
 	pid_t pid;
 	bool dbq_assigned;
-
+	uint32_t dbq_info;
+	struct doorbell_queue *dbq;
+	struct hgsl_mem_node shadow_ts_node;
+	uint32_t shadow_ts_flags;
 	bool in_destroy;
+	bool destroyed;
 	struct kref kref;
 
 	uint32_t last_ts;
@@ -41,17 +57,22 @@ struct hgsl_context {
 
 struct hgsl_priv {
 	struct qcom_hgsl *dev;
-	uint32_t dbq_idx;
 	pid_t pid;
-
+	struct list_head node;
 	struct idr isync_timeline_idr;
 	spinlock_t isync_timeline_lock;
+	struct hgsl_hyp_priv_t hyp_priv;
+	struct mutex lock;
+	struct list_head mem_mapped;
+	struct list_head mem_allocated;
 };
 
 
 static inline bool hgsl_ts_ge(uint32_t a, uint32_t b)
 {
-	return a >= b;
+	static const uint32_t TIMESTAMP_WINDOW = 0x80000000;
+
+	return (a - b) < TIMESTAMP_WINDOW;
 }
 
 /**
@@ -108,6 +129,7 @@ struct hgsl_isync_timeline {
 };
 
 struct hgsl_isync_fence {
+	struct list_head free_list;  /* For free in batch */
 	struct dma_fence fence;
 	struct hgsl_isync_timeline *timeline;
 	struct list_head child_list;
@@ -124,6 +146,7 @@ int hgsl_hsync_timeline_create(struct hgsl_context *context);
 void hgsl_hsync_timeline_signal(struct hgsl_hsync_timeline *timeline,
 						unsigned int ts);
 void hgsl_hsync_timeline_put(struct hgsl_hsync_timeline *timeline);
+void hgsl_hsync_timeline_fini(struct hgsl_context *context);
 
 /* Fence for process sync. */
 int hgsl_isync_timeline_create(struct hgsl_priv *priv,
@@ -131,7 +154,7 @@ int hgsl_isync_timeline_create(struct hgsl_priv *priv,
 int hgsl_isync_timeline_destroy(struct hgsl_priv *priv, uint32_t id);
 void hgsl_isync_fini(struct hgsl_priv *priv);
 int hgsl_isync_fence_create(struct hgsl_priv *priv, uint32_t timeline_id,
-						    uint32_t ts, int *fence);
+				uint32_t ts, bool ts_is_valid, int *fence_fd);
 int hgsl_isync_fence_signal(struct hgsl_priv *priv, uint32_t timeline_id,
 							       int fence_fd);
 int hgsl_isync_forward(struct hgsl_priv *priv, uint32_t timeline_id,

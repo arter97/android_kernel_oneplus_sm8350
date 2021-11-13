@@ -1954,6 +1954,26 @@ int __qcom_scm_clear_ice_key(struct device *dev, uint32_t index,
 	return qcom_scm_call_noretry(dev, &desc);
 }
 
+int __qcom_scm_derive_raw_secret(struct device *dev,
+				 phys_addr_t paddr_key, size_t key_size,
+				 phys_addr_t paddr_secret, size_t secret_size)
+{
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_ES,
+		.cmd = QCOM_SCM_ES_DERIVE_RAW_SECRET,
+		.owner = ARM_SMCCC_OWNER_SIP
+	};
+
+	desc.args[0] = paddr_key;
+	desc.args[1] = key_size;
+	desc.args[2] = paddr_secret;
+	desc.args[3] = secret_size;
+	desc.arginfo = QCOM_SCM_ARGS(4, QCOM_SCM_RW, QCOM_SCM_VAL,
+				     QCOM_SCM_RW, QCOM_SCM_VAL);
+
+	return qcom_scm_call_noretry(dev, &desc);
+}
+
 int __qcom_scm_hdcp_req(struct device *dev, struct qcom_scm_hdcp_req *req,
 			u32 req_cnt, u32 *resp)
 {
@@ -2231,6 +2251,7 @@ int __qcom_scm_tsens_reinit(struct device *dev, int *tsens_ret)
 	struct qcom_scm_desc desc = {
 		.svc = QCOM_SCM_SVC_TSENS,
 		.cmd = QCOM_SCM_TSENS_INIT_ID,
+		.owner = ARM_SMCCC_OWNER_SIP
 	};
 
 	ret = qcom_scm_call(dev, &desc);
@@ -2249,6 +2270,21 @@ int __qcom_scm_reboot(struct device *dev)
 	};
 
 	desc.arginfo = QCOM_SCM_ARGS(0);
+
+	return qcom_scm_call_atomic(dev, &desc);
+}
+
+int __qcom_scm_custom_reboot(struct device *dev,
+			enum qcom_scm_custom_reset_type reboot_type)
+{
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_OEM_POWER,
+		.cmd = QCOM_SCM_OEM_POWER_CUSTOM_REBOOT,
+		.owner = ARM_SMCCC_OWNER_OEM,
+	};
+
+	desc.args[0] = reboot_type;
+	desc.arginfo = QCOM_SCM_ARGS(1);
 
 	return qcom_scm_call_atomic(dev, &desc);
 }

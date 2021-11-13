@@ -14,7 +14,7 @@ unsigned int sysctl_sched_min_task_util_for_boost = 51;
 /* 0.68ms default for 20ms window size scaled to 1024 */
 unsigned int sysctl_sched_min_task_util_for_colocation = 35;
 
-int
+static int
 kick_active_balance(struct rq *rq, struct task_struct *p, int new_cpu)
 {
 	unsigned long flags;
@@ -42,9 +42,9 @@ struct walt_rotate_work {
 	int dst_cpu;
 };
 
-DEFINE_PER_CPU(struct walt_rotate_work, walt_rotate_works);
+static DEFINE_PER_CPU(struct walt_rotate_work, walt_rotate_works);
 
-void walt_rotate_work_func(struct work_struct *work)
+static void walt_rotate_work_func(struct work_struct *work)
 {
 	struct walt_rotate_work *wr = container_of(work,
 					struct walt_rotate_work, w);
@@ -81,7 +81,7 @@ void walt_rotate_work_init(void)
 }
 
 #define WALT_ROTATION_THRESHOLD_NS      16000000
-void walt_check_for_rotation(struct rq *src_rq)
+static void walt_check_for_rotation(struct rq *src_rq)
 {
 	u64 wc, wait, max_wait = 0, run, max_run = 0;
 	int deserved_cpu = nr_cpu_ids, dst_cpu = nr_cpu_ids;
@@ -175,7 +175,7 @@ void walt_check_for_rotation(struct rq *src_rq)
 		queue_work_on(src_cpu, system_highpri_wq, &wr->w);
 }
 
-DEFINE_RAW_SPINLOCK(migration_lock);
+static DEFINE_RAW_SPINLOCK(migration_lock);
 void check_for_migration(struct rq *rq, struct task_struct *p)
 {
 	int active_balance;
@@ -654,7 +654,7 @@ int sched_isolate_cpu(int cpu)
 
 	watchdog_disable(cpu);
 	irq_lock_sparse();
-	stop_cpus(cpumask_of(cpu), do_isolation_work_cpu_stop, 0);
+	stop_cpus(cpumask_of(cpu), do_isolation_work_cpu_stop, NULL);
 	irq_unlock_sparse();
 
 	calc_load_migrate(rq);
@@ -701,7 +701,7 @@ int sched_unisolate_cpu_unlocked(int cpu)
 	sched_update_group_capacities(cpu);
 
 	if (cpu_online(cpu)) {
-		stop_cpus(cpumask_of(cpu), do_unisolation_work_cpu_stop, 0);
+		stop_cpus(cpumask_of(cpu), do_unisolation_work_cpu_stop, NULL);
 
 		/* Kick CPU to immediately do load balancing */
 		if (!atomic_fetch_or(NOHZ_KICK_MASK, nohz_flags(cpu)))

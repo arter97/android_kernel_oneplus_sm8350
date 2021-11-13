@@ -177,6 +177,7 @@ struct adc5_chip {
 	struct mutex		lock;
 	bool			is_pmic7;
 	const struct adc5_data	*data;
+	int			irq_eoc;
 };
 
 static const struct vadc_prescale_ratio adc5_prescale_ratios[] = {
@@ -1376,7 +1377,7 @@ static int adc5_probe(struct platform_device *pdev)
 	struct regmap *regmap;
 	const char *irq_name;
 	const __be32 *prop_addr;
-	int ret, irq_eoc;
+	int ret;
 	u32 reg;
 	u8 val;
 
@@ -1434,17 +1435,17 @@ static int adc5_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	irq_eoc = platform_get_irq(pdev, 0);
-	if (irq_eoc < 0) {
-		if (irq_eoc == -EPROBE_DEFER || irq_eoc == -EINVAL)
-			return irq_eoc;
+	adc->irq_eoc = platform_get_irq(pdev, 0);
+	if (adc->irq_eoc < 0) {
+		if (adc->irq_eoc == -EPROBE_DEFER || adc->irq_eoc == -EINVAL)
+			return adc->irq_eoc;
 		adc->poll_eoc = true;
 	} else {
 		irq_name = "pm-adc5";
 		if (adc->data->name)
 			irq_name = adc->data->name;
 
-		ret = devm_request_irq(dev, irq_eoc, adc5_isr, 0,
+		ret = devm_request_irq(dev, adc->irq_eoc, adc5_isr, 0,
 				       irq_name, adc);
 		if (ret)
 			return ret;
@@ -1479,10 +1480,39 @@ static int adc5_exit(struct platform_device *pdev)
 	return 0;
 }
 
+static int adc_restore(struct device *dev)
+{
+	int ret = 0;
+	struct adc5_chip *adc = dev_get_drvdata(dev);
+
+	if (adc->irq_eoc > 0)
+		ret = devm_request_irq(dev, adc->irq_eoc, adc5_isr, 0,
+				       "pm-adc5", adc);
+
+	return ret;
+}
+
+static int adc_freeze(struct device *dev)
+{
+	struct adc5_chip *adc = dev_get_drvdata(dev);
+
+	if (adc->irq_eoc > 0)
+		devm_free_irq(dev, adc->irq_eoc, adc);
+
+	return 0;
+}
+
+static const struct dev_pm_ops adc_pm_ops = {
+	.freeze = adc_freeze,
+	.thaw = adc_restore,
+	.restore = adc_restore,
+};
+
 static struct platform_driver adc5_driver = {
 	.driver = {
 		.name = "qcom-spmi-adc5",
 		.of_match_table = adc5_match_table,
+		.pm = &adc_pm_ops,
 	},
 	.probe = adc5_probe,
 	.remove = adc5_exit,

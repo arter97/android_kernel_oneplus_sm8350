@@ -49,6 +49,9 @@ static LIST_HEAD(adc_tm_device_list);
 
 #define ADC5_GEN3_TM_LOW_STS_CLR		0x4d
 
+#define ADC5_GEN3_CONV_ERR_CLR			0x4e
+#define ADC5_GEN3_CONV_ERR_CLR_REQ		BIT(0)
+
 #define ADC5_GEN3_SID				0x4f
 #define ADC5_GEN3_SID_MASK			0xf
 
@@ -506,7 +509,7 @@ static void adc5_gen3_dump_regs_debug(struct adc5_chip *adc)
 
 	for (j = 0; j < 2; j++) {
 		if (!j) {
-			offset = 0;
+			offset = adc->base;
 			pr_debug("ADC SDAM DUMP\n");
 		} else {
 			if (adc->debug_base)
@@ -517,7 +520,7 @@ static void adc5_gen3_dump_regs_debug(struct adc5_chip *adc)
 		}
 
 		for (i = 0; i < ADC_SDAM_REG_DUMP; i++) {
-			rc = adc5_read(adc, offset, buf, sizeof(buf));
+			rc = regmap_bulk_read(adc->regmap, offset, buf, sizeof(buf));
 			if (rc < 0) {
 				pr_err("debug register dump failed\n");
 				return;
@@ -531,7 +534,7 @@ static void adc5_gen3_dump_regs_debug(struct adc5_chip *adc)
 static irqreturn_t adc5_gen3_isr(int irq, void *dev_id)
 {
 	struct adc5_chip *adc = dev_id;
-	u8 status, tm_status[2], eoc_status;
+	u8 status, tm_status[2], eoc_status, val;
 	int ret;
 
 	ret = adc5_read(adc, ADC5_GEN3_EOC_STS, &eoc_status, 1);
@@ -565,6 +568,22 @@ static irqreturn_t adc5_gen3_isr(int irq, void *dev_id)
 	if (status & ADC5_GEN3_STATUS1_CONV_FAULT) {
 		pr_err("Unexpected conversion fault\n");
 		adc5_gen3_dump_regs_debug(adc);
+
+		val = ADC5_GEN3_CONV_ERR_CLR_REQ;
+		ret = adc5_write(adc, ADC5_GEN3_CONV_ERR_CLR, &val, 1);
+		if (ret < 0)
+			goto handler_end;
+
+		/* To indicate conversion request is only to clear a status */
+		val = 0;
+		ret = adc5_write(adc, ADC5_GEN3_PERPH_CH, &val, 1);
+		if (ret < 0)
+			goto handler_end;
+
+		val = ADC5_GEN3_CONV_REQ_REQ;
+		ret = adc5_write(adc, ADC5_GEN3_CONV_REQ, &val, 1);
+		if (ret < 0)
+			goto handler_end;
 	}
 
 handler_end:
@@ -596,6 +615,10 @@ static void tm_handler_work(struct work_struct *work)
 	/* To indicate conversion request is only to clear a status */
 	val = 0;
 	ret = adc5_write(adc, ADC5_GEN3_PERPH_CH, &val, 1);
+	if (ret < 0) {
+		pr_err("adc write status clear conv_req failed with %d\n", ret);
+		goto work_unlock;
+	}
 
 	val = ADC5_GEN3_CONV_REQ_REQ;
 	ret = adc5_write(adc, ADC5_GEN3_CONV_REQ, &val, 1);

@@ -155,6 +155,7 @@
 #define GCC_BIAS_PLL_MISC_RESET_CLK			147
 #define GCC_BIAS_PLL_AHB_CLK				148
 #define GCC_BIAS_PLL_AON_CLK				149
+#define GCC_GPLL3					150
 
 #define GCC_GENI_IR_BCR					0
 #define GCC_USB_HS_BCR					1

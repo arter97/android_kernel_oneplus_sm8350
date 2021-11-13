@@ -297,12 +297,70 @@ out:
 	return ret;
 }
 
+static int virtio_clk_set_parent(struct clk_hw *hw, u8 index)
+{
+	struct clk_virtio *v = to_clk_virtio(hw);
+	struct virtio_clk *vclk = v->vclk;
+	struct virtio_clk_msg *req, *rsp;
+	struct scatterlist sg[1];
+	unsigned int len;
+	int ret = 0;
+
+	pr_debug("%s parent index: %d\n", clk_hw_get_name(hw), index);
+
+	req = kzalloc(sizeof(struct virtio_clk_msg), GFP_KERNEL);
+	if (!req)
+		return 0;
+
+	strlcpy(req->name, clk_hw_get_name(hw), sizeof(req->name));
+	req->id = cpu_to_virtio32(vclk->vdev, v->clk_id);
+	req->type = cpu_to_virtio32(vclk->vdev, VIRTIO_CLK_T_SET_PARENT);
+	req->data[0] = cpu_to_virtio32(vclk->vdev, index);
+	sg_init_one(sg, req, sizeof(*req));
+
+	mutex_lock(&vclk->lock);
+
+	ret = virtqueue_add_outbuf(vclk->vq, sg, 1, req, GFP_KERNEL);
+	if (ret) {
+		pr_err("%s: fail to add output buffer (%d)\n",
+				clk_hw_get_name(hw), ret);
+		goto out;
+	}
+
+	virtqueue_kick(vclk->vq);
+
+	wait_for_completion(&vclk->rsp_avail);
+
+	rsp = virtqueue_get_buf(vclk->vq, &len);
+	if (!rsp) {
+		pr_err("%s: fail to get virtqueue buffer\n",
+				clk_hw_get_name(hw));
+		ret = 0;
+		goto out;
+	}
+
+	ret = virtio32_to_cpu(vclk->vdev, rsp->result);
+
+out:
+	mutex_unlock(&vclk->lock);
+	kfree(req);
+
+	return ret;
+}
+
+static u8 virtio_clk_get_parent(struct clk_hw *hw)
+{
+	return U8_MAX;
+}
+
 static const struct clk_ops clk_virtio_ops = {
 	.prepare	= virtio_clk_prepare,
 	.unprepare	= virtio_clk_unprepare,
 	.set_rate	= virtio_clk_set_rate,
 	.round_rate	= virtio_clk_round_rate,
 	.recalc_rate	= virtio_clk_get_rate,
+	.set_parent	= virtio_clk_set_parent,
+	.get_parent	= virtio_clk_get_parent,
 };
 
 static int
@@ -522,12 +580,14 @@ static int virtio_clk_probe(struct virtio_device *vdev)
 
 	if (desc) {
 		for (i = 0; i < vclk->num_clks; i++) {
-			if (!desc->clk_names[i])
+			if (!desc->clks[i].name)
 				continue;
 
 			virtio_clks[i].clk_id = i;
 			virtio_clks[i].vclk = vclk;
-			init.name = desc->clk_names[i];
+			init.name = desc->clks[i].name;
+			init.parent_names = desc->clks[i].parent_names;
+			init.num_parents = desc->clks[i].num_parents;
 			virtio_clks[i].hw.init = &init;
 			ret = devm_clk_hw_register(&vdev->dev,
 					&virtio_clks[i].hw);

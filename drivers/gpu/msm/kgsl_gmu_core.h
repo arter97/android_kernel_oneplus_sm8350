@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
  */
 #ifndef __KGSL_GMU_CORE_H
 #define __KGSL_GMU_CORE_H
@@ -106,6 +106,7 @@ struct gmu_dev_ops {
 	int (*wait_for_active_transition)(struct kgsl_device *device);
 	bool (*scales_bandwidth)(struct kgsl_device *device);
 	int (*acd_set)(struct kgsl_device *device, bool val);
+	void (*force_first_boot)(struct kgsl_device *device);
 };
 
 /**
@@ -171,5 +172,6 @@ int gmu_core_dev_ifpc_show(struct kgsl_device *device);
 int gmu_core_dev_ifpc_store(struct kgsl_device *device, unsigned int val);
 int gmu_core_dev_wait_for_active_transition(struct kgsl_device *device);
 void gmu_core_dev_cooperative_reset(struct kgsl_device *device);
+void gmu_core_dev_force_first_boot(struct kgsl_device *device);
 
 #endif /* __KGSL_GMU_CORE_H */

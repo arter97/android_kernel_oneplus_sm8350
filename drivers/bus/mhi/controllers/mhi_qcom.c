@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.*/
+/* Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.*/
 
 #include <asm/arch_timer.h>
 #include <linux/debugfs.h>
@@ -577,13 +577,15 @@ static void mhi_status_cb(struct mhi_controller *mhi_cntrl,
 		 * we need to force a suspend so device can switch to
 		 * mission mode pcie phy settings.
 		 */
-		pm_runtime_get(dev);
-		ret = mhi_force_suspend(mhi_cntrl);
-		if (!ret) {
-			MHI_CNTRL_LOG("Attempt resume after forced suspend\n");
-			mhi_runtime_resume(dev);
+		if (!mhi_dev->skip_forced_suspend) {
+			pm_runtime_get(dev);
+			ret = mhi_force_suspend(mhi_cntrl);
+			if (!ret) {
+				MHI_CNTRL_LOG("Resume after forced suspend\n");
+				mhi_runtime_resume(dev);
+			}
+			pm_runtime_put(dev);
 		}
-		pm_runtime_put(dev);
 		mhi_arch_mission_mode_enter(mhi_cntrl);
 		break;
 	case MHI_CB_FATAL_ERROR:
@@ -598,7 +600,7 @@ static void mhi_status_cb(struct mhi_controller *mhi_cntrl,
 /* capture host SoC XO time in ticks */
 static u64 mhi_time_get(struct mhi_controller *mhi_cntrl, void *priv)
 {
-	return arch_counter_get_cntvct();
+	return __arch_counter_get_cntvct();
 }
 
 static ssize_t timeout_ms_show(struct device *dev,
@@ -722,6 +724,21 @@ static struct mhi_controller *mhi_register_controller(struct pci_dev *pci_dev)
 	mhi_cntrl->iova_start = memblock_start_of_DRAM();
 	mhi_cntrl->iova_stop = memblock_end_of_DRAM();
 
+	/*
+	 * Certain devices would send M1 events to MHI as they may not have
+	 * autonomous M2 support. MHI host can skip registering for link
+	 * inactivity timeouts in that case.
+	 */
+	mhi_dev->allow_m1 = of_property_read_bool(of_node, "mhi,allow-m1");
+
+	/*
+	 * Certain devices do not require a forced suspend/resume cycle at
+	 * mission mode entry after boot as they do not need to switch to
+	 * separate phy settings in order to enable low power modes
+	 */
+	mhi_dev->skip_forced_suspend = of_property_read_bool(of_node,
+							"mhi,skip-forced-suspend");
+
 	of_node = of_parse_phandle(mhi_cntrl->of_node, "qcom,iommu-group", 0);
 	if (of_node) {
 		use_s1 = true;
@@ -797,6 +814,9 @@ static struct mhi_controller *mhi_register_controller(struct pci_dev *pci_dev)
 	mhi_cntrl->fw_image = firmware_info->fw_image;
 	mhi_cntrl->edl_image = firmware_info->edl_image;
 
+	if (mhi_dev->allow_m1)
+		goto skip_offload;
+
 	mhi_cntrl->offload_wq = alloc_ordered_workqueue("offload_wq",
 						WQ_MEM_RECLAIM | WQ_HIGHPRI);
 	if (!mhi_cntrl->offload_wq)
@@ -816,6 +836,7 @@ static struct mhi_controller *mhi_register_controller(struct pci_dev *pci_dev)
 	if (sysfs_create_group(&mhi_cntrl->mhi_dev->dev.kobj, &mhi_qcom_group))
 		MHI_CNTRL_ERR("Error while creating the sysfs group\n");
 
+skip_offload:
 	return mhi_cntrl;
 
 error_free_wq:
