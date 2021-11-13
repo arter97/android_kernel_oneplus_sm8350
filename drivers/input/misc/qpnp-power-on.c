@@ -528,27 +528,8 @@ static int qpnp_pon_set_dbc(struct qpnp_pon *pon, u32 delay)
 
 static int qpnp_pon_get_dbc(struct qpnp_pon *pon, u32 *delay)
 {
-	int rc;
-	unsigned int val;
-
-	if (is_pon_gen3(pon) && pon->pbs_base)
-		rc = qpnp_pon_read(pon, QPNP_PON_PBS_DBC_CTL(pon), &val);
-	else
-		rc = qpnp_pon_read(pon, QPNP_PON_DBC_CTL(pon), &val);
-
-	if (rc)
-		return rc;
-
-	val &= QPNP_PON_DBC_DELAY_MASK(pon);
-
-	if (is_pon_gen2(pon) || is_pon_gen3(pon))
-		*delay = USEC_PER_SEC /
-			(1 << (QPNP_PON_GEN2_DELAY_BIT_SHIFT - val));
-	else
-		*delay = USEC_PER_SEC /
-			(1 << (QPNP_PON_DELAY_BIT_SHIFT - val));
-
-	return rc;
+	*delay = 15625;
+	return 0;
 }
 
 static ssize_t debounce_us_show(struct device *dev,
