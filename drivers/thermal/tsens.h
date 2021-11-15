@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2020, 2021 The Linux Foundation. All rights reserved.
  */
 
 #ifndef __QCOM_TSENS_H__
@@ -160,6 +160,10 @@ struct tsens_ops {
 								int *temp);
 	int (*sensor_en)(struct tsens_device *tmdev, u32 sensor_id);
 	int (*calibrate)(struct tsens_device *tmdev);
+#ifdef CONFIG_DEEPSLEEP
+	int (*suspend)(struct tsens_device *tmdev);
+	int (*resume)(struct tsens_device *tmdev);
+#endif
 };
 
 struct tsens_irqs {
