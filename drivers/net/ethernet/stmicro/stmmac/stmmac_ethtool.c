@@ -673,10 +673,12 @@ static void stmmac_get_wol(struct net_device *dev, struct ethtool_wolinfo *wol)
 		return;
 	}
 
+	phy_ethtool_get_wol(priv->phydev, wol);
+
 	mutex_lock(&priv->lock);
 	if (device_can_wakeup(priv->device)) {
 		wol->supported = WAKE_MAGIC | WAKE_UCAST;
-		wol->wolopts = priv->wolopts;
+		wol->wolopts |= priv->wolopts;
 	}
 	mutex_unlock(&priv->lock);
 }
@@ -685,11 +687,26 @@ static int stmmac_set_wol(struct net_device *dev, struct ethtool_wolinfo *wol)
 {
 	struct stmmac_priv *priv = netdev_priv(dev);
 	u32 support = WAKE_MAGIC | WAKE_UCAST;
+	int ret = 0;
 
 	if (!priv->phydev) {
 		pr_err("%s: %s: PHY is not registered\n",
 		       __func__, dev->name);
 		return -ENODEV;
+	}
+	if (!priv->plat->pmt) {
+		wol->cmd = ETHTOOL_SWOL;
+		ret = phy_ethtool_set_wol(priv->phydev, wol);
+		if (ret)
+			return ret;
+
+		device_set_wakeup_capable(priv->device, 1);
+
+		device_set_wakeup_enable(priv->device, 1);
+
+		enable_irq_wake(priv->phy_intr_wol_irq);
+
+		return ret;
 	}
 
 	/* By default almost all GMAC devices support the WoL via

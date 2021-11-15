@@ -241,6 +241,8 @@ struct stmmac_priv {
 	/* Receive Side Scaling */
 	struct stmmac_rss rss;
 	bool phy_irq_enabled;
+
+	int phy_intr_wol_irq;
 };
 
 enum stmmac_state {
