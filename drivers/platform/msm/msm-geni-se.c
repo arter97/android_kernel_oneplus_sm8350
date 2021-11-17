@@ -1378,6 +1378,28 @@ int geni_se_qupv3_hw_version(struct device *wrapper_dev, unsigned int *major,
 EXPORT_SYMBOL(geni_se_qupv3_hw_version);
 
 /**
+ * geni_se_qupv3_get_hw_version() - Get the QUPv3 Hardware version
+ * @wrapper_dev:	Pointer to the corresponding QUPv3 wrapper core.
+ *
+ * Return:		QUP hw version return on success,
+ *			standard Linux error codes on failure/error
+ */
+int geni_se_qupv3_get_hw_version(struct device *wrapper_dev)
+{
+	struct geni_se_device *geni_se_dev;
+
+	if (!wrapper_dev)
+		return -EINVAL;
+
+	geni_se_dev = dev_get_drvdata(wrapper_dev);
+	if (unlikely(!geni_se_dev))
+		return -ENODEV;
+
+	return geni_read_reg(geni_se_dev->base, QUPV3_HW_VER);
+}
+EXPORT_SYMBOL(geni_se_qupv3_get_hw_version);
+
+/**
  * geni_se_iommu_map_buf() - Map a single buffer into QUPv3 context bank
  * @wrapper_dev:	Pointer to the corresponding QUPv3 wrapper core.
  * @iova:		Pointer in which the mapped virtual address is stored.
