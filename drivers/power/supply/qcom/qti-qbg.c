@@ -2146,8 +2146,15 @@ static int qbg_register_interrupts(struct qti_qbg *chip)
 	rc = devm_request_threaded_irq(chip->dev, chip->irq, NULL,
 			qbg_data_full_irq_handler, IRQF_ONESHOT,
 			"qbg-sdam", chip);
-	if (rc < 0)
+	if (rc < 0) {
 		dev_err(chip->dev, "Failed to request IRQ(qbg-sdam), rc=%d\n",
+			rc);
+		return rc;
+	}
+
+	rc = enable_irq_wake(chip->irq);
+	if (rc < 0)
+		dev_err(chip->dev, "Failed to set IRQ(qbg-sdam) wake-able, rc=%d\n",
 			rc);
 
 	return rc;
