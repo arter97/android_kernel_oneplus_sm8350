@@ -1506,10 +1506,15 @@ static void ethqos_set_early_eth_param(struct stmmac_priv *priv,
 	if (pparams.is_valid_ipv6_addr) {
 		INIT_DELAYED_WORK(&ethqos->ipv6_addr_assign_wq,
 				  ethqos_is_ipv6_NW_stack_ready);
-		ret = qcom_ethqos_add_ipv6addr(&pparams, priv->dev);
-		if (ret)
+		if (ethqos->emac_ver == EMAC_HW_v2_3_1) {
 			schedule_delayed_work(&ethqos->ipv6_addr_assign_wq,
 					      msecs_to_jiffies(1000));
+		} else {
+			ret = qcom_ethqos_add_ipv6addr(&pparams, priv->dev);
+			if (ret)
+				schedule_delayed_work(&ethqos->ipv6_addr_assign_wq,
+						      msecs_to_jiffies(1000));
+		}
 	}
 #endif
 	return;
