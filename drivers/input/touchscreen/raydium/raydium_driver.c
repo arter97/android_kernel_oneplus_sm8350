@@ -1332,6 +1332,7 @@ exit_error:
 static void raydium_ts_do_suspend(void)
 {
 	unsigned char u8_i = 0;
+	int rc;
 
 	if (g_u8_raw_data_type == 0)
 		g_u8_resetflag = false;
@@ -1340,6 +1341,13 @@ static void raydium_ts_do_suspend(void)
 		return;
 	}
 
+	rc = raydium_enable_regulator(g_raydium_ts, false);
+	if (rc < 0) {
+		LOGD(LOG_ERR, "[touch]%s:Failed to disable regulators:rc=%d\n",
+			__func__, rc);
+	}
+	LOGD(LOG_INFO, "[touch]%s:voltage regulators disabled:rc=%d\n",
+		__func__, rc);
 	/*#ifndef GESTURE_EN*/
 	raydium_irq_control(DISABLE);
 	/*#endif*/
@@ -1381,6 +1389,7 @@ static void raydium_ts_do_resume(void)
 	int i32_ret = 0;
 	unsigned char u8_retry = 0;
 #endif
+	int rc;
 
 
 	LOGD(LOG_INFO, "[touch]%s, %d.\n", __func__, g_raydium_ts->is_suspend);
@@ -1420,6 +1429,14 @@ static void raydium_ts_do_resume(void)
 		g_u8_checkflag = false;
 	}
 #endif
+
+	rc = raydium_enable_regulator(g_raydium_ts, true);
+	if (rc < 0) {
+		LOGD(LOG_ERR, "[touch]%s: failed to enable regulators: rc=%d\n",
+			__func__, rc);
+	}
+	LOGD(LOG_INFO, "[touch]%s: voltage regulators enabled: rc=%d\n",
+		__func__, rc);
 	raydium_irq_control(ENABLE);
 #ifdef GESTURE_EN
 	if (device_may_wakeup(&g_raydium_ts->client->dev)) {
@@ -1819,7 +1836,125 @@ exit_error:
 	mutex_unlock(&g_raydium_ts->lock);
 	return i32_ret;
 }
+static int raydium_get_regulator(struct raydium_ts_data *cd, bool get)
+{
+	int rc;
 
+	if (!get) {
+		rc = 0;
+		goto regulator_put;
+	}
+#ifdef VDD_ANALOG_ENABLE
+	cd->vdd = regulator_get(&cd->client->dev, "vdd");
+	if (IS_ERR(cd->vdd)) {
+		rc = PTR_ERR(cd->vdd);
+		dev_err(&cd->client->dev,
+			"Regulator get failed vdd rc=%d\n", rc);
+		goto regulator_put;
+	}
+#endif
+
+	cd->vcc_i2c = regulator_get(&cd->client->dev, "vcc_i2c");
+	if (IS_ERR(cd->vcc_i2c)) {
+		rc = PTR_ERR(cd->vcc_i2c);
+		dev_err(&cd->client->dev,
+			"Regulator get failed vcc_i2c rc=%d\n", rc);
+		goto regulator_put;
+	}
+
+	return 0;
+
+regulator_put:
+#ifdef VDD_ANALOG_ENABLE
+	if (cd->vdd) {
+		regulator_put(cd->vdd);
+		cd->vdd = NULL;
+	}
+#endif
+
+	if (cd->vcc_i2c) {
+		regulator_put(cd->vcc_i2c);
+		cd->vcc_i2c = NULL;
+	}
+
+	return rc;
+}
+
+static int raydium_enable_regulator(struct raydium_ts_data *cd, bool en)
+{
+	int rc;
+
+	if (!en) {
+		rc = 0;
+		goto disable_vcc_i2c_reg;
+	}
+#ifdef VDD_ANALOG_ENABLE
+	if (cd->vdd) {
+		if (regulator_count_voltages(cd->vdd) > 0) {
+			rc = regulator_set_voltage(cd->vdd, VTG_MIN_UV,
+						VTG_MAX_UV);
+			if (rc) {
+				dev_err(&cd->client->dev,
+					"Regulator set_vtg failed vdd rc=%d\n", rc);
+				goto exit;
+			}
+		}
+
+		rc = regulator_enable(cd->vdd);
+		if (rc) {
+			dev_err(&cd->client->dev,
+				"Regulator vdd enable failed rc=%d\n", rc);
+			goto exit;
+		}
+	}
+#endif
+
+	if (cd->vcc_i2c) {
+		if (regulator_count_voltages(cd->vcc_i2c) > 0) {
+			rc = regulator_set_voltage(cd->vcc_i2c, I2C_VTG_MIN_UV,
+							I2C_VTG_MAX_UV);
+			if (rc) {
+				dev_err(&cd->client->dev,
+					"Regulator set_vtg failed vcc_i2c rc=%d\n", rc);
+				goto disable_vdd_reg;
+			}
+		}
+
+		rc = regulator_enable(cd->vcc_i2c);
+		if (rc) {
+			dev_err(&cd->client->dev,
+				"Regulator vcc_i2c enable failed rc=%d\n", rc);
+			goto disable_vdd_reg;
+		}
+	}
+
+	return 0;
+
+disable_vcc_i2c_reg:
+	if (cd->vcc_i2c) {
+		if (regulator_count_voltages(cd->vcc_i2c) > 0)
+			regulator_set_voltage(cd->vcc_i2c, I2C_VTG_MIN_UV,
+						I2C_VTG_MAX_UV);
+
+		regulator_disable(cd->vcc_i2c);
+	}
+
+disable_vdd_reg:
+#ifdef VDD_ANALOG_ENABLE
+	if (cd->vdd) {
+		if (regulator_count_voltages(cd->vdd) > 0)
+			regulator_set_voltage(cd->vdd, VTG_MIN_UV,
+						VTG_MAX_UV);
+
+		regulator_disable(cd->vdd);
+	}
+#endif
+
+#ifdef VDD_ANALOG_ENABLE
+exit:
+#endif
+	return rc;
+}
 static int raydium_ts_probe(struct i2c_client *client,
 			    const struct i2c_device_id *id)
 {
@@ -1900,6 +2035,17 @@ static int raydium_ts_probe(struct i2c_client *client,
 	}
 #endif /*end of MSM_NEW_VER*/
 
+	ret = raydium_get_regulator(g_raydium_ts, true);
+	if (ret) {
+		dev_err(&client->dev, "Failed to get voltage regulators\n");
+		goto error_alloc_data;
+	}
+
+	ret = raydium_enable_regulator(g_raydium_ts, true);
+	if (ret) {
+		dev_err(&client->dev, "Failed to enable regulators: rc=%d\n", ret);
+		goto error_get_regulator;
+	}
 	ret = raydium_gpio_configure(true);
 	if (ret < 0) {
 		LOGD(LOG_ERR, "[touch]failed to configure the gpios\n");
@@ -2030,7 +2176,10 @@ err_gpio_req:
 		}
 	}
 #endif/*end of MSM_NEW_VER*/
-
+error_get_regulator:
+	raydium_get_regulator(g_raydium_ts, false);
+error_alloc_data:
+	kfree(g_raydium_ts);
 parse_dt_failed:
 exit_check_functionality_failed:
 	return ret;
@@ -2064,8 +2213,9 @@ static int raydium_ts_remove(struct i2c_client *client)
 	cancel_work_sync(&g_raydium_ts->work);
 	destroy_workqueue(g_raydium_ts->workqueue);
 
-
-	//kfree(g_raydium_ts);
+	raydium_enable_regulator(g_raydium_ts, false);
+	raydium_get_regulator(g_raydium_ts, false);
+	kfree(g_raydium_ts);
 
 	i2c_set_clientdata(client, NULL);
 	return 0;
