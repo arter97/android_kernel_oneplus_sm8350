@@ -3663,7 +3663,7 @@ static const struct of_device_id msm_geni_device_tbl[] = {
 
 static int msm_geni_serial_get_ver_info(struct uart_port *uport)
 {
-	int ret = 0;
+	int hw_ver, ret = 0;
 	struct msm_geni_serial_port *msm_port = GET_DEV_PORT(uport);
 
 	/* clks_on/off only for HSUART, as console remains actve */
@@ -3683,19 +3683,21 @@ static int msm_geni_serial_get_ver_info(struct uart_port *uport)
 		__func__,
 		msm_port->ver_info.m_fw_ver, msm_port->ver_info.s_fw_ver);
 
-	msm_port->ver_info.hw_ver =
-		geni_se_qupv3_hw_version(msm_port->wrapper_dev,
+	hw_ver = geni_se_qupv3_hw_version(msm_port->wrapper_dev,
 		&msm_port->ver_info.hw_major_ver,
 		&msm_port->ver_info.hw_minor_ver,
 		&msm_port->ver_info.hw_step_ver);
-	if (msm_port->ver_info.hw_ver)
+	if (hw_ver)
 		dev_err(uport->dev, "%s:Err getting HW version %d\n",
-						__func__, msm_port->ver_info.hw_ver);
+						__func__, hw_ver);
 	else
 		IPC_LOG_MSG(msm_port->ipc_log_misc, "%s: HW Ver:%x.%x.%x\n",
 			__func__, msm_port->ver_info.hw_major_ver,
 			msm_port->ver_info.hw_minor_ver,
 			msm_port->ver_info.hw_step_ver);
+
+	msm_port->ver_info.hw_ver = geni_se_qupv3_get_hw_version(msm_port->wrapper_dev);
+	dev_err(uport->dev, "%s:HW version %d\n", __func__, msm_port->ver_info.hw_ver);
 
 	/* GSI mode changes */
 	msm_port->gsi_mode = geni_read_reg(uport->membase,
