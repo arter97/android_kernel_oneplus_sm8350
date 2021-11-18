@@ -12472,8 +12472,11 @@ static int drm_notifier_callback(struct notifier_block *self,
 				pt_debug(cd->dev, DL_INFO, "%s: Resume notified!\n", __func__);
 			}
 		}
-	} else if (*blank == DRM_PANEL_BLANK_LP) {
-		pt_debug(cd->dev, DL_INFO, "%s: LOWPOWER!\n", __func__);
+	} else if (*blank == DRM_PANEL_BLANK_LP || *blank == DRM_PANEL_BLANK_POWERDOWN) {
+		if (*blank == DRM_PANEL_BLANK_LP)
+			pt_debug(cd->dev, DL_INFO, "%s: LOWPOWER!\n", __func__);
+		else
+			pt_debug(cd->dev, DL_INFO, "%s: POWERDOWN!\n", __func__);
 		if (event == DRM_PANEL_EARLY_EVENT_BLANK) {
 			if (cd->fb_state != FB_OFF) {
 #if defined(CONFIG_PM_SLEEP)
