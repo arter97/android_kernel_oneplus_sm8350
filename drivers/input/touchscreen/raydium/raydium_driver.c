@@ -55,6 +55,7 @@ struct raydium_slot_status {
 struct raydium_slot_status gst_slot[MAX_TOUCH_NUM * 2];
 struct raydium_slot_status gst_slot_init = {0xFF, 0, 0};
 
+static int raydium_enable_regulator(struct raydium_ts_data *cd, bool en);
 #if (defined(CONFIG_RM_SYSFS_DEBUG))
 const struct attribute_group raydium_attr_group;
 #endif /*end of CONFIG_RM_SYSFS_DEBUG*/
@@ -1866,13 +1867,15 @@ static int raydium_get_regulator(struct raydium_ts_data *cd, bool get)
 
 regulator_put:
 #ifdef VDD_ANALOG_ENABLE
-	if (cd->vdd) {
+	if (!IS_ERR(cd->vdd)) {
+		dev_err(&cd->client->dev, "Regulator put vdd\n");
 		regulator_put(cd->vdd);
 		cd->vdd = NULL;
 	}
 #endif
 
-	if (cd->vcc_i2c) {
+	if (!IS_ERR(cd->vcc_i2c)) {
+		dev_err(&cd->client->dev, "Regulator put vcc_i2c\n");
 		regulator_put(cd->vcc_i2c);
 		cd->vcc_i2c = NULL;
 	}
@@ -2061,9 +2064,9 @@ static int raydium_ts_probe(struct i2c_client *client,
 
 	/*print touch i2c ready*/
 	ret = raydium_check_i2c_ready(&u16_i2c_data);
-	if (ret < 0) {
+	if (ret < 0 || (u16_i2c_data == 0)) {
 		LOGD(LOG_ERR, "[touch]Check I2C failed\n");
-		ret = -ENODEV;
+		ret = -EPROBE_DEFER;
 		goto exit_check_i2c;
 	}
 
@@ -2141,6 +2144,8 @@ static int raydium_ts_probe(struct i2c_client *client,
 		ret = -ENODEV;
 		goto exit_irq_request_failed;
 	}
+
+	LOGD(LOG_INFO, "[touch] probe: done\n");
 	return 0;
 
 exit_irq_request_failed:
@@ -2156,6 +2161,20 @@ exit_input_register_device_failed:
 
 exit_input_dev_alloc_failed:
 exit_check_i2c:
+#ifdef MSM_NEW_VER
+	if (g_raydium_ts->ts_pinctrl) {
+		if (IS_ERR_OR_NULL(g_raydium_ts->pinctrl_state_release)) {
+			devm_pinctrl_put(g_raydium_ts->ts_pinctrl);
+			g_raydium_ts->ts_pinctrl = NULL;
+		} else {
+			if (pinctrl_select_state(g_raydium_ts->ts_pinctrl,
+					g_raydium_ts->pinctrl_state_release))
+				LOGD(LOG_ERR,
+				    "[touch]pinctrl_select_state failed\n");
+		}
+	}
+#endif/*end of MSM_NEW_VER*/
+
 	if (gpio_is_valid(pdata->reset_gpio))
 		gpio_free(pdata->reset_gpio);
 
@@ -2163,23 +2182,11 @@ exit_check_i2c:
 		gpio_free(pdata->irq_gpio);
 
 err_gpio_req:
-#ifdef MSM_NEW_VER
-	if (g_raydium_ts->ts_pinctrl) {
-		if (IS_ERR_OR_NULL(g_raydium_ts->pinctrl_state_release)) {
-			devm_pinctrl_put(g_raydium_ts->ts_pinctrl);
-			g_raydium_ts->ts_pinctrl = NULL;
-		} else {
-			ret = pinctrl_select_state(g_raydium_ts->ts_pinctrl,
-						   g_raydium_ts->pinctrl_state_release);
-			if (ret)
-				LOGD(LOG_ERR, "[touch]pinctrl_select_state failed\n");
-		}
-	}
-#endif/*end of MSM_NEW_VER*/
+	raydium_enable_regulator(g_raydium_ts, false);
+
 error_get_regulator:
 	raydium_get_regulator(g_raydium_ts, false);
 error_alloc_data:
-	kfree(g_raydium_ts);
 parse_dt_failed:
 exit_check_functionality_failed:
 	return ret;
@@ -2215,7 +2222,6 @@ static int raydium_ts_remove(struct i2c_client *client)
 
 	raydium_enable_regulator(g_raydium_ts, false);
 	raydium_get_regulator(g_raydium_ts, false);
-	kfree(g_raydium_ts);
 
 	i2c_set_clientdata(client, NULL);
 	return 0;

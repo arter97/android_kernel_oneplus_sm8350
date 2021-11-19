@@ -501,7 +501,7 @@ STATUS burn_header_log_to_flash_3x(bool is_test_finish, bool is_in_header_data_p
 	DEBUGOUT("End burn header\r\n");
 	return SUCCESS;
 }
-
+#endif
 STATUS turn_on_flash_3x(void)
 {
 	unsigned int u32_read = 0;
@@ -1921,49 +1921,7 @@ STATUS load_test_fw_3x(void)
 
 	return u8_ret;
 }
-/*
- *	STATUS check_ext_flash_fw_version(void)
- *	{
- *	unsigned int u32_addr, u32_normal_fw_version, u32_test_fw_version;
- *	unsigned short u16_data_length = 0;
- *	u16_data_length = 4;
- *
- *
- *	//get normal FW version from ext flash//
- *	u32_addr = FLASH_NORMAL_FW_FW_VERSION_ADDR;
- *	if (read_flash_data(u32_addr, u16_data_length) == ERROR) {
- *		DEBUGOUT("Read Ext Flash NG [0x%08X] \r\n", u32_addr);
- *		return ERROR;
- *	}
- *	u32_normal_fw_version = 0;
- *	u32_normal_fw_version |= g_u8_data_buf[0];
- *	u32_normal_fw_version |= g_u8_data_buf[1] << 8;
- *	u32_normal_fw_version |= g_u8_data_buf[2] << 16;
- *	u32_normal_fw_version |= g_u8_data_buf[3] << 24;
- *	//DEBUGOUT("SPI Read_addr = 0x%08X, u16DataLength = %d \r\n", u32_normal_fw_version, u16_data_length);
- */
-	/* Test FW Version*/
-	u32_addr = FLASH_TEST_FW_FW_VERSION_ADDR;
-	if (read_flash_data(u32_addr, u16_data_length) == ERROR) {
-		DEBUGOUT("Read Ext Flash NG [0x%08X] \r\n", u32_addr);
-		return ERROR;
-	}
-	u32_test_fw_version = 0;
-	u32_test_fw_version |= g_u8_data_buf[0];
-	u32_test_fw_version |= g_u8_data_buf[1] << 8;
-	u32_test_fw_version |= g_u8_data_buf[2] << 16;
-	u32_test_fw_version |= g_u8_data_buf[3] << 24;
-	/*DEBUGOUT("SPI Read_addr = 0x%08X, u16DataLength = %d \r\n", u32_test_fw_version, u16_data_length);*/
-	if (g_st_test_para_resv.u32_normal_fw_version != u32_normal_fw_version
-	    || g_st_test_para_resv.u32_test_fw_version != u32_test_fw_version) {
-		DEBUGOUT("INI FW Version NG ,0x%08X VS 0x%08X \r\n", g_st_test_para_resv.u32_normal_fw_version, u32_normal_fw_version);
-		DEBUGOUT("INI Test FW Version NG ,0x%08X VS 0x%08X \r\n", g_st_test_para_resv.u32_test_fw_version, u32_test_fw_version);
-		return ERROR;
-	}
 
-	return SUCCESS;
-}
-#endif
 STATUS system_test_3x(void)
 {
 	STATUS u8_test_result = SUCCESS;
