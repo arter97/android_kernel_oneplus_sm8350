@@ -55,6 +55,7 @@ struct raydium_slot_status {
 struct raydium_slot_status gst_slot[MAX_TOUCH_NUM * 2];
 struct raydium_slot_status gst_slot_init = {0xFF, 0, 0};
 
+static int raydium_enable_regulator(struct raydium_ts_data *cd, bool en);
 #if (defined(CONFIG_RM_SYSFS_DEBUG))
 const struct attribute_group raydium_attr_group;
 #endif /*end of CONFIG_RM_SYSFS_DEBUG*/

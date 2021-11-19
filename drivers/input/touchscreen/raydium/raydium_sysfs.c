@@ -567,18 +567,18 @@ static ssize_t raydium_mem_store(struct device *dev,
 		kfree(g_rad_fw_image);
 		g_rad_fw_image = NULL;
 	}
-	if (g_rad_para_image) {
-		ree(g_rad_para_image);
-		g_rad_para_image = NULL;
-	}
+
+	kfree(g_rad_para_image);
+	g_rad_para_image = NULL;
+
 	if (g_rad_testfw_image) {
 		kfree(g_rad_testfw_image);
 		g_rad_testfw_image = NULL;
 	}
-	if (g_rad_testpara_image) {
-		free(g_rad_testpara_image);
-		g_rad_testpara_image = NULL;
-	}
+
+	kfree(g_rad_testpara_image);
+	g_rad_testpara_image = NULL;
+
 	if (!raydium_id_init(u8_type)) {
 		LOGD(LOG_ERR, "[touch]Set Raydium id failed!\n");
 		return count;
