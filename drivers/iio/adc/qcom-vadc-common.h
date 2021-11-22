@@ -278,4 +278,6 @@ void adc_tm_scale_therm_voltage_100k_gen3(struct adc_tm_config *param);
 
 int32_t adc_tm_absolute_rthr_gen3(struct adc_tm_config *tm_config);
 
+void qcom_vadc_gen3_set_r_comp(int r_comp_ohm);
+
 #endif /* QCOM_VADC_COMMON_H */
