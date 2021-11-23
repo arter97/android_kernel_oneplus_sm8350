@@ -114,5 +114,21 @@ config ARCH_SCUBA
 	select QCOM_GDSC
 	select GENERIC_CLOCKEVENTS_BROADCAST
 
+config ARCH_SA515M
+	bool "Enable support for SA515M"
+	select CPU_V7
+	select HAVE_ARM_ARCH_TIMER
+	select ARM_GIC
+	select MSM_CORTEX_A7
+	select PINCTRL
+	select PCI
+	select QCOM_SCM if SMP
+	select MSM_JTAG_MM if CORESIGHT_ETM
+	select PM_DEVFREQ
+	select COMMON_CLK
+	select COMMON_CLK_QCOM
+	select QCOM_GDSC
+	select GENERIC_CLOCKEVENTS_BROADCAST
+
 endmenu
 endif

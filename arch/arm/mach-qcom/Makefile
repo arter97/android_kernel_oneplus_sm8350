@@ -5,3 +5,4 @@ obj-$(CONFIG_ARCH_SDXLEMUR) += board-sdxlemur.o
 obj-$(CONFIG_ARCH_SDXNIGHTJAR) += board-sdxnightjar.o
 obj-$(CONFIG_ARCH_MONACO) += board-monaco.o
 obj-$(CONFIG_ARCH_SCUBA) += board-scuba.o
+obj-$(CONFIG_ARCH_SA515M) += board-sa515m.o
