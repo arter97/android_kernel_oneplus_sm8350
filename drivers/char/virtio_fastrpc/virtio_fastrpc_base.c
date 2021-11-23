@@ -26,6 +26,7 @@ static ssize_t fastrpc_debugfs_read(struct file *filp, char __user *buffer,
 					 size_t count, loff_t *position)
 {
 	struct fastrpc_file *fl = filp->private_data;
+	struct fastrpc_mmap *map = NULL;
 	struct fastrpc_buf *buf = NULL;
 	struct hlist_node *n;
 	struct fastrpc_invoke_ctx *ictx = NULL;
@@ -92,6 +93,24 @@ static ssize_t fastrpc_debugfs_read(struct file *filp, char __user *buffer,
 				ictx->size, ictx->handle);
 		}
 		spin_unlock(&fl->hlock);
+		len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
+			"\n=======%s %s %s======\n", title,
+			" LIST OF MAPS ", title);
+		len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
+			"%-20s|%-20s|%-20s\n", "va", "phys", "size");
+		len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
+			"%s%s%s%s%s\n",
+			single_line, single_line, single_line,
+			single_line, single_line);
+		mutex_lock(&fl->map_mutex);
+		hlist_for_each_entry_safe(map, n, &fl->maps, hn) {
+			len += scnprintf(fileinfo + len, DEBUGFS_SIZE - len,
+				"0x%-20lX|0x%-20llX|0x%-20zu\n\n",
+				map->va, map->phys,
+				map->size);
+		}
+		mutex_unlock(&fl->map_mutex);
+
 	}
 
 	if (len > DEBUGFS_SIZE)

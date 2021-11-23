@@ -63,7 +63,7 @@ static void context_free(struct fastrpc_invoke_ctx *ctx)
 
 	mutex_lock(&fl->map_mutex);
 	for (i = 0; i < nbufs; i++)
-		fastrpc_mmap_free(fl, ctx->maps[i]);
+		fastrpc_mmap_free(fl, ctx->maps[i], 0);
 	mutex_unlock(&fl->map_mutex);
 
 	if (ctx->msg) {
@@ -196,7 +196,7 @@ int fastrpc_file_free(struct fastrpc_file *fl)
 			lmap = map;
 			break;
 		}
-		fastrpc_mmap_free(fl, lmap);
+		fastrpc_mmap_free(fl, lmap, 1);
 	} while (lmap);
 	mutex_unlock(&fl->map_mutex);
 
@@ -314,16 +314,21 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 	struct virt_invoke_msg *vmsg;
 	int inbufs = REMOTE_SCALARS_INBUFS(ctx->sc);
 	int outbufs = REMOTE_SCALARS_OUTBUFS(ctx->sc);
-	int i, err = 0, bufs;
+	int i, err = 0, bufs, handles, total;
 	remote_arg_t *lpra = ctx->lpra;
 	int *fds = ctx->fds;
 	struct virt_fastrpc_buf *rpra;
-	uint64_t *p_offset;
+	struct virt_fastrpc_dmahandle *handle;
+	uint64_t *fdlist;
+	unsigned int *attrs = ctx->attrs;
 	struct fastrpc_mmap **maps = ctx->maps;
-	size_t copylen = 0, size = 0, metalen;
+	size_t copylen = 0, size = 0, handle_len = 0, metalen;
 	char *payload;
 
 	bufs = inbufs + outbufs;
+	handles = REMOTE_SCALARS_INHANDLES(ctx->sc)
+		+ REMOTE_SCALARS_OUTHANDLES(ctx->sc);
+	total = REMOTE_SCALARS_LENGTH(ctx->sc);
 
 	/* calculate len required for copying */
 	for (i = 0; i < bufs; i++) {
@@ -348,9 +353,29 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 			ctx->outbufs_offset += len;
 	}
 
-	metalen = sizeof(*vmsg) + bufs * sizeof(*rpra)
-		+ sizeof(uint64_t) * PAYLOAD_OFFSET;
-	size = metalen + copylen;
+	mutex_lock(&fl->map_mutex);
+	for (i = bufs; i < total; i++) {
+		int dmaflags = 0;
+
+		if (attrs && (attrs[i] & FASTRPC_ATTR_NOMAP))
+			dmaflags = FASTRPC_DMAHANDLE_NOMAP;
+		if (fds && (fds[i] != -1)) {
+			err = fastrpc_mmap_create(fl, fds[i],
+					0, 0, dmaflags, &maps[i]);
+			if (err) {
+				mutex_unlock(&fl->map_mutex);
+				goto bail;
+			}
+			handle_len += maps[i]->table->nents *
+					sizeof(struct virt_fastrpc_buf);
+		}
+	}
+	mutex_unlock(&fl->map_mutex);
+
+	metalen = sizeof(*vmsg) + total * sizeof(*rpra)
+		+ handles * sizeof(struct virt_fastrpc_dmahandle)
+		+ sizeof(uint64_t) * M_FDLIST;
+	size = metalen + copylen + handle_len;
 	if (size > me->buf_size) {
 		/* if user buffer contents exceed virtio buffer limits,
 		 * try to alloc an internal buffer to copy
@@ -385,7 +410,7 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 			if (i < inbufs)
 				ctx->outbufs_offset += len;
 		}
-		size = metalen + copylen;
+		size = metalen + copylen + handle_len;
 	}
 
 	ctx->msg = virt_alloc_msg(fl, size);
@@ -406,10 +431,11 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 	vmsg->handle = ctx->handle;
 	vmsg->sc = ctx->sc;
 	rpra = (struct virt_fastrpc_buf *)vmsg->pra;
-	p_offset = (uint64_t *)&rpra[bufs];
-	payload = (char *)&p_offset[PAYLOAD_OFFSET];
+	handle = (struct virt_fastrpc_dmahandle *)&rpra[total];
+	fdlist = (uint64_t *)&handle[handles];
+	payload = (char *)&fdlist[M_FDLIST];
 
-	memset(p_offset, 0, sizeof(uint64_t) * PAYLOAD_OFFSET);
+	memset(fdlist, 0, sizeof(uint64_t) * M_FDLIST);
 
 	for (i = 0; i < bufs; i++) {
 		size_t len = lpra[i].buf.len;
@@ -462,6 +488,30 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 		}
 	}
 
+	for (i = bufs; i < total; i++) {
+		struct sg_table *table;
+		struct virt_fastrpc_buf *sgbuf;
+		struct scatterlist *sgl = NULL;
+		int index = 0, hlist;
+
+		if (fds && maps[i]) {
+			/* fill in dma handle list */
+			hlist = i - bufs;
+			handle[hlist].fd = fds[i];
+			handle[hlist].offset = (uint32_t)(uintptr_t)lpra[i].buf.pv;
+			/* copy dma handle sglist to data area */
+			table = maps[i]->table;
+			rpra[i].pv = lpra[i].buf.len;
+			rpra[i].len = table->nents *
+				sizeof(struct virt_fastrpc_buf);
+			sgbuf = (struct virt_fastrpc_buf *)payload;
+			for_each_sg(table->sgl, sgl, table->nents, index) {
+				sgbuf[index].pv = sg_dma_address(sgl);
+				sgbuf[index].len = sg_dma_len(sgl);
+			}
+			payload += rpra[i].len;
+		}
+	}
 bail:
 	return err;
 }
@@ -475,11 +525,12 @@ static int put_args(struct fastrpc_invoke_ctx *ctx)
 	struct virt_invoke_msg *rsp = NULL;
 	int inbufs = REMOTE_SCALARS_INBUFS(ctx->sc);
 	int outbufs = REMOTE_SCALARS_OUTBUFS(ctx->sc);
-	int i, bufs;
+	int i, bufs, handles, total;
 	remote_arg_t *lpra = ctx->lpra;
 	struct virt_fastrpc_buf *rpra;
-	uint64_t *p_offset;
-	struct fastrpc_mmap **maps = ctx->maps;
+	struct virt_fastrpc_dmahandle *handle;
+	uint64_t *fdlist;
+	struct fastrpc_mmap **maps = ctx->maps, *mmap = NULL;
 	char *payload;
 
 	if (!msg) {
@@ -498,15 +549,19 @@ static int put_args(struct fastrpc_invoke_ctx *ctx)
 		goto bail;
 
 	bufs = inbufs + outbufs;
+	handles = REMOTE_SCALARS_INHANDLES(ctx->sc)
+		+ REMOTE_SCALARS_OUTHANDLES(ctx->sc);
+	total = REMOTE_SCALARS_LENGTH(ctx->sc);
 
 	rpra = (struct virt_fastrpc_buf *)rsp->pra;
-	p_offset = (uint64_t *)&rpra[bufs];
-	payload = (char *)&p_offset[PAYLOAD_OFFSET] + ctx->outbufs_offset;
+	handle = (struct virt_fastrpc_dmahandle *)&rpra[total];
+	fdlist = (uint64_t *)&handle[handles];
+	payload = (char *)&fdlist[M_FDLIST] + ctx->outbufs_offset;
 
 	for (i = inbufs; i < bufs; i++) {
 		if (maps[i]) {
 			mutex_lock(&fl->map_mutex);
-			fastrpc_mmap_free(fl, maps[i]);
+			fastrpc_mmap_free(fl, maps[i], 0);
 			mutex_unlock(&fl->map_mutex);
 			maps[i] = NULL;
 		} else if (ctx->desc &&
@@ -524,6 +579,17 @@ static int put_args(struct fastrpc_invoke_ctx *ctx)
 		payload += rpra[i].len;
 	}
 
+	mutex_lock(&fl->map_mutex);
+	if (total) {
+		for (i = 0; i < M_FDLIST; i++) {
+			if (!fdlist[i])
+				break;
+			if (!fastrpc_mmap_find(fl, (int)fdlist[i], 0, 0,
+						0, 0, &mmap))
+				fastrpc_mmap_free(fl, mmap, 0);
+		}
+	}
+	mutex_unlock(&fl->map_mutex);
 bail:
 	return err;
 }
@@ -636,7 +702,7 @@ int fastrpc_internal_munmap(struct fastrpc_file *fl,
 	if (err)
 		goto bail;
 	mutex_lock(&fl->map_mutex);
-	fastrpc_mmap_free(fl, map);
+	fastrpc_mmap_free(fl, map, 0);
 	mutex_unlock(&fl->map_mutex);
 bail:
 	if (err && map) {
@@ -662,7 +728,7 @@ int fastrpc_internal_munmap_fd(struct fastrpc_file *fl,
 		goto bail;
 	}
 	mutex_lock(&fl->map_mutex);
-	if (fastrpc_mmap_find(fl, ud->fd, ud->va, ud->len, 0, &map)) {
+	if (fastrpc_mmap_find(fl, ud->fd, ud->va, ud->len, 0, 0, &map)) {
 		dev_err(me->dev, "mapping not found to unmap fd 0x%x, va 0x%lx, len 0x%x\n",
 			ud->fd, ud->va, (unsigned int)ud->len);
 		err = -1;
@@ -670,7 +736,7 @@ int fastrpc_internal_munmap_fd(struct fastrpc_file *fl,
 		goto bail;
 	}
 	if (map)
-		fastrpc_mmap_free(fl, map);
+		fastrpc_mmap_free(fl, map, 0);
 	mutex_unlock(&fl->map_mutex);
 bail:
 	return err;
@@ -738,7 +804,7 @@ int fastrpc_internal_mmap(struct fastrpc_file *fl,
  bail:
 	if (err && map) {
 		mutex_lock(&fl->map_mutex);
-		fastrpc_mmap_free(fl, map);
+		fastrpc_mmap_free(fl, map, 0);
 		mutex_unlock(&fl->map_mutex);
 	}
 	return err;

@@ -22,6 +22,7 @@ struct fastrpc_mmap {
 	uintptr_t va;
 	size_t len;
 	uintptr_t raddr;
+	int refs;
 };
 
 struct fastrpc_buf {
@@ -53,11 +54,11 @@ int fastrpc_mmap_create(struct fastrpc_file *fl, int fd,
 	uintptr_t va, size_t len, int mflags, struct fastrpc_mmap **ppmap);
 
 int fastrpc_mmap_find(struct fastrpc_file *fl, int fd,
-		uintptr_t va, size_t len, int mflags,
+		uintptr_t va, size_t len, int mflags, int refs,
 		struct fastrpc_mmap **ppmap);
 
 void fastrpc_mmap_free(struct fastrpc_file *fl,
-		struct fastrpc_mmap *map);
+		struct fastrpc_mmap *map, uint32_t flags);
 
 int fastrpc_mmap_remove(struct fastrpc_file *fl, uintptr_t va,
 		size_t len, struct fastrpc_mmap **ppmap);
