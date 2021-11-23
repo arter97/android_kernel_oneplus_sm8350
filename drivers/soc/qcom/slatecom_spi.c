@@ -85,7 +85,6 @@ struct slate_spi_priv {
 	struct spi_transfer xfer1;
 	int irq_lock;
 
-	enum slatecom_state slate_state;
 };
 
 struct cb_data {
@@ -133,6 +132,7 @@ static struct mutex slate_task_mutex;
 static atomic_t  slate_is_runtime_suspend;
 static atomic_t  slate_is_spi_active;
 static atomic_t  ok_to_sleep;
+static atomic_t  state;
 static int slate_irq;
 
 static uint8_t *fxd_mem_buffer;
@@ -575,7 +575,7 @@ static int slatecom_resume_l(void *handle)
 	slate_spi = cntx->slate_spi;
 
 	mutex_lock(&slate_resume_mutex);
-	if (slate_spi->slate_state == SLATECOM_STATE_ACTIVE)
+	if (atomic_read(&state) == SLATECOM_STATE_ACTIVE)
 		goto unlock;
 
 	if (!(g_slav_status_reg & BIT(31))) {
@@ -593,8 +593,8 @@ static int slatecom_resume_l(void *handle)
 				goto error;
 			}
 		}
-		slate_spi->slate_state = SLATECOM_STATE_ACTIVE;
 	}
+	atomic_set(&state, SLATECOM_STATE_ACTIVE);
 	goto unlock;
 
 error:
@@ -1118,7 +1118,7 @@ static void slate_spi_init(struct slate_spi_priv *slate_spi)
 
 	wq = create_singlethread_workqueue("input_wq");
 
-	slate_spi->slate_state = SLATECOM_STATE_ACTIVE;
+	atomic_set(&state, SLATECOM_STATE_ACTIVE);
 
 	slate_com_drv = &slate_spi->lhandle;
 
@@ -1224,11 +1224,11 @@ static int slatecom_pm_suspend(struct device *dev)
 	int ret = 0;
 
 	clnt_handle.slate_spi = slate_spi;
-	if (slate_spi->slate_state == SLATECOM_STATE_SUSPEND)
+	if (atomic_read(&state) == SLATECOM_STATE_SUSPEND)
 		return 0;
 
-	if (slate_spi->slate_state == SLATECOM_STATE_RUNTIME_SUSPEND) {
-		slate_spi->slate_state = SLATECOM_STATE_SUSPEND;
+	if (atomic_read(&state) == SLATECOM_STATE_RUNTIME_SUSPEND) {
+		atomic_set(&state, SLATECOM_STATE_SUSPEND);
 		atomic_set(&slate_is_spi_active, 0);
 		atomic_set(&slate_is_runtime_suspend, 0);
 		disable_irq(slate_irq);
@@ -1248,7 +1248,7 @@ static int slatecom_pm_suspend(struct device *dev)
 
 	ret = slatecom_reg_write_cmd(&clnt_handle, SLATE_CMND_REG, 1, &cmnd_reg);
 	if (ret == 0) {
-		slate_spi->slate_state = SLATECOM_STATE_SUSPEND;
+		atomic_set(&state, SLATECOM_STATE_SUSPEND);
 		atomic_set(&slate_is_spi_active, 0);
 		atomic_set(&slate_is_runtime_suspend, 0);
 		atomic_set(&ok_to_sleep, 1);
@@ -1273,12 +1273,14 @@ static int slatecom_pm_resume(struct device *dev)
 			pr_err("Slate boot is not complete, skip SPI resume\n");
 			return 0;
 		}
+		mutex_lock(&slate_task_mutex);
 		clnt_handle.slate_spi = spi;
 		atomic_set(&slate_is_spi_active, 1);
 		atomic_set(&slate_is_runtime_suspend, 0);
 		enable_irq(slate_irq);
 		ret = slatecom_resume_l(&clnt_handle);
-			pr_info("Slatecom resumed with : %d\n", ret);
+		pr_info("Slatecom resumed with : %d\n", ret);
+		mutex_unlock(&slate_task_mutex);
 		return ret;
 	}
 }
@@ -1293,7 +1295,7 @@ static int slatecom_pm_runtime_suspend(struct device *dev)
 
 	clnt_handle.slate_spi = slate_spi;
 
-	if (slate_spi->slate_state == SLATECOM_STATE_RUNTIME_SUSPEND)
+	if (atomic_read(&state) == SLATECOM_STATE_RUNTIME_SUSPEND)
 		return 0;
 
 	mutex_lock(&slate_task_mutex);
@@ -1306,7 +1308,7 @@ static int slatecom_pm_runtime_suspend(struct device *dev)
 	ret = slatecom_reg_write_cmd(&clnt_handle, SLATE_CMND_REG,
 					1, &cmnd_reg);
 	if (ret == 0) {
-		slate_spi->slate_state = SLATECOM_STATE_RUNTIME_SUSPEND;
+		atomic_set(&state, SLATECOM_STATE_RUNTIME_SUSPEND);
 		atomic_set(&slate_is_spi_active, 0);
 		atomic_set(&slate_is_runtime_suspend, 1);
 		atomic_set(&ok_to_sleep, 1);
@@ -1343,11 +1345,11 @@ static int slatecom_pm_freeze(struct device *dev)
 	int ret = 0;
 
 	clnt_handle.slate_spi = slate_spi;
-	if (slate_spi->slate_state == SLATECOM_STATE_HIBERNATE)
+	if (atomic_read(&state) == SLATECOM_STATE_HIBERNATE)
 		return 0;
 
-	if (slate_spi->slate_state == SLATECOM_STATE_RUNTIME_SUSPEND) {
-		slate_spi->slate_state = SLATECOM_STATE_HIBERNATE;
+	if (atomic_read(&state) == SLATECOM_STATE_RUNTIME_SUSPEND) {
+		atomic_set(&state, SLATECOM_STATE_HIBERNATE);
 		atomic_set(&slate_is_spi_active, 0);
 		atomic_set(&slate_is_runtime_suspend, 0);
 		disable_irq(slate_irq);
@@ -1364,7 +1366,7 @@ static int slatecom_pm_freeze(struct device *dev)
 
 	ret = slatecom_reg_write_cmd(&clnt_handle, SLATE_CMND_REG, 1, &cmnd_reg);
 	if (ret == 0) {
-		slate_spi->slate_state = SLATECOM_STATE_HIBERNATE;
+		atomic_set(&state, SLATECOM_STATE_HIBERNATE);
 		atomic_set(&slate_is_spi_active, 0);
 		atomic_set(&slate_is_runtime_suspend, 0);
 		atomic_set(&ok_to_sleep, 1);
