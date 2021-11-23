@@ -19,6 +19,7 @@
 #include <linux/mmc/pm.h>
 #include <linux/dma-direction.h>
 #include <linux/ipc_logging.h>
+#include <linux/blkdev.h>
 
 struct mmc_ios {
 	unsigned int	clock;			/* clock rate */
