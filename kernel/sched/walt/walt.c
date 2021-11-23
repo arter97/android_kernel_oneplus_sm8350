@@ -2589,6 +2589,8 @@ void walt_update_cluster_topology(void)
 
 		if (policy) {
 			cluster->max_possible_freq = policy->cpuinfo.max_freq;
+			/*CPU run at its fmax at boot time*/
+			cluster->cur_freq = policy->cpuinfo.max_freq;
 
 			for_each_cpu(i, &cluster->cpus)
 				cpumask_copy(&cpu_rq(i)->wrq.freq_domain_cpumask,
