@@ -230,6 +230,7 @@ struct qti_qbg {
 	int			context_count;
 	bool			profile_loaded;
 	bool			battery_missing;
+	bool			battery_unknown;
 	bool			data_ready;
 	bool			in_fast_char;
 };
