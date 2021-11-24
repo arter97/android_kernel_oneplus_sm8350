@@ -188,8 +188,8 @@ struct spi_geni_master {
 };
 
 static void spi_slv_setup(struct spi_geni_master *mas);
-static int ssr_spi_force_suspend(struct device *dev);
-static int ssr_spi_force_resume(struct device *dev);
+static void ssr_spi_force_suspend(struct device *dev);
+static void ssr_spi_force_resume(struct device *dev);
 
 static ssize_t spi_slave_state_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -2218,6 +2218,9 @@ static int spi_geni_probe(struct platform_device *pdev)
 		spi->slave_abort = spi_slv_abort;
 	}
 
+	rsc->rsc_ssr.ssr_enable = of_property_read_bool(pdev->dev.of_node,
+			"ssr-enable");
+
 	geni_mas->slave_cross_connected =
 		of_property_read_bool(pdev->dev.of_node, "slv-cross-connected");
 	spi->mode_bits = (SPI_CPOL | SPI_CPHA | SPI_LOOP | SPI_CS_HIGH);
@@ -2411,7 +2414,7 @@ static int spi_geni_suspend(struct device *dev)
 }
 #endif
 
-static int ssr_spi_force_suspend(struct device *dev)
+static void ssr_spi_force_suspend(struct device *dev)
 {
 	struct spi_master *spi = get_spi_master(dev);
 	struct spi_geni_master *mas = spi_master_get_devdata(spi);
@@ -2436,11 +2439,9 @@ static int ssr_spi_force_suspend(struct device *dev)
 
 	GENI_SE_DBG(mas->ipc, false, mas->dev, "force suspend done\n");
 	mutex_unlock(&mas->spi_ssr.ssr_lock);
-
-	return ret;
 }
 
-static int ssr_spi_force_resume(struct device *dev)
+static void ssr_spi_force_resume(struct device *dev)
 {
 	struct spi_master *spi = get_spi_master(dev);
 	struct spi_geni_master *mas = spi_master_get_devdata(spi);
@@ -2450,8 +2451,6 @@ static int ssr_spi_force_resume(struct device *dev)
 	enable_irq(mas->irq);
 	GENI_SE_DBG(mas->ipc, false, mas->dev, "force resume done\n");
 	mutex_unlock(&mas->spi_ssr.ssr_lock);
-
-	return 0;
 }
 
 static const struct dev_pm_ops spi_geni_pm_ops = {

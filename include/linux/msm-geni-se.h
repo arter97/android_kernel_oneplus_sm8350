@@ -58,8 +58,9 @@ struct ssc_qup_ssr {
  */
 struct se_rsc_ssr {
 	struct list_head active_list;
-	int (*force_suspend)(struct device *ctrl_dev);
-	int (*force_resume)(struct device *ctrl_dev);
+	void (*force_suspend)(struct device *ctrl_dev);
+	void (*force_resume)(struct device *ctrl_dev);
+	bool ssr_enable;
 };
 
 /**
