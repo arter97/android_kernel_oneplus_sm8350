@@ -175,6 +175,7 @@ struct qti_qbg {
 	struct iio_channel	*batt_temp_chan;
 	struct iio_channel	**ext_iio_chans;
 	struct rtc_device	*rtc;
+	struct wakeup_source    *qbg_ws;
 	ktime_t			last_fast_char_time;
 	wait_queue_head_t	qbg_wait_q;
 	const char		*irq_name;

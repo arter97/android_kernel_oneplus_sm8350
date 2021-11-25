@@ -21,6 +21,7 @@
 #include <linux/platform_device.h>
 #include <linux/poll.h>
 #include <linux/power_supply.h>
+#include <linux/pm_wakeup.h>
 #include <linux/qti_power_supply.h>
 #include <linux/regmap.h>
 #include <linux/rtc.h>
@@ -545,6 +546,8 @@ static void process_udata_work(struct work_struct *work)
 	rc = qbg_sdam_set_battery_id(chip, chip->batt_id_ohm / 1000);
 	if (rc < 0)
 		pr_err("Failed to set battid in sdam, rc=%d\n", rc);
+
+	__pm_relax(chip->qbg_ws);
 
 	qbg_dbg(chip, QBG_DEBUG_STATUS, "udata update: batt_soc=%d sys_soc=%d soc=%d qbg_esr=%d\n",
 		(chip->batt_soc != INT_MIN) ? chip->batt_soc : -EINVAL,
@@ -1891,6 +1894,7 @@ static ssize_t qbg_device_write(struct file *file, const char __user *buf,
 		goto fail;
 	}
 
+	__pm_stay_awake(chip->qbg_ws);
 	rc = data_size;
 	schedule_work(&chip->udata_work);
 
@@ -2312,6 +2316,10 @@ static int qti_qbg_probe(struct platform_device *pdev)
 	init_waitqueue_head(&chip->qbg_wait_q);
 
 	chip->debug_mask = &qbg_debug_mask;
+
+	chip->qbg_ws = wakeup_source_register(chip->dev, "qcom-qbg");
+	if (!chip->qbg_ws)
+		return -EINVAL;
 
 	chip->default_iterm_ma = -EINVAL;
 	chip->soc = INT_MIN;
