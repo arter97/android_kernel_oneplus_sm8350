@@ -339,12 +339,12 @@ static int smblite_parse_dt_misc(struct smblite *chip, struct device_node *node)
 		return -EINVAL;
 	}
 
-	if (of_find_property(node, "nvmem", NULL)) {
-		chg->nvmem = devm_nvmem_device_get(chg->dev, "sdam_base");
-		if (IS_ERR(chg->nvmem)) {
-			rc = PTR_ERR(chg->nvmem);
+	if (of_find_property(node, "nvmem-cells", NULL)) {
+		chg->debug_mask_nvmem = devm_nvmem_cell_get(chg->dev, "charger_debug_mask");
+		if (IS_ERR(chg->debug_mask_nvmem)) {
+			rc = PTR_ERR(chg->debug_mask_nvmem);
 			if (rc != -EPROBE_DEFER)
-				dev_err(chg->dev, "Failed to get nvmem device, rc = %d\n", rc);
+				dev_err(chg->dev, "Failed to get nvmem-cells, rc=%d\n", rc);
 			return rc;
 		}
 	}
@@ -1758,24 +1758,14 @@ DEFINE_DEBUGFS_ATTRIBUTE(force_usb_psy_update_ops, NULL,
 			force_usb_psy_update_write, "0x%02llx\n");
 
 
-#define DEBUG_MASK_SDAM_OFFSET		0x95
 static ssize_t smblite_debug_mask_read(struct file *filp, char __user *buffer,
 		size_t count, loff_t *ppos)
 {
 	char *buf;
 	ssize_t len;
-	int rc = 0;
-	struct smblite *chip = filp->private_data;
-	struct smb_charger *chg = &chip->chg;
 
 	if (*ppos != 0)
 		return 0;
-
-	rc = nvmem_device_read(chg->nvmem, DEBUG_MASK_SDAM_OFFSET, 1,  (u8 *)&__debug_mask);
-	if (rc < 0) {
-		pr_err("Failed to read smblite debug mask from SDAM, rc = %d\n", rc);
-		return rc;
-	}
 
 	buf = kasprintf(GFP_KERNEL, "%d\n", __debug_mask);
 	if (!buf)
@@ -1803,9 +1793,9 @@ static ssize_t smblite_debug_mask_write(struct file *filp, const char __user *bu
 	if (rc < 0)
 		return rc;
 
-	rc = nvmem_device_write(chg->nvmem, DEBUG_MASK_SDAM_OFFSET, 1, (u8 *)&__debug_mask);
+	rc = nvmem_cell_write(chg->debug_mask_nvmem, (u8 *)&__debug_mask, 1);
 	if (rc < 0) {
-		pr_err("Failed to write smblite debug mask, rc = %d\n", rc);
+		pr_err("Failed to write charger debug mask, rc = %d\n", rc);
 		return rc;
 	}
 
@@ -1854,6 +1844,23 @@ static void smblite_create_debugfs(struct smblite *chip)
 {}
 
 #endif
+
+static void get_smblite_debug_mask(struct smblite *chip)
+{
+	struct smb_charger *chg = &chip->chg;
+	ssize_t len;
+	char *data;
+
+	data = nvmem_cell_read(chg->debug_mask_nvmem, &len);
+	if (IS_ERR(data)) {
+		pr_err("Failed to read charger debug mask from SDAM\n");
+		return;
+	}
+
+	__debug_mask = *data & 0xff;
+
+	kfree(data);
+}
 
 static int smblite_show_charger_status(struct smblite *chip)
 {
@@ -2111,6 +2118,9 @@ static int smblite_probe(struct platform_device *pdev)
 		pr_err("Couldn't parse device tree rc=%d\n", rc);
 		return rc;
 	}
+
+	get_smblite_debug_mask(chip);
+
 	 /* set driver data before resources request it */
 	platform_set_drvdata(pdev, chip);
 
