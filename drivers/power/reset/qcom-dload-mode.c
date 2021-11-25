@@ -284,7 +284,7 @@ static void __iomem *map_prop_mem(const char *propname)
 	void __iomem *addr;
 
 	if (!np) {
-		pr_err("Unable to find DT property: %s\n", propname);
+		pr_warn("Unable to find DT property: %s\n", propname);
 		return NULL;
 	}
 
