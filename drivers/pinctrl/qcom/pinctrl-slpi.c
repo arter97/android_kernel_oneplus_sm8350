@@ -388,7 +388,6 @@ static int slpi_pinctrl_probe(struct platform_device *pdev)
 	int ret, npins, i;
 	void __iomem *base;
 
-	dev_err(dev, "SLPI probe called !!!!!!\n");
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	base = devm_ioremap_resource(&pdev->dev, res);
 	if (IS_ERR(base))
@@ -450,7 +449,6 @@ static int slpi_pinctrl_probe(struct platform_device *pdev)
 		dev_err(dev, "Failed to register pinctrl device\n");
 		return PTR_ERR(pctldev);
 	}
-	dev_err(dev, "Registered pinctrl SLPI !!!!!!\n");
 	return 0;
 }
 
