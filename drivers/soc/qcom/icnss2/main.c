@@ -417,6 +417,15 @@ bool icnss_is_pdr(void)
 }
 EXPORT_SYMBOL(icnss_is_pdr);
 
+bool icnss_is_low_power(void)
+{
+	if (!penv)
+		return false;
+	else
+		return test_bit(ICNSS_LOW_POWER, &penv->state);
+}
+EXPORT_SYMBOL(icnss_is_low_power);
+
 static irqreturn_t fw_error_fatal_handler(int irq, void *ctx)
 {
 	struct icnss_priv *priv = ctx;
@@ -811,6 +820,7 @@ static int icnss_pd_restart_complete(struct icnss_priv *priv)
 	clear_bit(ICNSS_PDR, &priv->state);
 	clear_bit(ICNSS_REJUVENATE, &priv->state);
 	clear_bit(ICNSS_PD_RESTART, &priv->state);
+	clear_bit(ICNSS_LOW_POWER, &priv->state);
 	priv->early_crash_ind = false;
 	priv->is_ssr = false;
 
@@ -1716,6 +1726,18 @@ static char *icnss_subsys_notify_state_to_str(enum subsys_notif_type code)
 		return "SOC_RESET";
 	case SUBSYS_NOTIF_TYPE_COUNT:
 		return "NOTIF_TYPE_COUNT";
+	case SUBSYS_BEFORE_DS_ENTRY:
+		return "BEFORE_DS_ENTRY";
+	case SUBSYS_AFTER_DS_ENTRY:
+		return "AFTER_DS_ENTRY";
+	case SUBSYS_DS_ENTRY_FAIL:
+		return "DS_ENTRY_FAIL";
+	case SUBSYS_BEFORE_DS_EXIT:
+		return "BEFORE_DS_EXIT";
+	case SUBSYS_AFTER_DS_EXIT:
+		return "AFTER_DS_EXIT";
+	case SUBSYS_DS_EXIT_FAIL:
+		return "DS_EXIT_FAIL";
 	default:
 		return "UNKNOWN";
 	}
@@ -1792,14 +1814,29 @@ static int icnss_modem_notifier_nb(struct notifier_block *nb,
 	icnss_pr_vdbg("Modem-Notify: event %s(%lu)\n",
 		      icnss_subsys_notify_state_to_str(code), code);
 
-	if (code == SUBSYS_AFTER_SHUTDOWN) {
+	switch (code) {
+	case SUBSYS_BEFORE_SHUTDOWN:
+		break;
+	case SUBSYS_AFTER_SHUTDOWN:
 		icnss_pr_info("Collecting msa0 segment dump\n");
 		icnss_msa0_ramdump(priv);
 		goto out;
-	}
-
-	if (code != SUBSYS_BEFORE_SHUTDOWN)
+	case SUBSYS_BEFORE_DS_ENTRY:
+		if (test_bit(ICNSS_MODE_ON, &priv->state))
+			icnss_driver_event_post(
+					priv, ICNSS_DRIVER_EVENT_IDLE_SHUTDOWN,
+					ICNSS_EVENT_SYNC_UNINTERRUPTIBLE, NULL);
+		set_bit(ICNSS_LOW_POWER, &priv->state);
+		break;
+	case SUBSYS_AFTER_DS_ENTRY:
+	case SUBSYS_DS_ENTRY_FAIL:
+	case SUBSYS_BEFORE_DS_EXIT:
 		goto out;
+	case SUBSYS_AFTER_DS_EXIT:
+		clear_bit(ICNSS_LOW_POWER, &priv->state);
+	default:
+		goto out;
+	}
 
 	priv->is_ssr = true;
 

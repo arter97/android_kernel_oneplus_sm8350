@@ -125,6 +125,7 @@ enum icnss_driver_state {
 	ICNSS_QMI_DMS_CONNECTED,
 	ICNSS_SLATE_SSR_REGISTERED,
 	ICNSS_SLATE_UP,
+	ICNSS_LOW_POWER,
 };
 
 struct ce_irq_list {
