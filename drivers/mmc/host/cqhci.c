@@ -305,6 +305,16 @@ static void __cqhci_enable(struct cqhci_host *cq_host)
 	cqhci_set_irqs(cq_host, CQHCI_IS_MASK);
 
 	cq_host->activated = true;
+
+#if defined(CONFIG_SDC_QTI)
+	if (mmc->hiber_notifier) {
+		if (cqhci_host_is_crypto_supported(cq_host)) {
+			cqhci_crypto_enable(cq_host);
+			cqhci_crypto_recovery_finish(cq_host);
+		}
+		mmc->hiber_notifier = false;
+	}
+#endif
 	mmc_log_string(mmc, "CQ enabled\n");
 }
 

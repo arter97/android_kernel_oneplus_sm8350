@@ -2618,6 +2618,10 @@ static int mmc_pre_hibernate(struct mmc_host *host)
 {
 	int ret = 0;
 
+#if defined(CONFIG_SDC_QTI)
+	host->hiber_notifier = true;
+#endif
+
 	mmc_get_card(host->card, NULL);
 	host->cached_caps2 = host->caps2;
 
