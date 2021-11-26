@@ -986,9 +986,6 @@ int slatecom_resume(void *handle)
 		pr_info("Doing force resume\n");
 		atomic_set(&slate_is_spi_active, 1);
 
-		if (!atomic_read(&slate_is_runtime_suspend))
-			enable_irq(slate_irq);
-
 		ret = slatecom_resume_l(handle);
 	}
 	mutex_unlock(&slate_task_mutex);
@@ -1176,6 +1173,12 @@ static int slate_spi_probe(struct spi_device *spi)
 	if (ret)
 		goto err_ret;
 
+	ret = irq_set_irq_wake(slate_irq, true);
+	if (ret) {
+		pr_err("irq set as wakeup return: %d\n", ret);
+		goto err_ret;
+	}
+
 	atomic_set(&slate_is_spi_active, 1);
 	dma_set_coherent_mask(&spi->dev, DMA_BIT_MASK(64));
 
@@ -1231,7 +1234,6 @@ static int slatecom_pm_suspend(struct device *dev)
 		atomic_set(&state, SLATECOM_STATE_SUSPEND);
 		atomic_set(&slate_is_spi_active, 0);
 		atomic_set(&slate_is_runtime_suspend, 0);
-		disable_irq(slate_irq);
 		pr_info("suspended\n");
 		return 0;
 	}
@@ -1252,7 +1254,6 @@ static int slatecom_pm_suspend(struct device *dev)
 		atomic_set(&slate_is_spi_active, 0);
 		atomic_set(&slate_is_runtime_suspend, 0);
 		atomic_set(&ok_to_sleep, 1);
-		disable_irq(slate_irq);
 	}
 	pr_info("suspended with : %d\n", ret);
 	return ret;
@@ -1277,7 +1278,6 @@ static int slatecom_pm_resume(struct device *dev)
 		clnt_handle.slate_spi = spi;
 		atomic_set(&slate_is_spi_active, 1);
 		atomic_set(&slate_is_runtime_suspend, 0);
-		enable_irq(slate_irq);
 		ret = slatecom_resume_l(&clnt_handle);
 		pr_info("Slatecom resumed with : %d\n", ret);
 		mutex_unlock(&slate_task_mutex);
@@ -1352,7 +1352,6 @@ static int slatecom_pm_freeze(struct device *dev)
 		atomic_set(&state, SLATECOM_STATE_HIBERNATE);
 		atomic_set(&slate_is_spi_active, 0);
 		atomic_set(&slate_is_runtime_suspend, 0);
-		disable_irq(slate_irq);
 		pr_info("suspended\n");
 		return 0;
 	}
@@ -1370,7 +1369,6 @@ static int slatecom_pm_freeze(struct device *dev)
 		atomic_set(&slate_is_spi_active, 0);
 		atomic_set(&slate_is_runtime_suspend, 0);
 		atomic_set(&ok_to_sleep, 1);
-		disable_irq(slate_irq);
 	}
 	pr_info("freezed with : %d\n", ret);
 	return ret;
@@ -1393,7 +1391,6 @@ static int slatecom_pm_restore(struct device *dev)
 		clnt_handle.slate_spi = spi;
 		atomic_set(&slate_is_spi_active, 1);
 		atomic_set(&slate_is_runtime_suspend, 0);
-		enable_irq(slate_irq);
 		ret = slatecom_resume_l(&clnt_handle);
 		pr_info("Slatecom restore with : %d\n", ret);
 	}
