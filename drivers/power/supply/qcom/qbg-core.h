@@ -159,6 +159,8 @@ struct qti_qbg {
 	struct iio_dev		*indio_dev;
 	struct iio_chan_spec	*iio_chan;
 	struct nvmem_device	**sdam;
+	struct nvmem_cell       *debug_mask_nvmem_low;
+	struct nvmem_cell       *debug_mask_nvmem_high;
 	struct fifo_data	fifo[MAX_FIFO_COUNT];
 	struct qbg_essential_params	essential_params;
 	struct work_struct	status_change_work;

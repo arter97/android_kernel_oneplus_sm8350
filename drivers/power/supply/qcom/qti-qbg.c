@@ -2176,6 +2176,66 @@ static int qbg_register_interrupts(struct qti_qbg *chip)
 }
 
 #ifdef CONFIG_DEBUG_FS
+static ssize_t qbg_debug_mask_read(struct file *filp, char __user *buffer,
+		size_t count, loff_t *ppos)
+{
+	char *buf;
+	ssize_t len = 0;
+
+	if (*ppos != 0)
+		return 0;
+
+	buf = kasprintf(GFP_KERNEL, "%d\n", qbg_debug_mask);
+	if (!buf)
+		return -ENOMEM;
+
+	if (count < strlen(buf)) {
+		kfree(buf);
+		return -ENOSPC;
+	}
+
+	len = simple_read_from_buffer(buffer, count, ppos, buf, strlen(buf));
+	kfree(buf);
+
+	return len;
+}
+
+static ssize_t qbg_debug_mask_write(struct file *filp, const char __user *buffer,
+		size_t count, loff_t *ppos)
+{
+	struct qti_qbg *chip = filp->private_data;
+	int rc = 0;
+	char data[2];
+
+	rc = kstrtou32_from_user(buffer, count, 10, &qbg_debug_mask);
+	if (rc < 0)
+		return rc;
+
+	data[0] = qbg_debug_mask & 0xff;
+	data[1] = (qbg_debug_mask >> 8) & 0xff;
+
+	rc = nvmem_cell_write(chip->debug_mask_nvmem_low, &data[0], sizeof(data[0]));
+	if (rc < 0) {
+		pr_err("Failed to write qbg debug mask low byte, rc = %d\n", rc);
+		return rc;
+	}
+
+	rc = nvmem_cell_write(chip->debug_mask_nvmem_high, &data[1], sizeof(data[1]));
+	if (rc < 0) {
+		pr_err("Failed to write qbg debug mask high byte, rc = %d\n", rc);
+		return rc;
+	}
+
+	return count;
+}
+
+static const struct file_operations qbg_debug_mask_fops = {
+	.owner = THIS_MODULE,
+	.open = simple_open,
+	.read = qbg_debug_mask_read,
+	.write = qbg_debug_mask_write,
+};
+
 static void qbg_create_debugfs(struct qti_qbg *chip)
 {
 	struct dentry *entry;
@@ -2188,8 +2248,8 @@ static void qbg_create_debugfs(struct qti_qbg *chip)
 		return;
 	}
 
-	entry = debugfs_create_u32("debug_mask", 0600, chip->dfs_root,
-			&qbg_debug_mask);
+	entry = debugfs_create_file("debug_mask", 0600, chip->dfs_root, chip,
+			&qbg_debug_mask_fops);
 	if (IS_ERR_OR_NULL(entry)) {
 		pr_err("Failed to create debug_mask rc=%ld\n", (long)entry);
 		debugfs_remove_recursive(chip->dfs_root);
@@ -2200,6 +2260,30 @@ static void qbg_create_debugfs(struct qti_qbg *chip)
 {
 }
 #endif
+
+static void get_qbg_debug_mask(struct qti_qbg *chip)
+{
+	ssize_t len;
+	char *data[2];
+
+	data[0] = nvmem_cell_read(chip->debug_mask_nvmem_low, &len);
+	if (IS_ERR(data[0])) {
+		pr_err("Failed to read qbg debug mask low byte from SDAM\n");
+		return;
+	}
+
+	data[1] = nvmem_cell_read(chip->debug_mask_nvmem_high, &len);
+	if (IS_ERR(data[1])) {
+		pr_err("Failed to read qbg debug mask high byte from SDAM\n");
+		return;
+	}
+
+	qbg_debug_mask = *data[1] & 0xff;
+	qbg_debug_mask = (qbg_debug_mask << 8) | (*data[0]);
+
+	kfree(data[0]);
+	kfree(data[1]);
+}
 
 static int qbg_parse_sdam_dt(struct qti_qbg *chip, struct device_node *node)
 {
@@ -2287,6 +2371,23 @@ static int qbg_parse_dt(struct qti_qbg *chip)
 	if (!rc)
 		chip->recharge_vflt_delta_mv = val;
 
+	if (of_find_property(node, "nvmem-cells", NULL)) {
+		chip->debug_mask_nvmem_low = devm_nvmem_cell_get(chip->dev, "qbg_debug_mask_low");
+		if (IS_ERR(chip->debug_mask_nvmem_low)) {
+			rc = PTR_ERR(chip->debug_mask_nvmem_low);
+			if (rc != -EPROBE_DEFER)
+				dev_err(chip->dev, "Failed to get nvmem-cells, rc=%d\n", rc);
+			return rc;
+		}
+		chip->debug_mask_nvmem_high = devm_nvmem_cell_get(chip->dev, "qbg_debug_mask_high");
+		if (IS_ERR(chip->debug_mask_nvmem_high)) {
+			rc = PTR_ERR(chip->debug_mask_nvmem_high);
+			if (rc != -EPROBE_DEFER)
+				dev_err(chip->dev, "Failed to get nvmem-cells, rc=%d\n", rc);
+			return rc;
+		}
+	}
+
 	return 0;
 }
 
@@ -2355,6 +2456,8 @@ static int qti_qbg_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Failed to parse QBG devicetree, rc=%d\n", rc);
 		return rc;
 	}
+
+	get_qbg_debug_mask(chip);
 
 	/* ADC for Battery-ID */
 	chip->batt_id_chan = devm_iio_channel_get(&pdev->dev, "batt-id");
