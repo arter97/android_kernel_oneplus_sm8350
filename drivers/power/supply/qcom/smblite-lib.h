@@ -282,7 +282,7 @@ struct smb_charger {
 	struct iio_channel	**iio_chan_list_smb_parallel;
 	struct class            qcom_class;
 	struct smblite_remote_bms	remote_bms;
-	struct nvmem_device	*nvmem;
+	struct nvmem_cell       *debug_mask_nvmem;
 	int			*debug_mask;
 	enum smb_mode		mode;
 	u8			subtype;
