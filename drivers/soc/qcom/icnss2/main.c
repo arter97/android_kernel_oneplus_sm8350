@@ -1816,10 +1816,25 @@ static int icnss_modem_notifier_nb(struct notifier_block *nb,
 
 	switch (code) {
 	case SUBSYS_BEFORE_SHUTDOWN:
+		if (!notif->crashed &&
+		    priv->low_power_support) { /* Hibernate */
+			if (test_bit(ICNSS_MODE_ON, &priv->state))
+				icnss_driver_event_post(
+					priv, ICNSS_DRIVER_EVENT_IDLE_SHUTDOWN,
+					ICNSS_EVENT_SYNC_UNINTERRUPTIBLE, NULL);
+			set_bit(ICNSS_LOW_POWER, &priv->state);
+		}
 		break;
 	case SUBSYS_AFTER_SHUTDOWN:
-		icnss_pr_info("Collecting msa0 segment dump\n");
-		icnss_msa0_ramdump(priv);
+		/* Collect ramdump only when there was a crash. */
+		if (notif->crashed) {
+			icnss_pr_info("Collecting msa0 segment dump\n");
+			icnss_msa0_ramdump(priv);
+		}
+
+		if (test_bit(ICNSS_LOW_POWER, &priv->state) &&
+			     priv->low_power_support)
+			clear_bit(ICNSS_LOW_POWER, &priv->state);
 		goto out;
 	case SUBSYS_BEFORE_DS_ENTRY:
 		if (test_bit(ICNSS_MODE_ON, &priv->state))
@@ -3715,6 +3730,13 @@ static int icnss_resource_parse(struct icnss_priv *priv)
 			priv->is_slate_rfa = true;
 			icnss_pr_err("SLATE rfa is enabled\n");
 		}
+
+		if (of_property_read_bool(pdev->dev.of_node,
+					  "qcom,is_low_power")) {
+			priv->low_power_support = true;
+			icnss_pr_dbg("Deep Sleep/Hibernate mode supported\n");
+		}
+
 	} else if (priv->device_id == WCN6750_DEVICE_ID) {
 		res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
 						   "msi_addr");
