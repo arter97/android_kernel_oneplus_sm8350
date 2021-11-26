@@ -1043,6 +1043,15 @@ static int geni_i2c_xfer(struct i2c_adapter *adap,
 			/* Set device in suspended since resume failed */
 			pm_runtime_set_suspended(gi2c->dev);
 			return ret;
+		} else if (ret == 1 && gi2c->se_mode == UNINITIALIZED) {
+			/* Prepare the device if PM state is active after Hibernation */
+			GENI_SE_DBG(gi2c->ipcl, false, gi2c->dev,
+				"Prepare the device after Hibernation due to PM state is active\n");
+			ret = geni_i2c_prepare(gi2c);
+			if (ret) {
+				dev_err(gi2c->dev, "I2C prepare failed: %d\n", ret);
+				return ret;
+			}
 		}
 	}
 
