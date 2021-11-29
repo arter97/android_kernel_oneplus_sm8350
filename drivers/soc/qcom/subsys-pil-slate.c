@@ -635,6 +635,14 @@ static int setup_slate_gpio_irq(struct platform_device *pdev,
 		return ret;
 	}
 
+	ret = irq_set_irq_wake(drvdata->status_irq, true);
+	if (ret < 0) {
+		dev_err(drvdata->desc.dev,
+			"%s: SLATE2AP_STATUS IRQ#%d set wakeup capable failed, err=%d\n",
+			__func__, drvdata->status_irq, ret);
+		return ret;
+	}
+
 	if (gpio_request(drvdata->gpios[1], "AP2SLATE_STATUS")) {
 		dev_err(&pdev->dev,
 			"%s Failed to configure AP2SLATE_STATUS gpio\n",
