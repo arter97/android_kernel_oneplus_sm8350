@@ -856,9 +856,12 @@ static int smblite_lib_icl_irq_disable_vote_callback(struct votable *votable,
 		return 0;
 
 	if (chg->irq_info[USBIN_ICL_CHANGE_IRQ].enabled) {
-		if (disable)
+		if (disable) {
+			irq_set_status_flags(chg->irq_info[USBIN_ICL_CHANGE_IRQ].irq,
+						IRQ_DISABLE_UNLAZY);
 			disable_irq_nosync(
 				chg->irq_info[USBIN_ICL_CHANGE_IRQ].irq);
+		}
 	} else {
 		if (!disable)
 			enable_irq(chg->irq_info[USBIN_ICL_CHANGE_IRQ].irq);
@@ -881,6 +884,7 @@ static int smblite_lib_temp_change_irq_disable_vote_callback(
 	if (chg->irq_info[TEMP_CHANGE_IRQ].enabled && disable) {
 		if (chg->irq_info[TEMP_CHANGE_IRQ].wake)
 			disable_irq_wake(chg->irq_info[TEMP_CHANGE_IRQ].irq);
+		irq_set_status_flags(chg->irq_info[TEMP_CHANGE_IRQ].irq, IRQ_DISABLE_UNLAZY);
 		disable_irq_nosync(chg->irq_info[TEMP_CHANGE_IRQ].irq);
 	} else if (!chg->irq_info[TEMP_CHANGE_IRQ].enabled && !disable) {
 		enable_irq(chg->irq_info[TEMP_CHANGE_IRQ].irq);
