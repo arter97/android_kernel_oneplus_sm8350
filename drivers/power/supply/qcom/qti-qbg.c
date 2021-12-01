@@ -2215,6 +2215,9 @@ static ssize_t qbg_debug_mask_write(struct file *filp, const char __user *buffer
 	if (rc < 0)
 		return rc;
 
+	if (!chip->debug_mask_nvmem_low || !chip->debug_mask_nvmem_high)
+		return count;
+
 	data[0] = qbg_debug_mask & 0xff;
 	data[1] = (qbg_debug_mask >> 8) & 0xff;
 
@@ -2269,6 +2272,9 @@ static void get_qbg_debug_mask(struct qti_qbg *chip)
 {
 	ssize_t len;
 	char *data[2];
+
+	if (!chip->debug_mask_nvmem_low || !chip->debug_mask_nvmem_high)
+		return;
 
 	data[0] = nvmem_cell_read(chip->debug_mask_nvmem_low, &len);
 	if (IS_ERR(data[0])) {
