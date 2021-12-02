@@ -27,6 +27,7 @@
 enum slatecom_spi_state {
 	SLATECOM_SPI_FREE = 0,
 	SLATECOM_SPI_BUSY,
+	SLATECOM_SPI_PAUSE,
 };
 
 /* Enums to identify Blackghost events */

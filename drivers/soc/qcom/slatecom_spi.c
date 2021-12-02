@@ -57,6 +57,14 @@
 #define SLATE_RESUME_IRQ_TIMEOUT 1000
 #define SLATE_SPI_AUTOSUSPEND_TIMEOUT 5000
 
+/* Master_Command[27] */
+#define SLATE_PAUSE_OK		BIT(27)
+
+/* SLAVE_STATUS_AUTO_CLEAR[16:15] */
+#define SLATE_PAUSE_REQ		BIT(15)
+#define SLATE_RESUME_IND	BIT(16)
+
+
 enum slatecom_state {
 	/*SLATECOM Staus ready*/
 	SLATECOM_PROB_SUCCESS = 0,
@@ -139,6 +147,8 @@ static uint8_t *fxd_mem_buffer;
 static struct mutex cma_buffer_lock;
 
 static DECLARE_COMPLETION(slate_resume_wait);
+static int slatecom_reg_write_cmd(void *handle, uint8_t reg_start_addr,
+					uint8_t num_regs, void *write_buf);
 
 static struct spi_device *get_spi_device(void)
 {
@@ -505,6 +515,11 @@ static void slate_irq_tasklet_hndlr_l(void)
 	uint32_t fifo_size_reg;
 	int ret =  0;
 	uint32_t irq_buf[5] = {0};
+	uint32_t cmnd_reg = 0;
+	struct slate_context clnt_handle;
+	struct slate_spi_priv *spi =
+			container_of(slate_com_drv, struct slate_spi_priv, lhandle);
+	clnt_handle.slate_spi = spi;
 
 	ret = read_slate_locl(SLATECOM_READ_REG, 5, &irq_buf[0]);
 	if (ret)
@@ -517,6 +532,19 @@ static void slate_irq_tasklet_hndlr_l(void)
 	fifo_fill_reg = irq_buf[3];
 	fifo_size_reg = irq_buf[4];
 
+	if (slav_status_auto_clear_reg & SLATE_PAUSE_REQ) {
+		cmnd_reg |= SLATE_PAUSE_OK;
+		ret = slatecom_reg_write_cmd(&clnt_handle, SLATE_CMND_REG, 1, &cmnd_reg);
+		if (ret == 0) {
+			spi_state = SLATECOM_SPI_PAUSE;
+			pr_debug("SPI is in Pause State\n");
+		}
+	}
+
+	if (slav_status_auto_clear_reg & SLATE_RESUME_IND) {
+		spi_state = SLATECOM_SPI_FREE;
+		pr_debug("Apps to resume operation\n");
+	}
 	send_back_notification(slave_status_reg,
 		slav_status_auto_clear_reg, fifo_fill_reg, fifo_size_reg);
 
@@ -875,6 +903,10 @@ static int slatecom_reg_write_cmd(void *handle, uint8_t reg_start_addr,
 
 	if (spi_state == SLATECOM_SPI_BUSY) {
 		pr_err("Device busy\n");
+		return -EBUSY;
+	}
+	if (spi_state == SLATECOM_SPI_PAUSE) {
+		pr_err("Device in Pause State\n");
 		return -EBUSY;
 	}
 
