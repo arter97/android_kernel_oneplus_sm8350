@@ -1274,8 +1274,22 @@ static int sx150x_restore(struct device *dev)
 	return 0;
 }
 
+static int sx150x_freeze(struct device *dev)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct sx150x_pinctrl *pctl = i2c_get_clientdata(client);
+	int ret;
+
+	ret = sx150x_init_hw(pctl);
+	if (ret)
+		return ret;
+
+	return ret;
+}
+
 static const struct dev_pm_ops sx150x_pm = {
 	.restore = sx150x_restore,
+	.freeze = sx150x_freeze,
 };
 #endif
 
