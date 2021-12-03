@@ -2,7 +2,7 @@
 /*
  * Crypto virtual library for storage encryption.
  *
- * Copyright (c) 2021, Linux Foundation. All rights reserved.
+ * Copyright (c) 2021-2022, Linux Foundation. All rights reserved.
  */
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -18,16 +18,23 @@
 /** global definitions		 **/
 /**********************************/
 
-#define RESERVE_SIZE           (36*sizeof(uint16_t))
-/* This macro is aligned to actual definition present
- * in bio crypt context header file.
- */
-#define BLK_CRYPTO_MAX_WRAPPED_KEY_SIZE	128
-#define HAB_TIMEOUT_MS	(3000)
+#define	RESERVE_SIZE                    (36*sizeof(uint16_t))
+#define	SECRET_SIZE                     (32)
+
+#define	HAB_TIMEOUT_MS                  (50000)
+
 /* FBE request command ids */
-#define	FBE_GET_MAX_SLOTS         (7)
-#define	FBE_SET_KEY_V2            (8)
-#define	FBE_CLEAR_KEY_V2          (9)
+#define	FBE_GET_MAX_SLOTS               (7)
+#define	FBE_SET_KEY_V2                  (8)
+#define	FBE_CLEAR_KEY_V2                (9)
+#define	FBE_DERIVE_RAW_SECRET           (10)
+#define	FBE_GET_CRYPTO_CAPABILITIES     (11)
+#define	FBE_VERIFY_CRYPTO_CAPS          (12)
+
+struct fbe_derive_secret {
+	uint8_t wrapped_key[BLK_CRYPTO_MAX_WRAPPED_KEY_SIZE];
+	uint32_t wrapped_key_size;
+};
 
 struct fbe_request_v2_t {
 	uint8_t reserve[RESERVE_SIZE];//for compatibility
@@ -35,11 +42,20 @@ struct fbe_request_v2_t {
 	uint8_t  key[BLK_CRYPTO_MAX_WRAPPED_KEY_SIZE];
 	uint32_t key_size;
 	uint32_t virt_slot;
+	uint32_t data_unit_size;
+	enum blk_crypto_mode_num crypto_mode;
+	struct fbe_derive_secret derive_raw_secret;
+};
+
+struct fbe_v2_resp {
+	int32_t status;
+	uint8_t secret_key[SECRET_SIZE];
+	uint32_t crypto_modes_supported[BLK_ENCRYPTION_MODE_MAX];
 };
 
 struct fbe_req_args {
 	struct fbe_request_v2_t req;
-	int32_t status;
+	struct fbe_v2_resp response;
 	int32_t ret;
 };
 
@@ -72,20 +88,19 @@ static int32_t send_fbe_req_hab(void *arg)
 		}
 
 		do {
-			status_size = sizeof(int32_t);
-			ret = habmm_socket_recv(handle, &req_args->status, &status_size, 0,
-					HABMM_SOCKET_RECV_FLAGS_UNINTERRUPTIBLE);
+			status_size = sizeof(struct fbe_v2_resp);
+			ret = habmm_socket_recv(handle, &req_args->response, &status_size, 0,
+						HABMM_SOCKET_RECV_FLAGS_UNINTERRUPTIBLE);
 		} while (-EINTR == ret);
 
 		if (ret) {
 			pr_err("habmm_socket_recv failed, ret= 0x%x\n", ret);
 			break;
 		}
-
-		if (status_size != sizeof(int32_t)) {
+		if (status_size != sizeof(struct fbe_v2_resp)) {
 			pr_err("habmm_socket_recv expected size: %lu, actual=%u\n",
-					sizeof(int32_t),
-					status_size);
+			       sizeof(struct fbe_v2_resp),
+			       status_size);
 			ret = -E2BIG;
 			break;
 		}
@@ -110,7 +125,7 @@ static void send_fbe_req(struct fbe_req_args *arg)
 	struct task_struct *thread;
 
 	init_completion(&send_fbe_req_done);
-	arg->status  = 0;
+	arg->response.status  = 0;
 
 	thread = kthread_run(send_fbe_req_hab, arg, "send_fbe_req");
 	if (IS_ERR(thread)) {
@@ -138,36 +153,72 @@ int crypto_qti_virt_ice_get_info(uint32_t *total_num_slots)
 
 	arg.req.cmd = FBE_GET_MAX_SLOTS;
 	send_fbe_req(&arg);
-
-	if (arg.ret || arg.status < 0) {
+	if (arg.ret || arg.response.status < 0) {
 		pr_err("send_fbe_req_v2 failed with ret = %d, max_slots = %d\n",
-		       arg.ret, arg.status);
+		       arg.ret, arg.response.status);
 		return -ECOMM;
 	}
 
-	*total_num_slots = (uint32_t) arg.status;
+	*total_num_slots = (uint32_t) arg.response.status;
 
 	return 0;
+}
+
+static int verify_crypto_capabilities(enum blk_crypto_mode_num crypto_mode,
+				      unsigned int data_unit_size)
+{
+	struct fbe_req_args arg;
+
+	arg.req.cmd = FBE_VERIFY_CRYPTO_CAPS;
+	arg.req.crypto_mode = crypto_mode;
+	arg.req.data_unit_size = data_unit_size;
+	send_fbe_req(&arg);
+	if (arg.ret || arg.response.status < 0) {
+		pr_err("send_fbe_req_v2 failed with ret = %d, status = %d\n",
+			arg.ret, arg.response.status);
+		return -EINVAL;
+	}
+
+	return arg.response.status;
 }
 
 int crypto_qti_virt_program_key(const struct blk_crypto_key *key,
 						unsigned int slot)
 {
 	struct fbe_req_args arg;
+	int ret = 0, i = 0;
+	union {
+		u8 bytes[BLK_CRYPTO_MAX_WRAPPED_KEY_SIZE];
+		u32 words[BLK_CRYPTO_MAX_WRAPPED_KEY_SIZE / sizeof(u32)];
+	} key_new;
 
 	if (!key)
 		return -EINVAL;
 
+	memcpy(key_new.bytes, key->raw, key->size);
+	if (!key->is_hw_wrapped) {
+		for (i = 0; i < ARRAY_SIZE(key_new.words); i++)
+			__cpu_to_be32s(&key_new.words[i]);
+	}
+
+	/* Actual determination of capabilities for UFS/EMMC for different
+	 * encryption modes are done in the back end (host operating system)
+	 * in case of virtualization driver, so will send details to backend
+	 * and BE will verify the given capabilities.
+	 */
+	ret = verify_crypto_capabilities(key->crypto_mode,  key->data_unit_size);
+	if (ret)
+		return -EINVAL;
+	/* program key */
 	arg.req.cmd = FBE_SET_KEY_V2;
 	arg.req.virt_slot = slot;
 	arg.req.key_size = key->size;
-	memcpy(&(arg.req.key[0]), key->raw, key->size);
-
+	memcpy(&(arg.req.key[0]), key_new.bytes, key->size);
 	send_fbe_req(&arg);
 
-	if (arg.ret || arg.status) {
+	if (arg.ret || arg.response.status) {
 		pr_err("send_fbe_req_v2 failed with ret = %d, status = %d\n",
-		       arg.ret, arg.status);
+		       arg.ret, arg.response.status);
 		return -ECOMM;
 	}
 
@@ -184,9 +235,9 @@ int crypto_qti_virt_invalidate_key(unsigned int slot)
 
 	send_fbe_req(&arg);
 
-	if (arg.ret || arg.status) {
+	if (arg.ret || arg.response.status) {
 		pr_err("send_fbe_req_v2 failed with ret = %d, status = %d\n",
-		       arg.ret, arg.status);
+		       arg.ret, arg.response.status);
 		return -ECOMM;
 	}
 
@@ -194,12 +245,47 @@ int crypto_qti_virt_invalidate_key(unsigned int slot)
 }
 EXPORT_SYMBOL(crypto_qti_virt_invalidate_key);
 
+int crypto_qti_virt_get_crypto_capabilities(unsigned int *crypto_modes_supported,
+					    uint32_t crypto_array_size)
+{
+	struct fbe_req_args arg;
+
+	arg.req.cmd = FBE_GET_CRYPTO_CAPABILITIES;
+
+	send_fbe_req(&arg);
+
+	if (arg.ret || arg.response.status) {
+		pr_err("send_fbe_req_v2 failed with ret = %d, status = %d\n",
+		       arg.ret, arg.response.status);
+		return -ECOMM;
+	}
+	memcpy(crypto_modes_supported, &(arg.response.crypto_modes_supported[0]),
+	       crypto_array_size);
+
+	return 0;
+}
+
 int crypto_qti_virt_derive_raw_secret_platform(const u8 *wrapped_key,
 					       unsigned int wrapped_key_size,
 					       u8 *secret,
 					       unsigned int secret_size)
 {
-	memcpy(secret, wrapped_key, secret_size);
+	struct fbe_req_args arg;
+
+	arg.req.cmd = FBE_DERIVE_RAW_SECRET;
+	memcpy(&(arg.req.derive_raw_secret.wrapped_key[0]), wrapped_key,
+	       wrapped_key_size);
+	arg.req.derive_raw_secret.wrapped_key_size = wrapped_key_size;
+
+	send_fbe_req(&arg);
+
+	if (arg.ret || arg.response.status) {
+		pr_err("send_fbe_req_v2 failed with ret = %d, status = %d\n",
+		       arg.ret, arg.response.status);
+		return -EINVAL;
+	}
+	memcpy(secret, &(arg.response.secret_key[0]), secret_size);
+
 	return 0;
 }
 EXPORT_SYMBOL(crypto_qti_virt_derive_raw_secret_platform);

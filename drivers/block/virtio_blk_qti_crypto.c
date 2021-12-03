@@ -2,7 +2,7 @@
 /*
  * virtio block crypto ops QTI implementation.
  *
- * Copyright (c) 2021, Linux Foundation. All rights reserved.
+ * Copyright (c) 2021-2022, Linux Foundation. All rights reserved.
  */
 
 #include <linux/device.h>
@@ -102,10 +102,14 @@ static int virtblk_crypto_qti_derive_raw_secret(struct keyslot_manager *ksm,
 		err = -EINVAL;
 		return err;
 	}
-	err = crypto_qti_virt_derive_raw_secret_platform(wrapped_key,
-							 wrapped_key_size,
-							 secret,
-							 secret_size);
+	if (wrapped_key_size > 64) {
+		err = crypto_qti_virt_derive_raw_secret_platform(wrapped_key,
+								 wrapped_key_size,
+								 secret,
+								 secret_size);
+	} else {
+		memcpy(secret, wrapped_key, secret_size);
+	}
 	return err;
 }
 
@@ -118,26 +122,29 @@ static const struct keyslot_mgmt_ll_ops virtio_blk_crypto_qti_ksm_ops = {
 int virtblk_init_crypto_qti_spec(void)
 {
 	int err = 0;
-	int cap_idx = 0;
 	unsigned int crypto_modes_supported[BLK_ENCRYPTION_MODE_MAX];
 
-	/* Actual determination of capabilities for UFS/EMMC for different
-	 * encryption modes are done in the back end in case of virtualization
-	 * driver, so initializing this to 0xFFFFFFFF meaning it supports
-	 * all crypto capabilities to please the keyslot manager. feeding
-	 * as input parameter to the keyslot manager
-	 */
-	for (cap_idx = 0; cap_idx < BLK_ENCRYPTION_MODE_MAX; cap_idx++)
-		crypto_modes_supported[cap_idx] = 0xFFFFFFFF;
-	crypto_modes_supported[BLK_ENCRYPTION_MODE_INVALID] = 0;
+	memset(crypto_modes_supported, 0, sizeof(crypto_modes_supported));
 
+	/* Actual determination of capabilities for UFS/EMMC for different
+	 * encryption modes are done in the back end (host operating system)
+	 * in case of virtualization driver, so will get crypto capabilities
+	 * from the back end. The received capabilities is feeded as input
+	 * parameter to keyslot manager
+	 */
+	err = crypto_qti_virt_get_crypto_capabilities(crypto_modes_supported,
+						      sizeof(crypto_modes_supported));
+	if (err) {
+		pr_err("crypto_qti_virt_get_crypto_capabilities failed error = %d\n", err);
+		return err;
+	}
 	/* Get max number of ice  slots for guest vm */
 	err = crypto_qti_virt_ice_get_info(&num_ice_slots);
 	if (err) {
 		pr_err("crypto_qti_virt_ice_get_info failed error = %d\n", err);
 		return err;
 	}
-	/* Return from here inacse keyslot manger is already created */
+	/* Return from here incase keyslot manger is already created */
 	if (virtio_ksm)
 		return 0;
 
