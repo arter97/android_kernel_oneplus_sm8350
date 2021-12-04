@@ -91,6 +91,7 @@ enum qmi_ts_sensor {
 	QMI_TS_MMW2,
 	QMI_TS_MMW3,
 	QMI_TS_MMW_IFIC0,
+	QMI_TS_RF_CAL,
 	QMI_TS_MAX_NR
 };
 
@@ -183,6 +184,7 @@ static char sensor_clients[QMI_TS_MAX_NR][QMI_CLIENT_NAME_LENGTH] = {
 	{"mmw2"},
 	{"mmw3"},
 	{"mmw_ific0"},
+	{"rf_cal"},
 };
 
 static int32_t encode_qmi(int32_t val)
