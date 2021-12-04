@@ -552,6 +552,7 @@ static void slate_irq_tasklet_hndlr_l(void)
 	g_slav_status_reg = slave_status_reg;
 }
 
+/* Returns 1, if the slate spi is active */
 static int is_slate_resume(void *handle)
 {
 	uint32_t txn_len;
@@ -611,7 +612,7 @@ static int slatecom_resume_l(void *handle)
 		pr_err("Slate boot is not complete, skip SPI resume\n");
 		goto unlock;
 	}
-	if (is_slate_resume(handle)) {
+	if (!is_slate_resume(handle)) {
 		if (atomic_read(&ok_to_sleep)) {
 			reinit_completion(&slate_resume_wait);
 			ret = wait_for_completion_timeout(
