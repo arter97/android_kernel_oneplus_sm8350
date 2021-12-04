@@ -54,6 +54,7 @@
 #define WR_BUF_SIZE_IN_WORDS_FOR_USE   \
 		(WR_BUF_SIZE_IN_WORDS - WR_PROTOCOL_OVERHEAD_IN_WORDS)
 
+#define WR_BUF_SIZE_IN_BYTES_FOR_USE	(WR_BUF_SIZE_IN_WORDS_FOR_USE * sizeof(uint32_t))
 #define SLATE_RESUME_IRQ_TIMEOUT 1000
 #define SLATE_SPI_AUTOSUSPEND_TIMEOUT 5000
 
@@ -703,12 +704,80 @@ error_ret:
 }
 EXPORT_SYMBOL(slatecom_ahb_read);
 
+int slatecom_ahb_write_bytes(void *handle, uint32_t ahb_start_addr,
+	uint32_t num_bytes, void *write_buf)
+{
+	uint32_t txn_len;
+	uint8_t *tx_buf;
+	int ret;
+	uint8_t cmnd = 0;
+	uint32_t ahb_addr = 0;
+	uint32_t curr_num_bytes;
+	struct spi_device *spi = get_spi_device();
+
+	if (!handle || !write_buf || num_bytes == 0
+		|| num_bytes > (SLATE_SPI_MAX_WORDS * sizeof(int))) {
+		pr_err("Invalid param\n");
+		return -EINVAL;
+	}
+
+	if (!is_slatecom_ready())
+		return -ENODEV;
+
+	if (spi_state == SLATECOM_SPI_BUSY) {
+		pr_err("Device busy\n");
+		return -EBUSY;
+	}
+
+	pm_runtime_get_sync(&spi->dev);
+	mutex_lock(&slate_task_mutex);
+
+	ahb_addr = ahb_start_addr;
+
+	mutex_lock(&cma_buffer_lock);
+	while (num_bytes) {
+		curr_num_bytes = (num_bytes < WR_BUF_SIZE_IN_BYTES_FOR_USE) ?
+						num_bytes : WR_BUF_SIZE_IN_BYTES_FOR_USE;
+
+		txn_len = SLATE_SPI_AHB_CMD_LEN + curr_num_bytes;
+
+		if ((txn_len % sizeof(uint32_t)) != 0) {
+			txn_len +=
+				(sizeof(uint32_t) - (txn_len % sizeof(uint32_t)));
+		}
+		memset(fxd_mem_buffer, 0, txn_len);
+		tx_buf = fxd_mem_buffer;
+
+		cmnd |= SLATE_SPI_AHB_WRITE_CMD;
+
+		memcpy(tx_buf, &cmnd, sizeof(cmnd));
+		memcpy(tx_buf+sizeof(cmnd), &ahb_addr, sizeof(ahb_addr));
+		memcpy(tx_buf+SLATE_SPI_AHB_CMD_LEN, write_buf, curr_num_bytes);
+
+		ret = slatecom_transfer(handle, tx_buf, NULL, txn_len);
+		if (ret) {
+			pr_err("slatecom_transfer fail with error %d\n", ret);
+			goto error;
+		}
+		write_buf += curr_num_bytes;
+		ahb_addr += curr_num_bytes;
+		num_bytes -= curr_num_bytes;
+	}
+
+error:
+	mutex_unlock(&cma_buffer_lock);
+	pm_runtime_mark_last_busy(&spi->dev);
+	pm_runtime_put_sync_autosuspend(&spi->dev);
+	mutex_unlock(&slate_task_mutex);
+	return ret;
+}
+EXPORT_SYMBOL(slatecom_ahb_write_bytes);
+
 int slatecom_ahb_write(void *handle, uint32_t ahb_start_addr,
 	uint32_t num_words, void *write_buf)
 {
 	uint32_t txn_len;
 	uint8_t *tx_buf;
-	uint32_t size;
 	int ret;
 	uint8_t cmnd = 0;
 	uint32_t ahb_addr = 0;
@@ -736,7 +805,6 @@ int slatecom_ahb_write(void *handle, uint32_t ahb_start_addr,
 	ahb_addr = ahb_start_addr;
 
 	mutex_lock(&cma_buffer_lock);
-	size = num_words*SLATE_SPI_WORD_SIZE;
 	while (num_words) {
 		curr_num_words = (num_words < WR_BUF_SIZE_IN_WORDS_FOR_USE) ?
 						num_words : WR_BUF_SIZE_IN_WORDS_FOR_USE;
