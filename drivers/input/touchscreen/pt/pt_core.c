@@ -7653,10 +7653,13 @@ static int pt_core_sleep_(struct pt_core_data *cd)
 	int rc = 0;
 
 	mutex_lock(&cd->system_lock);
-	if (cd->sleep_state == SS_SLEEP_OFF) {
+	pt_debug(cd->dev, DL_INFO, "%s - sleep_state %d\n", __func__, cd->sleep_state);
+	if (cd->sleep_state == SS_SLEEP_OFF || cd->sleep_state == SS_SLEEP_NONE) {
 		cd->sleep_state = SS_SLEEPING;
 	} else {
 		mutex_unlock(&cd->system_lock);
+		pt_debug(cd->dev, DL_INFO,
+			"%s - Skip slee[ state %d\n", __func__, cd->sleep_state);
 		return 1;
 	}
 	mutex_unlock(&cd->system_lock);
@@ -7666,13 +7669,8 @@ static int pt_core_sleep_(struct pt_core_data *cd)
 	cancel_work_sync(&cd->enum_work);
 	pt_stop_wd_timer(cd);
 
-	if (IS_EASY_WAKE_CONFIGURED(cd->easy_wakeup_gesture) && cd->runtime) {
-		rc = pt_put_device_into_easy_wakeup_(cd);
-		if (rc)
-			pr_err("%s: Easy wakeup error detected :rc=%d\n", __func__, rc);
-	} else if (cd->cpdata->flags & PT_CORE_FLAG_POWEROFF_ON_SLEEP) {
-		pt_debug(cd->dev, DL_INFO,
-			"%s: Entering into power off mode:\n", __func__);
+	if (cd->cpdata->flags & PT_CORE_FLAG_POWEROFF_ON_SLEEP) {
+		pt_debug(cd->dev, DL_INFO, "%s: Entering into power off mode:\n", __func__);
 		rc = pt_core_poweroff_device_(cd);
 		if (rc)
 			pr_err("%s: Power off error detected :rc=%d\n", __func__, rc);
@@ -7696,6 +7694,86 @@ static int pt_core_sleep_(struct pt_core_data *cd)
 
 	return rc;
 }
+
+/*******************************************************************************
+ * FUNCTION: pt_core_easywake_on_
+ *
+ * SUMMARY: Suspend the device with easy wake on the
+ *  configuration in the core platform data structure.
+ *
+ * RETURN:
+ *   0 = success
+ *  !0 = failure
+ *
+ * PARAMETERS:
+ *  *cd  - pointer to core data
+ ******************************************************************************/
+static int pt_core_easywake_on_(struct pt_core_data *cd)
+{
+	int rc = 0;
+
+	mutex_lock(&cd->system_lock);
+
+	if (cd->sleep_state == SS_SLEEP_ON) {
+		mutex_unlock(&cd->system_lock);
+		pt_debug(cd->dev, DL_INFO, "%s - Skip sleep state %d\n",
+			__func__, cd->sleep_state);
+		return 1;
+	}
+	mutex_unlock(&cd->system_lock);
+
+	/* Ensure watchdog and startup works stopped */
+	pt_stop_wd_timer(cd);
+	cancel_work_sync(&cd->enum_work);
+	pt_stop_wd_timer(cd);
+
+	if (IS_EASY_WAKE_CONFIGURED(cd->easy_wakeup_gesture)) {
+		rc = pt_put_device_into_easy_wakeup_(cd);
+		pt_debug(cd->dev, DL_INFO, "%s :Entering into easywakeup: rc=%d\n", __func__, rc);
+		if (rc)
+			pr_err("%s: Easy wakeup error detected :rc=%d\n", __func__, rc);
+	}
+
+	return rc;
+}
+
+
+/*******************************************************************************
+ * FUNCTION: pt_core_easywake_on
+ *
+ * SUMMARY: Protected call to pt_core_easywake_on_ by exclusive access to the DUT.
+ *
+ * RETURN:
+ *   0 = success
+ *  !0 = failure
+ *
+ * PARAMETERS:
+ *  *cd  - pointer to core data
+ ******************************************************************************/
+static int pt_core_easywake_on(struct pt_core_data *cd)
+{
+	int rc = 0;
+
+	rc = request_exclusive(cd, cd->dev, PT_REQUEST_EXCLUSIVE_TIMEOUT);
+	if (rc < 0) {
+		pt_debug(cd->dev, DL_ERROR,
+			"%s: fail get exclusive ex=%p own=%p\n",
+			__func__, cd->exclusive_dev, cd->dev);
+		return rc;
+	}
+
+	rc = pt_core_easywake_on_(cd);
+
+	if (release_exclusive(cd, cd->dev) < 0)
+		pt_debug(cd->dev, DL_ERROR,
+			"%s: fail to release exclusive\n", __func__);
+	else
+		pt_debug(cd->dev, DL_DEBUG, "%s: pass release exclusive\n",
+			__func__);
+
+	return rc;
+}
+
 
 /*******************************************************************************
  * FUNCTION: pt_core_sleep
@@ -8420,7 +8498,7 @@ static int pt_read_input(struct pt_core_data *cd)
 	 */
 	mutex_lock(&cd->system_lock);
 
-	if (IS_EASY_WAKE_CONFIGURED(cd->easy_wakeup_gesture) && cd->runtime) {
+	if (IS_EASY_WAKE_CONFIGURED(cd->easy_wakeup_gesture)) {
 		if (cd->sleep_state == SS_SLEEP_ON) {
 			mutex_unlock(&cd->system_lock);
 			if (!dev->power.is_suspended)
@@ -9014,13 +9092,16 @@ static int pt_core_wake_device_from_deep_sleep_(
  ******************************************************************************/
 static int pt_core_wake_device_from_easy_wake_(struct pt_core_data *cd)
 {
+	int rc = 0;
+
 	mutex_lock(&cd->system_lock);
 	cd->wait_until_wake = 1;
 	mutex_unlock(&cd->system_lock);
 	wake_up(&cd->wait_q);
 	msleep(20);
 
-	return pt_core_wake_device_from_deep_sleep_(cd);
+	rc = pt_core_wake_device_from_deep_sleep_(cd);
+	return rc;
 }
 
 /*******************************************************************************
@@ -9481,6 +9562,81 @@ exit:
 }
 
 /*******************************************************************************
+ * FUNCTION: pt_core_easywake_off_
+ *
+ * SUMMARY: Resume the device with a power on or wake from deep sleep based on
+ *  the configuration in the core platform data structure.
+ *
+ * RETURN:
+ *   0 = success
+ *  !0 = failure
+ *
+ * PARAMETERS:
+ *  *cd  - pointer to core data
+ ******************************************************************************/
+static int pt_core_easywake_off_(struct pt_core_data *cd)
+{
+	int rc = 0;
+
+	mutex_lock(&cd->system_lock);
+	if (cd->sleep_state == SS_SLEEP_OFF) {
+		mutex_unlock(&cd->system_lock);
+		pt_debug(cd->dev, DL_INFO,
+			"%s - %d skip wakeoff\n", __func__, cd->sleep_state);
+		return 1;
+	}
+	mutex_unlock(&cd->system_lock);
+
+	if (!(cd->cpdata->flags & PT_CORE_FLAG_SKIP_RESUME)) {
+		if (IS_EASY_WAKE_CONFIGURED(cd->easy_wakeup_gesture))
+			rc = pt_core_wake_device_from_easy_wake_(cd);
+		if (rc < 0)
+			pt_debug(cd->dev, DL_ERROR,
+				"%s - %d failed %d\n", __func__, rc);
+	}
+
+	pt_start_wd_timer(cd);
+	return rc;
+}
+
+/*******************************************************************************
+ * FUNCTION: pt_core_easywake_off
+ *
+ * SUMMARY: Protected call to pt_core_easywake_off by exclusive access to the DUT.
+ *
+ * RETURN:
+ *   0 = success
+ *  !0 = failure
+ *
+ * PARAMETERS:
+ *  *cd  - pointer to core data
+ ******************************************************************************/
+static int pt_core_easywake_off(struct pt_core_data *cd)
+{
+	int rc;
+
+	rc = request_exclusive(cd, cd->dev, PT_REQUEST_EXCLUSIVE_TIMEOUT);
+	if (rc < 0) {
+		pt_debug(cd->dev, DL_ERROR,
+				"%s: fail get exclusive ex=%p own=%p\n",
+				__func__, cd->exclusive_dev, cd->dev);
+		return rc;
+	}
+
+	rc = pt_core_easywake_off_(cd);
+
+	if (release_exclusive(cd, cd->dev) < 0)
+		pt_debug(cd->dev, DL_ERROR, "%s: fail to release exclusive\n",
+			__func__);
+	else
+		pt_debug(cd->dev, DL_DEBUG, "%s: pass release exclusive\n",
+			__func__);
+
+	return rc;
+}
+
+
+/*******************************************************************************
  * FUNCTION: pt_core_wake_
  *
  * SUMMARY: Resume the device with a power on or wake from deep sleep based on
@@ -9498,18 +9654,18 @@ static int pt_core_wake_(struct pt_core_data *cd)
 	int rc = 0;
 
 	mutex_lock(&cd->system_lock);
-	if (cd->sleep_state == SS_SLEEP_ON) {
+	if (cd->sleep_state == SS_SLEEP_ON || cd->sleep_state == SS_SLEEP_NONE) {
 		cd->sleep_state = SS_WAKING;
 	} else {
 		mutex_unlock(&cd->system_lock);
+		pt_debug(cd->dev, DL_INFO,
+			"%s - skip wake sleep state %d\n", __func__, cd->sleep_state);
 		return 1;
 	}
 	mutex_unlock(&cd->system_lock);
 
 	if (!(cd->cpdata->flags & PT_CORE_FLAG_SKIP_RESUME)) {
-		if (IS_EASY_WAKE_CONFIGURED(cd->easy_wakeup_gesture) && cd->runtime)
-			rc = pt_core_wake_device_from_easy_wake_(cd);
-		else if (cd->cpdata->flags & PT_CORE_FLAG_POWEROFF_ON_SLEEP) {
+		if (cd->cpdata->flags & PT_CORE_FLAG_POWEROFF_ON_SLEEP) {
 			pt_debug(cd->dev, DL_INFO,
 				"%s: Entering into poweron mode:\n", __func__);
 			rc = pt_core_poweron_device_(cd);
@@ -10454,13 +10610,11 @@ static int pt_core_rt_suspend(struct device *dev)
 
 	dev_info(dev, "%s: Entering into runtime suspend mode:\n",
 		__func__);
+
 	if (cd->cpdata->flags & PT_CORE_FLAG_SKIP_RUNTIME)
 		return 0;
 
-	if (cd->sleep_state == SS_SLEEP_OFF)
-		cd->runtime = 1;
-
-	rc = pt_core_sleep(cd);
+	rc = pt_core_easywake_on(cd);
 	if (rc < 0) {
 		pt_debug(dev, DL_ERROR, "%s: Error on sleep\n", __func__);
 		return -EAGAIN;
@@ -10491,14 +10645,11 @@ static int pt_core_rt_resume(struct device *dev)
 	if (cd->cpdata->flags & PT_CORE_FLAG_SKIP_RUNTIME)
 		return 0;
 
-	rc = pt_core_wake(cd);
+	rc = pt_core_easywake_off(cd);
 	if (rc < 0) {
 		pt_debug(dev, DL_ERROR, "%s: Error on wake\n", __func__);
 		return -EAGAIN;
 	}
-
-	if (cd->sleep_state == SS_SLEEP_OFF)
-		cd->runtime = 0;
 
 	return 0;
 }
@@ -10527,20 +10678,17 @@ static int pt_core_suspend_(struct device *dev)
 	pt_debug(dev, DL_INFO, "%s: Entering into suspend mode:\n",
 		__func__);
 	rc = pt_core_sleep(cd);
-	if (rc < 0) {
+	if (rc) {
 		pt_debug(dev, DL_ERROR, "%s: Error on sleep\n", __func__);
 		return -EAGAIN;
 	}
 
+#ifdef REGULATOR
 	rc = pt_enable_regulator(cd, false);
-	if (rc) {
-		dev_err(dev, "%s: Failed to disable regulators: rc=%d\n",
-			__func__, rc);
-	}
-	dev_info(dev, "%s: Voltage regulators disabled: rc=%d\n",
-		__func__, rc);
-
-	if (!IS_EASY_WAKE_CONFIGURED(cd->easy_wakeup_gesture) && !cd->runtime)
+	if (rc)
+		dev_err(dev, "%s: Failed to disable regulators: rc=%d\n", __func__, rc);
+#endif
+	if (!IS_EASY_WAKE_CONFIGURED(cd->easy_wakeup_gesture))
 		return 0;
 
 	/* Required to prevent interrupts before bus awake */
@@ -10557,7 +10705,7 @@ static int pt_core_suspend_(struct device *dev)
 			__func__);
 	}
 
-	return 0;
+	return rc;
 }
 
 /*******************************************************************************
@@ -10577,10 +10725,14 @@ static int pt_core_suspend_(struct device *dev)
 static int pt_core_suspend(struct device *dev)
 {
 	struct pt_core_data *cd = dev_get_drvdata(dev);
+	int rc = 0;
+
 	if (cd->cpdata->flags & PT_CORE_FLAG_SKIP_SYS_SLEEP)
 		return 0;
 
-	return pt_core_suspend_(dev);
+	rc = pt_core_suspend_(dev);
+	pt_debug(dev, DL_WARN, "%s Exit - rc = %d\n", __func__, rc);
+	return rc;
 }
 
 /*******************************************************************************
@@ -10603,15 +10755,19 @@ static int pt_core_resume_(struct device *dev)
 
 	dev_info(dev, "%s: Entering into resume mode:\n",
 		__func__);
+
+#ifdef REGULATOR
 	rc = pt_enable_regulator(cd, true);
 	if (rc < 0) {
 		dev_err(dev, "%s: Failed to enable regulators: rc=%d\n",
 			__func__, rc);
 	}
+#endif
+
 	dev_info(dev, "%s: Voltage regulator enabled: rc=%d\n",
 		__func__, rc);
 
-	if (!IS_EASY_WAKE_CONFIGURED(cd->easy_wakeup_gesture) && !cd->runtime)
+	if (!IS_EASY_WAKE_CONFIGURED(cd->easy_wakeup_gesture))
 		goto exit;
 
 	/*
@@ -10637,7 +10793,7 @@ static int pt_core_resume_(struct device *dev)
 
 exit:
 	rc = pt_core_wake(cd);
-	if (rc < 0) {
+	if (rc) {
 		dev_err(dev, "%s: Failed to wake up: rc=%d\n",
 			__func__, rc);
 		return -EAGAIN;
@@ -12418,6 +12574,44 @@ static void pt_setup_early_suspend(struct pt_core_data *cd)
 }
 #elif defined(CONFIG_DRM)
 
+static void pt_resume_work(struct work_struct *work)
+{
+	struct pt_core_data *pt_data = container_of(work, struct pt_core_data,
+					resume_work);
+	int rc = 0;
+
+	if (pt_data->cpdata->flags & PT_CORE_FLAG_SKIP_RUNTIME)
+		return;
+
+	rc = pt_core_easywake_off(pt_data);
+	if (rc < 0) {
+		pt_debug(pt_data->dev, DL_ERROR,
+			"%s: Error on wake\n", __func__);
+		return;
+	}
+
+}
+
+static void pt_suspend_work(struct work_struct *work)
+{
+	struct pt_core_data *pt_data = container_of(work, struct pt_core_data,
+					suspend_work);
+	int rc = 0;
+
+	pt_debug(pt_data->dev, DL_INFO, "%s Start\n", __func__);
+
+	if (pt_data->cpdata->flags & PT_CORE_FLAG_SKIP_RUNTIME)
+		return;
+
+	rc = pt_core_easywake_on(pt_data);
+	if (rc < 0) {
+		pt_debug(pt_data->dev, DL_ERROR, "%s: Error on sleep\n", __func__);
+		return;
+	}
+	pt_debug(pt_data->dev, DL_INFO, "%s Exit\n", __func__);
+
+}
+
 /*******************************************************************************
  * FUNCTION: drm_notifier_callback
  *
@@ -12453,7 +12647,11 @@ static int drm_notifier_callback(struct notifier_block *self,
 	}
 
 	blank = evdata->data;
-	pt_debug(cd->dev, DL_INFO, "%s: DRM event:%lu,blank:%d", __func__, event, *blank);
+	pt_debug(cd->dev, DL_INFO, "%s: DRM event:%lu,blank:%d fb_state %d sleep state %d ",
+		__func__, event, *blank, cd->fb_state, cd->sleep_state);
+	pt_debug(cd->dev, DL_INFO, "%s: DRM Power - %s - FB state %d ",
+		__func__, (*blank == DRM_PANEL_BLANK_UNBLANK)?"UP":"DOWN", cd->fb_state);
+
 	if (*blank == DRM_PANEL_BLANK_UNBLANK) {
 		pt_debug(cd->dev, DL_INFO, "%s: UNBLANK!\n", __func__);
 		if (event == DRM_PANEL_EARLY_EVENT_BLANK) {
@@ -12461,7 +12659,9 @@ static int drm_notifier_callback(struct notifier_block *self,
 				__func__, event);
 		} else if (event == DRM_PANEL_EVENT_BLANK) {
 			if (cd->fb_state != FB_ON) {
-				call_atten_cb(cd, PT_ATTEN_RESUME, 0);
+				pt_debug(cd->dev, DL_INFO, "%s: Resume notifier called!\n",
+					__func__);
+				queue_work(cd->pt_workqueue, &cd->resume_work);
 #if defined(CONFIG_PM_SLEEP)
 				pt_debug(cd->dev, DL_INFO, "%s: Resume notifier called!\n",
 					__func__);
@@ -12472,11 +12672,8 @@ static int drm_notifier_callback(struct notifier_block *self,
 				pt_debug(cd->dev, DL_INFO, "%s: Resume notified!\n", __func__);
 			}
 		}
-	} else if (*blank == DRM_PANEL_BLANK_LP || *blank == DRM_PANEL_BLANK_POWERDOWN) {
-		if (*blank == DRM_PANEL_BLANK_LP)
-			pt_debug(cd->dev, DL_INFO, "%s: LOWPOWER!\n", __func__);
-		else
-			pt_debug(cd->dev, DL_INFO, "%s: POWERDOWN!\n", __func__);
+	} else if (*blank == DRM_PANEL_BLANK_LP) {
+		pt_debug(cd->dev, DL_INFO, "%s: LOWPOWER!\n", __func__);
 		if (event == DRM_PANEL_EARLY_EVENT_BLANK) {
 			if (cd->fb_state != FB_OFF) {
 #if defined(CONFIG_PM_SLEEP)
@@ -12485,7 +12682,8 @@ static int drm_notifier_callback(struct notifier_block *self,
 				if (cd->cpdata->flags & PT_CORE_FLAG_SKIP_RUNTIME)
 					pt_core_suspend_(cd->dev);
 #endif
-				call_atten_cb(cd, PT_ATTEN_SUSPEND, 0);
+				cancel_work_sync(&cd->resume_work);
+				queue_work(cd->pt_workqueue, &cd->suspend_work);
 				cd->fb_state = FB_OFF;
 				pt_debug(cd->dev, DL_INFO, "%s: Suspend notified!\n", __func__);
 			}
@@ -12511,13 +12709,24 @@ exit:
  ******************************************************************************/
 static void pt_setup_drm_notifier(struct pt_core_data *cd)
 {
-	cd->fb_state = FB_ON;
+	cd->fb_state = FB_NONE;
 	cd->fb_notifier.notifier_call = drm_notifier_callback;
 	pt_debug(cd->dev, DL_INFO, "%s: Setting up drm notifier\n", __func__);
 
 	if (!active_panel)
 		pt_debug(cd->dev, DL_ERROR,
 			"%s: Active panel not registered!\n", __func__);
+
+	cd->pt_workqueue = create_singlethread_workqueue("ts_wq");
+	if (!cd->pt_workqueue) {
+		pt_debug(cd->dev, DL_ERROR,
+			"%s: worker thread creation failed !\n", __func__);
+	}
+
+	if (cd->pt_workqueue) {
+		INIT_WORK(&cd->resume_work, pt_resume_work);
+		INIT_WORK(&cd->suspend_work, pt_suspend_work);
+	}
 
 	if (active_panel &&
 		drm_panel_notifier_register(active_panel,
@@ -17082,7 +17291,6 @@ int pt_probe(const struct pt_bus_ops *ops, struct device *dev,
 	cd->watchdog_enabled           = 0;
 	cd->startup_retry_count        = 0;
 	cd->core_probe_complete        = 0;
-	cd->runtime                    = 0;
 	cd->fw_system_mode             = FW_SYS_MODE_BOOT;
 	cd->pip_cmd_timeout            = PT_PIP_CMD_DEFAULT_TIMEOUT;
 	cd->pip_cmd_timeout_default    = PT_PIP_CMD_DEFAULT_TIMEOUT;
@@ -17092,6 +17300,7 @@ int pt_probe(const struct pt_bus_ops *ops, struct device *dev,
 	cd->cal_cache_in_host          = PT_FEATURE_DISABLE;
 	cd->multi_chip                 = PT_FEATURE_DISABLE;
 	cd->tthe_hid_usb_format        = PT_FEATURE_DISABLE;
+	cd->sleep_state					= SS_SLEEP_NONE;
 
 	if (cd->cpdata->config_dut_generation == CONFIG_DUT_PIP2_CAPABLE) {
 		cd->set_dut_generation = true;
