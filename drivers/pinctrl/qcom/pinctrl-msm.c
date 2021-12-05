@@ -1594,7 +1594,7 @@ static int pinctrl_hibernation_notifier(struct notifier_block *nb,
 		if (pctrl->gpio_regs == NULL)
 			return -ENOMEM;
 
-		if (soc->ntiles) {
+		if (soc->dir_conn_addr) {
 			pctrl->msm_tile_regs = kcalloc(soc->ntiles,
 				sizeof(*pctrl->msm_tile_regs), GFP_KERNEL);
 			if (pctrl->msm_tile_regs == NULL) {
@@ -1634,12 +1634,17 @@ static int msm_pinctrl_hibernation_suspend(void)
 		return 0;
 
 	/* Save direction conn registers for hmss */
-	for (i = 0; i < soc->ntiles; i++) {
-		tile_addr = pctrl->regs[i] + soc->dir_conn_addr[i];
-		pr_err("The tile addr generated is 0x%lx\n", (u64)tile_addr);
-		for (j = 0; j < 8; j++)
-			pctrl->msm_tile_regs[i].dir_con_regs[j] =
+	if (soc->dir_conn_addr) {
+		for (i = 0; i < soc->ntiles; i++) {
+			if (soc->tiles)
+				tile_addr = pctrl->regs[i] + soc->dir_conn_addr[i];
+			else
+				tile_addr = pctrl->regs[0] + soc->dir_conn_addr[i];
+			pr_info("The tile addr generated is 0x%lx\n", (u64)tile_addr);
+			for (j = 0; j < 8; j++)
+				pctrl->msm_tile_regs[i].dir_con_regs[j] =
 						readl_relaxed(tile_addr + j*4);
+		}
 	}
 
 	/* All normal gpios will have common registers, first save them */
@@ -1652,9 +1657,11 @@ static int msm_pinctrl_hibernation_suspend(void)
 				msm_readl_ctl(pctrl, pgroup);
 		pctrl->gpio_regs[i].io_reg =
 				msm_readl_io(pctrl, pgroup);
-		pctrl->gpio_regs[i].intr_cfg_reg =
+		if (pgroup->intr_cfg_reg)
+			pctrl->gpio_regs[i].intr_cfg_reg =
 				msm_readl_intr_cfg(pctrl, pgroup);
-		pctrl->gpio_regs[i].intr_status_reg =
+		if (pgroup->intr_status_reg)
+			pctrl->gpio_regs[i].intr_status_reg =
 				msm_readl_intr_status(pctrl, pgroup);
 	}
 
@@ -1681,12 +1688,17 @@ static void msm_pinctrl_hibernation_resume(void)
 	if (likely(!hibernation) || !pctrl->gpio_regs || !pctrl->msm_tile_regs)
 		return;
 
-	for (i = 0; i < soc->ntiles; i++) {
-		tile_addr = pctrl->regs[i] + soc->dir_conn_addr[i];
-		pr_err("The tile addr generated is 0x%lx\n", (u64)tile_addr);
-		for (j = 0; j < 8; j++)
-			writel_relaxed(pctrl->msm_tile_regs[i].dir_con_regs[j],
+	if (soc->dir_conn_addr) {
+		for (i = 0; i < soc->ntiles; i++) {
+			if (soc->tiles)
+				tile_addr = pctrl->regs[i] + soc->dir_conn_addr[i];
+			else
+				tile_addr = pctrl->regs[0] + soc->dir_conn_addr[i];
+			pr_info("The tile addr generated is 0x%lx\n", (u64)tile_addr);
+			for (j = 0; j < 8; j++)
+				writel_relaxed(pctrl->msm_tile_regs[i].dir_con_regs[j],
 							tile_addr + j*4);
+		}
 	}
 
 	/* Restore normal gpios */
@@ -1699,9 +1711,11 @@ static void msm_pinctrl_hibernation_resume(void)
 					pctrl, pgroup);
 		msm_writel_io(pctrl->gpio_regs[i].io_reg,
 					pctrl, pgroup);
-		msm_writel_intr_cfg(pctrl->gpio_regs[i].intr_cfg_reg,
+		if (pgroup->intr_cfg_reg)
+			msm_writel_intr_cfg(pctrl->gpio_regs[i].intr_cfg_reg,
 					pctrl, pgroup);
-		msm_writel_intr_status(pctrl->gpio_regs[i].intr_status_reg,
+		if (pgroup->intr_status_reg)
+			msm_writel_intr_status(pctrl->gpio_regs[i].intr_status_reg,
 					pctrl, pgroup);
 	}
 
