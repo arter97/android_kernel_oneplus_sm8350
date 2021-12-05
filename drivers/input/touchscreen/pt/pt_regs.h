@@ -143,6 +143,8 @@
 #define TT7XXX_EXAMPLE
 #endif
 
+#define TOUCH_TO_WAKE_POWER_FEATURE_WORK_AROUND
+
 /*
  * The largest PIP message is the PIP2 FILE_WRITE which has:
  *     2 byte register
@@ -1108,6 +1110,8 @@ enum pt_sleep_state {
 	SS_SLEEP_ON,
 	SS_SLEEPING,
 	SS_WAKING,
+	SS_EASY_WAKING_ON,
+	SS_EASY_WAKING_OFF,
 };
 
 enum pt_fb_state {
@@ -1443,6 +1447,7 @@ struct pt_core_data {
 	char core_id[20];
 	struct device *dev;
 	struct workqueue_struct *pt_workqueue;
+	struct work_struct	resume_offload_work;
 	struct work_struct	suspend_work;
 	struct work_struct	resume_work;
 

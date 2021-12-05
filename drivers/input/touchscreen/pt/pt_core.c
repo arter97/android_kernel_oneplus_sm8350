@@ -41,6 +41,11 @@
 #define FT_I2C_VTG_MIN_UV       1800000
 #define FT_I2C_VTG_MAX_UV       1800000
 
+#define PWR_SUSPEND_LOAD_UA  165
+#define I2C_SUSPEND_LOAD_UA  100
+#define PWR_ACTIVE_LOAD_MA  12000
+#define I2C_ACTIVE_LOAD_MA  30000
+
 #define PT_CORE_STARTUP_RETRY_COUNT		3
 
 #define PT_STATUS_STR_LEN (50)
@@ -51,6 +56,7 @@ static struct drm_panel *active_panel;
 
 MODULE_FIRMWARE(PT_FW_FILE_NAME);
 
+static int pt_lpm_regulator(struct regulator *reg, int load_uA);
 static const char *pt_driver_core_name = PT_CORE_NAME;
 static const char *pt_driver_core_version = PT_DRIVER_VERSION;
 static const char *pt_driver_core_date = PT_DRIVER_DATE;
@@ -7660,7 +7666,7 @@ static int pt_core_sleep_(struct pt_core_data *cd)
 		mutex_unlock(&cd->system_lock);
 		pt_debug(cd->dev, DL_INFO,
 			"%s - Skip slee[ state %d\n", __func__, cd->sleep_state);
-		return 1;
+		return 0;
 	}
 	mutex_unlock(&cd->system_lock);
 
@@ -7714,11 +7720,11 @@ static int pt_core_easywake_on_(struct pt_core_data *cd)
 
 	mutex_lock(&cd->system_lock);
 
-	if (cd->sleep_state == SS_SLEEP_ON) {
+	if (cd->sleep_state == SS_EASY_WAKING_ON) {
 		mutex_unlock(&cd->system_lock);
 		pt_debug(cd->dev, DL_INFO, "%s - Skip sleep state %d\n",
 			__func__, cd->sleep_state);
-		return 1;
+		return 0;
 	}
 	mutex_unlock(&cd->system_lock);
 
@@ -7733,6 +7739,9 @@ static int pt_core_easywake_on_(struct pt_core_data *cd)
 		if (rc)
 			pr_err("%s: Easy wakeup error detected :rc=%d\n", __func__, rc);
 	}
+	mutex_lock(&cd->system_lock);
+	cd->sleep_state = SS_EASY_WAKING_ON;
+	mutex_unlock(&cd->system_lock);
 
 	return rc;
 }
@@ -8499,7 +8508,7 @@ static int pt_read_input(struct pt_core_data *cd)
 	mutex_lock(&cd->system_lock);
 
 	if (IS_EASY_WAKE_CONFIGURED(cd->easy_wakeup_gesture)) {
-		if (cd->sleep_state == SS_SLEEP_ON) {
+		if (cd->sleep_state == SS_SLEEP_ON || cd->sleep_state == SS_EASY_WAKING_ON) {
 			mutex_unlock(&cd->system_lock);
 			if (!dev->power.is_suspended)
 				goto read;
@@ -9579,11 +9588,11 @@ static int pt_core_easywake_off_(struct pt_core_data *cd)
 	int rc = 0;
 
 	mutex_lock(&cd->system_lock);
-	if (cd->sleep_state == SS_SLEEP_OFF) {
+	if (cd->sleep_state == SS_EASY_WAKING_OFF) {
 		mutex_unlock(&cd->system_lock);
 		pt_debug(cd->dev, DL_INFO,
 			"%s - %d skip wakeoff\n", __func__, cd->sleep_state);
-		return 1;
+		return 0;
 	}
 	mutex_unlock(&cd->system_lock);
 
@@ -9595,6 +9604,9 @@ static int pt_core_easywake_off_(struct pt_core_data *cd)
 				"%s - %d failed %d\n", __func__, rc);
 	}
 
+	mutex_lock(&cd->system_lock);
+	cd->sleep_state = SS_EASY_WAKING_OFF;
+	mutex_unlock(&cd->system_lock);
 	pt_start_wd_timer(cd);
 	return rc;
 }
@@ -9660,7 +9672,7 @@ static int pt_core_wake_(struct pt_core_data *cd)
 		mutex_unlock(&cd->system_lock);
 		pt_debug(cd->dev, DL_INFO,
 			"%s - skip wake sleep state %d\n", __func__, cd->sleep_state);
-		return 1;
+		return 0;
 	}
 	mutex_unlock(&cd->system_lock);
 
@@ -9701,7 +9713,7 @@ static int pt_core_wake_(struct pt_core_data *cd)
  ******************************************************************************/
 static int pt_core_wake(struct pt_core_data *cd)
 {
-	int rc;
+	int rc = 0;
 
 	rc = request_exclusive(cd, cd->dev, PT_REQUEST_EXCLUSIVE_TIMEOUT);
 	if (rc < 0) {
@@ -10512,6 +10524,49 @@ regulator_put:
 	return rc;
 }
 
+static int pt_enable_vdd_regulator(struct pt_core_data *cd, bool en)
+{
+	int rc;
+
+	if (!en) {
+		rc = 0;
+		goto disable_vdd_reg;
+	}
+
+	if (cd->vdd) {
+		if (regulator_count_voltages(cd->vdd) > 0) {
+			rc = regulator_set_voltage(cd->vdd, FT_VTG_MIN_UV,
+						FT_VTG_MAX_UV);
+			if (rc) {
+				dev_err(cd->dev,
+					"Regulator set_vtg failed vdd rc=%d\n", rc);
+				goto exit;
+			}
+		}
+
+		rc = regulator_enable(cd->vdd);
+		if (rc) {
+			dev_err(cd->dev,
+				"Regulator vdd enable failed rc=%d\n", rc);
+			goto exit;
+		}
+	}
+
+	return 0;
+
+disable_vdd_reg:
+	if (cd->vdd) {
+		if (regulator_count_voltages(cd->vdd) > 0)
+			regulator_set_voltage(cd->vdd, FT_VTG_MIN_UV,
+						FT_VTG_MAX_UV);
+
+		regulator_disable(cd->vdd);
+	}
+
+exit:
+	return rc;
+}
+
 static int pt_enable_regulator(struct pt_core_data *cd, bool en)
 {
 	int rc;
@@ -10606,19 +10661,9 @@ exit:
 static int pt_core_rt_suspend(struct device *dev)
 {
 	struct pt_core_data *cd = dev_get_drvdata(dev);
-	int rc = 0;
 
-	dev_info(dev, "%s: Entering into runtime suspend mode:\n",
-		__func__);
-
-	if (cd->cpdata->flags & PT_CORE_FLAG_SKIP_RUNTIME)
-		return 0;
-
-	rc = pt_core_easywake_on(cd);
-	if (rc < 0) {
-		pt_debug(dev, DL_ERROR, "%s: Error on sleep\n", __func__);
-		return -EAGAIN;
-	}
+	pt_debug(dev, DL_DEBUG, "%s Skip - probe state %d\n",
+		__func__, cd->core_probe_complete);
 
 	return 0;
 }
@@ -10638,18 +10683,8 @@ static int pt_core_rt_suspend(struct device *dev)
 static int pt_core_rt_resume(struct device *dev)
 {
 	struct pt_core_data *cd = dev_get_drvdata(dev);
-	int rc = 0;
-
-	dev_info(dev, "%s: Entering into runtime resume mode:\n",
-		__func__);
-	if (cd->cpdata->flags & PT_CORE_FLAG_SKIP_RUNTIME)
-		return 0;
-
-	rc = pt_core_easywake_off(cd);
-	if (rc < 0) {
-		pt_debug(dev, DL_ERROR, "%s: Error on wake\n", __func__);
-		return -EAGAIN;
-	}
+	pt_debug(dev, DL_DEBUG, "%s Skip - probe state %d\n",
+		__func__, cd->core_probe_complete);
 
 	return 0;
 }
@@ -10683,11 +10718,17 @@ static int pt_core_suspend_(struct device *dev)
 		return -EAGAIN;
 	}
 
-#ifdef REGULATOR
-	rc = pt_enable_regulator(cd, false);
-	if (rc)
-		dev_err(dev, "%s: Failed to disable regulators: rc=%d\n", __func__, rc);
-#endif
+	rc = pt_enable_vdd_regulator(cd, false);
+	if (rc) {
+		dev_err(dev, "%s: Failed to disable vdd regulators: rc=%d\n",
+			__func__, rc);
+	}
+	rc = pt_lpm_regulator(cd->vcc_i2c, I2C_ACTIVE_LOAD_MA);
+	if (rc) {
+		dev_err(dev, "%s: Failed to enter to lpm mode rc=%d\n",
+			__func__, rc);
+	}
+
 	if (!IS_EASY_WAKE_CONFIGURED(cd->easy_wakeup_gesture))
 		return 0;
 
@@ -10706,6 +10747,13 @@ static int pt_core_suspend_(struct device *dev)
 	}
 
 	return rc;
+}
+
+static int pt_lpm_regulator(struct regulator *reg, int load_uA)
+{
+
+	return (regulator_count_voltages(reg) > 0) ?
+		regulator_set_load(reg, load_uA) : 0;
 }
 
 /*******************************************************************************
@@ -10732,7 +10780,7 @@ static int pt_core_suspend(struct device *dev)
 
 	rc = pt_core_suspend_(dev);
 	pt_debug(dev, DL_WARN, "%s Exit - rc = %d\n", __func__, rc);
-	return rc;
+	return 0;
 }
 
 /*******************************************************************************
@@ -10756,13 +10804,17 @@ static int pt_core_resume_(struct device *dev)
 	dev_info(dev, "%s: Entering into resume mode:\n",
 		__func__);
 
-#ifdef REGULATOR
-	rc = pt_enable_regulator(cd, true);
+	rc = pt_lpm_regulator(cd->vcc_i2c, I2C_ACTIVE_LOAD_MA);
 	if (rc < 0) {
-		dev_err(dev, "%s: Failed to enable regulators: rc=%d\n",
+		dev_err(dev, "%s: Failed to exit lpm mode: rc=%d\n",
 			__func__, rc);
 	}
-#endif
+
+	rc = pt_enable_vdd_regulator(cd, true);
+	if (rc < 0) {
+		dev_err(dev, "%s: Failed to enable vdd regulators: rc=%d\n",
+			__func__, rc);
+	}
 
 	dev_info(dev, "%s: Voltage regulator enabled: rc=%d\n",
 		__func__, rc);
@@ -10799,8 +10851,52 @@ exit:
 		return -EAGAIN;
 	}
 
-	return 0;
+	return rc;
 }
+
+/*******************************************************************************
+ * FUNCTION: resume_offload_work
+ *
+ * SUMMARY: Wrapper function of pt_core_resume_() to avoid TP to be waken/slept
+ *  along with kernel power state even the display is off based on the check of
+ *  TTDL core platform flag.
+ *
+ * RETURN:
+ *	 0 = success
+ *	!0 = failure
+ *
+ * PARAMETERS:
+ *      *dev  - pointer to core device
+ ******************************************************************************/
+static void pt_resume_offload_work(struct work_struct *work)
+
+{
+	int rc = 0;
+	int retry_count = 10;
+	struct pt_core_data *pt_data = container_of(work, struct pt_core_data,
+					resume_offload_work);
+
+	do {
+		retry_count--;
+	rc = pt_core_resume_(pt_data->dev);
+	if (rc < 0)
+		pt_debug(pt_data->dev, DL_ERROR,
+			"%s: Error on wake\n", __func__);
+	} while (retry_count && rc < 0);
+
+#ifdef TOUCH_TO_WAKE_POWER_FEATURE_WORK_AROUND
+	rc = pt_core_easywake_on(pt_data);
+	if (rc < 0) {
+		pt_debug(pt_data->dev, DL_ERROR,
+			"%s: Error on enable touch to wake key\n",
+			__func__);
+		return;
+	}
+	pt_data->fb_state = FB_OFF;
+	pt_debug(pt_data->dev, DL_INFO, "%s End\n", __func__);
+#endif
+}
+
 
 /*******************************************************************************
  * FUNCTION: pt_core_resume
@@ -10819,10 +10915,14 @@ exit:
 static int pt_core_resume(struct device *dev)
 {
 	struct pt_core_data *cd = dev_get_drvdata(dev);
+	int rc = 0;
 	if (cd->cpdata->flags & PT_CORE_FLAG_SKIP_SYS_SLEEP)
 		return 0;
 
-	return pt_core_resume_(dev);
+	queue_work(cd->pt_workqueue, &cd->resume_offload_work);
+	pt_debug(cd->dev, DL_ERROR, "%s End\n", __func__);
+
+	return rc;
 }
 #endif
 
@@ -12587,9 +12687,8 @@ static void pt_resume_work(struct work_struct *work)
 	if (rc < 0) {
 		pt_debug(pt_data->dev, DL_ERROR,
 			"%s: Error on wake\n", __func__);
-		return;
 	}
-
+	return;
 }
 
 static void pt_suspend_work(struct work_struct *work)
@@ -12609,7 +12708,7 @@ static void pt_suspend_work(struct work_struct *work)
 		return;
 	}
 	pt_debug(pt_data->dev, DL_INFO, "%s Exit\n", __func__);
-
+	return;
 }
 
 /*******************************************************************************
@@ -17649,6 +17748,7 @@ skip_enum:
 #elif defined(CONFIG_DRM)
 	pt_debug(dev, DL_ERROR, "%s: Probe: Setup drm notifier\n", __func__);
 	pt_setup_drm_notifier(cd);
+	INIT_WORK(&cd->resume_offload_work, pt_resume_offload_work);
 #elif defined(CONFIG_FB)
 	pt_setup_fb_notifier(cd);
 #endif
