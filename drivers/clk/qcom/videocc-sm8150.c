@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/clk-provider.h>
@@ -24,6 +24,10 @@
 #include "vdd-level-sm8150.h"
 
 static DEFINE_VDD_REGULATORS(vdd_mm, VDD_MM_NUM, 1, vdd_corner);
+
+static struct clk_vdd_class *video_cc_sm8150_regulators[] = {
+	&vdd_mm,
+};
 
 enum {
 	P_BI_TCXO,
@@ -255,12 +259,14 @@ static const struct regmap_config video_cc_sm8150_regmap_config = {
 	.fast_io = true,
 };
 
-static const struct qcom_cc_desc video_cc_sm8150_desc = {
+static struct qcom_cc_desc video_cc_sm8150_desc = {
 	.config = &video_cc_sm8150_regmap_config,
 	.clks = video_cc_sm8150_clocks,
 	.num_clks = ARRAY_SIZE(video_cc_sm8150_clocks),
 	.resets = video_cc_sm8150_resets,
 	.num_resets = ARRAY_SIZE(video_cc_sm8150_resets),
+	.clk_regulators = video_cc_sm8150_regulators,
+	.num_clk_regulators = ARRAY_SIZE(video_cc_sm8150_regulators),
 };
 
 static const struct of_device_id video_cc_sm8150_match_table[] = {
@@ -305,13 +311,6 @@ static int video_cc_sm8150_probe(struct platform_device *pdev)
 	struct regmap *regmap;
 	int ret;
 
-	vdd_mm.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_mm");
-	if (IS_ERR(vdd_mm.regulator[0])) {
-		if (PTR_ERR(vdd_mm.regulator[0]) != -EPROBE_DEFER)
-			dev_err(&pdev->dev, "Unable to get vdd_mm regulator\n");
-		return PTR_ERR(vdd_mm.regulator[0]);
-	}
-
 	pm_runtime_enable(&pdev->dev);
 	ret = pm_clk_create(&pdev->dev);
 	if (ret)
@@ -355,6 +354,11 @@ disable_pm_runtime:
 	return ret;
 }
 
+static void video_cc_sm8150_sync_state(struct device *dev)
+{
+	qcom_cc_sync_state(dev, &video_cc_sm8150_desc);
+}
+
 static const struct dev_pm_ops video_cc_sm8150_pm_ops = {
 	SET_RUNTIME_PM_OPS(pm_clk_suspend, pm_clk_resume, NULL)
 };
@@ -364,6 +368,7 @@ static struct platform_driver video_cc_sm8150_driver = {
 	.driver = {
 		.name = "video_cc-sm8150",
 		.of_match_table = video_cc_sm8150_match_table,
+		.sync_state = video_cc_sm8150_sync_state,
 		.pm = &video_cc_sm8150_pm_ops,
 	},
 };

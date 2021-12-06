@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2014-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2019, 2021 The Linux Foundation. All rights reserved.
  */
 
 #define pr_fmt(fmt) "sysmon-qmi: %s: " fmt, __func__
@@ -31,6 +31,9 @@
 #define QMI_SSCTL_SUBSYS_EVENT_REQ_V02		0x0023
 #define QMI_SSCTL_SUBSYS_EVENT_RESP_V02		0x0023
 #define QMI_SSCTL_SUBSYS_EVENT_READY_IND_V02	0x0023
+#define QMI_SSCTL_DSENTRY_REQ_V02		0x0026
+#define QMI_SSCTL_DSENTRY_RESP_V02		0x0026
+#define QMI_SSCTL_DSENTRY_READY_IND_V02	0x0026
 
 #define QMI_SSCTL_ERROR_MSG_LENGTH		90
 #define QMI_SSCTL_SUBSYS_NAME_LENGTH		15
@@ -76,6 +79,10 @@ static const int notif_map[SUBSYS_NOTIF_TYPE_COUNT] = {
 	[SUBSYS_AFTER_POWERUP] = SSCTL_SSR_EVENT_AFTER_POWERUP,
 	[SUBSYS_BEFORE_SHUTDOWN] = SSCTL_SSR_EVENT_BEFORE_SHUTDOWN,
 	[SUBSYS_AFTER_SHUTDOWN] = SSCTL_SSR_EVENT_AFTER_SHUTDOWN,
+	[SUBSYS_BEFORE_DS_ENTRY] = SSCTL_DS_EVENT_BEFORE_ENTRY,
+	[SUBSYS_AFTER_DS_ENTRY] = SSCTL_DS_EVENT_AFTER_ENTRY,
+	[SUBSYS_BEFORE_DS_EXIT] = SSCTL_DS_EVENT_BEFORE_EXIT,
+	[SUBSYS_AFTER_DS_EXIT] = SSCTL_DS_EVENT_AFTER_EXIT,
 };
 
 struct qmi_ssctl_shutdown_indication {
@@ -101,6 +108,22 @@ static void sysmon_ind_cb(struct qmi_handle *qmi, struct sockaddr_qrtr *sq,
 		       qmi_data->name);
 }
 
+static void sysmon_dsind_cb(struct qmi_handle *qmi, struct sockaddr_qrtr *sq,
+			struct qmi_txn *txn, const void *data)
+{
+	struct sysmon_qmi_data *qmi_data = container_of(qmi,
+					struct sysmon_qmi_data, clnt_handle);
+	struct subsys_desc *desc = qmi_data->desc;
+
+	pr_info("%s: Indication received from subsystem\n", qmi_data->name);
+
+	if (desc)
+		complete_dsentry_ack(desc);
+	else
+		pr_err("Failed to find subsystem: %s for indication\n",
+		       qmi_data->name);
+}
+
 static struct qmi_msg_handler qmi_indication_handler[] = {
 	{
 		.type = QMI_INDICATION,
@@ -108,6 +131,13 @@ static struct qmi_msg_handler qmi_indication_handler[] = {
 		.ei = qmi_ssctl_indication_ei,
 		.decoded_size = 0,
 		.fn = sysmon_ind_cb
+	},
+	{
+		.type = QMI_INDICATION,
+		.msg_id = QMI_SSCTL_DSENTRY_READY_IND_V02,
+		.ei = qmi_ssctl_indication_ei,
+		.decoded_size = 0,
+		.fn = sysmon_dsind_cb
 	},
 	{}
 };
@@ -354,6 +384,32 @@ static struct qmi_elem_info qmi_ssctl_shutdown_resp_msg_ei[] = {
 	QMI_EOTI_DATA_TYPE
 };
 
+struct qmi_ssctl_dsentry_req_msg {
+};
+
+struct qmi_ssctl_dsentry_resp_msg {
+	struct qmi_response_type_v01 resp;
+};
+
+static struct qmi_elem_info qmi_ssctl_dsentry_req_msg_ei[] = {
+	QMI_EOTI_DATA_TYPE
+};
+
+static struct qmi_elem_info qmi_ssctl_dsentry_resp_msg_ei[] = {
+	{
+		.data_type = QMI_STRUCT,
+		.elem_len  = 1,
+		.elem_size = sizeof(struct qmi_response_type_v01),
+		.array_type  = NO_ARRAY,
+		.tlv_type  = 0x02,
+		.offset    = offsetof(struct qmi_ssctl_dsentry_resp_msg,
+				      resp),
+		.ei_array  = qmi_response_type_v01_ei,
+	},
+	QMI_EOTI_DATA_TYPE
+};
+
+
 static inline int wait_for_shutdown_ack(struct subsys_desc *desc)
 {
 	int ret;
@@ -365,6 +421,24 @@ static inline int wait_for_shutdown_ack(struct subsys_desc *desc)
 						msecs_to_jiffies(10000));
 	if (!ret) {
 		pr_err("[%s]: Timed out waiting for shutdown ack\n",
+				desc->name);
+		return -ETIMEDOUT;
+	}
+
+	return ret;
+}
+
+static inline int wait_for_dsentry_ack(struct subsys_desc *desc)
+{
+	int ret;
+
+	if (!desc)
+		return 0;
+
+	ret = wait_for_completion_timeout(&desc->dsentry_ack,
+						msecs_to_jiffies(10000));
+	if (!ret) {
+		pr_err("[%s]: Timed out waiting for dsentry ack\n",
 				desc->name);
 		return -ETIMEDOUT;
 	}
@@ -473,6 +547,96 @@ out:
 	return ret;
 }
 EXPORT_SYMBOL(sysmon_send_shutdown);
+
+/**
+ * sysmon_send_enter_ds() - send DS ENTRY command to a
+ * subsystem.
+ * @dest_desc:	Subsystem descriptor of the subsystem to send to
+ *
+ * Returns 0 for success, -EINVAL for an invalid destination, -ENODEV if
+ * the SMD transport channel is not open, -ETIMEDOUT if the destination
+ * subsystem does not respond, and -EPROTO if the destination subsystem
+ * responds with something unexpected.
+ *
+ * If CONFIG_MSM_SYSMON_COMM is not defined, always return success (0).
+ */
+int sysmon_send_enter_ds(struct subsys_desc *dest_desc)
+{
+	struct qmi_ssctl_shutdown_resp_msg resp = { { 0, 0 } };
+	struct sysmon_qmi_data *data = NULL, *temp;
+	const char *dest_ss = dest_desc->name;
+	char req = 0;
+	int ret, dsentry_ack_ret;
+	struct qmi_txn txn;
+
+	if (dest_ss == NULL)
+		return -EINVAL;
+
+	mutex_lock(&sysmon_list_lock);
+	list_for_each_entry(temp, &sysmon_list, list)
+		if (!strcmp(temp->name, dest_desc->name))
+			data = temp;
+	mutex_unlock(&sysmon_list_lock);
+
+	if (!data)
+		return -EINVAL;
+
+	if (!data->connected)
+		return -EAGAIN;
+
+	reinit_completion(&dest_desc->dsentry_ack);
+
+	ret = qmi_txn_init(&data->clnt_handle, &txn,
+			qmi_ssctl_dsentry_resp_msg_ei,
+			&resp);
+
+	if (ret < 0) {
+		pr_err("SYSMON QMI tx init failed to dest %s, ret - %d\n",
+			dest_ss, ret);
+		goto out;
+	}
+
+	ret = qmi_send_request(&data->clnt_handle, &data->ssctl, &txn,
+			QMI_SSCTL_DSENTRY_REQ_V02,
+			QMI_SSCTL_EMPTY_MSG_LENGTH,
+			qmi_ssctl_dsentry_req_msg_ei,
+			&req);
+	if (ret < 0) {
+		pr_err("SYSMON QMI send req failed to dest %s, ret - %d\n",
+			 dest_ss, ret);
+		qmi_txn_cancel(&txn);
+		goto out;
+	}
+
+	ret = qmi_txn_wait(&txn, msecs_to_jiffies(SERVER_TIMEOUT));
+	if (ret < 0) {
+		pr_err("SYSMON QMI txn wait failed to dest %s, ret - %d\n",
+			dest_ss, ret);
+	}
+
+	/* Check the response */
+	if (ret != -ETIMEDOUT && QMI_RESP_BIT_SHIFT(resp.resp.result) !=
+	    QMI_RESULT_SUCCESS_V01) {
+		pr_err("SYSMON QMI request failed 0x%x\n",
+					QMI_RESP_BIT_SHIFT(resp.resp.error));
+		ret = -EREMOTEIO;
+		goto out;
+	}
+
+	dsentry_ack_ret = wait_for_dsentry_ack(dest_desc);
+	if (dsentry_ack_ret > 0) {
+		ret = 0;
+		goto out;
+	} else if (dsentry_ack_ret < 0) {
+		pr_err("shutdown acknowledgment not received for %s\n",
+		       data->name);
+		ret = dsentry_ack_ret;
+	}
+out:
+	return ret;
+}
+EXPORT_SYMBOL(sysmon_send_enter_ds);
+
 
 struct qmi_ssctl_get_failure_reason_req_msg {
 };
@@ -678,6 +842,7 @@ int sysmon_notifier_register(struct subsys_desc *desc)
 			SSCTL_VER_2, data->instance_id);
 add_list:
 	init_completion(&desc->shutdown_ack);
+	init_completion(&desc->dsentry_ack);
 	mutex_lock(&sysmon_list_lock);
 	INIT_LIST_HEAD(&data->list);
 	list_add_tail(&data->list, &sysmon_list);

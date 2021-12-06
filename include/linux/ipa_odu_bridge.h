@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
  */
 
 #ifndef _IPA_ODO_BRIDGE_H_
@@ -66,7 +66,7 @@ int ipa_bridge_cleanup(u32 hdl);
 
 #else /* IS_ENABLED(CONFIG_IPA3) */
 
-static inline int ipa_bridge_init(struct odu_bridge_params *params, u32 *hdl)
+static inline int ipa_bridge_init(struct ipa_bridge_init_params *params, u32 *hdl)
 {
 	return -EPERM;
 }

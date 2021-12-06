@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
 #ifndef _LINUX_SLIMBUS_H
@@ -552,6 +552,7 @@ enum slim_clk_state {
  *	Underlying controller has to support this. Typically useful to transfer
  *	messages to download firmware, or messages where strict ordering for
  *	slave is necessary
+ * @suspend_slimbus: Called to initiate immediate suspend of slimbus.
  */
 struct slim_controller {
 	struct device		dev;
@@ -606,6 +607,7 @@ struct slim_controller {
 				u8 la, u8 mt, u8 mc, struct slim_val_inf msgs[],
 				int n, int (*comp_cb)(void *ctx, int err),
 				void *ctx);
+	int			(*suspend_slimbus)(struct slim_controller *ctrl);
 };
 #define to_slim_controller(d) container_of(d, struct slim_controller, dev)
 
@@ -732,6 +734,12 @@ struct slim_boardinfo {
 extern int slim_get_logical_addr(struct slim_device *sb, const u8 *e_addr,
 					u8 e_len, u8 *laddr);
 
+/*
+ * slim_vote_for_suspend : initiate immediate suspend.
+ * @sb: client handle requesting the address.
+ * return zero in case of suspended success.
+ */
+extern int slim_vote_for_suspend(struct slim_device *sb);
 
 /* Message APIs Unicast message APIs used by slimbus slave drivers */
 

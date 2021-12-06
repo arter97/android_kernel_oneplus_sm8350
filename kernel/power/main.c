@@ -14,11 +14,11 @@
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
 #include <linux/suspend.h>
+#include <linux/silent_mode.h>
 #include <linux/syscalls.h>
 #include <linux/pm_runtime.h>
 
 #include "power.h"
-
 #ifdef CONFIG_PM_SLEEP
 
 void lock_system_sleep(void)
@@ -119,6 +119,44 @@ static ssize_t pm_async_store(struct kobject *kobj, struct kobj_attribute *attr,
 }
 
 power_attr(pm_async);
+
+#ifdef CONFIG_PM_SILENT_MODE
+static ssize_t pm_silentmode_kernel_state_show(struct kobject *kobj,
+					struct kobj_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%d\n", pm_silentmode_status());
+}
+
+static ssize_t pm_silentmode_kernel_state_store(struct kobject *kobj,
+		struct kobj_attribute *attr, const char *buf, size_t n)
+{
+	unsigned long val;
+
+	if (kstrtoul(buf, 10, &val))
+		return -EINVAL;
+
+	pm_silentmode_update(val, kobj, 1);
+
+	return n;
+}
+
+power_attr(pm_silentmode_kernel_state);
+
+static ssize_t pm_silentmode_hw_state_show(struct kobject *kobj,
+					struct kobj_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%d\n",
+					pm_silentmode_hw_state_get());
+}
+
+static ssize_t pm_silentmode_hw_state_store(struct kobject *kobj,
+		struct kobj_attribute *attr, const char *buf, size_t n)
+{
+	return -EINVAL;
+}
+power_attr(pm_silentmode_hw_state);
+
+#endif /* CONFIG_PM_SILENT_MODE */
 
 #ifdef CONFIG_SUSPEND
 static ssize_t mem_sleep_show(struct kobject *kobj, struct kobj_attribute *attr,
@@ -868,6 +906,10 @@ static struct attribute * g[] = {
 	&pm_print_times_attr.attr,
 	&pm_wakeup_irq_attr.attr,
 	&pm_debug_messages_attr.attr,
+#endif
+#ifdef CONFIG_PM_SILENT_MODE
+	&pm_silentmode_kernel_state_attr.attr,
+	&pm_silentmode_hw_state_attr.attr,
 #endif
 #endif
 #ifdef CONFIG_FREEZER

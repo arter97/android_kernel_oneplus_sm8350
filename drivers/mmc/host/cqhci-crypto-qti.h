@@ -28,7 +28,7 @@ int cqhci_crypto_qti_prep_desc(struct cqhci_host *host,
 #if IS_ENABLED(CONFIG_MMC_CQHCI_CRYPTO_QTI)
 void cqhci_crypto_qti_set_vops(struct cqhci_host *host);
 #else
-void cqhci_crypto_qti_set_vops(struct cqhci_host *host)
+static inline void cqhci_crypto_qti_set_vops(struct cqhci_host *host)
 {}
 #endif /* CONFIG_MMC_CQHCI_CRYPTO_QTI) */
 

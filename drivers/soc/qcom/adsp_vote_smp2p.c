@@ -22,11 +22,11 @@ static int adsp_vote_pm_notifier(struct notifier_block *nb,
 	switch (event) {
 	case PM_SUSPEND_PREPARE:
 		pr_info("ADSP unvoting initiated\n");
-		qcom_smem_state_update_bits(state, AWAKE_BIT, AWAKE_BIT);
+		qcom_smem_state_update_bits(state, AWAKE_BIT, 0);
 		break;
 	case PM_POST_SUSPEND:
 		pr_info("ADSP voting initiated\n");
-		qcom_smem_state_update_bits(state, AWAKE_BIT, 0);
+		qcom_smem_state_update_bits(state, AWAKE_BIT, AWAKE_BIT);
 		break;
 	}
 

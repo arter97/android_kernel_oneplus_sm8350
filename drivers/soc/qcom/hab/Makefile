@@ -25,16 +25,28 @@ msm_hab_hyp-objs = \
 	hab_ghs.o \
 	hab_ghs_linux.o
 else
+ifdef CONFIG_MSM_VIRTIO_HAB
+msm_hab_hyp-objs = hab_virtio.o
+
+else
+ifdef CONFIG_MSM_VHOST_HAB
+ccflags-y += -I$(srctree)/drivers/vhost
+msm_hab_hyp-objs = hab_vhost.o
+
+else
 ifdef CONFIG_QTI_QUIN_GVM
 msm_hab_hyp-objs = \
 	qvm_comm.o \
 	qvm_comm_linux.o \
 	hab_qvm.o \
 	hab_qvm_linux.o
+
 else
 msm_hab_hyp-objs = \
 	hab_comm.o \
 	hyp_stub.o
+endif
+endif
 endif
 endif
 

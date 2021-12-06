@@ -1591,6 +1591,45 @@ static bool is_boost_en(struct smb_charger *chg)
 	return (stat & CHARGING_DISABLED_FROM_BOOST_BIT);
 }
 
+#define BOOST_SS_TIMEOUT_COUNT 4
+static int smblite_lib_check_boost_ss(struct smb_charger *chg)
+{
+	int rc, cnt = 0;
+	bool is_ss_done = false;
+	u8 boost_status = 0;
+
+	/*
+	 * POLL on BOOST_SW_DONE bit for 80ms with 20ms interval for
+	 * BOOST start-up to be done.
+	 */
+	while (cnt < BOOST_SS_TIMEOUT_COUNT) {
+		rc = smblite_lib_read(chg, BOOST_BST_STATUS_REG(chg->base),
+				      &boost_status);
+		if (rc < 0)
+			smblite_lib_err(chg, "Couldn't read BOOST_BST_STATUS_REG rc=%d\n",
+					rc);
+
+		if (!rc && (boost_status & BOOST_SOFTSTART_DONE_BIT)) {
+			is_ss_done = true;
+			break;
+		}
+
+		cnt++;
+		msleep(20);
+	}
+
+	smblite_lib_dbg(chg, PR_MISC,
+			"Concurrent-mode: BOOST_STATUS=%x, cnt=%d\n", boost_status, cnt);
+
+	/* In case of BOOST failure disable concurrency mode and return failure. */
+	if (!is_ss_done) {
+		smblite_lib_err(chg, "Boost ss-done failed, failed to enable concurrency\n");
+		return -ETIME;
+	}
+
+	return 0;
+}
+
 #define CONCURRENCY_REDUCED_ICL_UA 300000
 int smblite_lib_set_concurrent_config(struct smb_charger *chg, bool enable)
 {
@@ -1695,6 +1734,21 @@ int smblite_lib_set_concurrent_config(struct smb_charger *chg, bool enable)
 		if (rc < 0)
 			goto failure;
 
+		/*
+		 * If Audio playback is in progress and charger is inserted, on enabling
+		 * concurrency there is a possibility of it to fail if the BOOST soft-start
+		 * is not complete. Avoid this by polling on BOOST_SW_DONE bit which gets
+		 * set after concurrency is successfully enabled and then returning back to
+		 * the caller. In case of failure disable concurrency-mode and return failure.
+		 */
+		if (boost_enabled) {
+			rc = smblite_lib_check_boost_ss(chg);
+			if (rc < 0) {
+				smblite_lib_concurrent_mode_config(chg, false);
+				goto boost_ss_failure;
+			}
+		}
+
 		chg->concurrent_mode_status = true;
 		smblite_lib_dbg(chg, PR_MISC, "Concurrent Mode enabled successfully: settled_icl_ua=%duA, icl_ua=%duA, is_hvdcp3=%d\n",
 					settled_icl_ua, icl_ua,
@@ -1741,6 +1795,7 @@ int smblite_lib_set_concurrent_config(struct smb_charger *chg, bool enable)
 
 failure:
 	rc = -EINVAL;
+boost_ss_failure:
 	smblite_lib_err(chg, "Failed to %s concurrent mode, rc=%d\n",
 			(enable ? "Enable" : "Disable"), rc);
 
@@ -4341,6 +4396,7 @@ int smblite_lib_init(struct smb_charger *chg)
 	struct iio_channel **iio_list;
 	struct smblite_remote_bms *remote_bms;
 
+	mutex_init(&chg->dpdm_lock);
 	INIT_WORK(&chg->bms_update_work, bms_update_work);
 	INIT_WORK(&chg->jeita_update_work, jeita_update_work);
 	INIT_DELAYED_WORK(&chg->icl_change_work, smblite_lib_icl_change_work);

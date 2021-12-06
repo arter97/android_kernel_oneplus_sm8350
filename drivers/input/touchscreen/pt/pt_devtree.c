@@ -747,6 +747,49 @@ static char *touch_setting_names[PT_IC_GRPNUM_NUM] = {
 };
 
 /*******************************************************************************
+ * FUNCTION: pt_check_dsi_panel_dt
+ *
+ * SUMMARY: Get the DSI active panel information from dtsi
+ *
+ * RETURN:
+ *   0 = success
+ *   !0 = fail
+ *
+ * PARAMETERS:
+ * np            -  pointer to device_node structure
+ * active_panel  -  name of active DSI panel
+ ******************************************************************************/
+
+
+static int pt_check_dsi_panel_dt(struct device_node *np, struct drm_panel **active_panel)
+{
+	int i;
+	int count;
+	struct device_node *node;
+	struct drm_panel *panel;
+
+	count = of_count_phandle_with_args(np, "panel", NULL);
+	pr_info("%s: Active panel count: %d\n", __func__, count);
+	if (count <= 0)
+		return 0;
+
+	for (i = 0; i < count; i++) {
+		node = of_parse_phandle(np, "panel", i);
+		if (node != NULL)
+			pr_info("%s: Node handle successfully parsed !\n", __func__);
+		panel = of_drm_find_panel(node);
+		of_node_put(node);
+		if (!IS_ERR(panel)) {
+			pr_info("%s: Active panel selected !\n", __func__);
+			*active_panel = panel;
+			return 0;
+		}
+	}
+	pr_err("%s: Active panel NOT selected !\n", __func__);
+	return PTR_ERR(panel);
+}
+
+/*******************************************************************************
  * FUNCTION: create_and_get_core_pdata
  *
  * SUMMARY: Create and get core module platform data from dts.
@@ -944,9 +987,12 @@ int pt_devtree_create_and_get_pdata(struct device *adap_dev)
 {
 	struct pt_platform_data *pdata;
 	struct device_node *core_node, *dev_node, *dev_node_fail;
+	struct drm_panel *active_panel = NULL;
 	enum pt_device_type type;
 	int count = 0;
 	int rc = 0;
+
+	pr_info("%s: Start of fetch dtsi..\n", __func__);
 
 	if (is_create_and_get_pdata == true)
 		return 0;
@@ -969,11 +1015,27 @@ int pt_devtree_create_and_get_pdata(struct device *adap_dev)
 		if (!rc)
 			pr_debug("%s: name:%s\n", __func__, name);
 
+		rc = pt_check_dsi_panel_dt(core_node, &active_panel);
+		if (rc) {
+			pr_err("%s: Panel not selected, rc=%d\n", __func__, rc);
+			if (rc == -EPROBE_DEFER) {
+				pr_err("%s: Probe defer selected, rc=%d\n", __func__, rc);
+				kfree(pdata);
+				return rc;
+			}
+		}
+
 		pdata->core_pdata = create_and_get_core_pdata(core_node);
 		if (IS_ERR(pdata->core_pdata)) {
+			pr_err("%s: Error in fetch dtsi..\n", __func__);
 			rc = PTR_ERR(pdata->core_pdata);
 			break;
 		}
+
+		pr_info("%s: End of fetch dtsi..\n", __func__);
+		pdata->core_pdata->active_panel = active_panel;
+		pr_info("%s: Successful insert of active panel in core data\n",
+				__func__);
 
 		/* Increment reference count */
 		of_node_get(core_node);

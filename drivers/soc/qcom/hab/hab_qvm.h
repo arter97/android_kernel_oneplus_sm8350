@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2019, 2021, The Linux Foundation. All rights reserved.
  */
 #ifndef __HAB_QNX_H
 #define __HAB_QNX_H
@@ -14,6 +14,9 @@ struct qvm_channel {
 
 	struct hab_pipe *pipe;
 	struct hab_pipe_endpoint *pipe_ep;
+	struct hab_shared_buf *tx_buf;
+	struct hab_shared_buf *rx_buf;
+	struct dbg_items *dbg_itms;
 	spinlock_t io_lock;
 
 	/* common but only for guest */

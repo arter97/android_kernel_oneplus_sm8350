@@ -262,6 +262,7 @@ int btfm_slim_disable_ch(struct btfmslim *btfmslim, struct btfmslim_ch *ch,
 	uint8_t rxport, uint8_t grp, uint8_t nchan)
 {
 	int ret, i;
+	int chipset_ver;
 
 	if (!btfmslim || !ch)
 		return -EINVAL;
@@ -313,6 +314,14 @@ int btfm_slim_disable_ch(struct btfmslim *btfmslim, struct btfmslim_ch *ch,
 			}
 		}
 	}
+
+	chipset_ver = btpower_get_chipset_version();
+	BTFMSLIM_INFO("chipset soc version:%x", chipset_ver);
+	if (chipset_ver == QCA_SLATE_SOC_ID_0100) {
+		BTFMSLIM_INFO("chipset is Slate, calling slim suspend for LPI");
+		slim_vote_for_suspend(btfmslim->slim_pgd);
+	}
+
 error:
 	return ret;
 }

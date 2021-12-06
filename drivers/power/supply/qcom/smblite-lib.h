@@ -266,6 +266,7 @@ struct smb_base_address {
 	u16 misc_base;
 	u16 dcdc_base;
 	u16 typec_base;
+	u16 boost_base;
 };
 
 struct smb_charger {

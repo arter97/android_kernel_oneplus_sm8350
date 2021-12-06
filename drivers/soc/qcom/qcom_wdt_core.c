@@ -320,6 +320,10 @@ static int qcom_wdt_suspend(void)
 
 	wdog_data->ops->reset_wdt(wdog_data);
 	if (wdog_data->wakeup_irq_enable) {
+#ifdef CONFIG_HIBERNATION
+		wdog_data->ops->disable_wdt(wdog_data);
+		wdog_data->enabled = false;
+#endif
 		wdog_data->last_pet = sched_clock();
 		return 0;
 	}
@@ -341,16 +345,24 @@ static int qcom_wdt_suspend(void)
  */
 static void qcom_wdt_resume(void)
 {
+	uint32_t val;
+
 	if (!wdog_data)
 		return;
 
+	val = BIT(EN);
 	if (wdog_data->wakeup_irq_enable) {
+#ifdef CONFIG_HIBERNATION
+		val |= BIT(UNMASKED_INT_EN);
+		wdog_data->ops->enable_wdt(val, wdog_data);
+		wdog_data->enabled = true;
+#endif
 		wdog_data->ops->reset_wdt(wdog_data);
 		wdog_data->last_pet = sched_clock();
 		return;
 	}
 
-	wdog_data->ops->enable_wdt(1, wdog_data);
+	wdog_data->ops->enable_wdt(val, wdog_data);
 	wdog_data->ops->reset_wdt(wdog_data);
 	wdog_data->enabled = true;
 	wdog_data->last_pet = sched_clock();

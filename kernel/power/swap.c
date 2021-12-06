@@ -31,7 +31,7 @@
 #include <linux/kthread.h>
 #include <linux/crc32.h>
 #include <linux/ktime.h>
-
+#include <soc/qcom/qcom_secure_hibernation.h>
 #include "power.h"
 
 #define HIBERNATE_SIG	"S1SUSPEND"
@@ -44,7 +44,8 @@
 static bool clean_pages_on_read;
 static bool clean_pages_on_decompress;
 static bool noswap_randomize;
-
+static int authslot_start;
+static int authslot_count;
 /*
  *	The swap map is a data structure used for keeping track of each page
  *	written to a swap partition.  It consists of many swap_map_page
@@ -105,12 +106,18 @@ struct swap_map_handle {
 
 struct swsusp_header {
 	char reserved[PAGE_SIZE - 20 - sizeof(sector_t) - sizeof(int) -
-	              sizeof(u32)];
+		sizeof(u32) - (3 * sizeof(int)) - 24 - WRAPPED_KEY_SIZE];
 	u32	crc32;
 	sector_t image;
 	unsigned int flags;	/* Flags to pass to the "boot" kernel */
-	char	orig_sig[10];
-	char	sig[10];
+	int     authsize;
+	int     authslot_start;
+	int     authslot_count;
+	unsigned char	key_blob[WRAPPED_KEY_SIZE];
+	unsigned char	iv[12];
+	unsigned char	aad[12];
+	unsigned char	orig_sig[10];
+	unsigned char	sig[10];
 } __packed;
 
 static struct swsusp_header *swsusp_header;
@@ -302,21 +309,30 @@ static blk_status_t hib_wait_io(struct hib_bio_batch *hb)
 /*
  * Saving part
  */
-
 static int mark_swapfiles(struct swap_map_handle *handle, unsigned int flags)
 {
 	int error;
+	struct qcom_crypto_params params;
 
 	hib_submit_io(REQ_OP_READ, 0, swsusp_resume_block,
 		      swsusp_header, NULL);
 	if (!memcmp("SWAP-SPACE",swsusp_header->sig, 10) ||
 	    !memcmp("SWAPSPACE2",swsusp_header->sig, 10)) {
+		memset(&params, 0, sizeof(params));
 		memcpy(swsusp_header->orig_sig,swsusp_header->sig, 10);
 		memcpy(swsusp_header->sig, HIBERNATE_SIG, 10);
 		swsusp_header->image = handle->first_sector;
 		swsusp_header->flags = flags;
 		if (flags & SF_CRC32_MODE)
 			swsusp_header->crc32 = handle->crc32;
+		populate_secure_params(&params);
+		memcpy(swsusp_header->key_blob, params.key_blob,
+				 sizeof(swsusp_header->key_blob));
+		memcpy(swsusp_header->iv, params.iv, sizeof(swsusp_header->iv));
+		memcpy(swsusp_header->aad, params.aad, sizeof(swsusp_header->aad));
+		swsusp_header->authsize = params.authsize;
+		swsusp_header->authslot_start = authslot_start;
+		swsusp_header->authslot_count = authslot_count;
 		error = hib_submit_io(REQ_OP_WRITE, REQ_SYNC,
 				      swsusp_resume_block, swsusp_header, NULL);
 	} else {
@@ -447,6 +463,9 @@ static int swap_write_page(struct swap_map_handle *handle, void *buf,
 	if (!handle->cur)
 		return -EINVAL;
 	offset = alloc_swapdev_block(root_swap);
+	error = encrypt_page(buf);
+	if (error)
+		return error;
 	error = write_page(buf, offset, hb);
 	if (error)
 		return error;
@@ -456,9 +475,11 @@ static int swap_write_page(struct swap_map_handle *handle, void *buf,
 		if (!offset)
 			return -ENOSPC;
 		handle->cur->next_swap = offset;
-		error = write_page(handle->cur, handle->cur_swap, hb);
-		if (error)
-			goto out;
+		if (!qcom_secure_hibernation_enabled()) {
+			error = write_page(handle->cur, handle->cur_swap, hb);
+			if (error)
+				goto out;
+		}
 		clear_page(handle->cur);
 		handle->cur_swap = offset;
 		handle->k = 0;
@@ -539,6 +560,9 @@ static int save_image(struct swap_map_handle *handle,
 	struct hib_bio_batch hb;
 	ktime_t start;
 	ktime_t stop;
+	void *authpage;
+	int authpage_count;
+	int curr_slot;
 
 	hib_init_batch(&hb);
 
@@ -560,6 +584,15 @@ static int save_image(struct swap_map_handle *handle,
 			pr_info("Image saving progress: %3d%%\n",
 				nr_pages / m * 10);
 		nr_pages++;
+	}
+	get_auth_params(&authpage, &authpage_count);
+	while (authslot_count < authpage_count) {
+		curr_slot = alloc_swapdev_block(root_swap);
+		if (!authslot_count)
+			authslot_start = curr_slot;
+		write_page(authpage, curr_slot, &hb);
+		authpage = (unsigned char *)authpage + PAGE_SIZE;
+		authslot_count++;
 	}
 	err2 = hib_wait_io(&hb);
 	stop = ktime_get();
@@ -913,6 +946,12 @@ int swsusp_write(unsigned int flags)
 		pr_err("Cannot get swap writer\n");
 		return error;
 	}
+	error = init_aes_encrypt();
+	if (error) {
+		pr_err("init_aes_encrypt() failed %d\n", error);
+		return error;
+	}
+	pages = pages + get_authpage_count();
 	if (flags & SF_NOCOMPRESS_MODE) {
 		if (!enough_swap(pages)) {
 			pr_err("Not enough free swap\n");

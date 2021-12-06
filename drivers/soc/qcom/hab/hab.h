@@ -59,6 +59,8 @@ enum hab_payload_type {
 #define DEVICE_XVM2_NAME "hab_xvm2"
 #define DEVICE_XVM3_NAME "hab_xvm3"
 
+#define HABCFG_MMID_NUM        26
+
 /* make sure concascaded name is less than this value */
 #define MAX_VMID_NAME_SIZE 30
 
@@ -163,6 +165,7 @@ struct hab_header {
 #define HAB_HEADER_GET_SESSION_ID(header) ((header).session_id)
 
 #define HAB_HS_TIMEOUT (10*1000*1000)
+#define HAB_HEAD_SIGNATURE 0xBEE1BEE1
 
 struct physical_channel {
 	struct list_head node;
@@ -578,7 +581,6 @@ int hab_stat_deinit(struct hab_driver *drv);
 int hab_stat_show_vchan(struct hab_driver *drv, char *buf, int sz);
 int hab_stat_show_ctx(struct hab_driver *drv, char *buf, int sz);
 int hab_stat_show_expimp(struct hab_driver *drv, int pid, char *buf, int sz);
-
 int hab_stat_init_sub(struct hab_driver *drv);
 int hab_stat_deinit_sub(struct hab_driver *drv);
 
@@ -624,4 +626,8 @@ int dump_hab_buf(void *buf, int size);
 void hab_pipe_read_dump(struct physical_channel *pchan);
 void dump_hab(int mmid);
 void dump_hab_wq(struct physical_channel *pchan);
+int hab_stat_log(struct physical_channel **pchans, int pchan_cnt, char *dest,
+			int dest_size);
+int hab_stat_buffer_print(char *dest,
+		int dest_size, const char *fmt, ...);
 #endif /* __HAB_H */
