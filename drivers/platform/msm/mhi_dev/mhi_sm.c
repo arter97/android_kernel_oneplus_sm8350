@@ -1348,7 +1348,7 @@ int mhi_dev_notify_sm_event(enum mhi_dev_event event)
 	 * progress thus avoids race between M0 and CHDB processing.
 	 */
 	if (event == MHI_DEV_EVENT_M0_STATE) {
-		MHI_SM_INFO("Got M0, wait until resume is done\n");
+		MHI_SM_DBG("Got M0, wait until resume is done\n");
 		flush_workqueue(mhi_sm_ctx->mhi_sm_wq);
 	}
 
