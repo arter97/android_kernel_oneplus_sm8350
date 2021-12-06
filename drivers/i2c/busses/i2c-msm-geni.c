@@ -294,11 +294,18 @@ static int geni_i2c_prepare(struct geni_i2c_dev *gi2c)
 	if (gi2c->se_mode == UNINITIALIZED) {
 		int proto = get_se_proto(gi2c->base);
 		u32 se_mode;
+		int ret = 0;
 
 		if (proto != I2C) {
 			dev_err(gi2c->dev, "Invalid proto %d\n", proto);
-			if (!gi2c->is_le_vm)
-				se_geni_resources_off(&gi2c->i2c_rsc);
+			if (!gi2c->is_le_vm) {
+				ret = se_geni_resources_off(&gi2c->i2c_rsc);
+				if (ret) {
+					dev_err(gi2c->dev, "%s: resource_off Error ret %d\n",
+						__func__, ret);
+					return ret;
+				}
+			}
 			return -ENXIO;
 		}
 
@@ -1621,12 +1628,16 @@ static int geni_i2c_runtime_suspend(struct device *dev)
 		}
 	} else if (gi2c->is_shared) {
 		/* Do not unconfigure GPIOs if shared se */
-		se_geni_clks_off(&gi2c->i2c_rsc);
+		ret = se_geni_clks_off(&gi2c->i2c_rsc);
+		if (ret)
+			dev_err(dev, "%s: clks_off Error ret %d\n", __func__, ret);
 	} else {
-		se_geni_resources_off(&gi2c->i2c_rsc);
+		ret = se_geni_resources_off(&gi2c->i2c_rsc);
+		if (ret)
+			dev_err(dev, "%s: resource_off Error ret %d\n", __func__, ret);
 	}
 	GENI_SE_DBG(gi2c->ipcl, false, gi2c->dev, "%s\n", __func__);
-	return 0;
+	return ret;
 }
 
 static int geni_i2c_runtime_resume(struct device *dev)
@@ -1644,8 +1655,10 @@ static int geni_i2c_runtime_resume(struct device *dev)
 	if (!gi2c->is_le_vm) {
 		/* Do not control clk/gpio/icb for LE-VM */
 		ret = se_geni_resources_on(&gi2c->i2c_rsc);
-		if (ret)
+		if (ret) {
+			dev_err(dev, "%s: resource_off Error ret %d\n", __func__, ret);
 			return ret;
+		}
 
 		ret = geni_i2c_prepare(gi2c);
 		if (ret) {

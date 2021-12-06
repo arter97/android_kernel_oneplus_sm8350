@@ -3594,11 +3594,18 @@ static int msm_geni_console_setup(struct console *co, char *options)
 	if (unlikely(!uport->membase))
 		return -ENXIO;
 
-	if (se_geni_resources_on(&dev_port->serial_rsc))
+	ret = se_geni_resources_on(&dev_port->serial_rsc);
+	if (ret) {
+		dev_err(uport->dev, "%s: resources_on Error ret %d\n",
+			__func__, ret);
 		WARN_ON(1);
+	}
 
 	if (unlikely(get_se_proto(uport->membase) != UART)) {
-		se_geni_resources_off(&dev_port->serial_rsc);
+		ret = se_geni_resources_off(&dev_port->serial_rsc);
+		if (ret)
+			dev_err(uport->dev, "%s: resources_off Error ret %d\n",
+				__func__, ret);
 		return -ENXIO;
 	}
 
