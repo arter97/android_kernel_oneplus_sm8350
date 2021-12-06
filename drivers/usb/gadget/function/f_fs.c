@@ -672,21 +672,14 @@ static int ffs_ep0_open(struct inode *inode, struct file *file)
 
 	ffs_log("state %d setup_state %d flags %lu opened %d", ffs->state,
 		ffs->setup_state, ffs->flags, atomic_read(&ffs->opened));
-	if (atomic_read(&ffs->opened)) {
-		pr_err("ep0 is already opened!\n");
-		return -EBUSY;
-	}
 
-	if (unlikely(ffs->state == FFS_CLOSING)) {
-		pr_err("FFS_CLOSING!\n");
+	if (unlikely(ffs->state == FFS_CLOSING))
 		return -EBUSY;
-	}
 
 	file->private_data = ffs;
 	ffs_data_opened(ffs);
-	pr_info("ep0_open success!\n");
 
-	return 0;
+	return stream_open(inode, file);
 }
 
 static int ffs_ep0_release(struct inode *inode, struct file *file)
@@ -1296,7 +1289,7 @@ ffs_epfile_open(struct inode *inode, struct file *file)
 	ffs_data_opened(epfile->ffs);
 	atomic_inc(&epfile->opened);
 
-	return 0;
+	return stream_open(inode, file);
 }
 
 static int ffs_aio_cancel(struct kiocb *kiocb)
@@ -3343,6 +3336,7 @@ static inline struct f_fs_opts *ffs_do_functionfs_bind(struct usb_function *f,
 	struct ffs_function *func = ffs_func_from_usb(f);
 	struct f_fs_opts *ffs_opts =
 		container_of(f->fi, struct f_fs_opts, func_inst);
+	struct ffs_data *ffs = ffs_opts->dev->ffs_data;
 	struct ffs_data *ffs_data;
 	int ret;
 
@@ -3377,8 +3371,10 @@ static inline struct f_fs_opts *ffs_do_functionfs_bind(struct usb_function *f,
 	 */
 	if (!ffs_opts->refcnt) {
 		ret = functionfs_bind(func->ffs, c->cdev);
-		if (ret)
+		if (ret) {
+			ffs_log("functionfs_bind returned %d", ret);
 			return ERR_PTR(ret);
+		}
 	}
 	ffs_opts->refcnt++;
 	func->function.strings = func->ffs->stringtabs;

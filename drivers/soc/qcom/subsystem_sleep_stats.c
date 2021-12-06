@@ -13,6 +13,7 @@
 #include <linux/slab.h>
 #include <linux/soc/qcom/smem.h>
 #include <linux/uaccess.h>
+#include "rpmh_master_stat.h"
 
 #define STATS_BASEMINOR				0
 #define STATS_MAX_MINOR				1
@@ -27,6 +28,8 @@
 #define DDR_STATS_NAME_ADDR		0x0
 #define DDR_STATS_COUNT_ADDR		0x4
 #define DDR_STATS_DURATION_ADDR		0x8
+
+#define MSM_ARCH_TIMER_FREQ	19200000
 
 #define APSS_IOCTL		_IOR(SUBSYSTEM_STATS_MAGIC_NUM, 0, \
 				     struct sleep_stats *)
@@ -116,7 +119,15 @@ struct sleep_stats_data {
 };
 
 static DEFINE_MUTEX(sleep_stats_mutex);
+static bool rpmh_stats_present;
 
+static inline u64 get_time_in_msec(u64 counter)
+{
+	do_div(counter, MSM_ARCH_TIMER_FREQ);
+	counter *= MSEC_PER_SEC;
+
+	return counter;
+}
 static int stats_data_open(struct inode *inode, struct file *file)
 {
 	struct sleep_stats_data *drvdata = NULL;
@@ -142,6 +153,7 @@ static void ddr_stats_sleep_stat(struct sleep_stats_data *stats_data, struct sle
 		(ddr_stats + i)->last_entered_at = 0xDEADDEAD;
 		(ddr_stats + i)->last_exited_at = 0xDEADDEAD;
 		(ddr_stats + i)->accumulated = readq_relaxed(reg + DDR_STATS_DURATION_ADDR);
+		(ddr_stats + i)->accumulated = get_time_in_msec((ddr_stats + i)->accumulated);
 		reg += sizeof(struct sleep_stats) - 2 * sizeof(u64);
 	}
 }
@@ -151,10 +163,21 @@ static int subsystem_sleep_stats(struct sleep_stats_data *stats_data, struct sle
 {
 	struct sleep_stats *subsystem_stats_data;
 
-	if (pid == SUBSYSTEM_STATS_OTHERS_NUM)
+	if (pid == SUBSYSTEM_STATS_OTHERS_NUM && rpmh_stats_present)
 		memcpy_fromio(stats, stats_data->reg[idx], sizeof(*stats));
 	else {
-		subsystem_stats_data = qcom_smem_get(pid, idx, NULL);
+		/* Check if HLOS already maintained APSS stats */
+		if (pid == QCOM_SMEM_HOST_ANY) {
+			struct msm_rpmh_master_stats *apss_data = msm_rpmh_get_apss_data();
+
+			if (apss_data && apss_data->version_id == 0x1)
+				subsystem_stats_data = (struct sleep_stats *) apss_data;
+			else
+				subsystem_stats_data = qcom_smem_get(pid, idx, NULL);
+		} else {
+			subsystem_stats_data = qcom_smem_get(pid, idx, NULL);
+		}
+
 		if (IS_ERR(subsystem_stats_data))
 			return -ENODEV;
 
@@ -265,7 +288,7 @@ static long stats_data_ioctl(struct file *file, unsigned int cmd,
 		}
 
 		ret = copy_to_user((void __user *)arg, temp, sizeof(struct sleep_stats));
-	} else {
+	} else if (rpmh_stats_present) {
 		ddr_stats_sleep_stat(drvdata, temp);
 		ret = copy_to_user((void __user *)arg, temp,
 					DDR_STATS_MAX_NUM_MODES * sizeof(struct sleep_stats));
@@ -338,8 +361,10 @@ static int subsystem_stats_probe(struct platform_device *pdev)
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!res) {
 		ret = PTR_ERR(res);
-		goto fail_device_create;
-	}
+		rpmh_stats_present = false;
+		goto skip_stats;
+	} else
+		rpmh_stats_present = true;
 
 	offset_addr = devm_ioremap(&pdev->dev, res->start + config->offset_addr, sizeof(u32));
 	if (IS_ERR(offset_addr)) {
@@ -393,6 +418,7 @@ static int subsystem_stats_probe(struct platform_device *pdev)
 		goto fail_device_create;
 	}
 
+skip_stats:
 	platform_set_drvdata(pdev, stats_data);
 
 	return 0;
