@@ -164,6 +164,7 @@
 #include "wlan_wfa_ucfg_api.h"
 #include "wlan_roam_debug.h"
 #include "wlan_pkt_capture_ucfg_api.h"
+#include "os_if_pkt_capture.h"
 
 #define g_mode_rates_size (12)
 #define a_mode_rates_size (8)
@@ -1702,6 +1703,12 @@ static const struct nl80211_vendor_cmd_info wlan_hdd_cfg80211_vendor_events[] = 
 	FEATURE_TWT_VENDOR_EVENTS
 #endif
 	FEATURE_CFR_DATA_VENDOR_EVENTS
+#ifdef WLAN_FEATURE_ROAM_OFFLOAD
+	[QCA_NL80211_VENDOR_SUBCMD_ROAM_EVENTS_INDEX] = {
+		.vendor_id = QCA_NL80211_VENDOR_ID,
+		.subcmd = QCA_NL80211_VENDOR_SUBCMD_ROAM_EVENTS,
+	},
+#endif
 };
 
 /**
@@ -14988,58 +14995,6 @@ get_usable_channel_policy[QCA_WLAN_VENDOR_ATTR_USABLE_CHANNELS_MAX + 1] = {
 	},
 };
 
-#ifdef WLAN_FEATURE_PKT_CAPTURE
-
-/* Short name for QCA_NL80211_VENDOR_SUBCMD_SET_MONITOR_MODE command */
-
-#define SET_MONITOR_MODE_CONFIG_MAX \
-	QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_MAX
-#define SET_MONITOR_MODE_INVALID \
-	QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_INVALID
-#define SET_MONITOR_MODE_DATA_TX_FRAME_TYPE \
-	QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_DATA_TX_FRAME_TYPE
-#define SET_MONITOR_MODE_DATA_RX_FRAME_TYPE \
-	QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_DATA_RX_FRAME_TYPE
-#define SET_MONITOR_MODE_MGMT_TX_FRAME_TYPE \
-	QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_MGMT_TX_FRAME_TYPE
-#define SET_MONITOR_MODE_MGMT_RX_FRAME_TYPE \
-	QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_MGMT_RX_FRAME_TYPE
-#define SET_MONITOR_MODE_CTRL_TX_FRAME_TYPE \
-	QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_CTRL_TX_FRAME_TYPE
-#define SET_MONITOR_MODE_CTRL_RX_FRAME_TYPE \
-	QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_CTRL_RX_FRAME_TYPE
-#define SET_MONITOR_MODE_CONNECTED_BEACON_INTERVAL \
-	QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_CONNECTED_BEACON_INTERVAL
-
-static const struct nla_policy
-set_monitor_mode_policy[SET_MONITOR_MODE_CONFIG_MAX + 1] = {
-	[SET_MONITOR_MODE_INVALID] = {
-		.type = NLA_U32
-	},
-	[SET_MONITOR_MODE_DATA_TX_FRAME_TYPE] = {
-		.type = NLA_U32
-	},
-	[SET_MONITOR_MODE_DATA_RX_FRAME_TYPE] = {
-		.type = NLA_U32
-	},
-	[SET_MONITOR_MODE_MGMT_TX_FRAME_TYPE] = {
-		.type = NLA_U32
-	},
-	[SET_MONITOR_MODE_MGMT_RX_FRAME_TYPE] = {
-		.type = NLA_U32
-	},
-	[SET_MONITOR_MODE_CTRL_TX_FRAME_TYPE] = {
-		.type = NLA_U32
-	},
-	[SET_MONITOR_MODE_CTRL_RX_FRAME_TYPE] = {
-		.type = NLA_U32
-	},
-	[SET_MONITOR_MODE_CONNECTED_BEACON_INTERVAL] = {
-		.type = NLA_U32
-	},
-};
-#endif
-
 #ifdef WLAN_FEATURE_GET_USABLE_CHAN_LIST
 static enum nl80211_chan_width
 hdd_convert_phy_bw_to_nl_bw(enum phy_ch_width bw)
@@ -15357,6 +15312,149 @@ err:
 }
 #endif
 
+#ifdef WLAN_FEATURE_ROAM_OFFLOAD
+/**
+ * enum roam_stats_set_params - Different types of params to set the roam stats
+ * @ROAM_RT_STATS_DISABLED:                Roam stats feature disabled
+ * @ROAM_RT_STATS_ENABLED:                 Roam stats feature enabled
+ * @ROAM_RT_STATS_ENABLED_IN_SUSPEND_MODE: Roam stats enabled in suspend mode
+ */
+enum roam_stats_set_params {
+	ROAM_RT_STATS_DISABLED = 0,
+	ROAM_RT_STATS_ENABLED = 1,
+	ROAM_RT_STATS_ENABLED_IN_SUSPEND_MODE = 2,
+};
+
+#define EVENTS_CONFIGURE QCA_WLAN_VENDOR_ATTR_ROAM_EVENTS_CONFIGURE
+#define SUSPEND_STATE    QCA_WLAN_VENDOR_ATTR_ROAM_EVENTS_SUSPEND_STATE
+
+static const struct nla_policy
+set_roam_events_policy[QCA_WLAN_VENDOR_ATTR_ROAM_EVENTS_MAX + 1] = {
+	[QCA_WLAN_VENDOR_ATTR_ROAM_EVENTS_CONFIGURE] = {.type = NLA_U8},
+	[QCA_WLAN_VENDOR_ATTR_ROAM_EVENTS_SUSPEND_STATE] = {.type = NLA_FLAG},
+};
+
+/**
+ * __wlan_hdd_cfg80211_set_roam_events() - set roam stats
+ * @wiphy: wiphy pointer
+ * @wdev: pointer to struct wireless_dev
+ * @data: pointer to incoming NL vendor data
+ * @data_len: length of @data
+ *
+ * Return: 0 on success; error number otherwise.
+ */
+static int __wlan_hdd_cfg80211_set_roam_events(struct wiphy *wiphy,
+					       struct wireless_dev *wdev,
+					       const void *data,
+					       int data_len)
+{
+	struct hdd_context *hdd_ctx = wiphy_priv(wiphy);
+	struct hdd_adapter *adapter = WLAN_HDD_GET_PRIV_PTR(wdev->netdev);
+	struct nlattr *tb[QCA_WLAN_VENDOR_ATTR_ROAM_EVENTS_MAX + 1];
+	QDF_STATUS status;
+	int ret;
+	uint8_t config, state, param = 0;
+
+	ret = wlan_hdd_validate_context(hdd_ctx);
+	if (ret != 0) {
+		hdd_err("Invalid hdd_ctx");
+		return ret;
+	}
+
+	ret = hdd_validate_adapter(adapter);
+	if (ret != 0) {
+		hdd_err("Invalid adapter");
+		return ret;
+	}
+
+	if (adapter->device_mode != QDF_STA_MODE) {
+		hdd_err("STATS supported in only STA mode!");
+		return -EINVAL;
+	}
+
+	if (wlan_cfg80211_nla_parse(tb, QCA_WLAN_VENDOR_ATTR_ROAM_EVENTS_MAX,
+				    data, data_len, set_roam_events_policy)) {
+		hdd_err("Invalid ATTR");
+		return -EINVAL;
+	}
+
+	if (!tb[EVENTS_CONFIGURE]) {
+		hdd_err("roam events configure not present");
+		return -EINVAL;
+	}
+
+	config = nla_get_u8(tb[EVENTS_CONFIGURE]);
+	hdd_debug("roam stats configured: %d", config);
+
+	if (!tb[SUSPEND_STATE]) {
+		hdd_debug("suspend state not present");
+		param = config ? ROAM_RT_STATS_ENABLED : ROAM_RT_STATS_DISABLED;
+	} else if (config == ROAM_RT_STATS_ENABLED) {
+		state = nla_get_flag(tb[SUSPEND_STATE]);
+		hdd_debug("Suspend state configured: %d", state);
+		param = ROAM_RT_STATS_ENABLED |
+			ROAM_RT_STATS_ENABLED_IN_SUSPEND_MODE;
+	}
+
+	hdd_debug("roam events param: %d", param);
+	ucfg_cm_update_roam_rt_stats(hdd_ctx->psoc,
+				     param, ROAM_RT_STATS_ENABLE);
+
+	if (param == (ROAM_RT_STATS_ENABLED |
+		      ROAM_RT_STATS_ENABLED_IN_SUSPEND_MODE)) {
+		ucfg_pmo_enable_wakeup_event(hdd_ctx->psoc, adapter->vdev_id,
+					     WOW_ROAM_STATS_EVENT);
+		ucfg_cm_update_roam_rt_stats(hdd_ctx->psoc,
+					     ROAM_RT_STATS_ENABLED,
+					     ROAM_RT_STATS_SUSPEND_MODE_ENABLE);
+	} else if (ucfg_cm_get_roam_rt_stats(hdd_ctx->psoc,
+					   ROAM_RT_STATS_SUSPEND_MODE_ENABLE)) {
+		ucfg_pmo_disable_wakeup_event(hdd_ctx->psoc, adapter->vdev_id,
+					      WOW_ROAM_STATS_EVENT);
+		ucfg_cm_update_roam_rt_stats(hdd_ctx->psoc,
+					     ROAM_RT_STATS_DISABLED,
+					     ROAM_RT_STATS_SUSPEND_MODE_ENABLE);
+	}
+
+	status = ucfg_cm_roam_send_rt_stats_config(hdd_ctx->pdev,
+						   adapter->vdev_id, param);
+
+	return qdf_status_to_os_return(status);
+}
+
+#undef EVENTS_CONFIGURE
+#undef SUSPEND_STATE
+
+/**
+ * wlan_hdd_cfg80211_set_roam_events() - set roam stats
+ * @wiphy: wiphy pointer
+ * @wdev: pointer to struct wireless_dev
+ * @data: pointer to incoming NL vendor data
+ * @data_len: length of @data
+ *
+ * Return: 0 on success; error number otherwise.
+ */
+static int wlan_hdd_cfg80211_set_roam_events(struct wiphy *wiphy,
+					     struct wireless_dev *wdev,
+					     const void *data,
+					     int data_len)
+{
+	int errno;
+	struct osif_vdev_sync *vdev_sync;
+
+	errno = osif_vdev_sync_op_start(wdev->netdev, &vdev_sync);
+	if (errno)
+		return errno;
+
+	errno = __wlan_hdd_cfg80211_set_roam_events(wiphy, wdev,
+						    data, data_len);
+
+	osif_vdev_sync_op_stop(vdev_sync);
+
+	return errno;
+}
+#endif
+
 /**
  * __wlan_hdd_cfg80211_get_chain_rssi() - get chain rssi
  * @wiphy: wiphy pointer
@@ -15488,108 +15586,6 @@ static int wlan_hdd_cfg80211_get_usable_channel(struct wiphy *wiphy,
 #ifdef WLAN_FEATURE_PKT_CAPTURE
 
 /**
- * hdd_monitor_mode_configure - Process monitor mode configuration
- * operation in the received vendor command
- * @adapter: adapter pointer
- * @tb: nl attributes
- *
- * Handles QCA_NL80211_VENDOR_SUBCMD_SET_MONITOR_MODE
- *
- * Return: 0 for Success and negative value for failure
- */
-static int hdd_monitor_mode_configure(struct hdd_adapter *adapter,
-				      struct nlattr **tb)
-{
-	struct pkt_capture_frame_filter frame_filter = {0};
-	struct wlan_objmgr_vdev *vdev;
-
-	QDF_STATUS status;
-
-	hdd_enter_dev(adapter->dev);
-
-	vdev = hdd_objmgr_get_vdev(adapter);;
-	if (!vdev)
-		return QDF_STATUS_E_INVAL;
-
-	if (tb[SET_MONITOR_MODE_INVALID])
-		return QDF_STATUS_E_FAILURE;
-
-	if (tb[SET_MONITOR_MODE_DATA_TX_FRAME_TYPE] &&
-	    nla_get_u32(tb[SET_MONITOR_MODE_DATA_TX_FRAME_TYPE]) <
-	    PACKET_CAPTURE_DATA_MAX_FILTER) {
-		frame_filter.data_tx_frame_filter =
-			nla_get_u32(tb[SET_MONITOR_MODE_DATA_TX_FRAME_TYPE]);
-		frame_filter.vendor_attr_to_set =
-			BIT(SET_MONITOR_MODE_DATA_TX_FRAME_TYPE);
-	}
-
-	if (tb[SET_MONITOR_MODE_DATA_RX_FRAME_TYPE] &&
-	    nla_get_u32(tb[SET_MONITOR_MODE_DATA_RX_FRAME_TYPE]) <
-	    PACKET_CAPTURE_DATA_MAX_FILTER) {
-		frame_filter.data_rx_frame_filter =
-			nla_get_u32(tb[SET_MONITOR_MODE_DATA_RX_FRAME_TYPE]);
-		frame_filter.vendor_attr_to_set |=
-			BIT(SET_MONITOR_MODE_DATA_RX_FRAME_TYPE);
-	}
-
-	if (tb[SET_MONITOR_MODE_MGMT_TX_FRAME_TYPE] &&
-	    nla_get_u32(tb[SET_MONITOR_MODE_MGMT_TX_FRAME_TYPE]) <
-	    PACKET_CAPTURE_MGMT_MAX_FILTER) {
-		frame_filter.mgmt_tx_frame_filter =
-			nla_get_u32(tb[SET_MONITOR_MODE_MGMT_TX_FRAME_TYPE]);
-		frame_filter.vendor_attr_to_set |=
-			BIT(SET_MONITOR_MODE_MGMT_TX_FRAME_TYPE);
-	}
-
-	if (tb[SET_MONITOR_MODE_MGMT_RX_FRAME_TYPE] &&
-	    nla_get_u32(tb[SET_MONITOR_MODE_MGMT_RX_FRAME_TYPE]) <
-	    PACKET_CAPTURE_MGMT_MAX_FILTER) {
-		frame_filter.mgmt_rx_frame_filter =
-			nla_get_u32(tb[SET_MONITOR_MODE_MGMT_RX_FRAME_TYPE]);
-		frame_filter.vendor_attr_to_set |=
-			BIT(SET_MONITOR_MODE_MGMT_RX_FRAME_TYPE);
-	}
-
-	if (tb[SET_MONITOR_MODE_CTRL_TX_FRAME_TYPE] &&
-	    nla_get_u32(tb[SET_MONITOR_MODE_CTRL_TX_FRAME_TYPE]) <
-	    PACKET_CAPTURE_CTRL_MAX_FILTER) {
-		frame_filter.ctrl_tx_frame_filter =
-			nla_get_u32(tb[SET_MONITOR_MODE_CTRL_TX_FRAME_TYPE]);
-		frame_filter.vendor_attr_to_set |=
-			BIT(SET_MONITOR_MODE_CTRL_TX_FRAME_TYPE);
-	}
-
-	if (tb[SET_MONITOR_MODE_CTRL_RX_FRAME_TYPE] &&
-	    nla_get_u32(tb[SET_MONITOR_MODE_CTRL_RX_FRAME_TYPE]) <
-	    PACKET_CAPTURE_CTRL_MAX_FILTER) {
-		frame_filter.ctrl_rx_frame_filter =
-			nla_get_u32(tb[SET_MONITOR_MODE_CTRL_RX_FRAME_TYPE]);
-		frame_filter.vendor_attr_to_set |=
-			BIT(SET_MONITOR_MODE_CTRL_RX_FRAME_TYPE);
-	}
-
-	if (tb[SET_MONITOR_MODE_CONNECTED_BEACON_INTERVAL]) {
-		frame_filter.connected_beacon_interval =
-			nla_get_u32(tb[SET_MONITOR_MODE_CONNECTED_BEACON_INTERVAL]);
-		frame_filter.vendor_attr_to_set |=
-			BIT(SET_MONITOR_MODE_CONNECTED_BEACON_INTERVAL);
-	}
-
-	hdd_debug("Monitor mode config %s data tx %d data rx %d mgmt tx %d mgmt rx %d ctrl tx %d ctrl rx %d beacon interval %d\n",
-		  __func__, frame_filter.data_tx_frame_filter,
-		  frame_filter.data_rx_frame_filter, frame_filter.mgmt_tx_frame_filter,
-		  frame_filter.mgmt_rx_frame_filter, frame_filter.ctrl_tx_frame_filter,
-		  frame_filter.ctrl_rx_frame_filter, frame_filter.connected_beacon_interval);
-
-	status = ucfg_pkt_capture_set_filter(frame_filter, vdev);
-	hdd_objmgr_put_vdev(adapter->vdev);
-
-	hdd_exit();
-
-	return status;
-}
-
-/**
  * __wlan_hdd_cfg80211_set_monitor_mode() - Wifi monitor mode configuration
  * vendor command
  * @wiphy: wiphy device pointer
@@ -15609,8 +15605,8 @@ __wlan_hdd_cfg80211_set_monitor_mode(struct wiphy *wiphy,
 	struct net_device *dev = wdev->netdev;
 	struct hdd_adapter *adapter = WLAN_HDD_GET_PRIV_PTR(dev);
 	struct hdd_context *hdd_ctx  = wiphy_priv(wiphy);
-	struct nlattr *tb[SET_MONITOR_MODE_CONFIG_MAX + 1];
 	int errno;
+	QDF_STATUS status;
 
 	if (hdd_get_conparam() == QDF_GLOBAL_FTM_MODE) {
 		hdd_err("Command not allowed in FTM mode");
@@ -15618,21 +15614,15 @@ __wlan_hdd_cfg80211_set_monitor_mode(struct wiphy *wiphy,
 	}
 
 	if (!ucfg_pkt_capture_get_mode(hdd_ctx->psoc))
-		return QDF_STATUS_E_FAILURE;
+		return -EPERM;
 
 	errno = hdd_validate_adapter(adapter);
 	if (errno)
 		return errno;
 
-	if (wlan_cfg80211_nla_parse(tb, SET_MONITOR_MODE_CONFIG_MAX,
-				    data, data_len, set_monitor_mode_policy)) {
-		hdd_err("invalid monitor attr");
-		return -EINVAL;
-	}
+	status = os_if_monitor_mode_configure(adapter, data, data_len);
 
-	errno = hdd_monitor_mode_configure(adapter, tb);
-
-	return errno;
+	return qdf_status_to_os_return(status);
 }
 
 /**
@@ -16555,15 +16545,19 @@ const struct wiphy_vendor_command hdd_wiphy_vendor_commands[] = {
 	FEATURE_WMM_COMMANDS
 
 #ifdef WLAN_FEATURE_PKT_CAPTURE
+	FEATURE_MONITOR_MODE_VENDOR_COMMANDS
+#endif
+
+#ifdef WLAN_FEATURE_ROAM_OFFLOAD
 	{
 	.info.vendor_id = QCA_NL80211_VENDOR_ID,
-	.info.subcmd = QCA_NL80211_VENDOR_SUBCMD_SET_MONITOR_MODE,
+	.info.subcmd = QCA_NL80211_VENDOR_SUBCMD_ROAM_EVENTS,
 	.flags = WIPHY_VENDOR_CMD_NEED_WDEV |
 		 WIPHY_VENDOR_CMD_NEED_NETDEV |
 		 WIPHY_VENDOR_CMD_NEED_RUNNING,
-	.doit = wlan_hdd_cfg80211_set_monitor_mode,
-	vendor_command_policy(set_monitor_mode_policy,
-			      QCA_WLAN_VENDOR_ATTR_SET_MONITOR_MODE_MAX)
+	.doit = wlan_hdd_cfg80211_set_roam_events,
+	vendor_command_policy(set_roam_events_policy,
+			      QCA_WLAN_VENDOR_ATTR_ROAM_EVENTS_MAX)
 	},
 #endif
 };
