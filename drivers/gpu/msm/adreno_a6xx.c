@@ -4,6 +4,7 @@
  */
 
 #include <linux/clk/qcom.h>
+#include <linux/clk-provider.h>
 #include <linux/io.h>
 #include <linux/of.h>
 #include <linux/of_fdt.h>
@@ -585,6 +586,19 @@ static void a6xx_deassert_gbif_halt(struct adreno_device *adreno_dev)
 		kgsl_regwrite(device, A6XX_RBBM_GPR0_CNTL, 0x0);
 	else
 		kgsl_regwrite(device, A6XX_RBBM_GBIF_HALT, 0x0);
+}
+
+bool a6xx_gx_is_on(struct adreno_device *adreno_dev)
+{
+	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
+	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
+	bool gdsc_on, clk_on;
+
+	clk_on = __clk_is_enabled(pwr->grp_clks[0]);
+
+	gdsc_on = regulator_is_enabled(pwr->gx_gdsc);
+
+	return (gdsc_on & clk_on);
 }
 
 /*
@@ -2675,6 +2689,7 @@ const struct adreno_gpudev adreno_a6xx_gpudev = {
 	.power_ops = &adreno_power_operations,
 	.clear_pending_transactions = a6xx_clear_pending_transactions,
 	.deassert_gbif_halt = a6xx_deassert_gbif_halt,
+	.gx_is_on = a6xx_gx_is_on,
 };
 
 const struct adreno_gpudev adreno_a6xx_hwsched_gpudev = {
@@ -2722,6 +2737,7 @@ const struct adreno_gpudev adreno_a6xx_gmu_gpudev = {
 #endif
 	.read_alwayson = a6xx_read_alwayson,
 	.power_ops = &a6xx_gmu_power_ops,
+	.gx_is_on = a6xx_gmu_gx_is_on,
 };
 
 const struct adreno_gpudev adreno_a6xx_rgmu_gpudev = {
@@ -2750,6 +2766,7 @@ const struct adreno_gpudev adreno_a6xx_rgmu_gpudev = {
 #endif
 	.read_alwayson = a6xx_read_alwayson,
 	.power_ops = &a6xx_rgmu_power_ops,
+	.gx_is_on = a6xx_rgmu_gx_is_on,
 };
 
 const struct adreno_gpudev adreno_a619_holi_gpudev = {
@@ -2787,6 +2804,7 @@ const struct adreno_gpudev adreno_a619_holi_gpudev = {
 	.clear_pending_transactions = a6xx_clear_pending_transactions,
 	.deassert_gbif_halt = a6xx_deassert_gbif_halt,
 	.regulator_disable_poll = a619_holi_regulator_disable_poll,
+	.gx_is_on = a619_holi_gx_is_on,
 };
 
 const struct adreno_gpudev adreno_a630_gpudev = {
@@ -2818,4 +2836,5 @@ const struct adreno_gpudev adreno_a630_gpudev = {
 #endif
 	.read_alwayson = a6xx_read_alwayson,
 	.power_ops = &a630_gmu_power_ops,
+	.gx_is_on = a6xx_gmu_gx_is_on,
 };

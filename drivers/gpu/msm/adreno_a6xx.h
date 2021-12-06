@@ -326,6 +326,7 @@ void a6xx_holi_gmu_sptprac_disable(struct adreno_device *adreno_dev);
 
 bool a6xx_gmu_sptprac_is_on(struct adreno_device *adreno_dev);
 bool a6xx_holi_gmu_sptprac_is_on(struct adreno_device *adreno_dev);
+bool a619_holi_gx_is_on(struct adreno_device *adreno_dev);
 
 
 /**
