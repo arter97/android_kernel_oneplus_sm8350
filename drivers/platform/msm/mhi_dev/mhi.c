@@ -3301,7 +3301,7 @@ void mhi_dev_close_channel(struct mhi_dev_client *handle)
 	ch->tr_events = NULL;
 	kfree(handle);
 	mhi_log(MHI_MSG_INFO,
-		"MEM_ALLOC:ch:%d size:%d CLNT_HANDLE\n",
+		"MEM_DEALLOC:ch:%d size:%d CLNT_HANDLE\n",
 		ch->ch_id, sizeof(struct mhi_dev_client));
 
 	mutex_unlock(&ch->ch_lock);
