@@ -66,6 +66,7 @@ obj-$(CONFIG_SA_DISPCC_DIREWOLF) += dispcc0-direwolf.o dispcc1-direwolf.o
 obj-$(CONFIG_SA_GCC_DIREWOLF) += gcc-direwolf.o
 obj-$(CONFIG_SA_GCC_LEMANS) += gcc-lemans.o
 obj-$(CONFIG_SA_GPUCC_DIREWOLF) += gpucc-direwolf.o
+obj-$(CONFIG_SA_GPUCC_LEMANS) += gpucc-lemans.o
 obj-$(CONFIG_SA_VIDEOCC_DIREWOLF) += videocc-direwolf.o
 obj-$(CONFIG_SA_VIDEOCC_LEMANS) += videocc-lemans.o
 obj-$(CONFIG_SC_CAMCC_SHRIKE) += camcc-scshrike.o
