@@ -56,7 +56,13 @@ static struct drm_panel *active_panel;
 
 MODULE_FIRMWARE(PT_FW_FILE_NAME);
 
-static int pt_lpm_regulator(struct regulator *reg, int load_uA);
+#ifdef ENABLE_VDD_REG_ONLY
+static int pt_enable_vdd_regulator(struct pt_core_data *cd, bool en);
+#endif
+
+#ifdef ENABLE_I2C_REG_ONLY
+static int pt_enable_i2c_regulator(struct pt_core_data *cd, bool en);
+#endif
 static const char *pt_driver_core_name = PT_CORE_NAME;
 static const char *pt_driver_core_version = PT_DRIVER_VERSION;
 static const char *pt_driver_core_date = PT_DRIVER_DATE;
@@ -10524,13 +10530,60 @@ regulator_put:
 	return rc;
 }
 
+#ifdef ENABLE_I2C_REG_ONLY
+static int pt_enable_i2c_regulator(struct pt_core_data *cd, bool en)
+{
+	int rc;
+
+	if (!en) {
+		rc = 0;
+		goto disable_vcc_i2c_reg_only;
+	}
+
+	if (cd->vcc_i2c) {
+		if (regulator_count_voltages(cd->vcc_i2c) > 0) {
+			rc = regulator_set_voltage(cd->vcc_i2c, FT_I2C_VTG_MIN_UV,
+							FT_I2C_VTG_MAX_UV);
+			if (rc) {
+				dev_err(cd->dev,
+					"Regulator set_vtg failed vcc_i2c rc=%d\n", rc);
+				goto disable_vcc_i2c_reg_only;
+			}
+		}
+
+		rc = regulator_enable(cd->vcc_i2c);
+		if (rc) {
+			dev_err(cd->dev,
+				"Regulator vcc_i2c enable failed rc=%d\n", rc);
+			goto disable_vcc_i2c_reg_only;
+		}
+	}
+
+
+	return 0;
+
+disable_vcc_i2c_reg_only:
+	if (cd->vcc_i2c) {
+		if (regulator_count_voltages(cd->vcc_i2c) > 0)
+			regulator_set_voltage(cd->vcc_i2c, FT_I2C_VTG_MIN_UV,
+						FT_I2C_VTG_MAX_UV);
+
+		regulator_disable(cd->vcc_i2c);
+	}
+
+	return rc;
+}
+
+#endif
+
+#ifdef ENABLE_VDD_REG_ONLY
 static int pt_enable_vdd_regulator(struct pt_core_data *cd, bool en)
 {
 	int rc;
 
 	if (!en) {
 		rc = 0;
-		goto disable_vdd_reg;
+		goto disable_vdd_reg_only;
 	}
 
 	if (cd->vdd) {
@@ -10540,7 +10593,7 @@ static int pt_enable_vdd_regulator(struct pt_core_data *cd, bool en)
 			if (rc) {
 				dev_err(cd->dev,
 					"Regulator set_vtg failed vdd rc=%d\n", rc);
-				goto exit;
+				goto disable_vdd_reg_only;
 			}
 		}
 
@@ -10548,13 +10601,13 @@ static int pt_enable_vdd_regulator(struct pt_core_data *cd, bool en)
 		if (rc) {
 			dev_err(cd->dev,
 				"Regulator vdd enable failed rc=%d\n", rc);
-			goto exit;
+			goto disable_vdd_reg_only;
 		}
 	}
 
 	return 0;
 
-disable_vdd_reg:
+disable_vdd_reg_only:
 	if (cd->vdd) {
 		if (regulator_count_voltages(cd->vdd) > 0)
 			regulator_set_voltage(cd->vdd, FT_VTG_MIN_UV,
@@ -10563,9 +10616,9 @@ disable_vdd_reg:
 		regulator_disable(cd->vdd);
 	}
 
-exit:
 	return rc;
 }
+#endif
 
 static int pt_enable_regulator(struct pt_core_data *cd, bool en)
 {
@@ -10718,16 +10771,20 @@ static int pt_core_suspend_(struct device *dev)
 		return -EAGAIN;
 	}
 
+#ifdef ENABLE_VDD_REG_ONLY
 	rc = pt_enable_vdd_regulator(cd, false);
 	if (rc) {
 		dev_err(dev, "%s: Failed to disable vdd regulators: rc=%d\n",
 			__func__, rc);
 	}
-	rc = pt_lpm_regulator(cd->vcc_i2c, I2C_ACTIVE_LOAD_MA);
-	if (rc) {
-		dev_err(dev, "%s: Failed to enter to lpm mode rc=%d\n",
-			__func__, rc);
-	}
+#endif
+#ifdef ENABLE_I2C_REG_ONLY
+		rc = pt_enable_i2c_regulator(cd, false);
+		if (rc) {
+			dev_err(dev, "%s: Failed to disable vdd regulators: rc=%d\n",
+				__func__, rc);
+		}
+#endif
 
 	if (!IS_EASY_WAKE_CONFIGURED(cd->easy_wakeup_gesture))
 		return 0;
@@ -10747,13 +10804,6 @@ static int pt_core_suspend_(struct device *dev)
 	}
 
 	return rc;
-}
-
-static int pt_lpm_regulator(struct regulator *reg, int load_uA)
-{
-
-	return (regulator_count_voltages(reg) > 0) ?
-		regulator_set_load(reg, load_uA) : 0;
 }
 
 /*******************************************************************************
@@ -10804,17 +10854,20 @@ static int pt_core_resume_(struct device *dev)
 	dev_info(dev, "%s: Entering into resume mode:\n",
 		__func__);
 
-	rc = pt_lpm_regulator(cd->vcc_i2c, I2C_ACTIVE_LOAD_MA);
-	if (rc < 0) {
-		dev_err(dev, "%s: Failed to exit lpm mode: rc=%d\n",
-			__func__, rc);
-	}
-
+#ifdef ENABLE_VDD_REG_ONLY
 	rc = pt_enable_vdd_regulator(cd, true);
 	if (rc < 0) {
 		dev_err(dev, "%s: Failed to enable vdd regulators: rc=%d\n",
 			__func__, rc);
 	}
+#endif
+#ifdef ENABLE_I2C_REG_ONLY
+	rc = pt_enable_i2c_regulator(cd, true);
+	if (rc < 0) {
+		dev_err(dev, "%s: Failed to enable vdd regulators: rc=%d\n",
+			__func__, rc);
+	}
+#endif
 
 	dev_info(dev, "%s: Voltage regulator enabled: rc=%d\n",
 		__func__, rc);
