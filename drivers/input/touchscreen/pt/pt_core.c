@@ -56,6 +56,8 @@ static struct drm_panel *active_panel;
 
 MODULE_FIRMWARE(PT_FW_FILE_NAME);
 
+#define ENABLE_VDD_REG_ONLY
+#define ENABLE_I2C_REG_ONLY
 #ifdef ENABLE_VDD_REG_ONLY
 static int pt_enable_vdd_regulator(struct pt_core_data *cd, bool en);
 #endif
