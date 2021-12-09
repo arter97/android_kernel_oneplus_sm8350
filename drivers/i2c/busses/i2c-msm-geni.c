@@ -1093,6 +1093,7 @@ static int geni_i2c_xfer(struct i2c_adapter *adap,
 			ret = geni_i2c_prepare(gi2c);
 			if (ret) {
 				dev_err(gi2c->dev, "I2C prepare failed: %d\n", ret);
+				mutex_unlock(&gi2c->i2c_ssr.ssr_lock);
 				return ret;
 			}
 		}
@@ -1101,8 +1102,10 @@ static int geni_i2c_xfer(struct i2c_adapter *adap,
 	// WAR : Complete previous pending cancel cmd
 	if (gi2c->prev_cancel_pending) {
 		ret = do_pending_cancel(gi2c);
-		if (ret)
+		if (ret) {
+			mutex_unlock(&gi2c->i2c_ssr.ssr_lock);
 			return ret; //Don't perform xfer is cancel failed
+		}
 	}
 
 	GENI_SE_DBG(gi2c->ipcl, false, gi2c->dev,
