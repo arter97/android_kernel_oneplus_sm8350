@@ -1153,12 +1153,6 @@ static int sx150x_probe(struct i2c_client *client,
 		return ret;
 	}
 
-	ret = pinctrl_enable(pctl->pctldev);
-	if (ret) {
-		dev_err(dev, "Failed to enable pinctrl device\n");
-		return ret;
-	}
-
 	/* Register GPIO controller */
 	pctl->gpio.base = -1;
 	pctl->gpio.ngpio = pctl->data->npins;
@@ -1189,6 +1183,12 @@ static int sx150x_probe(struct i2c_client *client,
 	ret = devm_gpiochip_add_data(dev, &pctl->gpio, pctl);
 	if (ret)
 		return ret;
+
+	ret = pinctrl_enable(pctl->pctldev);
+	if (ret) {
+		dev_err(dev, "Failed to enable pinctrl device\n");
+		return ret;
+	}
 
 	ret = gpiochip_add_pin_range(&pctl->gpio, dev_name(dev),
 				     0, 0, pctl->data->npins);
