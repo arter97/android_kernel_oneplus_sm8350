@@ -1585,7 +1585,7 @@ static const struct msm_pingroup scuba_groups[] = {
 };
 
 static const int scuba_reserved_gpios[] = {
-	0, 1, 2, 3, 14, 15, 16, 17, -1
+	2, 3, 14, 15, 16, 17, -1
 };
 
 static const struct msm_pinctrl_soc_data scuba_pinctrl = {
