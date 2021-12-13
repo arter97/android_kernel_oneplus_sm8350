@@ -78,14 +78,16 @@ static void _power_collapse_set(struct adreno_device *adreno_dev, bool val)
 		return;
 
 	if (val) {
-		if (adreno_is_a660(adreno_dev))
+		if (adreno_is_a660(adreno_dev) ||
+				adreno_is_a690(adreno_dev))
 			gmu_core_regwrite(device,
 				 A6XX_GMU_PWR_COL_PREEMPT_KEEPALIVE, 0x1);
 		else
 			gmu_core_regrmw(device,
 				 A6XX_GMU_AO_SPARE_CNTL, 0x0, 0x2);
 	} else {
-		if (adreno_is_a660(adreno_dev))
+		if (adreno_is_a660(adreno_dev) ||
+				adreno_is_a690(adreno_dev))
 			gmu_core_regwrite(device,
 				 A6XX_GMU_PWR_COL_PREEMPT_KEEPALIVE, 0x0);
 		else

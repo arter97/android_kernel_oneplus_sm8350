@@ -206,6 +206,7 @@ enum adreno_gpurev {
 	ADRENO_REV_A650 = 650,
 	ADRENO_REV_A660 = 660,
 	ADRENO_REV_A680 = 680,
+	ADRENO_REV_A690 = 690,
 	ADRENO_REV_A702 = 702,
 };
 
@@ -1086,6 +1087,7 @@ ADRENO_TARGET(a640, ADRENO_REV_A640)
 ADRENO_TARGET(a643, ADRENO_REV_A643)
 ADRENO_TARGET(a650, ADRENO_REV_A650)
 ADRENO_TARGET(a680, ADRENO_REV_A680)
+ADRENO_TARGET(a690, ADRENO_REV_A690)
 ADRENO_TARGET(a702, ADRENO_REV_A702)
 
 /* A642, A642L and A643 are derived from A660 and shares same logic */
@@ -1133,7 +1135,8 @@ static inline int adreno_is_a650_family(struct adreno_device *adreno_dev)
 
 	return (rev == ADRENO_REV_A650 || rev == ADRENO_REV_A620 ||
 		rev == ADRENO_REV_A660 || adreno_is_a642(adreno_dev) ||
-		adreno_is_a642l(adreno_dev) || rev == ADRENO_REV_A643);
+		adreno_is_a642l(adreno_dev) || rev == ADRENO_REV_A643 ||
+		rev == ADRENO_REV_A690);
 }
 
 static inline int adreno_is_a619_holi(struct adreno_device *adreno_dev)
