@@ -813,12 +813,14 @@ typedef struct {
  * @vdev_id: vdev id
  * @pdev_id: pdev_id
  * @wmi_host_inst_rssi_args: Instantaneous rssi stats args
+ * @is_qmi_send_support: support to send by qmi or not
  */
 struct stats_request_params {
 	uint32_t stats_id;
 	uint8_t vdev_id;
 	uint8_t pdev_id;
 	wmi_host_inst_rssi_args rssi_args;
+	bool is_qmi_send_support;
 };
 
 /**
@@ -7887,12 +7889,14 @@ struct wmi_roam_scan_data {
  * @status:             0 - Roaming is success ; 1 - Roaming failed ;
  * 2 - No roam
  * @fail_reason:        One of WMI_ROAM_FAIL_REASON_ID
+ * @fail_bssid:         BSSID of the last attempted roam failed AP
  */
 struct wmi_roam_result {
 	bool present;
 	uint32_t timestamp;
 	uint32_t status;
 	uint32_t fail_reason;
+	struct qdf_mac_addr fail_bssid;
 };
 
 /**
