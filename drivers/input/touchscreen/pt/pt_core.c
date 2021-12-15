@@ -7668,13 +7668,13 @@ static int pt_core_sleep_(struct pt_core_data *cd)
 
 	mutex_lock(&cd->system_lock);
 	pt_debug(cd->dev, DL_INFO, "%s - sleep_state %d\n", __func__, cd->sleep_state);
-	if (cd->sleep_state == SS_SLEEP_OFF || cd->sleep_state == SS_SLEEP_NONE) {
-		cd->sleep_state = SS_SLEEPING;
-	} else {
+	if (cd->sleep_state == SS_SLEEP_ON || cd->sleep_state == SS_SLEEPING) {
 		mutex_unlock(&cd->system_lock);
 		pt_debug(cd->dev, DL_INFO,
 			"%s - Skip slee[ state %d\n", __func__, cd->sleep_state);
-		return 0;
+			return 0;
+	} else {
+		cd->sleep_state = SS_SLEEPING;
 	}
 	mutex_unlock(&cd->system_lock);
 
@@ -9674,13 +9674,14 @@ static int pt_core_wake_(struct pt_core_data *cd)
 	int rc = 0;
 
 	mutex_lock(&cd->system_lock);
-	if (cd->sleep_state == SS_SLEEP_ON || cd->sleep_state == SS_SLEEP_NONE) {
-		cd->sleep_state = SS_WAKING;
-	} else {
+
+	if (cd->sleep_state == SS_SLEEP_OFF || cd->sleep_state == SS_WAKING) {
 		mutex_unlock(&cd->system_lock);
 		pt_debug(cd->dev, DL_INFO,
 			"%s - skip wake sleep state %d\n", __func__, cd->sleep_state);
 		return 0;
+	} else {
+		cd->sleep_state = SS_WAKING;
 	}
 	mutex_unlock(&cd->system_lock);
 
@@ -12826,7 +12827,7 @@ static int drm_notifier_callback(struct notifier_block *self,
 				pt_debug(cd->dev, DL_INFO, "%s: Resume notified!\n", __func__);
 			}
 		}
-	} else if (*blank == DRM_PANEL_BLANK_LP) {
+	} else if (*blank == DRM_PANEL_BLANK_LP || *blank == DRM_PANEL_BLANK_POWERDOWN) {
 		pt_debug(cd->dev, DL_INFO, "%s: LOWPOWER!\n", __func__);
 		if (event == DRM_PANEL_EARLY_EVENT_BLANK) {
 			if (cd->fb_state != FB_OFF) {
