@@ -1448,6 +1448,7 @@ struct pt_core_data {
 	struct device *dev;
 	struct workqueue_struct *pt_workqueue;
 	struct work_struct	resume_offload_work;
+	struct work_struct	suspend_offload_work;
 	struct work_struct	suspend_work;
 	struct work_struct	resume_work;
 

@@ -10825,15 +10825,16 @@ static int pt_core_suspend_(struct device *dev)
  ******************************************************************************/
 static int pt_core_suspend(struct device *dev)
 {
-	struct pt_core_data *cd = dev_get_drvdata(dev);
-	int rc = 0;
+		struct pt_core_data *cd = dev_get_drvdata(dev);
+		int rc = 0;
 
-	if (cd->cpdata->flags & PT_CORE_FLAG_SKIP_SYS_SLEEP)
-		return 0;
+		if (cd->cpdata->flags & PT_CORE_FLAG_SKIP_SYS_SLEEP)
+			return 0;
 
-	rc = pt_core_suspend_(dev);
-	pt_debug(dev, DL_WARN, "%s Exit - rc = %d\n", __func__, rc);
-	return 0;
+		queue_work(cd->pt_workqueue, &cd->suspend_offload_work);
+		pt_debug(cd->dev, DL_ERROR, "%s End\n", __func__);
+
+		return rc;
 }
 
 /*******************************************************************************
@@ -10908,6 +10909,34 @@ exit:
 	}
 
 	return rc;
+}
+
+/*******************************************************************************
+ * FUNCTION: suspend_offload_work
+ *
+ * SUMMARY: Wrapper function of pt_core_suspend() to avoid TP to be waken/slept
+ *  along with kernel power state even the display is off based on the check of
+ *  TTDL core platform flag.
+ *
+ * RETURN:
+ *	 0 = success
+ *	!0 = failure
+ *
+ * PARAMETERS:
+ *      *dev  - pointer to core device
+ ******************************************************************************/
+static void pt_suspend_offload_work(struct work_struct *work)
+
+{
+	int rc = 0;
+	struct pt_core_data *cd = container_of(work, struct pt_core_data,
+				suspend_offload_work);
+
+	if (cd->cpdata->flags & PT_CORE_FLAG_SKIP_SYS_SLEEP)
+		return;
+
+	rc = pt_core_suspend_(cd->dev);
+	pt_debug(cd->dev, DL_WARN, "%s Exit - rc = %d\n", __func__, rc);
 }
 
 /*******************************************************************************
@@ -17805,6 +17834,7 @@ skip_enum:
 	pt_debug(dev, DL_ERROR, "%s: Probe: Setup drm notifier\n", __func__);
 	pt_setup_drm_notifier(cd);
 	INIT_WORK(&cd->resume_offload_work, pt_resume_offload_work);
+	INIT_WORK(&cd->suspend_offload_work, pt_suspend_offload_work);
 #elif defined(CONFIG_FB)
 	pt_setup_fb_notifier(cd);
 #endif
