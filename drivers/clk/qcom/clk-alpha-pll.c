@@ -4986,6 +4986,7 @@ const struct clk_ops clk_alpha_pll_slew_ops = {
 	.set_rate = clk_alpha_pll_slew_set_rate,
 	.init = clk_alpha_pll_init,
 	.debug_init = clk_common_debug_init,
+	.restore_context = clk_pll_restore_context,
 #ifdef CONFIG_COMMON_CLK_QCOM_DEBUG
 	.list_rate_vdd_level = clk_list_rate_vdd_level,
 #endif
