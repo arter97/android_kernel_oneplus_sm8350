@@ -2983,6 +2983,12 @@ static void smblite_lib_micro_usb_plugin(struct smb_charger *chg,
 	int rc = 0;
 	u8 stat;
 	if (vbus_rising) {
+		/*
+		 * Send extcon notification for only Non-ADSP supported charger.
+		 */
+		if (chg->subtype == PM2250)
+			smblite_lib_notify_device_mode(chg, true);
+
 		rc = typec_partner_register(chg);
 		if (rc < 0)
 			smblite_lib_err(chg, "Couldn't register partner rc =%d\n",
