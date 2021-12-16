@@ -245,10 +245,11 @@ static int profiler_release(struct inode *inode, struct file *file)
 	mutex_unlock(&profiler->lock);
 
 	bwbuf = kzalloc(sizeof(struct tz_bw_svc_buf), GFP_KERNEL);
-	ret = bw_profiling_stop(bwbuf);
 
 	if (bwbuf == NULL)
 		return -ENOMEM;
+
+	ret = bw_profiling_stop(bwbuf);
 
 	if (ret)
 		pr_err("bw_profiling_stop Failed with ret: %d\n", ret);
