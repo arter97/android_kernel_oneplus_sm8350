@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2002,2007-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef __KGSL_DEVICE_H
 #define __KGSL_DEVICE_H
@@ -460,6 +461,10 @@ struct kgsl_process_private {
 	atomic_t ctxt_count;
 	spinlock_t ctxt_count_lock;
 	atomic64_t frame_count;
+	/**
+	 * @private_mutex: Mutex lock to protect kgsl_process_private
+	 */
+	struct mutex private_mutex;
 };
 
 /**
