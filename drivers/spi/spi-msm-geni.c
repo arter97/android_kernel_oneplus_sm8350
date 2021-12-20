@@ -2302,7 +2302,48 @@ static int spi_geni_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static int spi_geni_gpi_suspend_resume(struct spi_geni_master *geni_mas, bool flag)
+{
+	int tx_ret = 0, rx_ret = 0;
+
+	if ((geni_mas->tx != NULL) && (geni_mas->rx != NULL)) {
+		if (flag) {
+			tx_ret = dmaengine_pause(geni_mas->tx);
+			rx_ret = dmaengine_pause(geni_mas->rx);
+		} else {
+			tx_ret = dmaengine_resume(geni_mas->tx);
+			rx_ret = dmaengine_resume(geni_mas->rx);
+		}
+
+		if (tx_ret || rx_ret) {
+			GENI_SE_ERR(geni_mas->ipc, true, geni_mas->dev,
+			"%s failed: tx:%d rx:%d flag:%d\n",
+			__func__, tx_ret, rx_ret, flag);
+			return -EINVAL;
+		}
+	}
+	return 0;
+}
+
 #if IS_ENABLED(CONFIG_PM)
+
+static int spi_geni_levm_suspend_proc(struct spi_geni_master *geni_mas, struct spi_master *spi)
+{
+	int ret = 0;
+
+	spi_geni_unlock_bus(spi);
+
+	if (geni_mas->gsi_mode) {
+		ret = spi_geni_gpi_suspend_resume(geni_mas, true);
+		if (ret) {
+			GENI_SE_DBG(geni_mas->ipc, false, geni_mas->dev, "%s:\n", __func__);
+			return ret;
+		}
+	}
+	GENI_SE_DBG(geni_mas->ipc, false, geni_mas->dev, "%s:\n", __func__);
+	return 0;
+}
+
 static int spi_geni_runtime_suspend(struct device *dev)
 {
 	int ret = 0;
@@ -2310,25 +2351,16 @@ static int spi_geni_runtime_suspend(struct device *dev)
 	struct spi_geni_master *geni_mas = spi_master_get_devdata(spi);
 
 	disable_irq(geni_mas->irq);
-	if (geni_mas->is_le_vm) {
-		spi_geni_unlock_bus(spi);
-		return 0;
-	}
+	if (geni_mas->is_le_vm)
+		return spi_geni_levm_suspend_proc(geni_mas, spi);
 
 	GENI_SE_DBG(geni_mas->ipc, false, NULL, "%s:\n", __func__);
 
-	if (geni_mas->shared_se) {
-		if (geni_mas->tx != NULL) {
-			ret = dmaengine_pause(geni_mas->tx);
-			if (ret) {
-				GENI_SE_ERR(geni_mas->ipc, true, NULL,
-				"%s dmaengine_pause failed: %d\n", __func__, ret);
-			}
-			GENI_SE_DBG(geni_mas->ipc, false, NULL,
-			"%s: Shared_SE dma_pause\n", __func__);
-		}
+	if (geni_mas->gsi_mode) {
+		ret = spi_geni_gpi_suspend_resume(geni_mas, true);
+		if (ret)
+			return ret;
 	}
-
 	/* Do not unconfigure the GPIOs for a shared_se usecase */
 	if (geni_mas->shared_ee && !geni_mas->shared_se)
 		goto exit_rt_suspend;
@@ -2346,65 +2378,75 @@ exit_rt_suspend:
 	return ret;
 }
 
+static int spi_geni_levm_resume_proc(struct spi_geni_master *geni_mas, struct spi_master *spi)
+{
+	int ret = 0;
+
+	if (!geni_mas->setup) {
+		ret = spi_geni_mas_setup(spi);
+		if (ret) {
+			GENI_SE_ERR(geni_mas->ipc, true, geni_mas->dev,
+			"%s mas_setup failed: %d\n", __func__, ret);
+			return ret;
+		}
+	}
+
+	if (geni_mas->gsi_mode) {
+		ret = spi_geni_gpi_suspend_resume(geni_mas, false);
+		if (ret) {
+			GENI_SE_ERR(geni_mas->ipc, false, geni_mas->dev,
+				    "%s:\n", __func__);
+			return ret;
+		}
+	}
+
+	ret = spi_geni_lock_bus(spi);
+	if (ret) {
+		GENI_SE_ERR(geni_mas->ipc, true, geni_mas->dev,
+			"%s lock_bus failed: %d\n", __func__, ret);
+		return ret;
+	}
+	GENI_SE_DBG(geni_mas->ipc, false, geni_mas->dev, "%s:\n", __func__);
+	/* Return here as LE VM doesn't need resourc/clock management */
+	return ret;
+}
+
 static int spi_geni_runtime_resume(struct device *dev)
 {
 	int ret = 0;
 	struct spi_master *spi = get_spi_master(dev);
 	struct spi_geni_master *geni_mas = spi_master_get_devdata(spi);
 
-	if (geni_mas->spi_ssr.is_ssr_down) {
-		GENI_SE_ERR(geni_mas->ipc, false, NULL,
-			"%s: Error runtime resume in SSR down\n", __func__);
-		return -EAGAIN;
-	}
-	if (geni_mas->is_le_vm) {
-		if (!geni_mas->setup) {
-			ret = spi_geni_mas_setup(spi);
-			if (ret) {
-				GENI_SE_ERR(geni_mas->ipc, true, NULL,
-				"%s mas_setup failed: %d\n", __func__, ret);
-				return ret;
-			}
-		}
+	if (geni_mas->is_le_vm)
+		return spi_geni_levm_resume_proc(geni_mas, spi);
 
-		ret = spi_geni_lock_bus(spi);
-		if (ret) {
-			GENI_SE_ERR(geni_mas->ipc, true, NULL,
-				"%s lock_bus failed: %d\n", __func__, ret);
-			return ret;
-		}
-		/* Return here as LE VM doesn't need resourc/clock management */
-		return ret;
-	}
-
-	GENI_SE_DBG(geni_mas->ipc, false, NULL, "%s:\n", __func__);
-
-	if (geni_mas->shared_se) {
-		/* very first time mas->tx channel is not getting updated */
-		if (geni_mas->tx != NULL) {
-			ret = dmaengine_resume(geni_mas->tx);
-			if (ret) {
-				GENI_SE_ERR(geni_mas->ipc, true, NULL,
-				"%s dmaengine_resume failed: %d\n", __func__, ret);
-			}
-			GENI_SE_DBG(geni_mas->ipc, false, NULL,
-			"%s: Shared_SE dma_resume call\n", __func__);
-		}
-	}
-
+	GENI_SE_ERR(geni_mas->ipc, false, geni_mas->dev, "%s:\n", __func__);
 	if (geni_mas->shared_ee)
 		goto exit_rt_resume;
 
 	if (geni_mas->gsi_mode) {
 		ret = se_geni_clks_on(&geni_mas->spi_rsc);
-		if (ret)
-			GENI_SE_ERR(geni_mas->ipc, false, NULL,
+		if (ret) {
+			GENI_SE_ERR(geni_mas->ipc, false, geni_mas->dev,
 			"%s: Error %d turning on clocks\n", __func__, ret);
+			return ret;
+		}
+
+		ret = spi_geni_gpi_suspend_resume(geni_mas, false);
 		return ret;
 	}
 
 exit_rt_resume:
 	ret = se_geni_resources_on(&geni_mas->spi_rsc);
+	if (ret) {
+		GENI_SE_ERR(geni_mas->ipc, false, geni_mas->dev,
+		"%s: Error %d turning on clocks\n", __func__, ret);
+		return ret;
+	}
+
+	if (geni_mas->gsi_mode)
+		ret = spi_geni_gpi_suspend_resume(geni_mas, false);
+
 	enable_irq(geni_mas->irq);
 	return ret;
 }
