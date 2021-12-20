@@ -293,7 +293,11 @@ static unsigned long virtio_clk_get_rate(struct clk_hw *hw,
 	}
 
 	if (rsp->result) {
-		pr_err("%s: error response (%d)\n", clk_hw_get_name(hw),
+		/*
+		 * Some clocks do not support getting rate.
+		 * If getting clock rate is failing, return 0.
+		 */
+		pr_debug("%s: error response (%d)\n", clk_hw_get_name(hw),
 				rsp->result);
 		ret = 0;
 	} else
