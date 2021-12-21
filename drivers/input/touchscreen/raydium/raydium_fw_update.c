@@ -81,7 +81,7 @@ int raydium_mem_table_setting(void)
 		break;
 #endif
 	default:
-		LOGD(LOG_WARNING, "[touch]mapping ic setting use default fw\n");
+		LOGD(LOG_DEBUG, "[touch]mapping ic setting use default fw\n");
 		memcpy(g_rad_boot_image, u8_rad_boot_30, RAD_BOOT_3X_SIZE);
 		memcpy(g_rad_init_image, u8_rad_init_30, RAD_INIT_3X_SIZE);
 		memcpy(g_rad_fw_image, u8_rad_fw_30, RAD_FW_3X_SIZE);
