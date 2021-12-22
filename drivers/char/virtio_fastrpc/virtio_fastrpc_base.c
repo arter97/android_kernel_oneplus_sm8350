@@ -18,6 +18,29 @@
 #include "virtio_fastrpc_mem.h"
 #include "virtio_fastrpc_queue.h"
 
+#define VIRTIO_ID_FASTRPC				34
+/* indicates remote invoke with buffer attributes is supported */
+#define VIRTIO_FASTRPC_F_INVOKE_ATTR			1
+/* indicates remote invoke with CRC is supported */
+#define VIRTIO_FASTRPC_F_INVOKE_CRC			2
+/* indicates remote mmap/munmap is supported */
+#define VIRTIO_FASTRPC_F_MMAP				3
+/* indicates QOS setting is supported */
+#define VIRTIO_FASTRPC_F_CONTROL			4
+
+#define NUM_CHANNELS			4 /* adsp, mdsp, slpi, cdsp0*/
+#define NUM_DEVICES			2 /* adsprpc-smd, adsprpc-smd-secure */
+#define MINOR_NUM_DEV			0
+#define MINOR_NUM_SECURE_DEV		1
+
+#define INIT_FILELEN_MAX		(2*1024*1024)
+#define INIT_MEMLEN_MAX			(8*1024*1024)
+
+#define MAX_FASTRPC_BUF_SIZE		(128*1024)
+#define DEBUGFS_SIZE			3072
+#define PID_SIZE			10
+#define UL_SIZE				25
+
 static struct fastrpc_apps gfa;
 
 static struct dentry *debugfs_root;
