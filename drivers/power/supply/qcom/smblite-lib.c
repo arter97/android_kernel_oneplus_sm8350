@@ -593,6 +593,8 @@ static void smblite_lib_uusb_removal(struct smb_charger *chg)
 	vote(chg->usb_icl_votable, SW_ICL_MAX_VOTER, true,
 			is_flashlite_active(chg) ? USBIN_500UA : USBIN_100UA);
 	vote(chg->usb_icl_votable, FLASH_ACTIVE_VOTER, false, 0);
+	vote_override(chg->fcc_main_votable, FCC_STEPPER_VOTER,
+				false, chg->chg_param.fcc_step_start_ua);
 
 	/* Remove SW thermal regulation votes */
 	vote(chg->usb_icl_votable, SW_THERM_REGULATION_VOTER, false, 0);
@@ -2684,8 +2686,9 @@ irqreturn_t smblite_chg_state_change_irq_handler(int irq, void *data)
 {
 	struct smb_irq_data *irq_data = data;
 	struct smb_charger *chg = irq_data->parent_data;
-	u8 stat;
+	u8 stat, boost_en_chgr;
 	int rc;
+	int present;
 
 	smblite_lib_dbg(chg, PR_INTERRUPT, "IRQ: %s\n", irq_data->name);
 
@@ -2693,12 +2696,52 @@ irqreturn_t smblite_chg_state_change_irq_handler(int irq, void *data)
 	if (rc < 0) {
 		smblite_lib_err(chg, "Couldn't read BATTERY_CHARGER_STATUS_1 rc=%d\n",
 				rc);
-		return IRQ_HANDLED;
+		goto failure;
 	}
 
 	stat = stat & BATTERY_CHARGER_STATUS_MASK;
 
+	rc = smblite_lib_is_input_present(chg, &present);
+	if (rc < 0) {
+		smblite_lib_err(chg, "Couldn't read USB_INPUT status rc=%d\n",
+				rc);
+		goto failure;
+	}
+
+	if ((chg->subtype == PM5100) && !!present) {
+		rc = smblite_lib_read(chg, CHGR_CHG_EN_STATUS_REG(chg->base), &boost_en_chgr);
+		if (rc < 0) {
+			smblite_lib_err(chg, "Couldn't read BATTERY_CHARGER_STATUS_1 rc=%d\n",
+					rc);
+			goto failure;
+		}
+
+		/*
+		 * Every time BOOST disables charging, reset the FCC stepper from
+		 * fcc_step_start.  Enforce this by using the override voter. when
+		 * BOOST-disable re-enables charging restart the stepper from
+		 * fcc_step_start
+		 */
+		if (boost_en_chgr & CHARGING_DISABLED_FROM_BOOST_BIT) {
+			vote_override(chg->fcc_main_votable, FCC_STEPPER_VOTER,
+					true, chg->chg_param.fcc_step_start_ua);
+
+			vote(chg->fcc_votable, FCC_STEPPER_VOTER,
+				true, chg->chg_param.fcc_step_start_ua);
+
+			smblite_lib_dbg(chg, PR_INTERRUPT,
+				"Reset FCC stepper due to boost enabled\n");
+		} else {
+			vote_override(chg->fcc_main_votable, FCC_STEPPER_VOTER,
+					false, chg->chg_param.fcc_step_start_ua);
+			/* Remove this vote to allow stepper to ramp-up */
+			vote(chg->fcc_votable, FCC_STEPPER_VOTER, false, 0);
+		}
+	}
+
 	power_supply_changed(chg->batt_psy);
+
+failure:
 	return IRQ_HANDLED;
 }
 
