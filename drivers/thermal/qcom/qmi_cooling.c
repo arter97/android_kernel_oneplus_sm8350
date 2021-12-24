@@ -96,6 +96,7 @@ static char  device_clients[][QMI_CLIENT_NAME_LENGTH] = {
 	{"mmw3_dsc"},
 	{"mmw_ul_throttling_dsc"},
 	{"mmw_ific_dsc"},
+	{"tmd_rf_cal"},
 };
 
 static int qmi_get_max_state(struct thermal_cooling_device *cdev,
