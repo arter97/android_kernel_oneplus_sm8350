@@ -1718,9 +1718,12 @@ void geni_se_dump_dbg_regs(struct se_geni_rsc *rsc, void __iomem *base,
 	geni_se_dev = dev_get_drvdata(rsc->wrapper_dev);
 	if (!geni_se_dev)
 		return;
-	if (unlikely(list_empty(&rsc->ab_list) || list_empty(&rsc->ib_list))) {
-		GENI_SE_DBG(ipc, false, NULL, "%s: Clocks not on\n", __func__);
-		return;
+	if (!rsc->skip_bw_vote) {
+		/* Add condition for non PMIC usecase, for PMIC case we don't vote */
+		if (unlikely(list_empty(&rsc->ab_list) || list_empty(&rsc->ib_list))) {
+			GENI_SE_DBG(ipc, false, NULL, "%s: Clocks not on\n", __func__);
+			return;
+		}
 	}
 	m_cmd0 = geni_read_reg(base, SE_GENI_M_CMD0);
 	m_irq_status = geni_read_reg(base, SE_GENI_M_IRQ_STATUS);

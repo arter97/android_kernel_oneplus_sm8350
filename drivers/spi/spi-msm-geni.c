@@ -2293,13 +2293,17 @@ static int spi_geni_remove(struct platform_device *pdev)
 {
 	struct spi_master *master = platform_get_drvdata(pdev);
 	struct spi_geni_master *geni_mas = spi_master_get_devdata(master);
+	int ret = 0;
 
 	sysfs_remove_file(&pdev->dev.kobj, &dev_attr_spi_slave_state.attr);
-	se_geni_resources_off(&geni_mas->spi_rsc);
+	ret = se_geni_resources_off(&geni_mas->spi_rsc);
+	if (ret)
+		dev_err(geni_mas->dev, "%s: resurces_off Error ret %d\n",
+			__func__, ret);
 	spi_unregister_master(master);
 	pm_runtime_put_noidle(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
-	return 0;
+	return ret;
 }
 
 static int spi_geni_gpi_suspend_resume(struct spi_geni_master *geni_mas, bool flag)
@@ -2375,6 +2379,9 @@ static int spi_geni_runtime_suspend(struct device *dev)
 
 exit_rt_suspend:
 	ret = se_geni_resources_off(&geni_mas->spi_rsc);
+	if (ret)
+		dev_err(geni_mas->dev, "%s: resurces_off Error ret %d\n",
+			__func__, ret);
 	return ret;
 }
 
