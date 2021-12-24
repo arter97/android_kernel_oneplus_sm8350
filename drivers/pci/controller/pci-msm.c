@@ -2753,6 +2753,48 @@ static void msm_pcie_debugfs_exit(void)
 }
 #endif
 
+#ifdef CONFIG_IPC_LOGGING
+static void msm_pcie_ipc_log_init(int rc_num)
+{
+	char rc_name[MAX_RC_NAME_LEN];
+
+	scnprintf(rc_name, MAX_RC_NAME_LEN, "pcie%d-short", rc_num);
+	msm_pcie_dev[rc_num].ipc_log =
+		ipc_log_context_create(PCIE_LOG_PAGES, rc_name, 0);
+	if (msm_pcie_dev[rc_num].ipc_log == NULL)
+		pr_err("%s: unable to create IPC log context for %s\n",
+			__func__, rc_name);
+	else
+		PCIE_DBG(&msm_pcie_dev[rc_num],
+			"PCIe IPC logging is enable for RC%d\n",
+			rc_num);
+	scnprintf(rc_name, MAX_RC_NAME_LEN, "pcie%d-long", rc_num);
+	msm_pcie_dev[rc_num].ipc_log_long =
+		ipc_log_context_create(PCIE_LOG_PAGES, rc_name, 0);
+	if (msm_pcie_dev[rc_num].ipc_log_long == NULL)
+		pr_err("%s: unable to create IPC log context for %s\n",
+			__func__, rc_name);
+	else
+		PCIE_DBG(&msm_pcie_dev[rc_num],
+			"PCIe IPC logging %s is enable for RC%d\n",
+			rc_name, rc_num);
+	scnprintf(rc_name, MAX_RC_NAME_LEN, "pcie%d-dump", rc_num);
+	msm_pcie_dev[rc_num].ipc_log_dump =
+		ipc_log_context_create(PCIE_LOG_PAGES, rc_name, 0);
+	if (msm_pcie_dev[rc_num].ipc_log_dump == NULL)
+		pr_err("%s: unable to create IPC log context for %s\n",
+			__func__, rc_name);
+	else
+		PCIE_DBG(&msm_pcie_dev[rc_num],
+			"PCIe IPC logging %s is enable for RC%d\n",
+			rc_name, rc_num);
+}
+#else
+static void msm_pcie_ipc_log_init(int rc_num)
+{
+}
+#endif
+
 static int msm_pcie_is_link_up(struct msm_pcie_dev_t *dev)
 {
 	return readl_relaxed(dev->dm_core +
@@ -7177,7 +7219,6 @@ static struct i2c_driver pcie_i2c_ctrl_driver = {
 static int __init pcie_init(void)
 {
 	int ret = 0, i;
-	char rc_name[MAX_RC_NAME_LEN];
 
 	pr_alert("pcie:%s.\n", __func__);
 
@@ -7186,36 +7227,7 @@ static int __init pcie_init(void)
 	mutex_init(&pcie_drv.rpmsg_lock);
 
 	for (i = 0; i < MAX_RC_NUM; i++) {
-		scnprintf(rc_name, MAX_RC_NAME_LEN, "pcie%d-short", i);
-		msm_pcie_dev[i].ipc_log =
-			ipc_log_context_create(PCIE_LOG_PAGES, rc_name, 0);
-		if (msm_pcie_dev[i].ipc_log == NULL)
-			pr_err("%s: unable to create IPC log context for %s\n",
-				__func__, rc_name);
-		else
-			PCIE_DBG(&msm_pcie_dev[i],
-				"PCIe IPC logging is enable for RC%d\n",
-				i);
-		scnprintf(rc_name, MAX_RC_NAME_LEN, "pcie%d-long", i);
-		msm_pcie_dev[i].ipc_log_long =
-			ipc_log_context_create(PCIE_LOG_PAGES, rc_name, 0);
-		if (msm_pcie_dev[i].ipc_log_long == NULL)
-			pr_err("%s: unable to create IPC log context for %s\n",
-				__func__, rc_name);
-		else
-			PCIE_DBG(&msm_pcie_dev[i],
-				"PCIe IPC logging %s is enable for RC%d\n",
-				rc_name, i);
-		scnprintf(rc_name, MAX_RC_NAME_LEN, "pcie%d-dump", i);
-		msm_pcie_dev[i].ipc_log_dump =
-			ipc_log_context_create(PCIE_LOG_PAGES, rc_name, 0);
-		if (msm_pcie_dev[i].ipc_log_dump == NULL)
-			pr_err("%s: unable to create IPC log context for %s\n",
-				__func__, rc_name);
-		else
-			PCIE_DBG(&msm_pcie_dev[i],
-				"PCIe IPC logging %s is enable for RC%d\n",
-				rc_name, i);
+		msm_pcie_ipc_log_init(i);
 		spin_lock_init(&msm_pcie_dev[i].cfg_lock);
 		spin_lock_init(&msm_pcie_dev[i].evt_reg_list_lock);
 		msm_pcie_dev[i].cfg_access = true;
