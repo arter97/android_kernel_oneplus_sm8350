@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2020, 2021 The Linux Foundation. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -783,6 +783,60 @@ static const struct tsens_irqs tsens2xxx_irqs[] = {
 	{ "tsens-0C", tsens_tm_zeroc_irq_thread},
 };
 
+#ifdef CONFIG_DEEPSLEEP
+static int tsens2xxx_tsens_suspend(struct tsens_device *tmdev)
+{
+	int i, irq;
+	struct platform_device *pdev;
+
+	if (!tmdev)
+		return -EINVAL;
+
+	pdev = tmdev->pdev;
+	for (i = 0; i < (ARRAY_SIZE(tsens2xxx_irqs) - 1); i++) {
+		irq = platform_get_irq_byname(pdev, tsens2xxx_irqs[i].name);
+		if (irq < 0) {
+			dev_err(&pdev->dev, "failed to get irq %s\n",
+				tsens2xxx_irqs[i].name);
+			return irq;
+		}
+		disable_irq_nosync(irq);
+	}
+	/*Add zeroC voting, once adsp deepsleep exit is working*/
+	return 0;
+}
+
+static int tsens2xxx_tsens_resume(struct tsens_device *tmdev)
+{
+	int rc, i, irq;
+	struct platform_device *pdev;
+
+	if (!tmdev)
+		return -EINVAL;
+
+	rc = tsens2xxx_hw_init(tmdev);
+
+	if (rc) {
+		pr_err("Error initializing TSENS controller\n");
+		return rc;
+	}
+
+	pdev = tmdev->pdev;
+	for (i = 0; i < (ARRAY_SIZE(tsens2xxx_irqs) - 1); i++) {
+		irq = platform_get_irq_byname(pdev, tsens2xxx_irqs[i].name);
+		if (irq < 0) {
+			dev_err(&pdev->dev, "failed to get irq %s\n",
+				tsens2xxx_irqs[i].name);
+			return irq;
+		}
+		enable_irq_wake(irq);
+	}
+	queue_work(tmdev->tsens_reinit_work,
+					&tmdev->therm_fwk_notify);
+	return 0;
+}
+#endif
+
 static int tsens2xxx_register_interrupts(struct tsens_device *tmdev)
 {
 	struct platform_device *pdev;
@@ -833,6 +887,10 @@ static const struct tsens_ops ops_tsens2xxx = {
 	.interrupts_reg	= tsens2xxx_register_interrupts,
 	.dbg		= tsens2xxx_dbg,
 	.sensor_en	= tsens2xxx_hw_sensor_en,
+#ifdef CONFIG_DEEPSLEEP
+	.suspend = tsens2xxx_tsens_suspend,
+	.resume = tsens2xxx_tsens_resume,
+#endif
 };
 
 const struct tsens_data data_tsens2xxx = {
