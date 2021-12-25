@@ -613,6 +613,14 @@ msm_get_nmodem_supported(struct device *dev,
 }
 ATTR_DEFINE(nmodem_supported);
 
+static ssize_t
+msm_get_vendor(struct device *dev,
+			struct device_attribute *attr,
+			char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "Qualcomm\n");
+}
+
 struct qcom_socinfo {
 	struct soc_device *soc_dev;
 	struct soc_device_attribute attr;
@@ -698,6 +706,8 @@ static const struct soc_id soc_id[] = {
 	{ 498, "YUPIKP-IOT" },
 	{ 499, "YUPIKP" },
 	{ 515, "YUPIK-LTE" },
+	{ 523, "BENGAL" },
+	{ 524, "SCUBA" },
 	{ 417, "BENGAL" },
 	{ 444, "BENGAL" },
 };
@@ -946,6 +956,8 @@ static struct device_attribute select_image =
 static struct device_attribute images =
 	__ATTR(images, 0444, msm_get_images, NULL);
 
+static struct device_attribute vendor =
+	__ATTR(vendor, 0444, msm_get_vendor, NULL);
 
 static umode_t soc_info_attribute(struct kobject *kobj,
 						   struct attribute *attr,
@@ -1020,6 +1032,7 @@ static void socinfo_populate_sysfs(struct qcom_socinfo *qcom_socinfo)
 	msm_custom_socinfo_attrs[i++] = &image_crm_version.attr;
 	msm_custom_socinfo_attrs[i++] = &select_image.attr;
 	msm_custom_socinfo_attrs[i++] = &images.attr;
+	msm_custom_socinfo_attrs[i++] = &vendor.attr;
 	msm_custom_socinfo_attrs[i++] = NULL;
 	qcom_socinfo->attr.custom_attr_group = &custom_soc_attr_group;
 }

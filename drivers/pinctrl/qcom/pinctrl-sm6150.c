@@ -1617,9 +1617,9 @@ static struct msm_pinctrl_soc_data sm6150_pinctrl = {
 	.wakeirq_map = sm6150_pdc_map,
 	.nwakeirq_map = ARRAY_SIZE(sm6150_pdc_map),
 	.dir_conn = sm6150_dir_conn,
+	.ntiles = NUM_TILES,
 #ifdef CONFIG_HIBERNATION
 	.dir_conn_addr = tile_dir_conn_addr,
-	.tile_count = ARRAY_SIZE(tile_dir_conn_addr),
 #endif
 };
 

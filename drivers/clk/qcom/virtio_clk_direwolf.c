@@ -100,8 +100,9 @@ static const struct virtio_clk_init_data direwolf_gcc_virtio_clocks[] = {
 	[GCC_USB2_HS3_CLKREF_CLK] = {.name = "gcc_usb2_hs3_clkref_en",},
 	[GCC_SDCC2_AHB_CLK] = {.name = "gcc_sdcc2_ahb_clk",},
 	[GCC_SDCC2_APPS_CLK] = {.name = "gcc_sdcc2_apps_clk",},
-	[GCC_PCIE_2A_PIPE_CLK] = {
-				.name = "gcc_pcie_2a_pipe_clk",
+	[GCC_PCIE_2A_PIPE_CLK] = { .name = "gcc_pcie_2a_pipe_clk",},
+	[GCC_PCIE_2A_PIPE_CLK_SRC] = {
+				.name = "gcc_pcie_2a_pipe_clk_src",
 				.parent_names = dirwolf_gcc_parent_names_0,
 				.num_parents = ARRAY_SIZE(dirwolf_gcc_parent_names_0),
 				},
@@ -113,8 +114,9 @@ static const struct virtio_clk_init_data direwolf_gcc_virtio_clocks[] = {
 	[GCC_PCIE_2A_SLV_Q2A_AXI_CLK] = {.name = "gcc_pcie_2a_slv_q2a_axi_clk",},
 	[GCC_PCIE2A_PHY_RCHNG_CLK] = {.name = "gcc_pcie2a_phy_rchng_clk",},
 	[GCC_PCIE_2A_PIPEDIV2_CLK] = {.name = "gcc_pcie_2a_pipediv2_clk",},
-	[GCC_PCIE_2B_PIPE_CLK] = {
-				.name = "gcc_pcie_2b_pipe_clk",
+	[GCC_PCIE_2B_PIPE_CLK] = { .name = "gcc_pcie_2b_pipe_clk",},
+	[GCC_PCIE_2B_PIPE_CLK_SRC] = {
+				.name = "gcc_pcie_2b_pipe_clk_src",
 				.parent_names = dirwolf_gcc_parent_names_1,
 				.num_parents = ARRAY_SIZE(dirwolf_gcc_parent_names_1),
 				},
@@ -125,8 +127,9 @@ static const struct virtio_clk_init_data direwolf_gcc_virtio_clocks[] = {
 	[GCC_PCIE_2B_SLV_Q2A_AXI_CLK] = {.name = "gcc_pcie_2b_slv_q2a_axi_clk",},
 	[GCC_PCIE2B_PHY_RCHNG_CLK] = {.name = "gcc_pcie2b_phy_rchng_clk",},
 	[GCC_PCIE_2B_PIPEDIV2_CLK] = {.name = "gcc_pcie_2b_pipediv2_clk",},
-	[GCC_PCIE_3A_PIPE_CLK] = {
-				.name = "gcc_pcie_3a_pipe_clk",
+	[GCC_PCIE_3A_PIPE_CLK] = { .name = "gcc_pcie_3a_pipe_clk",},
+	[GCC_PCIE_3A_PIPE_CLK_SRC] = {
+				.name = "gcc_pcie_3a_pipe_clk_src",
 				.parent_names = dirwolf_gcc_parent_names_2,
 				.num_parents = ARRAY_SIZE(dirwolf_gcc_parent_names_2),
 				},
@@ -138,8 +141,9 @@ static const struct virtio_clk_init_data direwolf_gcc_virtio_clocks[] = {
 	[GCC_PCIE_3A_SLV_Q2A_AXI_CLK] = {.name = "gcc_pcie_3a_slv_q2a_axi_clk",},
 	[GCC_PCIE3A_PHY_RCHNG_CLK] = {.name = "gcc_pcie3a_phy_rchng_clk",},
 	[GCC_PCIE_3A_PIPEDIV2_CLK] = {.name = "gcc_pcie_3a_pipediv2_clk",},
-	[GCC_PCIE_3B_PIPE_CLK] = {
-				.name = "gcc_pcie_3b_pipe_clk",
+	[GCC_PCIE_3B_PIPE_CLK] = { .name = "gcc_pcie_3b_pipe_clk",},
+	[GCC_PCIE_3B_PIPE_CLK_SRC] = {
+				.name = "gcc_pcie_3b_pipe_clk_src",
 				.parent_names = dirwolf_gcc_parent_names_3,
 				.num_parents = ARRAY_SIZE(dirwolf_gcc_parent_names_3),
 				},
@@ -150,8 +154,9 @@ static const struct virtio_clk_init_data direwolf_gcc_virtio_clocks[] = {
 	[GCC_PCIE_3B_SLV_Q2A_AXI_CLK] = {.name = "gcc_pcie_3b_slv_q2a_axi_clk",},
 	[GCC_PCIE3B_PHY_RCHNG_CLK] = {.name = "gcc_pcie3b_phy_rchng_clk",},
 	[GCC_PCIE_3B_PIPEDIV2_CLK] = {.name = "gcc_pcie_3b_pipediv2_clk",},
-	[GCC_PCIE_4_PIPE_CLK] = {
-				.name = "gcc_pcie_4_pipe_clk",
+	[GCC_PCIE_4_PIPE_CLK] = {.name = "gcc_pcie_4_pipe_clk",},
+	[GCC_PCIE_4_PIPE_CLK_SRC] = {
+				.name = "gcc_pcie_4_pipe_clk_src",
 				.parent_names = dirwolf_gcc_parent_names_4,
 				.num_parents = ARRAY_SIZE(dirwolf_gcc_parent_names_4),
 				},

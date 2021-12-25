@@ -82,18 +82,21 @@ int habhyp_commdev_create_dispatcher(struct physical_channel *pchan)
 /* Debug: critical section? */
 void hab_pipe_read_dump(struct physical_channel *pchan)
 {
-	struct qvm_channel *dev  = (struct qvm_channel *)pchan->hyp_data;
+	struct qvm_channel *dev = (struct qvm_channel *)pchan->hyp_data;
 	char str[250];
 	int i;
-	struct dbg_items *its = (struct dbg_items *)dev->pipe->buf_a;
+	struct dbg_items *its = dev->dbg_itms;
+
+	struct hab_shared_buf *sh_buf = dev->rx_buf;
+	uint32_t buf_size = PIPE_SHMEM_SIZE;
 
 	snprintf(str, sizeof(str),
 		"index 0x%X rd_cnt %d wr_cnt %d size %d data_addr %lX",
 		dev->pipe_ep->rx_info.index,
-		dev->pipe_ep->rx_info.sh_buf->rd_count,
-		dev->pipe_ep->rx_info.sh_buf->wr_count,
-		dev->pipe_ep->rx_info.sh_buf->size,
-		&dev->pipe_ep->rx_info.sh_buf->data[0]);
+		sh_buf->rd_count,
+		sh_buf->wr_count,
+		sh_buf->size,
+		&sh_buf->data[0]);
 	dump_hab_buf(str, strlen(str)+1);
 
 	/* trace history buffer dump */
@@ -113,14 +116,13 @@ void hab_pipe_read_dump(struct physical_channel *pchan)
 	str[0] = str[1] = str[2] = str[3] = 33;
 	dump_hab_buf(str, 4); /* separator */
 
-	dump_hab_buf((void *)dev->pipe_ep->rx_info.sh_buf->data,
-			dev->pipe_ep->rx_info.sh_buf->size);
+	dump_hab_buf((void *)sh_buf->data, buf_size);
 
 	str[0] = str[1] = str[2] = str[3] = str[4] = str[5] = str[6] =
 		str[7] = 33; /* !!!! to end the readable string */
 	dump_hab_buf(str, 16); /* separator */
 
-	dump_hab_buf(dev->side_buf, dev->pipe_ep->rx_info.sh_buf->size);
+	dump_hab_buf(dev->side_buf, buf_size);
 }
 
 void dump_hab_wq(struct physical_channel *pchan)
@@ -130,6 +132,12 @@ void dump_hab_wq(struct physical_channel *pchan)
 	dev->wdata.data = pchan->habdev->id;
 	queue_work(dev->wq, &dev->wdata.work);
 }
+
+int hab_stat_log(struct physical_channel **pchans, int pchan_cnt, char *dest,
+			int dest_size)
+{
+	return 0;
+};
 
 /* The input is already va now */
 inline unsigned long hab_shmem_factory_va(unsigned long factory_addr)

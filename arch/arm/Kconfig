@@ -2158,6 +2158,10 @@ config ARM_CPU_SUSPEND
 	def_bool PM_SLEEP || BL_SWITCHER || ARM_PSCI_FW
 	depends on ARCH_SUSPEND_POSSIBLE
 
+config ARCH_HIBERNATION_HEADER
+	def_bool y
+	depends on HIBERNATION
+
 config ARCH_HIBERNATION_POSSIBLE
 	bool
 	depends on MMU

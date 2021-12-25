@@ -146,6 +146,9 @@ static int a6xx_rgmu_oob_set(struct kgsl_device *device,
 	struct a6xx_rgmu_device *rgmu = to_a6xx_rgmu(ADRENO_DEVICE(device));
 	int ret, set, check;
 
+	if (req == oob_perfcntr && rgmu->num_oob_perfcntr++)
+		return 0;
+
 	set = BIT(req + 16);
 	check = BIT(req + 16);
 
@@ -160,6 +163,8 @@ static int a6xx_rgmu_oob_set(struct kgsl_device *device,
 	if (ret) {
 		unsigned int status;
 
+		if (req == oob_perfcntr)
+			rgmu->num_oob_perfcntr--;
 		gmu_core_regread(device, A6XX_RGMU_CX_PCC_DEBUG, &status);
 		dev_err(&rgmu->pdev->dev,
 				"Timed out while setting OOB req:%s status:0x%x\n",
@@ -181,6 +186,11 @@ static int a6xx_rgmu_oob_set(struct kgsl_device *device,
 static void a6xx_rgmu_oob_clear(struct kgsl_device *device,
 		enum oob_request req)
 {
+	struct a6xx_rgmu_device *rgmu = to_a6xx_rgmu(ADRENO_DEVICE(device));
+
+	if (req == oob_perfcntr && --rgmu->num_oob_perfcntr)
+		return;
+
 	gmu_core_regwrite(device, A6XX_GMU_HOST2GMU_INTR_SET, BIT(req + 24));
 	trace_kgsl_gmu_oob_clear(BIT(req + 24));
 }
@@ -286,17 +296,12 @@ static void a6xx_rgmu_prepare_stop(struct kgsl_device *device)
 }
 
 #define GX_GDSC_POWER_OFF	BIT(6)
-/*
- * a6xx_rgmu_gx_is_on() - Check if GX is on using pwr status register
- * @adreno_dev - Pointer to adreno_device
- * This check should only be performed if the keepalive bit is set or it
- * can be guaranteed that the power state of the GPU will remain unchanged
- */
-static bool a6xx_rgmu_gx_is_on(struct kgsl_device *device)
+bool a6xx_rgmu_gx_is_on(struct adreno_device *adreno_dev)
 {
 	unsigned int val;
 
-	gmu_core_regread(device, A6XX_GMU_SPTPRAC_PWR_CLK_STATUS, &val);
+	gmu_core_regread(KGSL_DEVICE(adreno_dev),
+			A6XX_GMU_SPTPRAC_PWR_CLK_STATUS, &val);
 	return !(val & GX_GDSC_POWER_OFF);
 }
 
@@ -474,10 +479,11 @@ static void a6xx_rgmu_disable_clks(struct adreno_device *adreno_dev)
 {
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 	struct a6xx_rgmu_device *rgmu = to_a6xx_rgmu(adreno_dev);
+	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
 	int  ret;
 
 	/* Check GX GDSC is status */
-	if (a6xx_rgmu_gx_is_on(device)) {
+	if (a6xx_rgmu_gx_is_on(adreno_dev)) {
 
 		if (IS_ERR_OR_NULL(rgmu->gx_gdsc))
 			return;
@@ -497,11 +503,12 @@ static void a6xx_rgmu_disable_clks(struct adreno_device *adreno_dev)
 			dev_err(&rgmu->pdev->dev,
 					"Fail to disable gx gdsc:%d\n", ret);
 
-		if (a6xx_rgmu_gx_is_on(device))
+		if (a6xx_rgmu_gx_is_on(adreno_dev))
 			dev_err(&rgmu->pdev->dev, "gx is stuck on\n");
 	}
 
 	clk_bulk_disable_unprepare(rgmu->num_clks, rgmu->clks);
+	clear_bit(KGSL_PWRFLAGS_CLK_ON, &pwr->power_flags);
 }
 
 static int a6xx_rgmu_disable_gdsc(struct adreno_device *adreno_dev)
@@ -590,6 +597,7 @@ static int a6xx_rgmu_enable_clks(struct adreno_device *adreno_dev)
 	}
 
 	device->state = KGSL_STATE_AWARE;
+	set_bit(KGSL_PWRFLAGS_CLK_ON, &pwr->power_flags);
 
 	return 0;
 }
@@ -1211,7 +1219,6 @@ static void a6xx_rgmu_pm_resume(struct adreno_device *adreno_dev)
 static const struct gmu_dev_ops a6xx_rgmudev = {
 	.oob_set = a6xx_rgmu_oob_set,
 	.oob_clear = a6xx_rgmu_oob_clear,
-	.gx_is_on = a6xx_rgmu_gx_is_on,
 	.ifpc_store = a6xx_rgmu_ifpc_store,
 	.ifpc_show = a6xx_rgmu_ifpc_show,
 };

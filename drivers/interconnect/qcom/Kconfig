@@ -125,6 +125,7 @@ config INTERCONNECT_QCOM_SCUBA
 	depends on INTERCONNECT_QCOM
 	depends on MSM_RPM_SMD
 	select INTERCONNECT_QCOM_RPM
+	select INTERCONNECT_QCOM_QOS
 	help
 	  This is a driver for the Qualcomm Technologies, Inc. Network-on-Chip
 	  on scuba-based platforms. The interconnect provider collects and
@@ -154,6 +155,18 @@ config INTERCONNECT_QCOM_YUPIK
 	help
 	  This is a driver for the Qualcomm Technologies, Inc. Network-on-Chip
 	  on yupik-based platforms. The interconnect provider collects and
+	  aggreagates the cosumer bandwidth requests to satisfy constraints
+	  placed on Network-on-Chip performance states.
+
+config INTERCONNECT_QCOM_LEMANS
+	tristate "LEMANS interconnect driver"
+	depends on INTERCONNECT_QCOM
+	depends on QCOM_RPMH && QCOM_COMMAND_DB && OF
+	select INTERCONNECT_QCOM_BCM_VOTER
+	select INTERCONNECT_QCOM_RPMH
+	help
+	  This is a driver for the Qualcomm Technologies, Inc. Network-on-Chip
+	  on lemans-based platforms. The interconnect provider collects and
 	  aggreagates the cosumer bandwidth requests to satisfy constraints
 	  placed on Network-on-Chip performance states.
 

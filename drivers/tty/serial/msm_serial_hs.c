@@ -4,7 +4,7 @@
  * MSM 7k High speed uart driver
  *
  * Copyright (c) 2008 Google Inc.
- * Copyright (c) 2007-2018, 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2007-2018, 2020-2021, The Linux Foundation. All rights reserved.
  * Modified: Nick Pelly <npelly@google.com>
  *
  * Has optional support for uart power management independent of linux
@@ -851,12 +851,13 @@ reg_event_err:
  * Goal is to have around 8 ms before indicate stale.
  * roundup (((Bit Rate * .008) / 10) + 1
  */
-static void msm_hs_set_bps_locked(struct uart_port *uport,
+static int msm_hs_set_bps_locked(struct uart_port *uport,
 			       unsigned int bps)
 {
 	unsigned long rxstale;
 	unsigned long data;
 	struct msm_hs_port *msm_uport = UARTDM_TO_MSM(uport);
+	unsigned long clk_round = 0;
 
 	switch (bps) {
 	case 300:
@@ -956,8 +957,17 @@ static void msm_hs_set_bps_locked(struct uart_port *uport,
 		 * UART hardware is robust enough to handle this
 		 * deviation to achieve baud rate ~4 Mbps.
 		 */
-		if (bps == 4000000)
-			uport->uartclk = BLSP_UART_CLK_FMAX;
+		if (bps == 4000000) {
+			clk_round = clk_round_rate(msm_uport->clk, BLSP_UART_CLK_FMAX);
+			MSM_HS_INFO("%s(): baud:%u clk_round_rate:%lu uartclk:%u\n",
+					__func__, bps, clk_round, uport->uartclk);
+			if (clk_round < 0) {
+				MSM_HS_ERR("%s(): clk_round_rate failed ret: %d\n",
+					__func__, clk_round);
+				return clk_round;
+			}
+			uport->uartclk = clk_round;
+		}
 	} else {
 		uport->uartclk = 7372800;
 	}
@@ -978,6 +988,8 @@ static void msm_hs_set_bps_locked(struct uart_port *uport,
 	 */
 	msm_hs_write(uport, UART_DM_CR, RESET_TX);
 	msm_hs_write(uport, UART_DM_CR, RESET_RX);
+
+	return 0;
 }
 
 
@@ -1084,6 +1096,7 @@ static void msm_hs_set_termios(struct uart_port *uport,
 	unsigned long data;
 	unsigned int c_cflag = termios->c_cflag;
 	struct msm_hs_port *msm_uport = UARTDM_TO_MSM(uport);
+	int ret;
 
 	/**
 	 * set_termios can be invoked from the framework when
@@ -1128,8 +1141,17 @@ static void msm_hs_set_termios(struct uart_port *uport,
 	uport->uartclk = clk_get_rate(msm_uport->clk);
 	if (!uport->uartclk)
 		msm_hs_set_std_bps_locked(uport, bps);
-	else
-		msm_hs_set_bps_locked(uport, bps);
+	else {
+		ret = msm_hs_set_bps_locked(uport, bps);
+		if (ret < 0) {
+			msm_hs_enable_flow_control(uport, false);
+			msm_hs_resource_unvote(msm_uport);
+			mutex_unlock(&msm_uport->mtx);
+			dev_err(uport->dev, "Unable to set clk %lu\n",
+				uport->uartclk);
+			return;
+		}
+	}
 
 	data = msm_hs_read(uport, UART_DM_MR2);
 	data &= ~UARTDM_MR2_PARITY_MODE_BMSK;

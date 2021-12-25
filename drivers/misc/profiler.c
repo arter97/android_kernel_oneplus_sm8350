@@ -21,6 +21,10 @@
 #include <linux/qtee_shmbridge.h>
 #include <linux/qcom_scm.h>
 
+#include <linux/clk.h>
+#include <linux/of_device.h>
+#include <linux/platform_device.h>
+
 #define PROFILER_DEV			"profiler"
 
 static struct class *driver_class;
@@ -29,14 +33,11 @@ static dev_t profiler_device_no;
 struct profiler_control {
 	struct device *pdev;
 	struct cdev cdev;
+	struct clk *clk;
+	struct mutex lock;
 };
 
-static struct profiler_control profiler;
-
-struct profiler_dev_handle {
-	bool released;
-	int abort;
-};
+static struct profiler_control *profiler;
 
 static int bw_profiling_command(const void *req)
 {
@@ -197,14 +198,15 @@ static int profiler_get_bw_info(void __user *argp)
 static int profiler_open(struct inode *inode, struct file *file)
 {
 	int ret = 0;
-	struct profiler_dev_handle *data;
 
-	data = kzalloc(sizeof(*data), GFP_KERNEL);
-	if (!data)
-		return -ENOMEM;
-	file->private_data = data;
-	data->abort = 0;
-	data->released = false;
+	int lock_status = mutex_trylock(&profiler->lock);
+
+	if (lock_status == 1) {
+		file->private_data = profiler;
+		clk_prepare_enable(profiler->clk);
+	} else
+		return -EBUSY;
+
 	return ret;
 }
 
@@ -212,17 +214,11 @@ static long profiler_ioctl(struct file *file,
 		unsigned int cmd, unsigned long arg)
 {
 	int ret = 0;
-	struct profiler_dev_handle *data = file->private_data;
 	void __user *argp = (void __user *) arg;
 
-	if (!data) {
+	if (!profiler) {
 		pr_err("Invalid/uninitialized device handle\n");
 		return -EINVAL;
-	}
-
-	if (data->abort) {
-		pr_err("Aborting profiler driver\n");
-		return -ENODEV;
 	}
 
 	switch (cmd) {
@@ -240,7 +236,23 @@ static long profiler_ioctl(struct file *file,
 
 static int profiler_release(struct inode *inode, struct file *file)
 {
+	struct tz_bw_svc_buf *bwbuf = NULL;
+	int ret = 0;
+
 	pr_info("profiler release\n");
+
+	clk_disable_unprepare(profiler->clk);
+	mutex_unlock(&profiler->lock);
+
+	bwbuf = kzalloc(sizeof(struct tz_bw_svc_buf), GFP_KERNEL);
+	ret = bw_profiling_stop(bwbuf);
+
+	if (bwbuf == NULL)
+		return -ENOMEM;
+
+	if (ret)
+		pr_err("bw_profiling_stop Failed with ret: %d\n", ret);
+
 	return 0;
 }
 
@@ -254,10 +266,24 @@ static const struct file_operations profiler_fops = {
 	.release = profiler_release
 };
 
-static int profiler_init(void)
+static int bwprofiler_probe(struct platform_device *pdev)
 {
 	int rc;
 	struct device *class_dev;
+
+	profiler = devm_kzalloc(&pdev->dev, sizeof(*profiler), GFP_KERNEL);
+
+	if (!profiler)
+		return -ENOMEM;
+
+	profiler->clk = devm_clk_get(&pdev->dev, "qdss_clk");
+
+	mutex_init(&profiler->lock);
+
+	if (IS_ERR_OR_NULL(profiler->clk)) {
+		pr_err("could not locate qdss_clk\n");
+		return PTR_ERR(profiler->clk);
+	}
 
 	rc = alloc_chrdev_region(&profiler_device_no, 0, 1, PROFILER_DEV);
 	if (rc < 0) {
@@ -280,16 +306,16 @@ static int profiler_init(void)
 		goto exit_destroy_class;
 	}
 
-	cdev_init(&profiler.cdev, &profiler_fops);
-	profiler.cdev.owner = THIS_MODULE;
+	cdev_init(&profiler->cdev, &profiler_fops);
+	profiler->cdev.owner = THIS_MODULE;
 
-	rc = cdev_add(&profiler.cdev, MKDEV(MAJOR(profiler_device_no), 0), 1);
+	rc = cdev_add(&profiler->cdev, MKDEV(MAJOR(profiler_device_no), 0), 1);
 	if (rc < 0) {
 		pr_err("%s: cdev_add failed %d\n", __func__, rc);
 		goto exit_destroy_device;
 	}
 
-	profiler.pdev = class_dev;
+	profiler->pdev = class_dev;
 	return 0;
 
 exit_destroy_device:
@@ -298,16 +324,32 @@ exit_destroy_class:
 	class_destroy(driver_class);
 exit_unreg_chrdev_region:
 	unregister_chrdev_region(profiler_device_no, 1);
+
 	return rc;
 }
 
-static void profiler_exit(void)
+static int bwprofiler_remove(struct platform_device *pdev)
 {
-	pr_info("Exiting from profiler\n");
+	return 0;
 }
+
+static const struct of_device_id bwprofiler_of_match[] = {
+	{ .compatible = "qcom,ddr_bwprofiler", },
+	{},
+};
+
+static struct platform_driver bwprofiler_driver = {
+		.probe = bwprofiler_probe,
+		.remove	= bwprofiler_remove,
+		.driver	= {
+			.name = "qcom_bwprofiler",
+			.of_match_table = bwprofiler_of_match,
+		}
+};
+
+module_platform_driver(bwprofiler_driver);
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("Qualcomm Technologies, Inc. trustzone Communicator");
 
-module_init(profiler_init);
-module_exit(profiler_exit);
+

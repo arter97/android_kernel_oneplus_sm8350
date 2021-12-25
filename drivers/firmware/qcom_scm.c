@@ -369,6 +369,27 @@ int qcom_scm_pas_shutdown(u32 peripheral)
 }
 EXPORT_SYMBOL(qcom_scm_pas_shutdown);
 
+/**
+ * qcom_scm_pas_dsentry() - put the remote proc in deep sleep
+ * @peripheral: peripheral id
+ *
+ * Returns 0 on success.
+ */
+int qcom_scm_pas_dsentry(u32 peripheral)
+{
+	int ret;
+
+	ret = qcom_scm_clk_enable();
+	if (ret)
+		return ret;
+
+	ret = __qcom_scm_pas_dsentry(__scm->dev, peripheral);
+	qcom_scm_clk_disable();
+
+	return ret;
+}
+EXPORT_SYMBOL(qcom_scm_pas_dsentry);
+
 static int qcom_scm_pas_reset_assert(struct reset_controller_dev *rcdev,
 				     unsigned long idx)
 {

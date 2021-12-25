@@ -12,6 +12,7 @@
 #include <linux/of_device.h>
 #include <linux/platform_device.h>
 #include <linux/suspend.h>
+#include <linux/syscore_ops.h>
 #include <linux/regmap.h>
 
 #define QTI_PMIC_LPM_DEV_NAME	"qti,pmic-lpm"
@@ -25,6 +26,8 @@
 
 #define SDAM_INT_TEST_VAL	0xE1
 #define SDAM_INT_TEST_VAL_BIT	BIT(1)
+
+static void qti_pmic_lpm_syscore_shutdown(void);
 
 /**
  * struct qti_pmic_lpm - Structure for QTI pmic lpm device
@@ -41,6 +44,8 @@ struct qti_pmic_lpm {
 	int			sdam_base;
 	bool			twm_enable;
 };
+
+static struct qti_pmic_lpm *gchip;
 
 static int pmic_lpm_read(struct qti_pmic_lpm *chip, int addr, u8 *data, int len)
 {
@@ -129,6 +134,10 @@ static struct attribute *twm_attrs[] = {
 };
 ATTRIBUTE_GROUPS(twm);
 
+static struct syscore_ops qti_pmic_lpm_syscore_ops = {
+	.shutdown = qti_pmic_lpm_syscore_shutdown,
+};
+
 static int qti_pmic_lpm_probe(struct platform_device *pdev)
 {
 	struct qti_pmic_lpm *chip;
@@ -181,6 +190,17 @@ static int qti_pmic_lpm_probe(struct platform_device *pdev)
 		return rc;
 	}
 
+	gchip = chip;
+
+	/**
+	 * There is a possiblity where-in driver shutdown callback of
+	 * LPM driver is called first before other PM drivers shutdown
+	 * callback. This can lead to misconfiguration of INT registers.
+	 * Hence notify co-proc in syscore_ops shutdown callback which is
+	 * called after all the driver shutdown callbacks are called.
+	 */
+	register_syscore_ops(&qti_pmic_lpm_syscore_ops);
+
 	dev_info(chip->dev, "qti-pmic-lpm probe successful\n");
 
 	return 0;
@@ -204,15 +224,21 @@ static int qti_pmic_lpm_remove(struct platform_device *pdev)
 	return rc;
 }
 
-static void qti_pmic_lpm_shutdown(struct platform_device *pdev)
+static void qti_pmic_lpm_syscore_shutdown(void)
 {
-	struct qti_pmic_lpm *chip = platform_get_drvdata(pdev);
 	int rc = 0;
 
-	if (chip->twm_enable) {
-		rc = qti_pmic_handle_lpm(chip, true);
+	if (gchip == NULL) {
+		pr_err("gchip is NULL\n");
+		return;
+	}
+
+	pr_debug("LPM Syscore shutdown twm_state : %d\n", gchip->twm_enable);
+
+	if (gchip->twm_enable) {
+		rc = qti_pmic_handle_lpm(gchip, true);
 		if (rc < 0)
-			dev_err(chip->dev, "Failed to handle twm entry, rc:%d\n",
+			dev_err(gchip->dev, "Failed to handle twm entry, rc:%d\n",
 				rc);
 		pr_debug("PMIC TWM enabled\n");
 	}
@@ -292,7 +318,6 @@ static const struct of_device_id qti_pmic_lpm_match_table[] = {
 
 static struct platform_driver qti_pmic_lpm_driver = {
 	.probe		= qti_pmic_lpm_probe,
-	.shutdown	= qti_pmic_lpm_shutdown,
 	.remove		= qti_pmic_lpm_remove,
 	.driver		= {
 		.name		= "qti,pmic-lpm",

@@ -292,6 +292,12 @@ static int send_state_change_cmd(struct slate_ui_data *ui_obj_msg)
 	case STATE_DS_EXIT:
 		msg_header.opcode = GMI_MGR_EXIT_TRACKER_DS;
 		break;
+	case STATE_S2D_ENTER:
+		msg_header.opcode = GMI_MGR_ENTER_TRACKER_DS;
+		break;
+	case STATE_S2D_EXIT:
+		msg_header.opcode = GMI_MGR_EXIT_TRACKER_DS;
+		break;
 	default:
 		pr_err("Invalid MSM State transtion cmd\n");
 		break;
@@ -701,7 +707,6 @@ static int ssr_slate_cb(struct notifier_block *this,
 	case SUBSYS_BEFORE_SHUTDOWN:
 		pr_debug("Slate before shutdown\n");
 		slatee.e_type = SLATE_BEFORE_POWER_DOWN;
-		slatecom_slatedown_handler();
 		slatecom_set_spi_state(SLATECOM_SPI_BUSY);
 		send_uevent(&slatee);
 		queue_work(dev->slatecom_wq, &dev->slatecom_down_work);
@@ -709,7 +714,10 @@ static int ssr_slate_cb(struct notifier_block *this,
 	case SUBSYS_AFTER_SHUTDOWN:
 		pr_debug("Slate after shutdown\n");
 		slatee.e_type = SLATE_AFTER_POWER_DOWN;
+		slatecom_slatedown_handler();
 		send_uevent(&slatee);
+		set_slate_bt_state(false);
+		set_slate_dsp_state(false);
 		break;
 	case SUBSYS_BEFORE_POWERUP:
 		pr_debug("Slate before powerup\n");

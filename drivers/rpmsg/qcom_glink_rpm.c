@@ -17,6 +17,8 @@
 #include <linux/slab.h>
 #include <linux/workqueue.h>
 #include <linux/mailbox_client.h>
+#include <linux/notifier.h>
+#include <soc/qcom/subsystem_notif.h>
 
 #include "rpmsg_internal.h"
 #include "qcom_glink_native.h"
@@ -30,6 +32,19 @@
 #define RPM_RX_FIFO_ID		0x72326170 /* r2ap */
 
 #define to_rpm_pipe(p) container_of(p, struct glink_rpm_pipe, native)
+
+#ifdef CONFIG_DEEPSLEEP
+#define GLINK_SSR_PRIORITY	1
+
+struct rpm_edge_info {
+	const char *ssr_label;
+	struct notifier_block nb;
+	void *notifier_handle;
+	struct platform_device *pdev;
+};
+
+struct rpm_edge_info *einfo;
+#endif
 
 struct rpm_toc_entry {
 	__le32 id;
@@ -266,6 +281,10 @@ static int glink_rpm_probe(struct platform_device *pdev)
 	struct resource r;
 	int ret;
 
+#ifdef CONFIG_DEEPSLEEP
+	einfo->pdev = pdev;
+#endif
+
 	rx_pipe = devm_kzalloc(&pdev->dev, sizeof(*rx_pipe), GFP_KERNEL);
 	tx_pipe = devm_kzalloc(&pdev->dev, sizeof(*tx_pipe), GFP_KERNEL);
 	if (!rx_pipe || !tx_pipe)
@@ -315,9 +334,31 @@ static int glink_rpm_remove(struct platform_device *pdev)
 	struct qcom_glink *glink = platform_get_drvdata(pdev);
 
 	qcom_glink_native_remove(glink);
-
+#ifdef CONFIG_DEEPSLEEP
+	qcom_glink_native_unregister(glink);
+#endif
 	return 0;
 }
+
+#ifdef CONFIG_DEEPSLEEP
+static int glink_rpm_ssr_cb(struct notifier_block *this,
+			unsigned long code, void *data)
+{
+	pr_info("received %ld for %s\n", code, einfo->ssr_label);
+
+	switch (code) {
+	case SUBSYS_AFTER_DS_EXIT:
+	case SUBSYS_DS_ENTRY_FAIL:
+		glink_rpm_remove(einfo->pdev);
+		glink_rpm_probe(einfo->pdev);
+		break;
+	default:
+		break;
+	}
+
+	return NOTIFY_DONE;
+}
+#endif
 
 static const struct of_device_id glink_rpm_of_match[] = {
 	{ .compatible = "qcom,glink-rpm" },
@@ -337,12 +378,33 @@ static struct platform_driver glink_rpm_driver = {
 
 static int __init glink_rpm_init(void)
 {
+#ifdef CONFIG_DEEPSLEEP
+	void *handle;
+
+	einfo = kzalloc(sizeof(*einfo), GFP_KERNEL);
+	if (!einfo)
+		return -ENOMEM;
+
+	einfo->ssr_label = "apss";
+	einfo->nb.notifier_call = glink_rpm_ssr_cb;
+	einfo->nb.priority = GLINK_SSR_PRIORITY;
+
+	handle = subsys_notif_register_notifier(einfo->ssr_label, &einfo->nb);
+	if (IS_ERR_OR_NULL(handle)) {
+		pr_err("could not register for SSR notifier for %s\n",
+			  einfo->ssr_label);
+	}
+	einfo->notifier_handle = handle;
+#endif
 	return platform_driver_register(&glink_rpm_driver);
 }
 subsys_initcall(glink_rpm_init);
 
 static void __exit glink_rpm_exit(void)
 {
+#ifdef CONFIG_DEEPSLEEP
+	kfree(einfo);
+#endif
 	platform_driver_unregister(&glink_rpm_driver);
 }
 module_exit(glink_rpm_exit);

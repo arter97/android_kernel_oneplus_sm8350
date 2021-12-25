@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2014-2017, 2019-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2017, 2019-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/slab.h>
@@ -18,6 +18,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/module.h>
 #include <linux/of_reserved_mem.h>
+#include <linux/syscore_ops.h>
 
 #define MSM_DUMP_TABLE_VERSION		MSM_DUMP_MAKE_VERSION(2, 0)
 
@@ -682,6 +683,18 @@ int msm_dump_data_register_nominidump(enum msm_dump_table_ids id,
 }
 EXPORT_SYMBOL(msm_dump_data_register_nominidump);
 
+static void __iomem *imem_base;
+#ifdef CONFIG_HIBERNATION
+static void memory_dump_syscore_resume(void)
+{
+	memcpy_toio(imem_base, &memdump.table_phys, sizeof(memdump.table_phys));
+}
+
+static struct syscore_ops memory_dump_syscore_ops = {
+	.resume = memory_dump_syscore_resume,
+};
+#endif
+
 #define MSM_DUMP_TOTAL_SIZE_OFFSET	0x724
 static int init_memory_dump(void *dump_vaddr, phys_addr_t phys_addr,
 					size_t size)
@@ -689,7 +702,6 @@ static int init_memory_dump(void *dump_vaddr, phys_addr_t phys_addr,
 	struct msm_dump_table *table;
 	struct msm_dump_entry entry;
 	struct device_node *np;
-	void __iomem *imem_base;
 	int ret;
 
 	np = of_find_compatible_node(NULL, NULL,
@@ -717,7 +729,10 @@ static int init_memory_dump(void *dump_vaddr, phys_addr_t phys_addr,
 	mb();
 	pr_info("MSM Memory Dump base table set up\n");
 
+#ifndef CONFIG_HIBERNATION
 	iounmap(imem_base);
+#endif
+
 	dump_vaddr +=  sizeof(*table);
 	phys_addr += sizeof(*table);
 	table = dump_vaddr;
@@ -730,6 +745,10 @@ static int init_memory_dump(void *dump_vaddr, phys_addr_t phys_addr,
 		return ret;
 	}
 	pr_info("MSM Memory Dump apps data table set up\n");
+
+#ifdef CONFIG_HIBERNATION
+	register_syscore_ops(&memory_dump_syscore_ops);
+#endif
 
 	return 0;
 }

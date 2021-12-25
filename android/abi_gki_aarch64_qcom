@@ -950,6 +950,7 @@
   fs_kobj
   fsl8250_handle_irq
   fsstack_copy_attr_all
+  ftrace_set_clr_event
   full_name_hash
   fwnode_connection_find_match
   fwnode_get_parent
@@ -1833,6 +1834,7 @@
   __pm_runtime_use_autosuspend
   __pm_stay_awake
   pm_stay_awake
+  pm_system_cancel_wakeup
   pm_system_wakeup
   pm_wakeup_dev_event
   pm_wakeup_ws_event
@@ -2468,6 +2470,8 @@
   timer_unstable_counter_workaround
   timespec64_to_jiffies
   _totalram_pages
+  trace_array_create
+  trace_array_destroy
   __trace_bprintk
   trace_define_field
   trace_event_buffer_commit

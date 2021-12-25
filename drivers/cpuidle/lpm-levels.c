@@ -36,6 +36,7 @@
 #include <soc/qcom/pm.h>
 #include <soc/qcom/lpm_levels.h>
 #include <soc/qcom/lpm-stats.h>
+#include <soc/qcom/rpm-smd.h>
 #include <asm/arch_timer.h>
 #include <asm/suspend.h>
 #include <asm/cpuidle.h>
@@ -49,6 +50,12 @@
 #define PSCI_POWER_STATE(reset) (reset << 30)
 #define PSCI_AFFINITY_LEVEL(lvl) ((lvl & 0x3) << 24)
 #define MAX_LPM_CPUS (8)
+#ifdef CONFIG_DEEPSLEEP
+#define RPM_XO_DS_REQ  0x73646f78
+#define RPM_XO_DS_ID  0x0
+#define RPM_XO_DS_KEY  0x62616e45
+#define RPM_XO_DS_VALUE  0x0
+#endif
 
 enum {
 	MSM_LPM_LVL_DBG_SUSPEND_LIMITS = BIT(0),
@@ -112,7 +119,9 @@ static DEFINE_PER_CPU(struct hrtimer, biastimer);
 static struct lpm_debug *lpm_debug;
 static phys_addr_t lpm_debug_phys;
 static const int num_dbg_elements = 0x100;
-
+#ifdef CONFIG_DEEPSLEEP
+static bool deep_sleep_mask;
+#endif
 static void cluster_unprepare(struct lpm_cluster *cluster,
 		const struct cpumask *cpu, int child_idx, bool from_idle,
 		int64_t time, bool success);
@@ -1339,9 +1348,14 @@ static int get_cluster_id(struct lpm_cluster *cluster, int *aff_lvl,
 		 * We may have updated the broadcast timers, update
 		 * the wakeup value by reading the bc timer directly.
 		 */
-		if (level->notify_rpm)
+		if (level->notify_rpm) {
 			if (sys_pm_ops && sys_pm_ops->update_wakeup)
 				sys_pm_ops->update_wakeup(from_idle);
+#ifdef CONFIG_DEEPSLEEP
+			if (deep_sleep_mask)
+				state_id = state_id | (1 << 16);
+#endif
+		}
 		if (cluster->psci_mode_shift)
 			(*aff_lvl)++;
 	}
@@ -1729,6 +1743,40 @@ static void lpm_suspend_wake(void)
 	lpm_stats_suspend_exit();
 }
 
+#ifdef CONFIG_DEEPSLEEP
+static void clear_deep_sleep(void)
+{
+	deep_sleep_mask = false;
+}
+
+static int send_deep_sleep_vote(void)
+{
+	uint32_t val = RPM_XO_DS_VALUE;
+	struct msm_rpm_kvp req = {
+		.key = RPM_XO_DS_KEY,
+		.data = (void *)&val,
+		.length = sizeof(val),
+	};
+
+	return msm_rpm_send_message(MSM_RPM_CTX_SLEEP_SET, RPM_XO_DS_REQ,
+					RPM_XO_DS_ID, &req, 1);
+}
+
+static int set_deep_sleep(suspend_state_t state)
+{
+	if (state == PM_SUSPEND_MEM) {
+		deep_sleep_mask = true;
+		return send_deep_sleep_vote();
+	}
+	return 0;
+}
+
+static int lpm_suspend_valid(suspend_state_t state)
+{
+	return state == PM_SUSPEND_STANDBY || state == PM_SUSPEND_MEM;
+}
+#endif
+
 static int lpm_suspend_enter(suspend_state_t state)
 {
 	int cpu = raw_smp_processor_id();
@@ -1747,6 +1795,14 @@ static int lpm_suspend_enter(suspend_state_t state)
 		pr_err("Failed suspend\n");
 		return -EINVAL;
 	}
+#ifdef CONFIG_DEEPSLEEP
+	ret = set_deep_sleep(state);
+	if (ret) {
+		clear_deep_sleep();
+		return ret;
+	}
+
+#endif
 	cpu_prepare(lpm_cpu, idx, false);
 	cluster_prepare(cluster, cpumask, idx, false, 0);
 
@@ -1754,6 +1810,9 @@ static int lpm_suspend_enter(suspend_state_t state)
 	ret = psci_enter_sleep(lpm_cpu, idx, false);
 	success = (ret == 0);
 
+#ifdef CONFIG_DEEPSLEEP
+	clear_deep_sleep();
+#endif
 	cluster_unprepare(cluster, cpumask, idx, false, 0, success);
 	cpu_unprepare(lpm_cpu, idx, false);
 	return ret;
@@ -1761,7 +1820,11 @@ static int lpm_suspend_enter(suspend_state_t state)
 
 static const struct platform_suspend_ops lpm_suspend_ops = {
 	.enter = lpm_suspend_enter,
+#ifdef CONFIG_DEEPSLEEP
+	.valid = lpm_suspend_valid,
+#else
 	.valid = suspend_valid_only_mem,
+#endif
 	.prepare_late = lpm_suspend_prepare,
 	.wake = lpm_suspend_wake,
 };

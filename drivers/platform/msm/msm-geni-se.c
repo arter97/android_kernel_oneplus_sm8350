@@ -15,6 +15,7 @@
 #include <linux/of_platform.h>
 #include <linux/pm_runtime.h>
 #include <linux/msm-geni-se.h>
+#include <linux/qcom_scm.h>
 #include <linux/spinlock.h>
 #include <linux/pinctrl/consumer.h>
 
@@ -40,6 +41,12 @@ struct bus_vectors {
 	int dst;
 	int ab;
 	int ib;
+};
+
+enum ssc_core_clks {
+	SSC_CORE_CLK,
+	SSC_CORE2X_CLK,
+	SSC_NUM_CLKS
 };
 
 /**
@@ -74,6 +81,8 @@ struct bus_vectors {
  * @num_paths:		Two paths. QUPv3 clock and DDR paths.
  * @vote_for_bw:	To check if we have to vote for BW or BCM threashold
 			in ab/ib ICB voting.
+ * @struct ssc_qup_ssr: Structure to represent SSC Qupv3 SSR Structure.
+ * @struct clk_bulk_data: Data used for bulk clk operations.
  */
 struct geni_se_device {
 	struct device *dev;
@@ -104,6 +113,8 @@ struct geni_se_device {
 	int num_paths;
 	bool vote_for_bw;
 	struct se_geni_rsc wrapper_rsc;
+	struct ssc_qup_ssr ssr;
+	struct clk_bulk_data *ssc_clks;
 };
 
 #define HW_VER_MAJOR_MASK GENMASK(31, 28)
@@ -329,6 +340,126 @@ static int geni_se_select_fifo_mode(void __iomem *base)
 	geni_write_reg(common_geni_m_irq_en, base, SE_GENI_M_IRQ_EN);
 	geni_write_reg(common_geni_s_irq_en, base, SE_GENI_S_IRQ_EN);
 	geni_write_reg(geni_dma_mode, base, SE_GENI_DMA_MODE_EN);
+
+	return 0;
+}
+
+static ssize_t ssc_qup_state_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct geni_se_device *geni_se_dev = dev_get_drvdata(dev);
+
+	return scnprintf(buf, sizeof(int), "%d\n",
+				!geni_se_dev->ssr.is_ssr_down);
+}
+
+static DEVICE_ATTR_RO(ssc_qup_state);
+
+static void geni_se_ssc_qup_down(struct geni_se_device *dev)
+{
+	struct se_geni_rsc *rsc = NULL;
+
+	dev->ssr.is_ssr_down = true;
+	if (list_empty(&dev->ssr.active_list_head)) {
+		GENI_SE_ERR(dev->log_ctx, false, NULL,
+			"%s: No Active usecase\n", __func__);
+		return;
+	}
+
+	list_for_each_entry(rsc, &dev->ssr.active_list_head,
+					rsc_ssr.active_list) {
+		rsc->rsc_ssr.force_suspend(rsc->ctrl_dev);
+	}
+	/* Disable core and core2x clk */
+	clk_bulk_disable_unprepare(SSC_NUM_CLKS, dev->ssc_clks);
+}
+
+static void geni_se_ssc_qup_up(struct geni_se_device *dev)
+{
+	int ret = 0;
+	struct se_geni_rsc *rsc = NULL;
+
+	if (list_empty(&dev->ssr.active_list_head)) {
+		GENI_SE_ERR(dev->log_ctx, false, NULL,
+			"%s: No Active usecase\n", __func__);
+		return;
+	}
+	/* Enable core/2x clk before TZ SCM call */
+	ret = clk_bulk_prepare_enable(SSC_NUM_CLKS, dev->ssc_clks);
+	if (ret) {
+		GENI_SE_ERR(dev->log_ctx, false, NULL,
+			"%s: corex/2x clk enable failed ret:%d\n",
+						__func__, ret);
+		return;
+	}
+
+	list_for_each_entry(rsc, &dev->ssr.active_list_head,
+					rsc_ssr.active_list) {
+		se_geni_clks_on(rsc);
+	}
+
+	/* Make SCM call, to load the TZ FW */
+	ret = qcom_scm_load_qup_fw();
+	if (ret) {
+		dev_err(dev->dev, "Unable to load firmware after SSR\n");
+		return;
+	}
+
+	list_for_each_entry(rsc, &dev->ssr.active_list_head,
+					rsc_ssr.active_list) {
+		se_geni_clks_off(rsc);
+	}
+
+	list_for_each_entry(rsc, &dev->ssr.active_list_head,
+					rsc_ssr.active_list) {
+		rsc->rsc_ssr.force_resume(rsc->ctrl_dev);
+	}
+
+	dev->ssr.is_ssr_down = false;
+}
+
+static int geni_se_ssr_notify_block(struct notifier_block *n,
+						unsigned long code, void *_cmd)
+{
+	struct ssc_qup_nb *ssc_qup_nb = container_of(n, struct ssc_qup_nb, nb);
+	struct ssc_qup_ssr *ssr = container_of(ssc_qup_nb, struct ssc_qup_ssr,
+					ssc_qup_nb);
+	struct geni_se_device *dev = container_of(ssr, struct geni_se_device,
+						ssr);
+
+	switch (code) {
+	case SUBSYS_BEFORE_SHUTDOWN:
+		geni_se_ssc_qup_down(dev);
+		GENI_SE_DBG(dev->log_ctx, false, NULL,
+				"SSR notification before power down\n");
+		break;
+	case SUBSYS_AFTER_POWERUP:
+			geni_se_ssc_qup_up(dev);
+
+		GENI_SE_DBG(dev->log_ctx, false, NULL,
+				"SSR notification after power up\n");
+		break;
+	default:
+		break;
+	}
+
+	return 0;
+}
+
+static int geni_se_ssc_qup_ssr_reg(struct geni_se_device *dev)
+{
+	dev->ssr.ssc_qup_nb.nb.notifier_call = geni_se_ssr_notify_block;
+	dev->ssr.ssc_qup_nb.next = subsys_notif_register_notifier(
+				dev->ssr.subsys_name, &dev->ssr.ssc_qup_nb.nb);
+
+	if (IS_ERR_OR_NULL(dev->ssr.ssc_qup_nb.next)) {
+		dev_err(dev->dev,
+			"subsys_notif_register_notifier failed %ld\n",
+			PTR_ERR(dev->ssr.ssc_qup_nb.next));
+		return PTR_ERR(dev->ssr.ssc_qup_nb.next);
+	}
+
+	GENI_SE_DBG(dev->log_ctx, false, NULL, "SSR registration done\n");
 
 	return 0;
 }
@@ -1095,6 +1226,12 @@ int geni_se_resources_init(struct se_geni_rsc *rsc,
 	INIT_LIST_HEAD(&rsc->ab_list);
 	INIT_LIST_HEAD(&rsc->ib_list);
 
+	if (geni_se_dev->ssr.subsys_name && rsc->rsc_ssr.ssr_enable) {
+		INIT_LIST_HEAD(&rsc->rsc_ssr.active_list);
+		list_add(&rsc->rsc_ssr.active_list,
+				&geni_se_dev->ssr.active_list_head);
+	}
+
 	return 0;
 }
 EXPORT_SYMBOL(geni_se_resources_init);
@@ -1376,6 +1513,28 @@ int geni_se_qupv3_hw_version(struct device *wrapper_dev, unsigned int *major,
 	return 0;
 }
 EXPORT_SYMBOL(geni_se_qupv3_hw_version);
+
+/**
+ * geni_se_qupv3_get_hw_version() - Get the QUPv3 Hardware version
+ * @wrapper_dev:	Pointer to the corresponding QUPv3 wrapper core.
+ *
+ * Return:		QUP hw version return on success,
+ *			standard Linux error codes on failure/error
+ */
+int geni_se_qupv3_get_hw_version(struct device *wrapper_dev)
+{
+	struct geni_se_device *geni_se_dev;
+
+	if (!wrapper_dev)
+		return -EINVAL;
+
+	geni_se_dev = dev_get_drvdata(wrapper_dev);
+	if (unlikely(!geni_se_dev))
+		return -ENODEV;
+
+	return geni_read_reg(geni_se_dev->base, QUPV3_HW_VER);
+}
+EXPORT_SYMBOL(geni_se_qupv3_get_hw_version);
 
 /**
  * geni_se_iommu_map_buf() - Map a single buffer into QUPv3 context bank
@@ -1799,6 +1958,38 @@ static int geni_se_probe(struct platform_device *pdev)
 		return ret;
 	}
 
+	ret = of_property_read_string(geni_se_dev->dev->of_node,
+			"qcom,subsys-name", &geni_se_dev->ssr.subsys_name);
+	if (!ret) {
+		geni_se_dev->ssc_clks = devm_kcalloc(dev, SSC_NUM_CLKS,
+				sizeof(*geni_se_dev->ssc_clks), GFP_KERNEL);
+		if (!geni_se_dev->ssc_clks) {
+			ret = -ENOMEM;
+			dev_err(dev, "%s: Unable to allocate memmory ret:%d\n",
+					__func__, ret);
+			return ret;
+		}
+		geni_se_dev->ssc_clks[SSC_CORE_CLK].id = "corex";
+		geni_se_dev->ssc_clks[SSC_CORE2X_CLK].id = "core2x";
+		ret = devm_clk_bulk_get(dev, SSC_NUM_CLKS,
+					geni_se_dev->ssc_clks);
+		if (ret) {
+			dev_err(dev, "%s: Err getting core/2x clk:%d\n", ret);
+			return ret;
+		}
+
+		INIT_LIST_HEAD(&geni_se_dev->ssr.active_list_head);
+		ret = geni_se_ssc_qup_ssr_reg(geni_se_dev);
+		if (ret) {
+			dev_err(dev, "Unable to register SSR notification\n");
+			return ret;
+		}
+
+		ret = sysfs_create_file(&geni_se_dev->dev->kobj,
+			&dev_attr_ssc_qup_state.attr);
+		if (ret)
+			dev_err(dev, "Unable to create sysfs file\n");
+	}
 	GENI_SE_DBG(geni_se_dev->log_ctx, false, NULL,
 		    "%s: Probe successful\n", __func__);
 	return 0;
@@ -1809,6 +2000,13 @@ static int geni_se_remove(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct geni_se_device *geni_se_dev = dev_get_drvdata(dev);
 
+	if (geni_se_dev->ssr.subsys_name) {
+		subsys_notif_unregister_notifier(
+			geni_se_dev->ssr.ssc_qup_nb.next,
+			&geni_se_dev->ssr.ssc_qup_nb.nb);
+		sysfs_remove_file(&geni_se_dev->dev->kobj,
+			&dev_attr_ssc_qup_state.attr);
+	}
 	ipc_log_context_destroy(geni_se_dev->log_ctx);
 	return 0;
 }

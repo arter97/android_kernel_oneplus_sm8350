@@ -26,6 +26,10 @@
 
 static DEFINE_VDD_REGULATORS(vdd_mm, VDD_MM_NUM, 1, vdd_corner);
 
+static struct clk_vdd_class *disp_cc_scshrike_regulators[] = {
+	&vdd_mm,
+};
+
 #define DISP_CC_MISC_CMD	0x8000
 
 enum {
@@ -1007,7 +1011,7 @@ static struct clk_branch disp_cc_mdss_ahb_clk = {
 				.hw = &disp_cc_mdss_ahb_clk_src.clkr.hw,
 			},
 			.num_parents = 1,
-			.flags = CLK_SET_RATE_PARENT,
+			.flags = CLK_SET_RATE_PARENT | CLK_DONT_HOLD_STATE,
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -1686,12 +1690,14 @@ static const struct regmap_config disp_cc_scshrike_regmap_config = {
 	.fast_io = true,
 };
 
-static const struct qcom_cc_desc disp_cc_scshrike_desc = {
+static struct qcom_cc_desc disp_cc_scshrike_desc = {
 	.config = &disp_cc_scshrike_regmap_config,
 	.clks = disp_cc_scshrike_clocks,
 	.num_clks = ARRAY_SIZE(disp_cc_scshrike_clocks),
 	.resets = disp_cc_scshrike_resets,
 	.num_resets = ARRAY_SIZE(disp_cc_scshrike_resets),
+	.clk_regulators = disp_cc_scshrike_regulators,
+	.num_clk_regulators = ARRAY_SIZE(disp_cc_scshrike_regulators),
 };
 
 static const struct of_device_id disp_cc_scshrike_match_table[] = {
@@ -1774,13 +1780,6 @@ static int disp_cc_scshrike_probe(struct platform_device *pdev)
 	struct regmap *regmap;
 	int ret;
 
-	vdd_mm.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_mm");
-	if (IS_ERR(vdd_mm.regulator[0])) {
-		if (PTR_ERR(vdd_mm.regulator[0]) != -EPROBE_DEFER)
-			dev_err(&pdev->dev, "Unable to get vdd_mm regulator\n");
-		return PTR_ERR(vdd_mm.regulator[0]);
-	}
-
 	pm_runtime_enable(&pdev->dev);
 	ret = pm_clk_create(&pdev->dev);
 	if (ret)
@@ -1828,6 +1827,11 @@ disable_pm_runtime:
 	return ret;
 }
 
+static void disp_cc_scshrike_sync_state(struct device *dev)
+{
+	qcom_cc_sync_state(dev, &disp_cc_scshrike_desc);
+}
+
 static const struct dev_pm_ops disp_cc_scshrike_pm_ops = {
 	SET_RUNTIME_PM_OPS(pm_clk_suspend, pm_clk_resume, NULL)
 };
@@ -1837,6 +1841,7 @@ static struct platform_driver disp_cc_scshrike_driver = {
 	.driver = {
 		.name = "disp_cc-scshrike",
 		.of_match_table = disp_cc_scshrike_match_table,
+		.sync_state = disp_cc_scshrike_sync_state,
 		.pm = &disp_cc_scshrike_pm_ops,
 	},
 };

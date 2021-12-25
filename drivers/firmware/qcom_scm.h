@@ -44,6 +44,7 @@ extern void __qcom_scm_phy_update_scm_level_shifter(struct device *dev, u32 val)
 #define QCOM_SCM_PIL_PAS_SHUTDOWN		0x06
 #define QCOM_SCM_PIL_PAS_IS_SUPPORTED		0x07
 #define QCOM_SCM_PIL_PAS_MSS_RESET		0x0a
+#define QCOM_SCM_PIL_PAS_DSENTER		0x2f
 extern bool __qcom_scm_pas_supported(struct device *dev, u32 peripheral);
 extern int  __qcom_scm_pas_init_image(struct device *dev, u32 peripheral,
 		dma_addr_t metadata_phys);
@@ -51,6 +52,7 @@ extern int  __qcom_scm_pas_mem_setup(struct device *dev, u32 peripheral,
 		phys_addr_t addr, phys_addr_t size);
 extern int  __qcom_scm_pas_auth_and_reset(struct device *dev, u32 peripheral);
 extern int  __qcom_scm_pas_shutdown(struct device *dev, u32 peripheral);
+extern int  __qcom_scm_pas_dsentry(struct device *dev, u32 peripheral);
 extern int  __qcom_scm_pas_mss_reset(struct device *dev, bool reset);
 
 #define QCOM_SCM_SVC_UTIL			0x03

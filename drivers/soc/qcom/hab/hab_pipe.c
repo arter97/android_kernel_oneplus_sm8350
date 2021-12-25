@@ -5,24 +5,38 @@
 #include "hab.h"
 #include "hab_pipe.h"
 
-size_t hab_pipe_calc_required_bytes(uint32_t shared_buf_size)
+size_t hab_pipe_calc_required_bytes(const uint32_t shared_buf_size)
 {
 	return sizeof(struct hab_pipe)
 		+ (2 * (sizeof(struct hab_shared_buf) + shared_buf_size));
 }
 
+/*
+ * Must store the tx and rx ring buf pointers in non-shared/local area and
+ * always use such pointers(inaccessible from the remote untrusted side) to
+ * read/write the shared ring buffer region. Following reasons to keep it
+ * in local:
+ * 1. Such kind of local ring buf pointers are of no use for the remote side.
+ * 2. There is a info disclosure risk if they are stored and used in share buffer.
+ * 3. Furthermore, the untrusted peer can modify it deliberately. It will cause
+ *    arbitrary/OOB access on local side.
+ */
 struct hab_pipe_endpoint *hab_pipe_init(struct hab_pipe *pipe,
-		uint32_t shared_buf_size, int top)
+		struct hab_shared_buf **tx_buf_p,
+		struct hab_shared_buf **rx_buf_p,
+		struct dbg_items **itms,
+		const uint32_t shared_buf_size, int top)
 {
 	struct hab_pipe_endpoint *ep = NULL;
-	struct hab_shared_buf *buf_a;
-	struct hab_shared_buf *buf_b;
+	struct hab_shared_buf *buf_a = NULL;
+	struct hab_shared_buf *buf_b = NULL;
+	struct dbg_items *its = NULL;
+
+	if (!pipe || !tx_buf_p || !rx_buf_p)
+		return NULL;
 
 	/* debug only */
-	struct dbg_items *its = kzalloc(sizeof(struct dbg_items), GFP_KERNEL);
-
-	if (!pipe)
-		return NULL;
+	its = kzalloc(sizeof(struct dbg_items), GFP_KERNEL);
 
 	buf_a = (struct hab_shared_buf *) pipe->buf_base;
 	buf_b = (struct hab_shared_buf *) (pipe->buf_base
@@ -31,35 +45,45 @@ struct hab_pipe_endpoint *hab_pipe_init(struct hab_pipe *pipe,
 	if (top) {
 		ep = &pipe->top;
 		memset(ep, 0, sizeof(*ep));
-		ep->tx_info.sh_buf = buf_a;
-		ep->rx_info.sh_buf = buf_b;
+		*tx_buf_p = buf_a;
+		*rx_buf_p = buf_b;
+		pipe->legacy_buf_a = NULL;
 	} else {
 		ep = &pipe->bottom;
 		memset(ep, 0, sizeof(*ep));
-		ep->tx_info.sh_buf = buf_b;
-		ep->rx_info.sh_buf = buf_a;
-		memset(ep->tx_info.sh_buf, 0, sizeof(struct hab_shared_buf));
-		memset(ep->rx_info.sh_buf, 0, sizeof(struct hab_shared_buf));
-		ep->tx_info.sh_buf->size = shared_buf_size;
-		ep->rx_info.sh_buf->size = shared_buf_size;
+		*tx_buf_p = buf_b;
+		*rx_buf_p = buf_a;
+		memset(buf_b, 0, sizeof(struct hab_shared_buf));
+		memset(buf_a, 0, sizeof(struct hab_shared_buf));
+		buf_a->size = shared_buf_size;
+		buf_b->size = shared_buf_size;
 
-		pipe->buf_a = buf_a;
-		pipe->buf_b = buf_b;
+		pipe->legacy_buf_b = NULL;
 		pipe->total_size =
 			hab_pipe_calc_required_bytes(shared_buf_size);
 	}
 
-	pipe->buf_a = (struct hab_shared_buf *)its;
+	*itms = its;
 	return ep;
 }
 
 uint32_t hab_pipe_write(struct hab_pipe_endpoint *ep,
+		struct hab_shared_buf *sh_buf,
+		const uint32_t buf_size,
 		unsigned char *p, uint32_t num_bytes)
 {
-	struct hab_shared_buf *sh_buf = ep->tx_info.sh_buf;
-	uint32_t space =
-		(sh_buf->size - (ep->tx_info.wr_count - sh_buf->rd_count));
+	/* Save a copy for index and count to avoid ToC-ToU issue */
+	uint32_t ep_tx_index = ep->tx_info.index;
+	uint32_t ep_tx_wr_count = ep->tx_info.wr_count;
+	uint32_t sh_buf_rd_count = sh_buf->rd_count;
+	uint32_t space = 0U;
 	uint32_t count1, count2;
+
+	if (ep_tx_wr_count < sh_buf_rd_count || buf_size < (ep_tx_wr_count - sh_buf_rd_count)) {
+		pr_err("rd/wr counter or buf_size error, underflow detected\n");
+		return 0;
+	}
+	space = buf_size - (ep_tx_wr_count - sh_buf_rd_count);
 
 	if (!p || num_bytes > space || num_bytes == 0) {
 		pr_err("****can not write to pipe p %pK to-write %d space available %d\n",
@@ -69,33 +93,41 @@ uint32_t hab_pipe_write(struct hab_pipe_endpoint *ep,
 
 	asm volatile("dmb ish" ::: "memory");
 
-	count1 = (num_bytes <= (sh_buf->size - ep->tx_info.index)) ? num_bytes :
-		(sh_buf->size - ep->tx_info.index);
+	if ((buf_size < ep_tx_index) || (buf_size < num_bytes)) {
+		pr_err("index in tx ep is out of boundary or number of bytes is larger than the ring buffer size\n");
+		return 0;
+	}
+
+	count1 = (num_bytes <= (buf_size - ep_tx_index))
+		? num_bytes : (buf_size - ep_tx_index);
 	count2 = num_bytes - count1;
 
 	if (count1 > 0) {
-		memcpy((void *)&sh_buf->data[ep->tx_info.index], p, count1);
-		ep->tx_info.wr_count += count1;
-		ep->tx_info.index += count1;
-		if (ep->tx_info.index >= sh_buf->size)
-			ep->tx_info.index = 0;
+		memcpy((void *)&sh_buf->data[ep_tx_index], p, count1);
+		ep_tx_wr_count += count1;
+		ep_tx_index += count1;
+		if (ep_tx_index >= buf_size)
+			ep_tx_index = 0;
 	}
 	if (count2 > 0) {/* handle buffer wrapping */
-		memcpy((void *)&sh_buf->data[ep->tx_info.index],
+		memcpy((void *)&sh_buf->data[ep_tx_index],
 			p + count1, count2);
-		ep->tx_info.wr_count += count2;
-		ep->tx_info.index += count2;
-		if (ep->tx_info.index >= sh_buf->size)
-			ep->tx_info.index = 0;
+		ep_tx_wr_count += count2;
+		ep_tx_index += count2;
+		if (ep_tx_index >= buf_size)
+			ep_tx_index = 0;
 	}
+
+	ep->tx_info.wr_count = ep_tx_wr_count;
+	ep->tx_info.index = ep_tx_index;
+
 	return num_bytes;
 }
 
 /* Updates the write index which is shared with the other VM */
-void hab_pipe_write_commit(struct hab_pipe_endpoint *ep)
+void hab_pipe_write_commit(struct hab_pipe_endpoint *ep,
+		struct hab_shared_buf *sh_buf)
 {
-	struct hab_shared_buf *sh_buf = ep->tx_info.sh_buf;
-
 	/* Must commit data before incrementing count */
 	asm volatile("dmb ishst" ::: "memory");
 	sh_buf->wr_count = ep->tx_info.wr_count;
@@ -104,42 +136,51 @@ void hab_pipe_write_commit(struct hab_pipe_endpoint *ep)
 #define HAB_HEAD_CLEAR     0xCC
 
 uint32_t hab_pipe_read(struct hab_pipe_endpoint *ep,
+		struct hab_shared_buf *sh_buf,
+		const uint32_t buf_size,
 		unsigned char *p, uint32_t size, uint32_t clear)
 {
-	struct hab_shared_buf *sh_buf = ep->rx_info.sh_buf;
+	/* Save a copy for index to avoid ToC-ToU issue */
+	uint32_t ep_rx_index = ep->rx_info.index;
 	/* mb to guarantee wr_count is updated after contents are written */
 	uint32_t avail = sh_buf->wr_count - sh_buf->rd_count;
 	uint32_t count1, count2, to_read;
-	uint32_t index_saved = ep->rx_info.index; /* store original for retry */
+	uint32_t index_saved = ep_rx_index; /* store original for retry */
 	static uint8_t signature_mismatch;
 
-	if (!p || avail == 0 || size == 0)
+	if (!p || avail == 0 || size == 0 || ep_rx_index > buf_size)
 		return 0;
 
 	asm volatile("dmb ishld" ::: "memory");
 	/* error if available is less than size and available is not zero */
 	to_read = (avail < size) ? avail : size;
 
-	if (to_read < size) /* only provide exact read size, not less */
-		pr_err("less data available %d than requested %d\n",
+	/*
+	 * Generally, the available size should be equal to the expected read size.
+	 * But when calling hab_msg_drop() during message recv, available size may
+	 * less than expected size.
+	 */
+	if (to_read < size)
+		pr_info("less data available %d than requested %d\n",
 			avail, size);
 
-	count1 = (to_read <= (sh_buf->size - ep->rx_info.index)) ? to_read :
-		(sh_buf->size - ep->rx_info.index);
+	count1 = (to_read <= (buf_size - ep_rx_index)) ? to_read :
+		(buf_size - ep_rx_index);
 	count2 = to_read - count1;
 
 	if (count1 > 0) {
-		memcpy(p, (void *)&sh_buf->data[ep->rx_info.index], count1);
-		ep->rx_info.index += count1;
-		if (ep->rx_info.index >= sh_buf->size)
-			ep->rx_info.index = 0;
+		memcpy(p, (void *)&sh_buf->data[ep_rx_index], count1);
+		ep_rx_index += count1;
+		if (ep_rx_index >= buf_size)
+			ep_rx_index = 0;
 	}
 	if (count2 > 0) { /* handle buffer wrapping */
-		memcpy(p + count1, (void *)&sh_buf->data[ep->rx_info.index],
+		memcpy(p + count1, (void *)&sh_buf->data[ep_rx_index],
 			count2);
-		ep->rx_info.index += count2;
+		ep_rx_index += count2;
 	}
 
+	ep->rx_info.index = ep_rx_index;
 
 	if (count1 + count2) {
 		struct hab_header *head = (struct hab_header *)p;
@@ -149,9 +190,11 @@ uint32_t hab_pipe_read(struct hab_pipe_endpoint *ep,
 retry:
 
 			if (unlikely(head->signature != 0xBEE1BEE1)) {
-				pr_debug("hab head corruption detected at %pK buf %pK %08X %08X %08X %08X rd %d wr %d index %X saved %X retry %d\n",
+				pr_debug("hab head corruption detected at %pK buf %pK %08X %08X %08X %08X %08X rd %d wr %d index %X saved %X retry %d\n",
 					head, &sh_buf->data[0],
-					head->id_type_size, head->session_id,
+					head->id_type,
+					head->payload_size,
+					head->session_id,
 					head->signature, head->sequence,
 					sh_buf->rd_count, sh_buf->wr_count,
 					ep->rx_info.index, index_saved,
@@ -161,13 +204,14 @@ retry:
 						   count1);
 					if (count2)
 						memcpy(&p[count1],
-						&sh_buf->data[ep->rx_info.index - count2],
+						&sh_buf->data[ep_rx_index - count2],
 						count2);
 					if (!signature_mismatch)
 						goto retry;
 				} else
-					pr_err("quit retry after %d time may fail %X %X %X %X rd %d wr %d index %X\n",
-						retry_cnt, head->id_type_size,
+					pr_err("quit retry after %d time may fail %X %X %X %X %X rd %d wr %d index %X\n",
+						retry_cnt, head->id_type,
+						head->payload_size,
 						head->session_id,
 						head->signature,
 						head->sequence,
@@ -200,11 +244,11 @@ retry:
 	return to_read;
 }
 
-void hab_pipe_rxinfo(struct hab_pipe_endpoint *ep, uint32_t *rd_cnt,
-					uint32_t *wr_cnt, uint32_t *idx)
+void hab_pipe_rxinfo(struct hab_pipe_endpoint *ep,
+			struct hab_shared_buf *sh_buf,
+			uint32_t *rd_cnt,
+			uint32_t *wr_cnt, uint32_t *idx)
 {
-	struct hab_shared_buf *sh_buf = ep->rx_info.sh_buf;
-
 	*idx = ep->rx_info.index;
 	*rd_cnt = sh_buf->rd_count;
 	*wr_cnt = sh_buf->wr_count;

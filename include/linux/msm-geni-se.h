@@ -9,6 +9,8 @@
 #include <linux/dma-direction.h>
 #include <linux/io.h>
 #include <linux/list.h>
+/* SSC Qup SSR related */
+#include <soc/qcom/subsystem_notif.h>
 
 /* Transfer mode supported by GENI Serial Engines */
 enum se_xfer_mode {
@@ -26,6 +28,39 @@ enum se_protocol_types {
 	I2C,
 	I3C,
 	SPI_SLAVE
+};
+
+/* Notifier block Structure */
+struct ssc_qup_nb {
+	struct notifier_block nb;
+	/*Notifier block pointer to next notifier block structure*/
+	void *next;
+};
+
+/**
+ * struct ssc_qup_ssr	GENI Serial Engine SSC qup SSR Structure.
+ * @is_ssr_down		To check SE status.
+ * @subsys_name		Subsystem name for ssr registration.
+ * @active_list_head	List Head of all client in SSC QUPv3.
+ */
+struct ssc_qup_ssr {
+	struct ssc_qup_nb ssc_qup_nb;
+	bool is_ssr_down;
+	const char *subsys_name;
+	struct list_head active_list_head;
+};
+
+/**
+ * struct se_rsc_ssr	GENI Resource SSR Structure.
+ * @active_list		List of SSC qup SE clients.
+ * @force_suspend	Function pointer for Subsystem shutdown case.
+ * @force_resume	Function pointer for Subsystem restart case.
+ */
+struct se_rsc_ssr {
+	struct list_head active_list;
+	void (*force_suspend)(struct device *ctrl_dev);
+	void (*force_resume)(struct device *ctrl_dev);
+	bool ssr_enable;
 };
 
 /**
@@ -52,6 +87,7 @@ enum se_protocol_types {
  * @num_clk_levels:	Number of valid clock levels in clk_perf_tbl.
  * @clk_perf_tbl:	Table of clock frequency input to Serial Engine clock.
  * @skip_bw_vote:	Used for PMIC over i2c use case to skip the BW vote.
+ * @se_rsc_ssr:		Pointer to Geni resource SSR structure.
  */
 struct se_geni_rsc {
 	struct device *ctrl_dev;
@@ -75,6 +111,7 @@ struct se_geni_rsc {
 	unsigned int num_clk_levels;
 	unsigned long *clk_perf_tbl;
 	bool skip_bw_vote;
+	struct se_rsc_ssr rsc_ssr;
 };
 
 #define PINCTRL_DEFAULT	"default"
@@ -146,6 +183,12 @@ struct se_geni_rsc {
 #define IO1_SEL_TX			BIT(2)
 #define IO2_DATA_IN_SEL_PAD2		(GENMASK(11, 10))
 #define IO3_DATA_IN_SEL_PAD2		BIT(15)
+#define OTHER_IO_OE			BIT(12)
+#define IO2_DATA_IN_SEL			BIT(11)
+#define RX_DATA_IN_SEL			BIT(8)
+#define IO_MACRO_IO3_SEL		(GENMASK(7, 6))
+#define IO_MACRO_IO2_SEL		BIT(5)
+#define IO_MACRO_IO0_SEL		BIT(0)
 
 /* GENI_FORCE_DEFAULT_REG fields */
 #define FORCE_DEFAULT	(BIT(0))
@@ -400,6 +443,7 @@ if (print) { \
 #define SPI_CORE2X_VOTE	100000
 #define UART_CORE2X_VOTE	100000
 #define UART_CONSOLE_CORE2X_VOTE	19200
+#define QUP_SE_VERSION_2_7	0x20070000
 
 #if IS_ENABLED(CONFIG_MSM_GENI_SE)
 /**
@@ -760,6 +804,15 @@ void geni_se_rx_dma_unprep(struct device *wrapper_dev,
  */
 int geni_se_qupv3_hw_version(struct device *wrapper_dev, unsigned int *major,
 			     unsigned int *minor, unsigned int *step);
+
+/**
+ * geni_se_qupv3_get_hw_version() - Get the QUPv3 Hardware version
+ * @wrapper_dev:	Pointer to the corresponding QUPv3 wrapper core.
+ *
+ * Return:		QUP HW version return on success,
+ *			standard Linux error codes on failure/error
+ */
+int geni_se_qupv3_get_hw_version(struct device *wrapper_dev);
 
 /**
  * geni_se_iommu_map_buf() - Map a single buffer into QUPv3 context bank

@@ -353,8 +353,58 @@ static void kgsl_destroy_ion(struct kgsl_memdesc *memdesc)
 	memdesc->sgt = NULL;
 }
 
+static int kgsl_dmabuf_map_kernel(struct kgsl_memdesc *memdesc)
+{
+	struct kgsl_mem_entry *entry = container_of(memdesc,
+		struct kgsl_mem_entry, memdesc);
+	struct kgsl_dma_buf_meta *meta = entry->priv_data;
+	int ret = 0;
+
+	mutex_lock(&kgsl_driver.kernel_map_mutex);
+	if (!(memdesc->hostptr) && meta && meta->dmabuf) {
+		memdesc->hostptr = dma_buf_vmap(meta->dmabuf);
+		if (memdesc->hostptr) {
+			dma_buf_begin_cpu_access(meta->dmabuf, DMA_BIDIRECTIONAL);
+			KGSL_STATS_ADD(memdesc->size,
+				&kgsl_driver.stats.vmalloc,
+				&kgsl_driver.stats.vmalloc_max);
+		} else
+			ret = -ENOMEM;
+	}
+	if (memdesc->hostptr)
+		memdesc->hostptr_count++;
+
+	mutex_unlock(&kgsl_driver.kernel_map_mutex);
+
+	return ret;
+}
+
+static void kgsl_dmabuf_unmap_kernel(struct kgsl_memdesc *memdesc)
+{
+	struct kgsl_mem_entry *entry = container_of(memdesc,
+		struct kgsl_mem_entry, memdesc);
+	struct kgsl_dma_buf_meta *meta = entry->priv_data;
+
+	mutex_lock(&kgsl_driver.kernel_map_mutex);
+	if (memdesc->hostptr && meta && meta->dmabuf) {
+		memdesc->hostptr_count--;
+		if (memdesc->hostptr_count)
+			goto done;
+
+		dma_buf_end_cpu_access(meta->dmabuf, DMA_BIDIRECTIONAL);
+		dma_buf_vunmap(meta->dmabuf, memdesc->hostptr);
+		atomic_long_sub(memdesc->size, &kgsl_driver.stats.vmalloc);
+		memdesc->hostptr = NULL;
+	}
+
+done:
+	mutex_unlock(&kgsl_driver.kernel_map_mutex);
+}
+
 static const struct kgsl_memdesc_ops kgsl_dmabuf_ops = {
 	.free = kgsl_destroy_ion,
+	.map_kernel = kgsl_dmabuf_map_kernel,
+	.unmap_kernel = kgsl_dmabuf_unmap_kernel,
 };
 #endif
 
@@ -2025,20 +2075,14 @@ long kgsl_ioctl_gpu_aux_command(struct kgsl_device_private *dev_priv,
 	u32 queued, count;
 	int i, index = 0;
 	long ret;
+	struct kgsl_gpu_aux_command_generic generic;
 
-	/* Aux commands don't make sense without commands */
-	if (!param->numcmds)
+	/* We support only one aux command */
+	if (param->numcmds != 1)
 		return -EINVAL;
 
 	if (!(param->flags &
 		(KGSL_GPU_AUX_COMMAND_TIMELINE)))
-		return -EINVAL;
-
-	/*
-	 * Make sure we don't overflow count. Couple of drawobjs are reserved:
-	 * One drawobj for timestamp sync and another for aux command sync.
-	 */
-	if (param->numcmds > (UINT_MAX - 2))
 		return -EINVAL;
 
 	context = kgsl_context_get_owner(dev_priv, param->context_id);
@@ -2046,13 +2090,12 @@ long kgsl_ioctl_gpu_aux_command(struct kgsl_device_private *dev_priv,
 		return -EINVAL;
 
 	/*
-	 * We have one drawobj for the timestamp sync plus one for all of the
-	 * commands
+	 * param->numcmds is always one and we have one additional drawobj
+	 * for the timestamp sync if KGSL_GPU_AUX_COMMAND_SYNC flag is passed.
+	 * On top of that we make an implicit sync object for the last queued
+	 * timestamp on this context.
 	 */
-	count = param->numcmds + 1;
-
-	if (param->flags & KGSL_GPU_AUX_COMMAND_SYNC)
-		count++;
+	count = (param->flags & KGSL_GPU_AUX_COMMAND_SYNC) ? 3 : 2;
 
 	drawobjs = kvcalloc(count, sizeof(*drawobjs), GFP_KERNEL);
 
@@ -2100,39 +2143,34 @@ long kgsl_ioctl_gpu_aux_command(struct kgsl_device_private *dev_priv,
 
 	cmdlist = u64_to_user_ptr(param->cmdlist);
 
-	/* Create a draw object for each command */
-	for (i = 0; i < param->numcmds; i++) {
-		struct kgsl_gpu_aux_command_generic generic;
+	 /* Create a draw object for KGSL_GPU_AUX_COMMAND_TIMELINE */
+	if (copy_struct_from_user(&generic, sizeof(generic),
+		cmdlist, param->cmdsize)) {
+		ret = -EFAULT;
+		goto err;
+	}
 
-		if (copy_struct_from_user(&generic, sizeof(generic),
-			cmdlist, param->cmdsize)) {
-			ret = -EFAULT;
+	if (generic.type == KGSL_GPU_AUX_COMMAND_TIMELINE) {
+		struct kgsl_drawobj_timeline *timelineobj;
+
+		timelineobj = kgsl_drawobj_timeline_create(device,
+			context);
+
+		if (IS_ERR(timelineobj)) {
+			ret = PTR_ERR(timelineobj);
 			goto err;
 		}
 
-		if (generic.type == KGSL_GPU_AUX_COMMAND_TIMELINE) {
-			struct kgsl_drawobj_timeline *timelineobj;
+		drawobjs[index++] = DRAWOBJ(timelineobj);
 
-			timelineobj = kgsl_drawobj_timeline_create(device,
-				context);
-
-			if (IS_ERR(timelineobj)) {
-				ret = PTR_ERR(timelineobj);
-				goto err;
-			}
-
-			drawobjs[index++] = DRAWOBJ(timelineobj);
-
-			ret = kgsl_drawobj_add_timeline(dev_priv, timelineobj,
-				u64_to_user_ptr(generic.priv), generic.size);
-			if (ret)
-				goto err;
-		} else {
-			ret = -EINVAL;
+		ret = kgsl_drawobj_add_timeline(dev_priv, timelineobj,
+			u64_to_user_ptr(generic.priv), generic.size);
+		if (ret)
 			goto err;
-		}
 
-		cmdlist += param->cmdsize;
+	} else {
+		ret = -EINVAL;
+		goto err;
 	}
 
 	ret = device->ftbl->queue_cmds(dev_priv, context,
@@ -3854,6 +3892,30 @@ long kgsl_ioctl_timestamp_event(struct kgsl_device_private *dev_priv,
 	return ret;
 }
 
+long kgsl_ioctl_drawctxt_set_shadow_mem(struct kgsl_device_private *dev_priv,
+					unsigned int cmd, void *data)
+{
+	struct kgsl_drawctxt_set_shadow_mem *param = data;
+	struct kgsl_device *device = dev_priv->device;
+	long result;
+	struct kgsl_context *context;
+
+	/* Separate timestamp shadow memory is not supported
+	 * until it is enabled in GMU
+	 */
+	if (test_bit(GMU_DISPATCH, &device->gmu_core.flags))
+		return -EOPNOTSUPP;
+
+	context = kgsl_context_get_owner(dev_priv, param->drawctxt_id);
+	if (!context)
+		return -EINVAL;
+
+	result = device->ftbl->drawctxt_set_shadow_mem(dev_priv, context,
+						param->gpuobj_id);
+	kgsl_context_put(context);
+	return result;
+}
+
 static vm_fault_t
 kgsl_memstore_vm_fault(struct vm_fault *vmf)
 {
@@ -4293,6 +4355,7 @@ struct kgsl_driver kgsl_driver  = {
 	.proclist_lock = __RW_LOCK_UNLOCKED(kgsl_driver.proclist_lock),
 	.ptlock = __SPIN_LOCK_UNLOCKED(kgsl_driver.ptlock),
 	.devlock = __MUTEX_INITIALIZER(kgsl_driver.devlock),
+	.kernel_map_mutex = __MUTEX_INITIALIZER(kgsl_driver.kernel_map_mutex),
 	/*
 	 * Full cache flushes are faster than line by line on at least
 	 * 8064 and 8974 once the region to be flushed is > 16mb.

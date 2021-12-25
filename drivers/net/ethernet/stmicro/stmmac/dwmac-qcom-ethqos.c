@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 // Copyright (c) 2018-19 Linaro Limited
+/* Copyright (c) 2021, The Linux Foundation. All rights reserved. */
 
 #include <linux/module.h>
 #include <linux/of.h>
@@ -216,8 +217,10 @@ void dwmac_qcom_program_avb_algorithm(struct stmmac_priv *priv,
 	ETHQOSDBG("\n");
 
 	if (copy_from_user(&l_avb_struct, (void __user *)u_avb_struct,
-			   sizeof(struct dwmac_qcom_avb_algorithm)))
+			   sizeof(struct dwmac_qcom_avb_algorithm))) {
 		ETHQOSERR("Failed to fetch AVB Struct\n");
+		return;
+	}
 
 	if (priv->speed == SPEED_1000)
 		avb_params = &l_avb_struct.speed1000params;
@@ -228,10 +231,15 @@ void dwmac_qcom_program_avb_algorithm(struct stmmac_priv *priv,
 	 * 2 for CLASS B traffic
 	 * Configure right channel accordingly
 	 */
-	if (l_avb_struct.qinx == 1)
+	if (l_avb_struct.qinx == 1) {
 		l_avb_struct.qinx = CLASS_A_TRAFFIC_TX_CHANNEL;
-	else if (l_avb_struct.qinx == 2)
+	} else if (l_avb_struct.qinx == 2) {
 		l_avb_struct.qinx = CLASS_B_TRAFFIC_TX_CHANNEL;
+	} else {
+		ETHQOSERR("Invalid index [%u] in AVB struct from user\n",
+			  l_avb_struct.qinx);
+		return;
+	}
 
 	priv->plat->tx_queues_cfg[l_avb_struct.qinx].mode_to_use =
 		MTL_QUEUE_AVB;
@@ -983,6 +991,9 @@ static int ethqos_mdio_read(struct stmmac_priv  *priv, int phyaddr, int phyreg)
 static int ethqos_phy_intr_config(struct qcom_ethqos *ethqos)
 {
 	int ret = 0;
+	struct platform_device *pdev = ethqos->pdev;
+	struct net_device *dev = platform_get_drvdata(pdev);
+	struct stmmac_priv *priv = netdev_priv(dev);
 
 	ethqos->phy_intr = platform_get_irq_byname(ethqos->pdev, "phy-intr");
 
@@ -992,6 +1003,8 @@ static int ethqos_phy_intr_config(struct qcom_ethqos *ethqos)
 				"PHY IRQ configuration information not found\n");
 		}
 		ret = 1;
+	} else {
+		priv->phy_intr_wol_irq = ethqos->phy_intr;
 	}
 
 	return ret;
@@ -1493,10 +1506,15 @@ static void ethqos_set_early_eth_param(struct stmmac_priv *priv,
 	if (pparams.is_valid_ipv6_addr) {
 		INIT_DELAYED_WORK(&ethqos->ipv6_addr_assign_wq,
 				  ethqos_is_ipv6_NW_stack_ready);
-		ret = qcom_ethqos_add_ipv6addr(&pparams, priv->dev);
-		if (ret)
+		if (ethqos->emac_ver == EMAC_HW_v2_3_1) {
 			schedule_delayed_work(&ethqos->ipv6_addr_assign_wq,
 					      msecs_to_jiffies(1000));
+		} else {
+			ret = qcom_ethqos_add_ipv6addr(&pparams, priv->dev);
+			if (ret)
+				schedule_delayed_work(&ethqos->ipv6_addr_assign_wq,
+						      msecs_to_jiffies(1000));
+		}
 	}
 #endif
 	return;
@@ -1822,7 +1840,7 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 
 	ethqos->pdev = pdev;
 
-	ethqos_init_reqgulators(ethqos);
+	ethqos_init_regulators(ethqos);
 	ethqos_init_gpio(ethqos);
 
 	plat_dat = stmmac_probe_config_dt(pdev, &stmmac_res.mac);
@@ -1965,8 +1983,11 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	}
 
 	res = platform_get_resource(ethqos->pdev, IORESOURCE_MEM, 0);
-	if (!res)
+	if (!res) {
 		ETHQOSERR("get emac-base resource failed\n");
+		ret = -ENOMEM;
+		goto err_clk;
+	}
 
 	ethqos->emac_mem_size = resource_size(res);
 
@@ -2210,7 +2231,7 @@ static int qcom_ethqos_hib_restore(struct device *dev)
 
 	priv = netdev_priv(ndev);
 
-	ret = ethqos_init_reqgulators(ethqos);
+	ret = ethqos_init_regulators(ethqos);
 	if (ret)
 		return ret;
 

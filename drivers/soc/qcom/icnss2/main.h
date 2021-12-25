@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2017-2020, 2021, The Linux Foundation.
+ * Copyright (c) 2017-2020, 2021, The Linux Foundation. All rights reserved.
  * All rights reserved.
  */
 
@@ -123,6 +123,8 @@ enum icnss_driver_state {
 	ICNSS_DEL_SERVER,
 	ICNSS_COLD_BOOT_CAL,
 	ICNSS_QMI_DMS_CONNECTED,
+	ICNSS_SLATE_SSR_REGISTERED,
+	ICNSS_SLATE_UP,
 };
 
 struct ce_irq_list {
@@ -415,6 +417,8 @@ struct icnss_priv {
 	void *wpss_notify_handler;
 	struct notifier_block modem_ssr_nb;
 	struct notifier_block wpss_ssr_nb;
+	void *slate_notify_handler;
+	struct notifier_block slate_ssr_nb;
 	uint32_t diag_reg_read_addr;
 	uint32_t diag_reg_read_mem_type;
 	uint32_t diag_reg_read_len;
@@ -464,6 +468,8 @@ struct icnss_priv {
 	u32 hw_trc_override;
 	struct icnss_dms_data dms;
 	u8 use_nv_mac;
+	u8 is_slate_rfa;
+	struct completion slate_boot_complete;
 };
 
 struct icnss_reg_info {

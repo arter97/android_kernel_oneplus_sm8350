@@ -211,6 +211,8 @@ struct a6xx_gmu_device {
 	void __iomem *pdc_cfg_base;
 	/** @pdc_seq_base: Base address of PDC seq registers */
 	void __iomem *pdc_seq_base;
+	/** @num_oob_perfcntr: Number of active oob_perfcntr requests */
+	u32 num_oob_perfcntr;
 };
 
 /* Helper function to get to a6xx gmu device from adreno device */
@@ -246,12 +248,12 @@ int a6xx_build_rpmh_tables(struct adreno_device *adreno_dev);
 
 /**
  * a6xx_gmu_gx_is_on - Check if GX is on
- * @device: Pointer to KGSL device
+ * @adreno_dev: Pointer to the adreno device
  *
  * This function reads pwr status registers to check if GX
  * is on or off
  */
-bool a6xx_gmu_gx_is_on(struct kgsl_device *device);
+bool a6xx_gmu_gx_is_on(struct adreno_device *adreno_dev);
 
 /**
  * a6xx_gmu_device_snapshot - A6XX GMU snapshot function

@@ -116,4 +116,6 @@
 #define VHOST_VSOCK_SET_GUEST_CID	_IOW(VHOST_VIRTIO, 0x60, __u64)
 #define VHOST_VSOCK_SET_RUNNING		_IOW(VHOST_VIRTIO, 0x61, int)
 
+#define VHOST_SET_CONFIG _IOW(VHOST_VIRTIO, 0x70, struct vhost_config)
+
 #endif

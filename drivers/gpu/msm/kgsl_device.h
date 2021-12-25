@@ -172,6 +172,8 @@ struct kgsl_functable {
 	/** @gpu_bus_set: Target specific function to set gpu bandwidth */
 	int (*gpu_bus_set)(struct kgsl_device *device, int bus_level, u32 ab);
 	void (*deassert_gbif_halt)(struct kgsl_device *device);
+	int (*drawctxt_set_shadow_mem)(struct kgsl_device_private *dev_priv,
+		struct kgsl_context *context, uint32_t memory_id);
 };
 
 struct kgsl_ioctl {

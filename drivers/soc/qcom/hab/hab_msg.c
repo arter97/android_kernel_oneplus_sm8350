@@ -7,7 +7,7 @@
 
 static int hab_rx_queue_empty(struct virtual_channel *vchan)
 {
-	int ret;
+	int ret = 0;
 	int irqs_disabled = irqs_disabled();
 
 	hab_spin_lock(&vchan->rx_lock, irqs_disabled);
@@ -320,6 +320,9 @@ int hab_msg_recv(struct physical_channel *pchan,
 				pchan->name, sizebytes, sizeof(*exp_desc));
 			break;
 		}
+
+		pr_debug("%s exp payload %zu bytes\n",
+				pchan->name, sizebytes);
 
 		exp_desc = kzalloc(sizebytes, GFP_ATOMIC);
 		if (!exp_desc)

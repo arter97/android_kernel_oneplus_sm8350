@@ -19,6 +19,7 @@
 #include <linux/mmc/pm.h>
 #include <linux/dma-direction.h>
 #include <linux/ipc_logging.h>
+#include <linux/blkdev.h>
 
 struct mmc_ios {
 	unsigned int	clock;			/* clock rate */
@@ -387,9 +388,12 @@ struct mmc_host {
 	u32			ocr_avail_sdio;	/* SDIO-specific OCR */
 	u32			ocr_avail_sd;	/* SD-specific OCR */
 	u32			ocr_avail_mmc;	/* MMC-specific OCR */
+
 #ifdef CONFIG_PM_SLEEP
+	/* DO NOT USE, is not used, for abi preservation only */
 	struct notifier_block	pm_notify;
 #endif
+
 	u32			max_current_330;
 	u32			max_current_300;
 	u32			max_current_180;
@@ -600,6 +604,12 @@ struct mmc_host {
 #if defined(CONFIG_SDC_QTI)
 	atomic_t active_reqs;
 #endif
+
+#if defined(CONFIG_SDC_QTI)
+	bool			crash_on_err;
+#endif
+	bool			deepsleep;
+
 	unsigned long		private[0] ____cacheline_aligned;
 };
 

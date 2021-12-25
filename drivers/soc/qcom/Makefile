@@ -140,3 +140,4 @@ obj-$(CONFIG_POWER_STATE) += power_state.o
 obj-$(CONFIG_AUTO_EARLY_LAUNCH) += auto_early_launcher.o
 obj-$(CONFIG_SILENT_MODE) += silent-mode-hw-monitoring.o
 obj-$(CONFIG_QTI_PMIC_LPM)	+= qti-pmic-lpm.o
+obj-$(CONFIG_QCOM_SECURE_HIBERNATION) += qcom_secure_hibernation.o

@@ -21,7 +21,7 @@ int hab_stat_deinit(struct hab_driver *driver)
  * If all goes well the return value is the formated print and concatenated
  * original dest string.
  */
-static int hab_stat_buffer_print(char *dest,
+int hab_stat_buffer_print(char *dest,
 		int dest_size, const char *fmt, ...)
 {
 	va_list args;
@@ -182,17 +182,38 @@ static int print_ctx_total_expimp(struct uhab_context *ctx,
 int hab_stat_show_expimp(struct hab_driver *driver,
 		int pid, char *buf, int size)
 {
-	struct uhab_context *ctx;
-	int ret;
+	struct uhab_context *ctx = NULL;
+	int ret = 0;
+	struct virtual_channel *vchan = NULL;
+	int mmid = 0;
+	struct physical_channel *pchans[HABCFG_MMID_NUM];
+	int pchan_count = 0;
+
+	(void)driver;
 
 	ret = strlcpy(buf, "", size);
 
 	spin_lock_bh(&hab_driver.drvlock);
 	list_for_each_entry(ctx, &hab_driver.uctx_list, node) {
-		if (pid == ctx->owner)
+		if (pid == ctx->owner) {
 			ret = print_ctx_total_expimp(ctx, buf, size);
+
+			list_for_each_entry(vchan, &ctx->vchannels, node) {
+				if (vchan->pchan->habdev->id != mmid) {
+					mmid = vchan->pchan->habdev->id;
+					pchans[pchan_count++] = vchan->pchan;
+					if (pchan_count >= HABCFG_MMID_NUM)
+						break;
+				}
+			}
+			break;
+		}
 	}
 	spin_unlock_bh(&hab_driver.drvlock);
+
+	/* print pchannel status, drvlock is not required */
+	if (pchan_count > 0)
+		ret = hab_stat_log(pchans, pchan_count, buf, size);
 
 	return ret;
 }
@@ -200,7 +221,7 @@ int hab_stat_show_expimp(struct hab_driver *driver,
 #define HAB_PIPE_DUMP_FILE_NAME "/sdcard/habpipe-"
 #define HAB_PIPE_DUMP_FILE_EXT ".dat"
 
-#define HAB_PIPEDUMP_SIZE (768*1024)
+#define HAB_PIPEDUMP_SIZE (768*1024*4)
 static char *filp;
 static int pipedump_idx;
 

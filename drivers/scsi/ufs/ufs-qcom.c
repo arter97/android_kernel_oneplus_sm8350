@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2013-2020, Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/acpi.h>
@@ -2705,6 +2705,7 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 	struct platform_device *pdev = to_platform_device(dev);
 	struct ufs_qcom_host *host;
 	struct resource *res;
+	struct device_node *np = dev->of_node;
 
 	host = devm_kzalloc(dev, sizeof(*host), GFP_KERNEL);
 	if (!host) {
@@ -2761,6 +2762,16 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 			dev_err(dev, "%s: PHY get failed %d\n", __func__, err);
 			goto out_variant_clear;
 		}
+	}
+
+	/*
+	 * Check whether primary UFS boot device is probed using
+	 * primary_boot_device_probed flag, if its not set defer the probe.
+	 */
+	if ((of_property_read_bool(np, "secondary-storage")) && (!ufs_qcom_hosts[0]
+		|| !ufs_qcom_hosts[0]->hba->primary_boot_device_probed)) {
+		err = -EPROBE_DEFER;
+		goto out_variant_clear;
 	}
 
 	host->device_reset = devm_gpiod_get_optional(dev, "reset",
@@ -3791,6 +3802,11 @@ static const struct dev_pm_ops ufs_qcom_pm_ops = {
 	.runtime_suspend = ufshcd_pltfrm_runtime_suspend,
 	.runtime_resume  = ufshcd_pltfrm_runtime_resume,
 	.runtime_idle    = ufshcd_pltfrm_runtime_idle,
+#if defined(CONFIG_SCSI_UFSHCD_QTI)
+	.freeze		= ufshcd_pltfrm_freeze,
+	.restore	= ufshcd_pltfrm_restore,
+	.thaw		= ufshcd_pltfrm_thaw,
+#endif
 };
 
 static struct platform_driver ufs_qcom_pltform = {

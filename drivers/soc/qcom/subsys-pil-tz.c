@@ -124,6 +124,7 @@ struct pil_tz_data {
 	int generic_irq;
 	int ramdump_disable_irq;
 	int shutdown_ack_irq;
+	int dsentry_ack_irq;
 	int force_stop_bit;
 	struct qcom_smem_state *state;
 };
@@ -806,6 +807,24 @@ static int subsys_shutdown(const struct subsys_desc *subsys, bool force_stop)
 	return 0;
 }
 
+static int subsys_enter_ds(const struct subsys_desc *subsys)
+{
+
+	struct pil_tz_data *d = subsys_to_data(subsys);
+	u32 scm_ret = 0;
+
+	/* Instruct secure firmware to unprotect memory
+	 * without running tear down sequence here
+	 */
+	scm_ret = qcom_scm_pas_dsentry(d->pas_id);
+
+	disable_unprepare_clocks(d->clks, d->clk_count);
+	disable_regulators(d, d->regs, d->reg_count, false);
+	subsys_disable_all_irqs(d);
+	return scm_ret;
+}
+
+
 static int subsys_powerup(const struct subsys_desc *subsys)
 {
 	struct pil_tz_data *d = subsys_to_data(subsys);
@@ -956,6 +975,16 @@ static irqreturn_t subsys_shutdown_ack_intr_handler(int irq, void *drv_data)
 	pr_info("Received stop shutdown interrupt from %s\n",
 			d->subsys_desc.name);
 	complete_shutdown_ack(&d->subsys_desc);
+	return IRQ_HANDLED;
+}
+
+static irqreturn_t subsys_dsentry_ack_intr_handler(int irq, void *drv_data)
+{
+	struct pil_tz_data *d = drv_data;
+
+	pr_info("Received dsentry ack interrupt from %s\n",
+			d->subsys_desc.name);
+	complete_dsentry_ack(&d->subsys_desc);
 	return IRQ_HANDLED;
 }
 
@@ -1122,6 +1151,8 @@ static void subsys_enable_all_irqs(struct pil_tz_data *d)
 		enable_irq(d->stop_ack_irq);
 	if (d->shutdown_ack_irq)
 		enable_irq(d->shutdown_ack_irq);
+	if (d->dsentry_ack_irq)
+		enable_irq(d->dsentry_ack_irq);
 	if (d->ramdump_disable_irq)
 		enable_irq(d->ramdump_disable_irq);
 	if (d->generic_irq) {
@@ -1145,6 +1176,8 @@ static void subsys_disable_all_irqs(struct pil_tz_data *d)
 		disable_irq(d->stop_ack_irq);
 	if (d->shutdown_ack_irq)
 		disable_irq(d->shutdown_ack_irq);
+	if (d->dsentry_ack_irq)
+		disable_irq(d->dsentry_ack_irq);
 	if (d->generic_irq) {
 		mask_scsr_irqs(d);
 		irq_set_irq_wake(d->generic_irq, 0);
@@ -1211,6 +1244,10 @@ static int subsys_parse_irqs(struct platform_device *pdev)
 		return ret;
 
 	ret = __get_irq(pdev, "qcom,shutdown-ack", &d->shutdown_ack_irq);
+	if (ret && ret != -ENOENT)
+		return ret;
+
+	ret = __get_irq(pdev, "qcom,dsentry-ack", &d->dsentry_ack_irq);
 	if (ret && ret != -ENOENT)
 		return ret;
 
@@ -1287,6 +1324,20 @@ static int subsys_setup_irqs(struct platform_device *pdev)
 			return ret;
 		}
 		disable_irq(d->shutdown_ack_irq);
+	}
+
+	if (d->dsentry_ack_irq) {
+		ret = devm_request_threaded_irq(&pdev->dev,
+				d->dsentry_ack_irq,
+				NULL, subsys_dsentry_ack_intr_handler,
+				IRQF_TRIGGER_RISING | IRQF_ONESHOT,
+				d->desc.name, d);
+		if (ret < 0) {
+			dev_err(&pdev->dev, "[%s]: Unable to register shutdown ack handler: %d\n",
+				d->desc.name, ret);
+			return ret;
+		}
+		disable_irq(d->dsentry_ack_irq);
 	}
 
 	if (d->ramdump_disable_irq) {
@@ -1431,6 +1482,7 @@ static int pil_tz_generic_probe(struct platform_device *pdev)
 	d->subsys_desc.ramdump = subsys_ramdump;
 	d->subsys_desc.free_memory = subsys_free_memory;
 	d->subsys_desc.crash_shutdown = subsys_crash_shutdown;
+	d->subsys_desc.enter_ds = subsys_enter_ds;
 
 	if (of_property_read_bool(pdev->dev.of_node,
 					"qcom,pil-generic-irq-handler")) {

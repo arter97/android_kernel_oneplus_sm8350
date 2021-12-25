@@ -1651,6 +1651,8 @@ static const struct msm_gpio_wakeirq_map monaco_mpm_map[] = {
 	{82, 63},
 	{83, 64},
 	{84, 65},
+	{95, 70},
+	{98, 74},
 };
 
 static const struct msm_pinctrl_soc_data monaco_pinctrl = {

@@ -129,7 +129,7 @@ int remote_bms_get_prop(int channel, int *val, int src)
 		if (is_debug_batt_id(the_bms))
 			*val = REMOTE_FG_DEBUG_BATT_SOC;
 		else if (!the_bms->is_seb_up)
-			*val = REMOTE_FG_FAKE_BATT_SOC;
+			return -EAGAIN;
 		else
 			rc = bms_get_buffered_data(channel, val, src);
 		break;
@@ -394,6 +394,10 @@ static void rx_data_work(struct work_struct *work)
 
 	if (!rc)
 		pr_debug("Finished processing rx buf from remote-fg\n");
+
+	/* Notify Clients so that they pick-up latest data from QBG */
+	if (bms->batt_psy)
+		power_supply_changed(bms->batt_psy);
 
 out:
 	mutex_unlock(&bms->rx_lock);

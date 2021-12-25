@@ -3277,7 +3277,7 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool force_power_collapse,
 		dbg_event(0xFF, "pend evt", 0);
 
 	/* disable power event irq, hs and ss phy irq is used as wake up src */
-	disable_irq(mdwc->wakeup_irq[PWR_EVNT_IRQ].irq);
+	disable_irq_nosync(mdwc->wakeup_irq[PWR_EVNT_IRQ].irq);
 
 	dwc3_set_phy_speed_flags(mdwc);
 	/* Suspend HS PHY */
@@ -5813,10 +5813,10 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 		if (test_bit(ID, &mdwc->inputs) &&
 				!test_bit(B_SESS_VLD, &mdwc->inputs)) {
 			dbg_event(0xFF, "undef_id_!bsv", 0);
+			dwc3_msm_resume(mdwc);
 			pm_runtime_set_active(mdwc->dev);
 			pm_runtime_enable(mdwc->dev);
 			pm_runtime_get_noresume(mdwc->dev);
-			dwc3_msm_resume(mdwc);
 			pm_runtime_put_sync(mdwc->dev);
 			dbg_event(0xFF, "Undef NoUSB",
 				atomic_read(&mdwc->dev->power.usage_count));

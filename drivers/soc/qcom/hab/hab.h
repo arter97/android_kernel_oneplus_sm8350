@@ -59,6 +59,8 @@ enum hab_payload_type {
 #define DEVICE_XVM2_NAME "hab_xvm2"
 #define DEVICE_XVM3_NAME "hab_xvm3"
 
+#define HABCFG_MMID_NUM        26
+
 /* make sure concascaded name is less than this value */
 #define MAX_VMID_NAME_SIZE 30
 
@@ -99,17 +101,17 @@ enum hab_payload_type {
 	((settings)->vmid_mmid_list[_vmid_].is_listener[_mmid_])
 
 struct hab_header {
-	uint32_t id_type_size;
+	uint32_t id_type;
+	uint32_t payload_size;
 	uint32_t session_id;
 	uint32_t signature;
 	uint32_t sequence;
 } __packed;
 
 /* "Size" of the HAB_HEADER_ID and HAB_VCID_ID must match */
-#define HAB_HEADER_SIZE_SHIFT 0
 #define HAB_HEADER_TYPE_SHIFT 16
 #define HAB_HEADER_ID_SHIFT 20
-#define HAB_HEADER_SIZE_MASK 0x0000FFFF
+#define HAB_HEADER_SIZE_MASK 0x0003FFFF
 #define HAB_HEADER_TYPE_MASK 0x000F0000
 #define HAB_HEADER_ID_MASK   0xFFF00000
 #define HAB_HEADER_INITIALIZER {0}
@@ -131,38 +133,35 @@ struct hab_header {
 	((header).session_id = (sid))
 
 #define HAB_HEADER_SET_SIZE(header, size) \
-	((header).id_type_size = ((header).id_type_size & \
-			(~HAB_HEADER_SIZE_MASK)) | \
-			(((size) << HAB_HEADER_SIZE_SHIFT) & \
-			HAB_HEADER_SIZE_MASK))
+	((header).payload_size = (size) & HAB_HEADER_SIZE_MASK)
 
 #define HAB_HEADER_SET_TYPE(header, type) \
-	((header).id_type_size = ((header).id_type_size & \
+	((header).id_type = ((header).id_type & \
 			(~HAB_HEADER_TYPE_MASK)) | \
 			(((type) << HAB_HEADER_TYPE_SHIFT) & \
 			HAB_HEADER_TYPE_MASK))
 
 #define HAB_HEADER_SET_ID(header, id) \
-	((header).id_type_size = ((header).id_type_size & \
+	((header).id_type = ((header).id_type & \
 			(~HAB_HEADER_ID_MASK)) | \
 			((HAB_VCID_GET_ID(id) << HAB_HEADER_ID_SHIFT) & \
 			HAB_HEADER_ID_MASK))
 
 #define HAB_HEADER_GET_SIZE(header) \
-	(((header).id_type_size & \
-		HAB_HEADER_SIZE_MASK) >> HAB_HEADER_SIZE_SHIFT)
+	((header).payload_size & HAB_HEADER_SIZE_MASK)
 
 #define HAB_HEADER_GET_TYPE(header) \
-	(((header).id_type_size & \
+	(((header).id_type & \
 		HAB_HEADER_TYPE_MASK) >> HAB_HEADER_TYPE_SHIFT)
 
 #define HAB_HEADER_GET_ID(header) \
-	((((header).id_type_size & HAB_HEADER_ID_MASK) >> \
+	((((header).id_type & HAB_HEADER_ID_MASK) >> \
 	(HAB_HEADER_ID_SHIFT - HAB_VCID_ID_SHIFT)) & HAB_VCID_ID_MASK)
 
 #define HAB_HEADER_GET_SESSION_ID(header) ((header).session_id)
 
 #define HAB_HS_TIMEOUT (10*1000*1000)
+#define HAB_HEAD_SIGNATURE 0xBEE1BEE1
 
 struct physical_channel {
 	struct list_head node;
@@ -578,7 +577,6 @@ int hab_stat_deinit(struct hab_driver *drv);
 int hab_stat_show_vchan(struct hab_driver *drv, char *buf, int sz);
 int hab_stat_show_ctx(struct hab_driver *drv, char *buf, int sz);
 int hab_stat_show_expimp(struct hab_driver *drv, int pid, char *buf, int sz);
-
 int hab_stat_init_sub(struct hab_driver *drv);
 int hab_stat_deinit_sub(struct hab_driver *drv);
 
@@ -624,4 +622,8 @@ int dump_hab_buf(void *buf, int size);
 void hab_pipe_read_dump(struct physical_channel *pchan);
 void dump_hab(int mmid);
 void dump_hab_wq(struct physical_channel *pchan);
+int hab_stat_log(struct physical_channel **pchans, int pchan_cnt, char *dest,
+			int dest_size);
+int hab_stat_buffer_print(char *dest,
+		int dest_size, const char *fmt, ...);
 #endif /* __HAB_H */

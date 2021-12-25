@@ -1840,7 +1840,7 @@ void a6xx_snapshot(struct adreno_device *adreno_dev,
 	if (gpudev->sptprac_is_on)
 		sptprac_on = gpudev->sptprac_is_on(adreno_dev);
 
-	if (!gmu_core_dev_gx_is_on(device))
+	if (!adreno_gx_is_on(adreno_dev))
 		return;
 
 	kgsl_regread(device, A6XX_CP_IB1_BASE, &lo);

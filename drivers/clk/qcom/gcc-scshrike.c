@@ -27,6 +27,11 @@
 static DEFINE_VDD_REGULATORS(vdd_cx, VDD_NUM, 1, vdd_corner);
 static DEFINE_VDD_REGULATORS(vdd_cx_ao, VDD_NUM, 1, vdd_corner);
 
+static struct clk_vdd_class *gcc_scshrike_regulators[] = {
+	&vdd_cx,
+	&vdd_cx_ao,
+};
+
 enum {
 	P_BI_TCXO,
 	P_AUD_REF_CLK,
@@ -2565,6 +2570,7 @@ static struct clk_branch gcc_gpu_memnoc_gfx_clk = {
 		.enable_mask = BIT(0),
 		.hw.init = &(struct clk_init_data){
 			.name = "gcc_gpu_memnoc_gfx_clk",
+			.flags = CLK_DONT_HOLD_STATE,
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -2578,6 +2584,7 @@ static struct clk_branch gcc_gpu_snoc_dvm_gfx_clk = {
 		.enable_mask = BIT(0),
 		.hw.init = &(struct clk_init_data){
 			.name = "gcc_gpu_snoc_dvm_gfx_clk",
+			.flags = CLK_DONT_HOLD_STATE,
 			.ops = &clk_branch2_ops,
 		},
 	},
@@ -5278,6 +5285,8 @@ static const struct qcom_cc_desc gcc_scshrike_desc = {
 	.num_clks = ARRAY_SIZE(gcc_scshrike_clocks),
 	.resets = gcc_scshrike_resets,
 	.num_resets = ARRAY_SIZE(gcc_scshrike_resets),
+	.clk_regulators = gcc_scshrike_regulators,
+	.num_clk_regulators = ARRAY_SIZE(gcc_scshrike_regulators),
 };
 
 static const struct of_device_id gcc_scshrike_match_table[] = {
@@ -5319,22 +5328,6 @@ static int gcc_scshrike_probe(struct platform_device *pdev)
 	struct regmap *regmap;
 	int ret;
 
-	vdd_cx.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_cx");
-	if (IS_ERR(vdd_cx.regulator[0])) {
-		if (!(PTR_ERR(vdd_cx.regulator[0]) == -EPROBE_DEFER))
-			dev_err(&pdev->dev,
-				"Unable to get vdd_cx regulator\n");
-		return PTR_ERR(vdd_cx.regulator[0]);
-	}
-
-	vdd_cx_ao.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_cx_ao");
-	if (IS_ERR(vdd_cx_ao.regulator[0])) {
-		if (!(PTR_ERR(vdd_cx_ao.regulator[0]) == -EPROBE_DEFER))
-			dev_err(&pdev->dev,
-				"Unable to get vdd_cx_ao regulator\n");
-		return PTR_ERR(vdd_cx_ao.regulator[0]);
-	}
-
 	regmap = qcom_cc_map(pdev, &gcc_scshrike_desc);
 	if (IS_ERR(regmap))
 		return PTR_ERR(regmap);
@@ -5363,11 +5356,17 @@ static int gcc_scshrike_probe(struct platform_device *pdev)
 	return ret;
 }
 
+static void gcc_scshrike_sync_state(struct device *dev)
+{
+	qcom_cc_sync_state(dev, &gcc_scshrike_desc);
+}
+
 static struct platform_driver gcc_scshrike_driver = {
 	.probe = gcc_scshrike_probe,
 	.driver = {
 		.name = "gcc-scshrike",
 		.of_match_table = gcc_scshrike_match_table,
+		.sync_state = gcc_scshrike_sync_state,
 	},
 };
 

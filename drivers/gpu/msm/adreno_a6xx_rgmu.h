@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
  */
 #ifndef __ADRENO_A6XX_RGMU_H
 #define __ADRENO_A6XX_RGMU_H
@@ -58,6 +58,8 @@ struct a6xx_rgmu_device {
 	unsigned int fault_count;
 	/** @flags: rgmu internal flags */
 	unsigned long flags;
+	/** @num_oob_perfcntr: Number of active oob_perfcntr requests */
+	u32 num_oob_perfcntr;
 };
 
 /**
@@ -89,4 +91,13 @@ int a6xx_rgmu_restart(struct kgsl_device *device);
  */
 void a6xx_rgmu_snapshot(struct adreno_device *adreno_dev,
 	struct kgsl_snapshot *snapshot);
+
+/**
+ * a6xx_rgmu_gx_is_on() - Check if GX is on using pwr status register
+ * @adreno_dev: Pointer to the adreno device
+ *
+ * This check should only be performed if the keepalive bit is set or it
+ * can be guaranteed that the power state of the GPU will remain unchanged
+ */
+bool a6xx_rgmu_gx_is_on(struct adreno_device *adreno_dev);
 #endif

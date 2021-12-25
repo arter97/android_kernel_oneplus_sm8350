@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2019, 2021, The Linux Foundation. All rights reserved.
  */
 #ifndef HAB_PIPE_H
 #define HAB_PIPE_H
@@ -45,29 +45,39 @@ struct hab_pipe {
 	struct hab_pipe_endpoint top;
 	struct hab_pipe_endpoint bottom;
 
-	/* For debugging only */
-	struct hab_shared_buf *buf_a; /* top TX, bottom RX */
-	struct hab_shared_buf *buf_b; /* top RX, bottom TX */
+	/* Legacy debugging metadata, replaced by dbg_itms from qvm_channel */
+	struct hab_shared_buf *legacy_buf_a; /* top TX, bottom RX */
+	struct hab_shared_buf *legacy_buf_b; /* top RX, bottom TX */
 	size_t total_size;
 
 	unsigned char buf_base[];
 };
 
-size_t hab_pipe_calc_required_bytes(uint32_t shared_buf_size);
+size_t hab_pipe_calc_required_bytes(const uint32_t shared_buf_size);
 
 struct hab_pipe_endpoint *hab_pipe_init(struct hab_pipe *pipe,
-		uint32_t shared_buf_size, int top);
+		struct hab_shared_buf **tx_buf_p,
+		struct hab_shared_buf **rx_buf_p,
+		struct dbg_items **itms,
+		const uint32_t shared_buf_size, int top);
 
 uint32_t hab_pipe_write(struct hab_pipe_endpoint *ep,
+		struct hab_shared_buf *sh_buf,
+		const uint32_t buf_size,
 		unsigned char *p, uint32_t num_bytes);
 
-void hab_pipe_write_commit(struct hab_pipe_endpoint *ep);
+void hab_pipe_write_commit(struct hab_pipe_endpoint *ep,
+		struct hab_shared_buf *sh_buf);
 
 uint32_t hab_pipe_read(struct hab_pipe_endpoint *ep,
+		struct hab_shared_buf *sh_buf,
+		const uint32_t buf_size,
 		unsigned char *p, uint32_t size, uint32_t clear);
 
 /* debug only */
-void hab_pipe_rxinfo(struct hab_pipe_endpoint *ep, uint32_t *rd_cnt,
+void hab_pipe_rxinfo(struct hab_pipe_endpoint *ep,
+		struct hab_shared_buf *sh_buf,
+		uint32_t *rd_cnt,
 		uint32_t *wr_cnt, uint32_t *idx);
 
 #endif /* HAB_PIPE_H */

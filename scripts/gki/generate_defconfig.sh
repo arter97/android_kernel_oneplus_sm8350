@@ -33,7 +33,23 @@ else
 	source ${SCRIPTS_ROOT}/envsetup.sh $PLATFORM_NAME
 fi
 
-KERN_MAKE_ARGS="ARCH=$ARCH \
+# Pass LEX, YACC, and KBUILD_HOSTLDFLAGS via KERN_MAKE_ARGS to prevent build
+# errors due to android build system's restriction against using path tools.
+if [[ "$HOSTCC" == *"clang" ]]; then
+	KERN_MAKE_ARGS="ARCH=$ARCH \
+		CROSS_COMPILE=$CROSS_COMPILE \
+		REAL_CC=$REAL_CC \
+		CLANG_TRIPLE=$CLANG_TRIPLE \
+		HOSTCC=$HOSTCC \
+		HOSTLD=$HOSTLD \
+		HOSTAR=$HOSTAR \
+		LD=$LD \
+                LEX=$LEX \
+                YACC=$YACC \
+                KBUILD_HOSTLDFLAGS=-fuse-ld=lld \
+		"
+else
+	KERN_MAKE_ARGS="ARCH=$ARCH \
 		CROSS_COMPILE=$CROSS_COMPILE \
 		REAL_CC=$REAL_CC \
 		CLANG_TRIPLE=$CLANG_TRIPLE \
@@ -42,6 +58,7 @@ KERN_MAKE_ARGS="ARCH=$ARCH \
 		HOSTAR=$HOSTAR \
 		LD=$LD \
 		"
+fi
 
 # Allyes fragment temporarily created on GKI config fragment
 QCOM_GKI_ALLYES_FRAG=${CONFIGS_DIR}/${PLATFORM_NAME}_ALLYES_GKI.config
@@ -74,9 +91,11 @@ case "$REQUIRED_DEFCONFIG" in
 		FINAL_DEFCONFIG_BLEND+=" $QCOM_GKI_FRAG "
 		;;
 	${PLATFORM_NAME}-debug_defconfig )
+		FINAL_DEFCONFIG_BLEND+=" $QCOM_DEBUG_FS_FRAG"
 		FINAL_DEFCONFIG_BLEND+=" $QCOM_GENERIC_DEBUG_FRAG "
 		;&
 	${PLATFORM_NAME}_defconfig )
+		FINAL_DEFCONFIG_BLEND+=" $QCOM_DEBUG_FS_FRAG"
 		FINAL_DEFCONFIG_BLEND+=" $QCOM_GENERIC_PERF_FRAG "
 		;;
 esac

@@ -129,8 +129,8 @@ struct hgsl_isync_timeline {
 };
 
 struct hgsl_isync_fence {
-	struct list_head free_list;  /* For free in batch */
 	struct dma_fence fence;
+	struct list_head free_list;  /* For free in batch */
 	struct hgsl_isync_timeline *timeline;
 	struct list_head child_list;
 	u32 ts;
