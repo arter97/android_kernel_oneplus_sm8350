@@ -3977,6 +3977,7 @@ static const struct spi_device_id mcp25xxfd_id_table[] = {
 };
 MODULE_DEVICE_TABLE(spi, mcp25xxfd_id_table);
 
+#if defined(CONFIG_DEBUG_FS)
 static int mcp25xxfd_dump_regs(struct seq_file *file, void *offset)
 {
 	struct spi_device *spi = file->private;
@@ -4016,7 +4017,6 @@ static int mcp25xxfd_dump_regs(struct seq_file *file, void *offset)
 	return 0;
 }
 
-#if defined(CONFIG_DEBUG_FS)
 static void mcp25xxfd_debugfs_add(struct mcp25xxfd_priv *priv)
 {
 	struct dentry *root, *fifousage, *fifoaddr, *rx, *tx, *status,
@@ -4180,7 +4180,6 @@ static void mcp25xxfd_debugfs_remove(struct mcp25xxfd_priv *priv)
 #else
 static void mcp25xxfd_debugfs_add(struct mcp25xxfd_priv *priv)
 {
-	return 0;
 }
 
 static void mcp25xxfd_debugfs_remove(struct mcp25xxfd_priv *priv)
