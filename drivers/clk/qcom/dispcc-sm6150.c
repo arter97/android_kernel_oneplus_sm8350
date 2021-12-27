@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/clk-provider.h>
@@ -15,6 +15,7 @@
 
 #include "clk-alpha-pll.h"
 #include "clk-branch.h"
+#include "clk-pm.h"
 #include "clk-rcg.h"
 #include "clk-regmap.h"
 #include "clk-regmap-divider.h"
@@ -797,20 +798,6 @@ static struct clk_branch disp_cc_mdss_vsync_clk = {
 	},
 };
 
-static struct clk_branch disp_cc_xo_clk = {
-	.halt_reg = 0x6054,
-	.halt_check = BRANCH_HALT,
-	.clkr = {
-		.enable_reg = 0x6054,
-		.enable_mask = BIT(0),
-		.hw.init = &(struct clk_init_data){
-			.name = "disp_cc_xo_clk",
-			.flags = CLK_IS_CRITICAL,
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
 static struct clk_regmap *disp_cc_sm6150_clocks[] = {
 	[DISP_CC_MDSS_AHB_CLK] = &disp_cc_mdss_ahb_clk.clkr,
 	[DISP_CC_MDSS_AHB_CLK_SRC] = &disp_cc_mdss_ahb_clk_src.clkr,
@@ -846,7 +833,6 @@ static struct clk_regmap *disp_cc_sm6150_clocks[] = {
 	[DISP_CC_MDSS_VSYNC_CLK] = &disp_cc_mdss_vsync_clk.clkr,
 	[DISP_CC_MDSS_VSYNC_CLK_SRC] = &disp_cc_mdss_vsync_clk_src.clkr,
 	[DISP_CC_PLL0] = &disp_cc_pll0.clkr,
-	[DISP_CC_XO_CLK] = &disp_cc_xo_clk.clkr,
 };
 
 static const struct regmap_config disp_cc_sm6150_regmap_config = {
@@ -857,10 +843,16 @@ static const struct regmap_config disp_cc_sm6150_regmap_config = {
 	.fast_io = true,
 };
 
-static const struct qcom_cc_desc disp_cc_sm6150_desc = {
+static struct critical_clk_offset critical_clk_list[] = {
+	{ .offset = 0x6054, .mask = BIT(0) },
+};
+
+static struct qcom_cc_desc disp_cc_sm6150_desc = {
 	.config = &disp_cc_sm6150_regmap_config,
 	.clks = disp_cc_sm6150_clocks,
 	.num_clks = ARRAY_SIZE(disp_cc_sm6150_clocks),
+	.critical_clk_en = critical_clk_list,
+	.num_critical_clk = ARRAY_SIZE(critical_clk_list),
 };
 
 static const struct of_device_id disp_cc_sm6150_match_table[] = {
@@ -902,11 +894,21 @@ static int disp_cc_sm6150_probe(struct platform_device *pdev)
 
 	clk_alpha_pll_configure(&disp_cc_pll0, regmap, disp_cc_pll0.config);
 
+	/*
+	 * Keep clocks always enabled:
+	 *	disp_cc_xo_clk
+	 */
+	regmap_update_bits(regmap, 0x6054, BIT(0), BIT(0));
+
 	ret = qcom_cc_really_probe(pdev, &disp_cc_sm6150_desc, regmap);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register DISP CC clocks\n");
 		return ret;
 	}
+
+	ret = register_qcom_clks_pm(pdev, false, &disp_cc_sm6150_desc);
+	if (ret)
+		dev_err(&pdev->dev, "DISP CC failed to register for pm ops\n");
 
 	dev_info(&pdev->dev, "Registered DISP CC clocks\n");
 

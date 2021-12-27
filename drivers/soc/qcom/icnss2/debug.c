@@ -421,6 +421,9 @@ static int icnss_stats_show_state(struct seq_file *s, struct icnss_priv *priv)
 			continue;
 		case ICNSS_SLATE_UP:
 			seq_puts(s, "ICNSS SLATE UP");
+			continue;
+		case ICNSS_LOW_POWER:
+			seq_puts(s, "ICNSS LOW POWER");
 		}
 
 		seq_printf(s, "UNKNOWN-%d", i);

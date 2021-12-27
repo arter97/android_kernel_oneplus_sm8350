@@ -607,6 +607,7 @@ struct mmc_host {
 
 #if defined(CONFIG_SDC_QTI)
 	bool			crash_on_err;
+	bool                    hiber_notifier;
 #endif
 	bool			deepsleep;
 

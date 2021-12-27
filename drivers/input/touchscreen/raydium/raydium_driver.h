@@ -232,7 +232,7 @@
 #define GESTURE_EN
 
 /* Enable FW update */
-/* #define FW_UPDATE_EN */
+#define FW_UPDATE_EN
 /* #define FW_MAPPING_EN */
 #define MSM_NEW_VER
 

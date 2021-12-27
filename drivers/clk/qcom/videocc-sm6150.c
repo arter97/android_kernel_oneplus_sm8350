@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/clk-provider.h>
@@ -15,6 +15,7 @@
 
 #include "clk-alpha-pll.h"
 #include "clk-branch.h"
+#include "clk-pm.h"
 #include "clk-rcg.h"
 #include "clk-regmap.h"
 #include "common.h"
@@ -261,20 +262,6 @@ static struct clk_branch video_cc_venus_ctl_core_clk = {
 	},
 };
 
-static struct clk_branch video_cc_xo_clk = {
-	.halt_reg = 0xab8,
-	.halt_check = BRANCH_HALT,
-	.clkr = {
-		.enable_reg = 0xab8,
-		.enable_mask = BIT(0),
-		.hw.init = &(struct clk_init_data){
-			.name = "video_cc_xo_clk",
-			.flags = CLK_IS_CRITICAL,
-			.ops = &clk_branch2_ops,
-		},
-	},
-};
-
 static struct clk_regmap *video_cc_sm6150_clocks[] = {
 	[VIDEO_CC_SLEEP_CLK] = &video_cc_sleep_clk.clkr,
 	[VIDEO_CC_SLEEP_CLK_SRC] = &video_cc_sleep_clk_src.clkr,
@@ -284,7 +271,6 @@ static struct clk_regmap *video_cc_sm6150_clocks[] = {
 	[VIDEO_CC_VENUS_CLK_SRC] = &video_cc_venus_clk_src.clkr,
 	[VIDEO_CC_VENUS_CTL_AXI_CLK] = &video_cc_venus_ctl_axi_clk.clkr,
 	[VIDEO_CC_VENUS_CTL_CORE_CLK] = &video_cc_venus_ctl_core_clk.clkr,
-	[VIDEO_CC_XO_CLK] = &video_cc_xo_clk.clkr,
 	[VIDEO_PLL0] = &video_pll0.clkr,
 };
 
@@ -296,10 +282,16 @@ static const struct regmap_config video_cc_sm6150_regmap_config = {
 	.fast_io = true,
 };
 
-static const struct qcom_cc_desc video_cc_sm6150_desc = {
+static struct critical_clk_offset critical_clk_list[] = {
+	{ .offset = 0xab8, .mask = BIT(0) },
+};
+
+static struct qcom_cc_desc video_cc_sm6150_desc = {
 	.config = &video_cc_sm6150_regmap_config,
 	.clks = video_cc_sm6150_clocks,
 	.num_clks = ARRAY_SIZE(video_cc_sm6150_clocks),
+	.critical_clk_en = critical_clk_list,
+	.num_critical_clk = ARRAY_SIZE(critical_clk_list),
 };
 
 static const struct of_device_id video_cc_sm6150_match_table[] = {
@@ -343,11 +335,21 @@ static int video_cc_sm6150_probe(struct platform_device *pdev)
 
 	clk_alpha_pll_configure(&video_pll0, regmap, video_pll0.config);
 
+	/*
+	 * Keep clocks always enabled:
+	 *	video_cc_xo_clk
+	 */
+	regmap_update_bits(regmap, 0xab8, BIT(0), BIT(0));
+
 	ret = qcom_cc_really_probe(pdev, &video_cc_sm6150_desc, regmap);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register VIDEO CC clocks\n");
 		return ret;
 	}
+
+	ret = register_qcom_clks_pm(pdev, false, &video_cc_sm6150_desc);
+	if (ret)
+		dev_err(&pdev->dev, "VIDEO CC failed to register for pm ops\n");
 
 	dev_info(&pdev->dev, "Registered VIDEO CC clocks\n");
 

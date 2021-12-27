@@ -7,7 +7,7 @@
 
 #include "hab_ghs_os.h"
 
-#define GIPC_RECV_BUFF_SIZE_BYTES   (48*1024)
+#define GIPC_RECV_BUFF_SIZE_BYTES   (256*1024)
 
 struct ghs_vdev {
 	int be;

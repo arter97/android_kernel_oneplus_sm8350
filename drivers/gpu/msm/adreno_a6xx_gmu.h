@@ -151,6 +151,8 @@ enum {
  * @cx_gdsc: CX headswitch that controls power of GMU and
 		subsystem peripherals
  * @gx_gdsc: GX headswitch that controls power of GPU subsystem
+ * @gx_gdsc_parent: Pointer to the GX domain parent supply
+ * @gx_gdsc_parent_min_corner: Minimum supply voltage for GX parent
  * @clks: GPU subsystem clocks required for GMU functionality
  * @wakeup_pwrlevel: GPU wake up power/DCVS level in case different
  *		than default power level
@@ -176,6 +178,10 @@ struct a6xx_gmu_device {
 	/** @pwrlevels: Array of GMU power levels */
 	struct regulator *cx_gdsc;
 	struct regulator *gx_gdsc;
+	/** @gx_gdsc_parent: Pointer to the GX domain parent supply */
+	struct regulator *gx_gdsc_parent;
+	/** @gx_gdsc_parent_min_corner: Minimum supply voltage for GX parent */
+	u32 gx_gdsc_parent_min_corner;
 	struct clk_bulk_data *clks;
 	/** @num_clks: Number of entries in the @clks array */
 	int num_clks;
