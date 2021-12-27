@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
  */
 #include "hab.h"
 #include "hab_ghs.h"
@@ -15,13 +15,13 @@ int physical_channel_read(struct physical_channel *pchan,
 	if (dev->read_size < read_size + sizeof(struct hab_header)) {
 		pr_warn("read %zd is less than requested %zd plus header %zd\n",
 			dev->read_size, read_size, sizeof(struct hab_header));
-		read_size = dev->read_size;
+		read_size = 0;
+	} else {
+		/* always skip the header */
+		memcpy(payload, (unsigned char *)dev->read_data +
+			sizeof(struct hab_header) + dev->read_offset, read_size);
+		dev->read_offset += read_size;
 	}
-
-	/* always skip the header */
-	memcpy(payload, (unsigned char *)dev->read_data +
-		sizeof(struct hab_header) + dev->read_offset, read_size);
-	dev->read_offset += read_size;
 
 	return read_size;
 }

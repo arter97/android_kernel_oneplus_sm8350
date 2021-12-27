@@ -168,6 +168,16 @@ static int hab_receive_create_export_ack(struct physical_channel *pchan,
 		return -EINVAL;
 	}
 
+	/*
+	 * If the hab version on remote side is different with local side,
+	 * the size of the ack structure may differ. Under this circumstance,
+	 * the sizebytes is still trusted. Thus, we need to read it out and
+	 * drop the mismatched ack message from channel.
+	 * Dropping such message could avoid the [payload][header][payload]
+	 * data layout which will make the whole channel unusable.
+	 * But for security reason, we cannot perform it when sizebytes is
+	 * larger than expected.
+	 */
 	if (physical_channel_read(pchan,
 		&ack_recvd->ack,
 		sizebytes) != sizebytes) {
@@ -175,9 +185,15 @@ static int hab_receive_create_export_ack(struct physical_channel *pchan,
 		return -EIO;
 	}
 
-	hab_spin_lock(&ctx->expq_lock, irqs_disabled);
-	list_add_tail(&ack_recvd->node, &ctx->exp_rxq);
-	hab_spin_unlock(&ctx->expq_lock, irqs_disabled);
+	/* add ack_recvd node into rx queue only if the sizebytes is expected */
+	if (sizeof(ack_recvd->ack) == sizebytes) {
+		hab_spin_lock(&ctx->expq_lock, irqs_disabled);
+		list_add_tail(&ack_recvd->node, &ctx->exp_rxq);
+		hab_spin_unlock(&ctx->expq_lock, irqs_disabled);
+	} else {
+		kfree(ack_recvd);
+		return -EINVAL;
+	}
 
 	return 0;
 }
