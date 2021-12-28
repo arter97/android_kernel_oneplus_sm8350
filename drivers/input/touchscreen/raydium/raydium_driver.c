@@ -152,6 +152,14 @@ static int raydium_gpio_configure(bool on)
 				goto err_irq_gpio_req;
 			}
 
+			i32_err = gpio_direction_output(g_raydium_ts->rst_gpio, 0);
+			msleep(RAYDIUM_RESET_INTERVAL_10MSEC);
+			if (i32_err) {
+				LOGD(LOG_ERR,
+				     "[touch]set_direction for rst gpio failed\n");
+				goto err_rst_gpio_dir;
+			}
+
 			i32_err = gpio_direction_output(g_raydium_ts->rst_gpio, 1);
 			if (i32_err) {
 				LOGD(LOG_ERR,
@@ -862,7 +870,7 @@ static int raydium_create_sysfs(struct i2c_client *client)
 		sysfs_remove_group(&client->dev.kobj, &raydium_attr_group);
 		ret = -EIO;
 	} else {
-		LOGD(LOG_INFO, "[touch]create raydium sysfs attr_group successful\n");
+		LOGD(LOG_DEBUG, "[touch]create raydium sysfs attr_group successful\n");
 	}
 	return ret;
 }
@@ -962,7 +970,7 @@ static int raydium_touch_report(unsigned char *p_u8_buf,
 					gst_slot[u8_j].pt_id = u8_pt_id;
 					gst_slot[u8_j].need_update = 1;
 					gst_slot[u8_j].pt_report_offset = u8_i;
-					LOGD(LOG_INFO, "[touch]x:%d,y:%d\n",
+					LOGD(LOG_DEBUG, "[touch]x:%d,y:%d\n",
 					     p_u8_buf[POS_X_L + u8_offset] |
 					     p_u8_buf[POS_X_H + u8_offset] << 8,
 					     p_u8_buf[POS_Y_L + u8_offset] |
@@ -1124,7 +1132,7 @@ int raydium_read_touchdata(unsigned char *p_u8_tp_status,  unsigned char *p_u8_b
 			LOGD(LOG_ERR, "[touch]%s: write data failed: %d\n", __func__, i32_ret);
 			goto exit_error;
 		}
-		LOGD(LOG_WARNING, "[touch]%s -> report not updated.\n", __func__);
+		LOGD(LOG_DEBUG, "[touch]%s -> report not updated.\n", __func__);
 		goto exit_error;
 	}
 	u8_seq_no = p_u8_tp_status[POS_SEQ];
@@ -1285,7 +1293,7 @@ static irqreturn_t raydium_ts_interrupt(int irq, void *dev_id)
 			}
 			mutex_unlock(&g_raydium_ts->lock);
 
-			LOGD(LOG_WARNING, "[touch]work_pending\n");
+			LOGD(LOG_DEBUG, "[touch]work_pending\n");
 		}
 	}
 	return IRQ_HANDLED;
@@ -1322,7 +1330,7 @@ static int raydium_check_i2c_ready(unsigned short *u16_i2c_data)
 
 	*u16_i2c_data = u8_buf[3] << 8 | u8_buf[2];
 
-	LOGD(LOG_INFO, "[touch]RAD check I2C : 0x%02X%02X\n", u8_buf[3], u8_buf[2]);
+	LOGD(LOG_DEBUG, "[touch]RAD check I2C : 0x%02X%02X\n", u8_buf[3], u8_buf[2]);
 
 exit_error:
 	mutex_unlock(&g_raydium_ts->lock);
@@ -1477,9 +1485,9 @@ static int raydium_ts_open(struct input_dev *input_dev)
 {
 	//int i32_ret = 0;
 
-	LOGD(LOG_INFO, "[touch]%s()+\n", __func__);
+	LOGD(LOG_DEBUG, "[touch]%s()+\n", __func__);
 
-	LOGD(LOG_INFO, "[touch]ts->blank:%x\n", g_raydium_ts->blank);
+	LOGD(LOG_DEBUG, "[touch]ts->blank:%x\n", g_raydium_ts->blank);
 
 	if (g_raydium_ts->is_sleep == 1) {
 		mutex_lock(&g_raydium_ts->lock);
@@ -1825,7 +1833,7 @@ static int raydium_set_resolution(void)
 	u32_x = u8_buf[3] << 8 | u8_buf[2];
 	u32_y = u8_buf[1] << 8 | u8_buf[0];
 
-	LOGD(LOG_INFO, "[touch]RAD display info x:%d, y:%d\n", u32_x, u32_y);
+	LOGD(LOG_DEBUG, "[touch]RAD display info x:%d, y:%d\n", u32_x, u32_y);
 
 	if (u32_x > 100 && u32_y > 100 &&
 	    u32_x < 600 && u32_y < 600) {
@@ -2114,8 +2122,8 @@ static int raydium_ts_probe(struct i2c_client *client,
 
 	g_raydium_ts->workqueue = create_singlethread_workqueue("raydium_ts");
 	/*irq_gpio = 13 irqflags = 108*/
-	LOGD(LOG_INFO, "[touch]pdata irq : %d\n", g_raydium_ts->irq_gpio);
-	LOGD(LOG_INFO, "[touch]client irq : %d, pdata flags : %d\n",
+	LOGD(LOG_DEBUG, "[touch]pdata irq : %d\n", g_raydium_ts->irq_gpio);
+	LOGD(LOG_DEBUG, "[touch]client irq : %d, pdata flags : %d\n",
 	     client->irq, pdata->irqflags);
 
 	g_raydium_ts->irq = gpio_to_irq(pdata->irq_gpio);
@@ -2135,7 +2143,7 @@ static int raydium_ts_probe(struct i2c_client *client,
 
 	/*raydium_irq_control(ts, ENABLE);*/
 
-	LOGD(LOG_INFO, "[touch]RAD Touch driver ver :0x%X\n", g_u32_driver_version);
+	LOGD(LOG_DEBUG, "[touch]RAD Touch driver ver :0x%X\n", g_u32_driver_version);
 
 	/*fw update check*/
 	ret = raydium_fw_update_check(u16_i2c_data);
