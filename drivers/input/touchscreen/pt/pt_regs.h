@@ -143,6 +143,8 @@
 #define TT7XXX_EXAMPLE
 #endif
 
+#define TOUCH_TO_WAKE_POWER_FEATURE_WORK_AROUND
+
 /*
  * The largest PIP message is the PIP2 FILE_WRITE which has:
  *     2 byte register
@@ -175,7 +177,7 @@ enum PT_DEBUG_LEVEL {
 	DL_DEBUG	= 4,
 	DL_MAX
 };
-#define PT_INITIAL_DEBUG_LEVEL DL_WARN
+#define PT_INITIAL_DEBUG_LEVEL DL_MAX
 
 /* Startup DUT enum status bitmask */
 enum PT_STARTUP_STATUS {
@@ -1103,13 +1105,17 @@ enum pt_atten_type {
 };
 
 enum pt_sleep_state {
+	SS_SLEEP_NONE,
 	SS_SLEEP_OFF,
 	SS_SLEEP_ON,
 	SS_SLEEPING,
 	SS_WAKING,
+	SS_EASY_WAKING_ON,
+	SS_EASY_WAKING_OFF,
 };
 
 enum pt_fb_state {
+	FB_NONE,
 	FB_ON,
 	FB_OFF,
 };
@@ -1440,6 +1446,11 @@ struct pt_core_data {
 	struct list_head module_list; /* List of probed modules */
 	char core_id[20];
 	struct device *dev;
+	struct workqueue_struct *pt_workqueue;
+	struct work_struct	resume_offload_work;
+	struct work_struct	suspend_work;
+	struct work_struct	resume_work;
+
 	struct list_head atten_list[PT_ATTEN_NUM_ATTEN];
 	struct list_head param_list;
 	struct mutex module_list_lock;
@@ -1467,7 +1478,6 @@ struct pt_core_data {
 	bool irq_wake;
 	bool irq_disabled;
 	bool hw_detected;
-	bool runtime;
 	u8 easy_wakeup_gesture;
 #ifdef EASYWAKE_TSG6
 	u8 gesture_id;
