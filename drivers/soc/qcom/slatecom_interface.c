@@ -572,6 +572,44 @@ static long slate_com_ioctl(struct file *filp,
 	return ret;
 }
 
+static ssize_t slatecom_char_write(struct file *f, const char __user *buf,
+				size_t count, loff_t *off)
+{
+	unsigned char qcli_cmnd;
+	uint32_t opcode;
+	int ret = 0;
+	struct slatedaemon_priv *dev = container_of(slatecom_intf_drv,
+					struct slatedaemon_priv,
+					lhndl);
+
+	if (copy_from_user(&qcli_cmnd, buf, sizeof(unsigned char)))
+		return -EFAULT;
+
+	pr_debug("%s: QCLI command arg = %c\n", __func__, qcli_cmnd);
+
+	switch (qcli_cmnd) {
+	case '0':
+		opcode = GMI_MGR_DISABLE_QCLI;
+		ret = slatecom_tx_msg(dev, &opcode, sizeof(opcode));
+		if (ret < 0)
+			pr_err("MSM QCLI Disable cmd failed\n");
+		break;
+	case '1':
+		opcode = GMI_MGR_ENABLE_QCLI;
+		ret = slatecom_tx_msg(dev, &opcode, sizeof(opcode));
+		if (ret < 0)
+			pr_err("MSM QCLI Enable cmd failed\n");
+		break;
+
+	default:
+		pr_err("MSM QCLI Invalid Option\n");
+		break;
+	}
+
+	*off += count;
+	return count;
+}
+
 static int slatecom_char_close(struct inode *inode, struct file *file)
 {
 	int ret;
@@ -687,6 +725,7 @@ static struct platform_driver slate_daemon_driver = {
 static const struct file_operations fops = {
 	.owner          = THIS_MODULE,
 	.open           = slatecom_char_open,
+	.write          = slatecom_char_write,
 	.release        = slatecom_char_close,
 	.unlocked_ioctl = slate_com_ioctl,
 };
