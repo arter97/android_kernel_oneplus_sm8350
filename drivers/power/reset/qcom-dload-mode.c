@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright (c) 2020 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
  */
-
 #include <linux/delay.h>
 #include <linux/err.h>
 #include <linux/init.h>
@@ -15,6 +14,9 @@
 #include <linux/pm.h>
 #include <linux/qcom_scm.h>
 #include <soc/qcom/minidump.h>
+#ifdef CONFIG_HIBERNATION
+#include <linux/syscore_ops.h>
+#endif
 
 enum qcom_download_dest {
 	QCOM_DOWNLOAD_DEST_UNKNOWN = -1,
@@ -239,6 +241,17 @@ static struct attribute_group qcom_dload_attr_group = {
 	.attrs = qcom_dload_attrs,
 };
 
+#ifdef CONFIG_HIBERNATION
+static void qcom_dload_syscore_resume(void)
+{
+	msm_enable_dump_mode(enable_dump);
+}
+
+static struct syscore_ops qcom_dload_syscore_ops = {
+	.resume = qcom_dload_syscore_resume,
+};
+#endif
+
 static int qcom_dload_panic(struct notifier_block *this, unsigned long event,
 			      void *ptr)
 {
@@ -357,6 +370,9 @@ static int qcom_dload_probe(struct platform_device *pdev)
 	poweroff->reboot_nb.notifier_call = qcom_dload_reboot;
 	poweroff->reboot_nb.priority = 255;
 	register_reboot_notifier(&poweroff->reboot_nb);
+#ifdef CONFIG_HIBERNATION
+	register_syscore_ops(&qcom_dload_syscore_ops);
+#endif
 
 	platform_set_drvdata(pdev, poweroff);
 
