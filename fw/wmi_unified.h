@@ -117,6 +117,18 @@ extern "C" {
     (_var) |= (((_val) & ((1 << (_num_bits)) - 1)) << (_index));    \
     } while (0)
 
+#define WMI_APPEND_TWO_SET_BITS(var, lsb_index, lsb_num_bits, msb_index, msb_num_bits, val) \
+    do { \
+        WMI_SET_BITS(var, lsb_index, lsb_num_bits, val); \
+        WMI_SET_BITS(var, msb_index, msb_num_bits, (val >> lsb_num_bits)); \
+    } while(0)
+
+#define WMI_APPEND_TWO_GET_BITS(var, lsb_index, lsb_num_bits, msb_index, msb_num_bits, val) \
+    do { \
+        (var) = WMI_GET_BITS(val, lsb_index, lsb_num_bits); \
+        (var) |= (WMI_GET_BITS(val, msb_index, msb_num_bits) << lsb_num_bits); \
+    } while(0)
+
 /**
  * A packed array is an array where each entry in the array is less than
  * or equal to 16 bits, and the entries are stuffed into an A_UINT32 array.
@@ -272,6 +284,7 @@ typedef enum {
     WMI_GRP_LATENCY,        /* 0x47 TID/AC level latency config */
     WMI_GRP_MLO,            /* 0x48 MLO(Multiple Link Operation) management */
     WMI_GRP_SAWF,           /* 0x49 SAWF (Service Aware WiFi) */
+    WMI_GRP_QUIET_OFL,      /* 0x4a Quiet offloads */
 } WMI_GRP_ID;
 
 #define WMI_CMD_GRP_START_ID(grp_id) (((grp_id) << 12) | 0x1)
@@ -2160,6 +2173,9 @@ typedef enum {
     WMI_MLO_SETUP_COMPLETE_EVENTID,
     /* Response event for MLO teardown cmd */
     WMI_MLO_TEARDOWN_COMPLETE_EVENTID,
+
+    /* WMI event specific to Quiet handling */
+    WMI_QUIET_HANDLING_EVENTID = WMI_EVT_GRP_START_ID(WMI_GRP_QUIET_OFL),
 } WMI_EVT_ID;
 
 /* defines for OEM message sub-types */
@@ -2883,8 +2899,9 @@ typedef struct {
     /*
      * Extended FW build version information:
      * bits  9:0  -> HDL version info
-     * bits 27:10 -> reserved
-     * bits 31:28 -> CRM sub ID
+     * bits 12:10 -> CRM sub ID MSbs (refer to WMI_SVC_RDY_CRM_SUB_ID_GET/SET)
+     * bits 27:13 -> reserved
+     * bits 31:28 -> CRM sub ID LSbs (refer to WMI_SVC_RDY_CRM_SUB_ID_GET/SET)
      */
     A_UINT32 fw_build_vers_ext;
     /* max_nlo_ssids - dynamically negotiated maximum number of SSIDS for NLO
@@ -2918,6 +2935,27 @@ typedef struct {
      *   WMI_CHAN_RF_CHARACTERIZATION_INFO wmi_chan_rf_characterization_info[];
      */
 } wmi_service_ready_ext_event_fixed_param;
+
+#define WMI_SVC_RDY_CRM_SUB_ID_LSBS_INDEX    28
+#define WMI_SVC_RDY_CRM_SUB_ID_LSBS_NUM_BITS 4
+#define WMI_SVC_RDY_CRM_SUB_ID_MSBS_INDEX    10
+#define WMI_SVC_RDY_CRM_SUB_ID_MSBS_NUM_BITS 3
+#define WMI_SVC_RDY_CRM_SUB_ID_GET(var, val) \
+    WMI_APPEND_TWO_GET_BITS( \
+        var, \
+        WMI_SVC_RDY_CRM_SUB_ID_LSBS_INDEX, \
+        WMI_SVC_RDY_CRM_SUB_ID_LSBS_NUM_BITS, \
+        WMI_SVC_RDY_CRM_SUB_ID_MSBS_INDEX, \
+        WMI_SVC_RDY_CRM_SUB_ID_MSBS_NUM_BITS, \
+        val)
+#define WMI_SVC_RDY_CRM_SUB_ID_SET(var, val) \
+    WMI_APPEND_TWO_SET_BITS( \
+        var, \
+        WMI_SVC_RDY_CRM_SUB_ID_LSBS_INDEX, \
+        WMI_SVC_RDY_CRM_SUB_ID_LSBS_NUM_BITS, \
+        WMI_SVC_RDY_CRM_SUB_ID_MSBS_INDEX, \
+        WMI_SVC_RDY_CRM_SUB_ID_MSBS_NUM_BITS, \
+        val)
 
 /*
  * regdb version GET/SET APIs
@@ -5923,6 +5961,9 @@ typedef struct {
 #define WMI_TX_SEND_PARAM_BEAMFORM_GET(tx_param_dword1) WMI_GET_BITS(tx_param_dword1, 22, 1)
 #define WMI_TX_SEND_PARAM_BEAMFORM_SET(tx_param_dword1, value) WMI_SET_BITS(tx_param_dword1, 22, 1, value)
 
+#define WMI_TX_SEND_PARAM_RETRY_LIMIT_EXT_GET(tx_param_dword1) WMI_GET_BITS(tx_param_dword1, 23, 3)
+#define WMI_TX_SEND_PARAM_RETRY_LIMIT_EXT_SET(tx_param_dword1, value) WMI_SET_BITS(tx_param_dword1, 23, 3, value)
+
 
 /* TX_SEND flags:
  * Bit 0: set wrong txkey
@@ -6069,7 +6110,13 @@ typedef struct {
                 /* Enables Beamforming when bit is set */
                 en_beamforming: 1,
 
-                reserved1_31_23: 9;
+                /*
+                 * Extra 3 bits of retry limit defined in tx_param_dword0,
+                 * to allow maximum 127 retries for specific frames.
+                 */
+                retry_limit_ext: 3,
+
+                reserved1_31_26: 6;
         };
         A_UINT32 tx_param_dword1;
     };
@@ -6818,6 +6865,39 @@ typedef struct {
      */
     A_UINT32 cswrap_ie_extended[5];
 } wmi_csa_event_fixed_param;
+
+#define WMI_GET_MLD_MAC_ADDRESS_PRESENT(mld_mac_address_present) \
+    WMI_GET_BITS(mld_mac_address_present, 0, 1)
+#define WMI_SET_MLD_MAC_ADDRESS_PRESENT(mld_mac_address_present, value) \
+    WMI_SET_BITS(mld_mac_address_present, 0, 1, value)
+
+#define WMI_GET_LINK_ADDRESS_PRESENT(link_mac_address_present) \
+    WMI_GET_BITS(link_mac_address_present, 1, 1)
+#define WMI_SET_LINK_ADDRESS_PRESENT(link_mac_address_present, value) \
+    WMI_SET_BITS(link_mac_address_present, 1, 1, value)
+
+#define WMI_GET_LINK_ID_PRESENT(link_id_present) \
+    WMI_GET_BITS(link_id_present, 2, 1)
+#define WMI_SET_LINK_ID_PRESENT(link_id_present, value) \
+    WMI_SET_BITS(link_id_present, 2, 1, value)
+
+typedef enum {
+    WMI_QUIET_EVENT_START = 0,
+    WMI_QUIET_EVENT_STOP  = 1,
+} WMI_QUIET_EVENT_FLAG;
+
+/* WMI Quiet receive event from beacon frame */
+typedef struct {
+    A_UINT32 tlv_header; /* TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_quiet_event_fixed_param */
+    wmi_mac_addr mld_mac_address; /* AP mld mac address */
+    wmi_mac_addr link_mac_address; /* AP link mac address */
+    A_UINT32 linkid; /* Link id associated with AP */
+    A_UINT32 mld_mac_address_present :1,
+             link_mac_address_present :1,
+             linkid_present :1,
+             reserved :29;
+    A_UINT32 quiet_status; /* WMI_QUIET_EVENT_FLAG: quiet start or stop */
+} wmi_quiet_event_fixed_param;
 
 typedef enum {
     WAL_PEER_MCAST2UCAST_DISABLED    = 0,
@@ -8864,6 +8944,15 @@ typedef struct {
 } wmi_debug_mesg_fw_data_stall_param;
 
 typedef struct {
+    /** TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_debug_mesg_fw_cal_failure_param */
+    A_UINT32 tlv_header;
+    /* wmi_ctrl_path_stats_cal_type_ids enum defines possible cal type IDs */
+    A_UINT32 cal_type;
+    /* wmi_cal_failure_reason_code enum defines possible failure reason codes */
+    A_UINT32 cal_failure_reason_code;
+} wmi_debug_mesg_fw_cal_failure_param;
+
+typedef struct {
     A_UINT32 tlv_header; /** TLV tag and len; tag equals WMITLV_TAG_STRUC_wmi_debug_mesg_flush_complete_fixed_param*/
     A_UINT32 reserved0; /** placeholder for future */
 } wmi_debug_mesg_flush_complete_fixed_param;
@@ -10205,6 +10294,24 @@ typedef struct {
     A_UINT32 wl_tx_req_cntr;
 } wmi_ctrl_path_btcoex_stats_struct;
 
+/* Send diag event based on trigger reasons */
+typedef enum {
+    WMI_DIAG_TRIGGER_MIN = 0x1000,
+
+    WMI_DIAG_TRIGGER_HOST_REQUESTED = WMI_DIAG_TRIGGER_MIN,
+    WMI_DIAG_TRIGGER_BEACON_MISS,
+    WMI_DIAG_TRIGGER_SCAN_FAIL,
+    WMI_DIAG_TRIGGER_DISCONNECT,
+    WMI_DIAG_TRIGGER_ENTER_BMPS_IMPS_FAIL,
+    WMI_DIAG_TRIGGER_BUFFER_FULL,
+    WMI_DIAG_TRIGGER_DATA_STALL,
+    WMI_DIAG_TRIGGER_TIMER_TRIGGERED,
+    WMI_DIAG_TRIGGER_REMOTE_COPY,
+    WMI_DIAG_TRIGGER_CAL_FAILURE,
+
+    WMI_DIAG_TRIGGER_MAX,
+} wmi_diag_trigger_e;
+
 typedef enum {
     WMI_CTRL_PATH_STATS_ARENA_HRAM,
     WMI_CTRL_PATH_STATS_ARENA_HCRAM,
@@ -10295,6 +10402,37 @@ typedef struct {
     A_UINT32 rx_bytes_per_sp;   /* Average rx bytes per SP */
 } wmi_ctrl_path_twt_stats_struct;
 
+#define BMISS_STATS_RSSI_SAMPLE_MAX 10
+typedef struct {
+    A_INT32  rssi;        /* dBm units */
+    A_UINT32 sample_time; /* timestamp from host/target shared qtimer */
+} bmiss_stats_rssi_samples_t;
+
+typedef struct {
+    A_UINT32 num_of_bmiss_sequences; /* number of consecutive bmiss > 2 */
+    A_UINT32 num_bitmask_wraparound; /* number of times bitmask wrapped around */
+    A_UINT32 num_bcn_hist_lost;      /* number of beacons history we have lost */
+} consecutive_bmiss_stats_t;
+
+typedef struct {
+    /** TLV tag and len; tag equals
+     *  WMITLV_TAG_STRUC_wmi_ctrl_path_bmiss_stats_struct */
+    A_UINT32 tlv_header;
+    A_UINT32 num_pre_bmiss;                     /* number of pre_bmiss */
+    bmiss_stats_rssi_samples_t  rssi_samples[BMISS_STATS_RSSI_SAMPLE_MAX];  /* RSSI samples at pre bmiss*/
+    /* rssi_sample_curr_index:
+     * index of the element in rssi_samples array containing the oldest sample
+     */
+    A_UINT32 rssi_sample_curr_index;
+    A_UINT32 num_first_bmiss;                   /* number of first bmiss */
+    A_UINT32 num_final_bmiss;                   /* number of final bmiss */
+    A_UINT32 num_null_sent_in_first_bmiss;      /* number of null frames sent in first bmiss */
+    A_UINT32 num_null_failed_in_first_bmiss;    /* number of failed null frames in first bmiss */
+    A_UINT32 num_null_sent_in_final_bmiss;      /* number of null frames sent in final bmiss */
+    A_UINT32 num_null_failed_in_final_bmiss;    /* number of failed null frames in final bmiss */
+    consecutive_bmiss_stats_t cons_bmiss_stats;
+} wmi_ctrl_path_bmiss_stats_struct;
+
 typedef enum {
     WMI_CTRL_PATH_STATS_CAL_PROFILE_COLD_BOOT_CAL       = 0x0,
     WMI_CTRL_PATH_STATS_CAL_PROFILE_FULL_CHAN_SWITCH    = 0x1,
@@ -10350,6 +10488,31 @@ typedef enum {
     /* add new periodic cal types above this line */
     WMI_CTRL_PATH_STATS_PERIODIC_CAL_TYPE_INVALID        = 0xFF
 } wmi_ctrl_path_stats_periodic_cal_type_ids;
+
+typedef enum {
+    WMI_CAL_FAILURE_REASON_ERROR_MIN = 0x0,
+    /* DPD failure reasons */
+    WMI_CAL_FAILURE_REASON_DPD_NMSE_FAIL = 0x1,
+    WMI_CAL_FAILURE_REASON_DPD_SQ_FAIL = 0x2,
+    WMI_CAL_FAILURE_REASON_DPD_HW_FAIL = 0x3,
+    WMI_CAL_FAILURE_REASON_DPD_EXCESSIVE_RETRY = 0x4,
+    /* RXDCO failure reasons */
+    WMI_CAL_FAILURE_REASON_RXDCO_HW_CAL_EXCESSIVE_RETRY = 0x5,
+    WMI_CAL_FAILURE_REASON_RXDCO_INVALID_HW_CAL = 0x6,
+    WMI_CAL_FAILURE_REASON_RXDCO_HW_AND_SWPP_FAILURE = 0x7,
+    /* ADC failure reasons */
+    WMI_CAL_FAILURE_REASON_TIADC_INVALID_BAND = 0x8,
+    /* BWFILTER failure reasons */
+    WMI_CAL_FAILURE_REASON_TXBBF = 0x9,
+    WMI_CAL_FAILURE_REASON_RXBBF = 0xa,
+    /* PKDET failure reasons */
+    WMI_CAL_FAILURE_REASON_PKDET = 0xb,
+    /* COMBCAL failure reasons */
+    WMI_CAL_FAILURE_REASON_COMB = 0xc,
+
+    /* add new cal failure error reasons above this line */
+    WMI_CAL_FAILURE_REASON_ERROR_MAX = 0xff,
+} wmi_cal_failure_reason_code;
 
 /*
  * Used by some hosts to print names of cal profile, based on
@@ -10430,6 +10593,32 @@ static INLINE A_UINT8 *wmi_ctrl_path_periodic_cal_type_id_to_name(A_UINT32 perio
     }
 
     return (A_UINT8 *) "WMI_CTRL_PATH_STATS_PERIODIC_CAL_TYPE_UNKNOWN";
+}
+
+/*
+ * Used by some hosts to print names of cal failure reason code, based on
+ * wmi_ctrl_path_cal_failure_reason_codes values specified in cal fail event msg
+ */
+static INLINE A_UINT8 *wmi_cal_failure_reason_code_to_name(A_UINT32 cal_failure_reason_code)
+{
+    switch (cal_failure_reason_code)
+    {
+        WMI_RETURN_STRING(WMI_CAL_FAILURE_REASON_ERROR_MIN);
+        WMI_RETURN_STRING(WMI_CAL_FAILURE_REASON_DPD_NMSE_FAIL);
+        WMI_RETURN_STRING(WMI_CAL_FAILURE_REASON_DPD_SQ_FAIL);
+        WMI_RETURN_STRING(WMI_CAL_FAILURE_REASON_DPD_HW_FAIL);
+        WMI_RETURN_STRING(WMI_CAL_FAILURE_REASON_DPD_EXCESSIVE_RETRY);
+        WMI_RETURN_STRING(WMI_CAL_FAILURE_REASON_RXDCO_HW_CAL_EXCESSIVE_RETRY);
+        WMI_RETURN_STRING(WMI_CAL_FAILURE_REASON_RXDCO_INVALID_HW_CAL);
+        WMI_RETURN_STRING(WMI_CAL_FAILURE_REASON_RXDCO_HW_AND_SWPP_FAILURE);
+        WMI_RETURN_STRING(WMI_CAL_FAILURE_REASON_TIADC_INVALID_BAND);
+        WMI_RETURN_STRING(WMI_CAL_FAILURE_REASON_TXBBF);
+        WMI_RETURN_STRING(WMI_CAL_FAILURE_REASON_RXBBF);
+        WMI_RETURN_STRING(WMI_CAL_FAILURE_REASON_PKDET);
+        WMI_RETURN_STRING(WMI_CAL_FAILURE_REASON_COMB);
+    }
+
+    return (A_UINT8 *) "WMI_CAL_FAILURE_REASON_UNKNOWN";
 }
 
 typedef struct {
@@ -11057,6 +11246,8 @@ typedef struct {
 #define WMI_MLO_FLAGS_SET_LINK_INDEX_VALID(mlo_flags, value) WMI_SET_BITS(mlo_flags, 3, 1, value)
 #define WMI_MLO_FLAGS_GET_PEER_ID_VALID(mlo_flags)          WMI_GET_BITS(mlo_flags, 4, 1)
 #define WMI_MLO_FLAGS_SET_PEER_ID_VALID(mlo_flags, value)   WMI_SET_BITS(mlo_flags, 4, 1, value)
+#define WMI_MLO_FLAGS_GET_MCAST_VDEV(mlo_flags)             WMI_GET_BITS(mlo_flags, 5, 1)
+#define WMI_MLO_FLAGS_SET_MCAST_VDEV(mlo_flags, value)      WMI_SET_BITS(mlo_flags, 5, 1, value)
 
 /* this structure used for pass mlo flags*/
 typedef struct {
@@ -11067,7 +11258,8 @@ typedef struct {
                      mlo_primary_umac:1, /* indicate is the link on primary UMAC, WIN only flag */
                      mlo_logical_link_index_valid:1, /* indicate if the logial link index in wmi_peer_assoc_mlo_params is valid */
                      mlo_peer_id_valid:1, /* indicate if the mlo peer id in wmi_peer_assoc_mlo_params is valid */
-                     unused: 27;
+                     mlo_mcast_vdev:1, /* indicate this is the MLO mcast primary vdev */
+                     unused: 26;
         };
         A_UINT32 mlo_flags;
     };
@@ -13001,6 +13193,16 @@ typedef enum {
      *  the value of WMI_VDEV_PARAM_MAX_LI_OF_MODDTIM
      */
     WMI_VDEV_PARAM_MAX_LI_OF_MODDTIM_MS,     /* 0xAA */
+
+    /*
+     * Security config advertised in beacons
+     * bit 0: URNM_MFPR in RSNXE
+     * bit 1: MFPC in RSN CAP
+     * bit 2: MFPR in RSN CAP
+     * bit 31:3 Reserved
+     */
+    WMI_VDEV_PARAM_11AZ_SECURITY_CONFIG,    /* 0xAB */
+
 
     /*=== ADD NEW VDEV PARAM TYPES ABOVE THIS LINE ===
      * The below vdev param types are used for prototyping, and are
@@ -28096,6 +28298,7 @@ typedef enum {
     WMI_REQUEST_CTRL_PATH_DFS_CHANNEL_STAT  = 6,
     WMI_REQUEST_CTRL_PATH_AWGN_STAT         = 7,
     WMI_REQUEST_CTRL_PATH_BTCOEX_STAT       = 8,
+    WMI_REQUEST_CTRL_PATH_BMISS_STAT        = 9,
 } wmi_ctrl_path_stats_id;
 
 typedef enum {
