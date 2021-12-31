@@ -1800,9 +1800,9 @@ static struct bus_vectors *get_icc_paths(struct platform_device *pdev,
 
 	for (i = 0; i < host->num_paths; i++) {
 		vectors[i].src =
-				be32_to_cpu(vec_arr[(i*2)]);
+				be32_to_cpu(*(__be32 *)&vec_arr[(i*2)]);
 		vectors[i].dst =
-				be32_to_cpu(vec_arr[(i*2) + 1]);
+				be32_to_cpu(*(__be32 *)&vec_arr[(i*2) + 1]);
 	}
 
 	return vectors;
