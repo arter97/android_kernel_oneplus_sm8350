@@ -929,6 +929,9 @@ int dsi_ctrl_pixel_format_to_bpp(enum dsi_pixel_format dst_format)
 	case DSI_PIXEL_FORMAT_RGB888:
 		bpp = 24;
 		break;
+	case DSI_PIXEL_FORMAT_RGB101010:
+		bpp = 30;
+		break;
 	default:
 		bpp = 24;
 		break;
@@ -1592,7 +1595,8 @@ static int dsi_message_tx(struct dsi_ctrl *dsi_ctrl,
 	if (dsi_ctrl->dma_wait_queued)
 		dsi_ctrl_flush_cmd_dma_queue(dsi_ctrl);
 
-	if (!(*flags & DSI_CTRL_CMD_BROADCAST_MASTER))
+	if ((*flags & DSI_CTRL_CMD_BROADCAST) &&
+			(!(*flags & DSI_CTRL_CMD_BROADCAST_MASTER)))
 		dsi_ctrl_clear_slave_dma_status(dsi_ctrl, *flags);
 
 	if (*flags & DSI_CTRL_CMD_NON_EMBEDDED_MODE) {
