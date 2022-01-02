@@ -969,8 +969,6 @@ static int dsi_panel_update_backlight(struct dsi_panel *panel,
 			}
 		}
 
-		DSI_ERR("backlight = %d\n", bl_lvl);
-
 		if (dsi_panel_name == DSI_PANEL_SAMSUNG_AMB670YF01) {
 			if(bl_lvl >= PANEL_MAX_NOMAL_BRIGHTNESS)
 				bl_lvl = PANEL_MAX_NOMAL_BRIGHTNESS-1;
