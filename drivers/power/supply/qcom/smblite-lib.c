@@ -1428,19 +1428,67 @@ static int smblite_lib_dp_pulse(struct smb_charger *chg)
 	return rc;
 }
 
-#define HVDCP3_QUALIFICATION_UV (PM5100_MAX_HVDCP3_PULSES * \
-					(HVDCP3_STEP_SIZE_UV / 2))
+static int smblite_lib_force_vbus_voltage(struct smb_charger *chg, u8 val)
+{
+	int rc;
+
+	rc = smblite_lib_masked_write(chg, CMD_HVDCP_REG(chg->base), val, val);
+	if (rc < 0)
+		smblite_lib_err(chg, "Couldn't write to CMD_HVDCP_2_REG rc=%d\n",
+				rc);
+
+	return rc;
+}
+
+static bool is_boost_en(struct smb_charger *chg)
+{
+	int rc;
+	u8 stat = 0;
+
+	if (chg->subtype != PM5100)
+		return false;
+
+	rc = smblite_lib_read(chg, BOOST_BST_EN_REG(chg->base), &stat);
+	if (rc < 0)
+		smblite_lib_err(chg, "Couldn't read BOOST_BST_EN_REG rc=%d\n",
+				rc);
+
+	return (stat & DCIN_BST_EN_BIT);
+}
+
+#define HVDCP3_QUALIFICATION_UV 300000
 static int smblite_lib_hvdcp3_force_max_vbus(struct smb_charger *chg)
 {
 	union power_supply_propval pval = {0, };
-	int cnt = 0, rc, prev_vbus;
-	bool qc3_detected = false;
+	int cnt = 0, rc = 0, prev_vbus;
+	bool boost_en;
+
+	mutex_lock(&chg->dpdm_pulse_lock);
+
+	boost_en = is_boost_en(chg);
+
+	if (boost_en || chg->hvdcp3_detected) {
+		smblite_lib_dbg(chg, PR_MISC,
+			"HVDCP3 : Ignore VBUS increment due to boost_en=%s, hvdcp3_detected=%s\n",
+			(boost_en ? "True" : "False"),
+			(chg->hvdcp3_detected ? "True" : "False"));
+		goto failure;
+	}
+
+	/* Move adapter to IDLE state (continuous mode). */
+	rc = smblite_lib_force_vbus_voltage(chg, IDLE_BIT);
+	if (rc < 0)
+		smblite_lib_dbg(chg, PR_MISC,
+				"HVDCP3 : Failed to reset adapter to IDLE state\n");
+
+	/* Wait for 100ms for adapter to move to idle mode */
+	msleep(100);
 
 	rc = smblite_lib_get_prop_usb_voltage_now(chg, &pval);
 	if (rc < 0) {
 		smblite_lib_err(chg, "Couldn't read voltage_now rc=%d\n",
 		rc);
-		return rc;
+		goto failure;
 	}
 
 	prev_vbus = pval.intval;
@@ -1455,32 +1503,39 @@ static int smblite_lib_hvdcp3_force_max_vbus(struct smb_charger *chg)
 		msleep(100);
 	}
 
+	if (is_boost_en(chg)) {
+		smblite_lib_dbg(chg, PR_MISC,
+				"HVDCP3 : Failed to increase vbus due to boost_en\n");
+		goto failure;
+	}
+
+	/* Wait for 200ms for vbus to settle before reading it. */
+	msleep(200);
 	rc = smblite_lib_get_prop_usb_voltage_now(chg, &pval);
 	if (rc < 0) {
 		smblite_lib_err(chg, "Couldn't read voltage_now rc=%d\n",
 			rc);
-		return rc;
+		goto failure;
 	}
 
 	/* Check if voltage incremented. (i.e if QC3 ) */
 	if (pval.intval >= (prev_vbus + HVDCP3_QUALIFICATION_UV))
-		qc3_detected = true;
+		chg->hvdcp3_detected = true;
 
 	smblite_lib_dbg(chg, PR_MISC, "HVDCP3 : detected=%s, prev_vbus=%d, vbus_now=%d\n",
-			(qc3_detected ? "True" : "False"), prev_vbus,
+			(chg->hvdcp3_detected ? "True" : "False"), prev_vbus,
 			pval.intval);
 
-	return qc3_detected;
-}
+failure:
+	if (!chg->hvdcp3_detected) {
+		/* Incase of failure during QC3 detection force 5V. */
+		rc = smblite_lib_force_vbus_voltage(chg, FORCE_5V_BIT);
+		if (rc < 0)
+			smblite_lib_dbg(chg, PR_MISC,
+					"HVDCP3 : Failed to move adapter vbus to 5V\n");
+	}
 
-static int smblite_lib_force_vbus_voltage(struct smb_charger *chg, u8 val)
-{
-	int rc;
-
-	rc = smblite_lib_masked_write(chg, CMD_HVDCP_REG(chg->base), val, val);
-	if (rc < 0)
-		smblite_lib_err(chg, "Couldn't write to CMD_HVDCP_2_REG rc=%d\n",
-				rc);
+	mutex_unlock(&chg->dpdm_pulse_lock);
 
 	return rc;
 }
@@ -1579,22 +1634,6 @@ static int poll_aicl_done(struct smb_charger *chg, int *settled_icl_ua)
 			*settled_icl_ua);
 
 	return 0;
-}
-
-static bool is_boost_en(struct smb_charger *chg)
-{
-	int rc;
-	u8 stat;
-
-	if (chg->subtype != PM5100)
-		return false;
-
-	rc = smblite_lib_read(chg, BOOST_BST_EN_REG(chg->base), &stat);
-	if (rc < 0)
-		smblite_lib_err(chg, "Couldn't read BOOST_BST_EN_REG rc=%d\n",
-				rc);
-
-	return (stat & DCIN_BST_EN_BIT);
 }
 
 #define BOOST_SS_TIMEOUT_COUNT 4
@@ -1725,6 +1764,7 @@ int smblite_lib_set_concurrent_config(struct smb_charger *chg, bool enable)
 			if (rc < 0)
 				smblite_lib_err(chg, "Failed to force vbus to 5V rc=%d\n",
 					rc);
+			chg->hvdcp3_detected = false;
 		}
 
 		/* Enable charger if already disabled */
@@ -1812,7 +1852,7 @@ int smblite_lib_set_concurrent_config(struct smb_charger *chg, bool enable)
 		 *			       effect with boost enabled.
 		 */
 		if ((apsd_status & QC_3P0_BIT) && usb_present && !boost_enabled)
-			chg->hvdcp3_detected = smblite_lib_hvdcp3_force_max_vbus(chg);
+			smblite_lib_hvdcp3_force_max_vbus(chg);
 
 		rc = smblite_lib_run_aicl(chg, RERUN_AICL);
 		if (rc < 0)
@@ -1907,9 +1947,17 @@ int smblite_lib_get_prop_usb_online(struct smb_charger *chg,
 int smblite_lib_get_usb_online(struct smb_charger *chg,
 			union power_supply_propval *val)
 {
-	int rc;
+	int rc, input_present = 0;
 
-	if (chg->real_charger_type == POWER_SUPPLY_TYPE_UNKNOWN) {
+	/*
+	 * Incase of APSD rerun real_charger_type (i.e APSD_STATUS)
+	 * is reset which may cause the USB_ONLINE to always return
+	 * zero. Report USB_ONLINE=0 only when real_charger_type is
+	 * UNKNOWN and input is not present.
+	 */
+	smblite_lib_is_input_present(chg, &input_present);
+	if ((chg->real_charger_type == POWER_SUPPLY_TYPE_UNKNOWN) &&
+		!input_present) {
 		val->intval = 0;
 		return 0;
 	}
@@ -3368,8 +3416,6 @@ static void smblite_lib_handle_hvdcp_check_timeout(struct smb_charger *chg,
 			rc = smblite_lib_hvdcp3_force_max_vbus(chg);
 			if (rc < 0)
 				smblite_lib_err(chg, "HVDCP3 detection failure\n");
-			if (rc > 0)
-				chg->hvdcp3_detected = true;
 		}
 	}
 
@@ -3991,7 +4037,7 @@ irqreturn_t smblite_usb_id_irq_handler(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
-irqreturn_t smblite_boost_mode_active_irq_handler(int irq, void *data)
+irqreturn_t smblite_boost_mode_sw_en_irq_handler(int irq, void *data)
 {
 	struct smb_irq_data *irq_data = data;
 	struct smb_charger *chg = irq_data->parent_data;
@@ -4015,7 +4061,9 @@ irqreturn_t smblite_boost_mode_active_irq_handler(int irq, void *data)
 		/* Restore vbus to MAX(6V) only if QC adapter is connected */
 		if (apsd_status & QC_3P0_BIT) {
 			is_qc = true;
-			smblite_lib_rerun_apsd_if_required(chg);
+			/* wait for 100ms to move from boosti -> buck mode. */
+			msleep(100);
+			smblite_lib_hvdcp3_force_max_vbus(chg);
 		}
 	}
 
@@ -4476,6 +4524,7 @@ int smblite_lib_init(struct smb_charger *chg)
 	struct smblite_remote_bms *remote_bms;
 
 	mutex_init(&chg->dpdm_lock);
+	mutex_init(&chg->dpdm_pulse_lock);
 	INIT_WORK(&chg->bms_update_work, bms_update_work);
 	INIT_WORK(&chg->jeita_update_work, jeita_update_work);
 	INIT_DELAYED_WORK(&chg->icl_change_work, smblite_lib_icl_change_work);
