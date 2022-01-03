@@ -65,6 +65,8 @@
 #define SLATE_PAUSE_REQ		BIT(15)
 #define SLATE_RESUME_IND	BIT(16)
 
+#define SPI_FREQ_1MHZ	1000000
+#define SPI_FREQ_40MHZ	40000000
 
 enum slatecom_state {
 	/*SLATECOM Staus ready*/
@@ -122,7 +124,7 @@ struct spi_slave_parameters {
 	u32 spi_cs_clk_delay;
 	u32 spi_inter_words_delay;
 };
-static struct spi_slave_parameters slv_ctrl = { 4000, 0 };
+static struct spi_slave_parameters slv_ctrl = { 255, 0 };
 
 /* SLATECOM client callbacks set-up */
 static void send_input_events(struct work_struct *work);
@@ -268,7 +270,7 @@ static int read_slate_locl(enum slatecom_req_type req_type,
 }
 
 static int slatecom_transfer(void *handle, uint8_t *tx_buf,
-	uint8_t *rx_buf, uint32_t txn_len)
+	uint8_t *rx_buf, uint32_t txn_len, uint32_t freq)
 {
 	struct spi_transfer *tx_xfer;
 	struct slate_spi_priv *slate_spi;
@@ -306,6 +308,7 @@ static int slatecom_transfer(void *handle, uint8_t *tx_buf,
 		tx_xfer->rx_buf = rx_buf;
 
 	tx_xfer->len = txn_len;
+	tx_xfer->speed_hz = freq;
 	ret = spi_sync(spi, &slate_spi->msg1);
 	mutex_unlock(&slate_spi->xfer_mutex);
 
@@ -560,6 +563,15 @@ static int is_slate_resume(void *handle)
 	uint8_t tx_buf[8] = {0};
 	uint8_t rx_buf[8] = {0};
 	uint32_t cmnd_reg = 0;
+	uint8_t tx_ahb_buf[1024] = {0};
+	uint8_t *rx_ahb_buf = fxd_mem_buffer;
+	uint32_t ahb_addr = 0x200E1800;
+	uint8_t cmnd = 0;
+	struct slate_spi_priv *slate_spi;
+	struct slate_context *cntx;
+
+	cntx = (struct slate_context *)handle;
+	slate_spi = cntx->slate_spi;
 
 	if (spi_state == SLATECOM_SPI_BUSY) {
 		printk_ratelimited("SPI is held by TZ\n");
@@ -568,10 +580,23 @@ static int is_slate_resume(void *handle)
 
 	txn_len = 0x08;
 	tx_buf[0] = 0x05;
-	ret = slatecom_transfer(handle, tx_buf, rx_buf, txn_len);
+	ret = slatecom_transfer(handle, tx_buf, rx_buf, txn_len, SPI_FREQ_40MHZ);
+
 	if (!ret)
 		memcpy(&cmnd_reg, rx_buf+SLATE_SPI_READ_LEN, 0x04);
 
+	if (!(cmnd_reg & BIT(31))) {
+		pr_err("AHB read to resume\n");
+
+		txn_len = 32;
+		cmnd |= SLATE_SPI_AHB_READ_CMD;
+		memcpy(tx_ahb_buf, &cmnd, sizeof(cmnd));
+		memcpy(tx_ahb_buf+sizeof(cmnd), &ahb_addr, sizeof(ahb_addr));
+
+		ret = slatecom_transfer(handle, tx_ahb_buf, rx_ahb_buf, txn_len, SPI_FREQ_1MHZ);
+		if (ret)
+			pr_err("slatecom_transfer fail with error %d\n", ret);
+	}
 ret_err:
 	return cmnd_reg & BIT(31);
 }
@@ -689,7 +714,7 @@ int slatecom_ahb_read(void *handle, uint32_t ahb_start_addr,
 	memcpy(tx_buf, &cmnd, sizeof(cmnd));
 	memcpy(tx_buf+sizeof(cmnd), &ahb_addr, sizeof(ahb_addr));
 
-	ret = slatecom_transfer(handle, tx_buf, rx_buf, txn_len);
+	ret = slatecom_transfer(handle, tx_buf, rx_buf, txn_len, SPI_FREQ_40MHZ);
 
 	if (!ret)
 		memcpy(read_buf, rx_buf+SLATE_SPI_AHB_READ_CMD_LEN, size);
@@ -755,7 +780,7 @@ int slatecom_ahb_write_bytes(void *handle, uint32_t ahb_start_addr,
 		memcpy(tx_buf+sizeof(cmnd), &ahb_addr, sizeof(ahb_addr));
 		memcpy(tx_buf+SLATE_SPI_AHB_CMD_LEN, write_buf, curr_num_bytes);
 
-		ret = slatecom_transfer(handle, tx_buf, NULL, txn_len);
+		ret = slatecom_transfer(handle, tx_buf, NULL, txn_len, SPI_FREQ_40MHZ);
 		if (ret) {
 			pr_err("slatecom_transfer fail with error %d\n", ret);
 			goto error;
@@ -821,7 +846,7 @@ int slatecom_ahb_write(void *handle, uint32_t ahb_start_addr,
 		memcpy(tx_buf+sizeof(cmnd), &ahb_addr, sizeof(ahb_addr));
 		memcpy(tx_buf+SLATE_SPI_AHB_CMD_LEN, write_buf, curr_num_bytes);
 
-		ret = slatecom_transfer(handle, tx_buf, NULL, txn_len);
+		ret = slatecom_transfer(handle, tx_buf, NULL, txn_len, SPI_FREQ_40MHZ);
 		if (ret) {
 			pr_err("slatecom_transfer fail with error %d\n", ret);
 			goto error;
@@ -880,7 +905,7 @@ int slatecom_fifo_write(void *handle, uint32_t num_words,
 	memcpy(tx_buf, &cmnd, sizeof(cmnd));
 	memcpy(tx_buf+sizeof(cmnd), write_buf, size);
 
-	ret = slatecom_transfer(handle, tx_buf, NULL, txn_len);
+	ret = slatecom_transfer(handle, tx_buf, NULL, txn_len, SPI_FREQ_40MHZ);
 	kfree(tx_buf);
 
 error_ret:
@@ -937,7 +962,7 @@ int slatecom_fifo_read(void *handle, uint32_t num_words,
 	cmnd |= SLATE_SPI_FIFO_READ_CMD;
 	memcpy(tx_buf, &cmnd, sizeof(cmnd));
 
-	ret = slatecom_transfer(handle, tx_buf, rx_buf, txn_len);
+	ret = slatecom_transfer(handle, tx_buf, rx_buf, txn_len, SPI_FREQ_40MHZ);
 
 	if (!ret)
 		memcpy(read_buf, rx_buf+SLATE_SPI_READ_LEN, size);
@@ -991,7 +1016,7 @@ static int slatecom_reg_write_cmd(void *handle, uint8_t reg_start_addr,
 	memcpy(tx_buf, &cmnd, sizeof(cmnd));
 	memcpy(tx_buf+sizeof(cmnd), write_buf, size);
 
-	ret = slatecom_transfer(handle, tx_buf, NULL, txn_len);
+	ret = slatecom_transfer(handle, tx_buf, NULL, txn_len, SPI_FREQ_40MHZ);
 	kfree(tx_buf);
 	return ret;
 }
@@ -1062,7 +1087,7 @@ int slatecom_reg_read(void *handle, uint8_t reg_start_addr,
 	cmnd |= reg_start_addr;
 	memcpy(tx_buf, &cmnd, sizeof(cmnd));
 
-	ret = slatecom_transfer(handle, tx_buf, rx_buf, txn_len);
+	ret = slatecom_transfer(handle, tx_buf, rx_buf, txn_len, SPI_FREQ_40MHZ);
 
 	if (!ret)
 		memcpy(read_buf, rx_buf+SLATE_SPI_READ_LEN, size);
