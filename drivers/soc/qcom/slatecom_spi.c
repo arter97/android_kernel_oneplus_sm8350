@@ -57,6 +57,7 @@
 #define WR_BUF_SIZE_IN_BYTES_FOR_USE	(WR_BUF_SIZE_IN_WORDS_FOR_USE * sizeof(uint32_t))
 #define SLATE_RESUME_IRQ_TIMEOUT 1000
 #define SLATE_SPI_AUTOSUSPEND_TIMEOUT 5000
+#define MIN_SLEEP_TIME	5
 
 /* Master_Command[27] */
 #define SLATE_PAUSE_OK		BIT(27)
@@ -148,6 +149,7 @@ static int slate_irq;
 
 static uint8_t *fxd_mem_buffer;
 static struct mutex cma_buffer_lock;
+static ktime_t sleep_time_start;
 
 static DECLARE_COMPLETION(slate_resume_wait);
 static int slatecom_reg_write_cmd(void *handle, uint8_t reg_start_addr,
@@ -569,6 +571,8 @@ static int is_slate_resume(void *handle)
 	uint8_t cmnd = 0;
 	struct slate_spi_priv *slate_spi;
 	struct slate_context *cntx;
+	ktime_t delta;
+	s64 time_elapsed;
 
 	cntx = (struct slate_context *)handle;
 	slate_spi = cntx->slate_spi;
@@ -576,6 +580,15 @@ static int is_slate_resume(void *handle)
 	if (spi_state == SLATECOM_SPI_BUSY) {
 		printk_ratelimited("SPI is held by TZ\n");
 		goto ret_err;
+	}
+
+	/* require a min time gap between OK_TO_SLEEP message and resume. */
+	delta = ktime_sub(ktime_get(), sleep_time_start);
+	time_elapsed = ktime_to_ms(delta);
+	if (time_elapsed < MIN_SLEEP_TIME) {
+		pr_info("avoid aggresive wakeup, sleep for %lu ms\n",
+				MIN_SLEEP_TIME - time_elapsed);
+		msleep(MIN_SLEEP_TIME - time_elapsed);
 	}
 
 	txn_len = 0x08;
@@ -1375,6 +1388,7 @@ static int slatecom_pm_suspend(struct device *dev)
 		cmnd_reg |= SLATE_OK_SLP_RBSC;
 
 	ret = slatecom_reg_write_cmd(&clnt_handle, SLATE_CMND_REG, 1, &cmnd_reg);
+	sleep_time_start = ktime_get();
 	if (ret == 0) {
 		atomic_set(&state, SLATECOM_STATE_SUSPEND);
 		atomic_set(&slate_is_spi_active, 0);
@@ -1441,6 +1455,7 @@ static int slatecom_pm_runtime_suspend(struct device *dev)
 
 	ret = slatecom_reg_write_cmd(&clnt_handle, SLATE_CMND_REG,
 					1, &cmnd_reg);
+	sleep_time_start = ktime_get();
 	if (ret == 0) {
 		atomic_set(&state, SLATECOM_STATE_RUNTIME_SUSPEND);
 		atomic_set(&slate_is_spi_active, 0);
