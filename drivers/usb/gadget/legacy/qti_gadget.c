@@ -324,10 +324,9 @@ static int qti_usb_func_alloc(struct qti_usb_config *qcfg,
 	}
 
 #if IS_ENABLED(CONFIG_USB_F_GSI)
-	struct qti_usb_gadget *qg;
-
 	if (!strcmp(instance_name, "rmnet")) {
-		qg = container_of(cdev, struct qti_usb_gadget, cdev);
+		struct qti_usb_gadget *qg = container_of(cdev, struct qti_usb_gadget, cdev);
+
 		rmnet_gsi_update_in_buffer_mem_type(f,
 			of_property_read_bool(qg->cfg_node,
 				"qcom,rmnet_in_use_tcm_mem"));
@@ -686,3 +685,6 @@ static void __exit gadget_qti_exit(void)
 	platform_driver_unregister(&qti_gadget_platform_driver);
 }
 module_exit(gadget_qti_exit);
+
+MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("DTSI based USB enumeration Driver");
