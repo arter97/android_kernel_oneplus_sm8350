@@ -103,8 +103,9 @@
 
 /* UART DMA Rx GP_IRQ_BITS */
 #define UART_DMA_RX_PARITY_ERR	BIT(5)
-#define UART_DMA_RX_ERRS	(GENMASK(5, 6))
-#define UART_DMA_RX_BREAK	(GENMASK(7, 8))
+#define UART_DMA_RX_FRAME_ERR	BIT(6)
+#define UART_DMA_RX_ERRS	(GENMASK(6, 5))
+#define UART_DMA_RX_BREAK	(GENMASK(8, 7))
 
 #define UART_OVERSAMPLING	(32)
 #define STALE_TIMEOUT		(16)
@@ -138,7 +139,7 @@
 #define DMA_RX_IRQ_BITS		(RX_EOT | RX_GENI_CANCEL_IRQ |\
 				RX_RESET_DONE | UART_DMA_RX_ERRS |\
 				UART_DMA_RX_PARITY_ERR | UART_DMA_RX_BREAK |\
-				RX_DMA_DONE | RX_SBE)
+				UART_DMA_RX_FRAME_ERR | RX_DMA_DONE | RX_SBE)
 
 /* Required for polling for 100 msecs */
 #define POLL_WAIT_TIMEOUT_MSEC	100
@@ -172,6 +173,7 @@ enum uart_error_code {
 	UART_ERROR_ILLEGAL_INTERRUPT,
 	UART_ERROR_BUFFER_OVERRUN,
 	UART_ERROR_RX_PARITY_ERROR,
+	UART_ERROR_RX_FRAME_ERROR,
 	UART_ERROR_RX_BREAK_ERROR,
 	UART_ERROR_RX_SBE_ERROR,
 	SOC_ERROR_START_TX_IOS_SOC_RFR_HIGH
@@ -2618,11 +2620,19 @@ static bool handle_rx_fifo_xfer(u32 s_irq_status, struct uart_port *uport,
 	struct msm_geni_serial_port *msm_port = GET_DEV_PORT(uport);
 
 	if (s_irq_status & (S_GP_IRQ_0_EN | S_GP_IRQ_1_EN)) {
-		if (s_irq_status & S_GP_IRQ_0_EN)
+		if (s_irq_status & S_GP_IRQ_0_EN) {
 			uport->icount.parity++;
-		IPC_LOG_MSG(msm_port->ipc_log_misc,
-			"%s.sirq 0x%x parity:%d\n",
-			__func__, s_irq_status, uport->icount.parity);
+			IPC_LOG_MSG(msm_port->ipc_log_misc,
+				"%s.sirq 0x%x parity:%d\n",
+				__func__, s_irq_status, uport->icount.parity);
+		}
+
+		if (s_irq_status & S_GP_IRQ_1_EN) {
+			uport->icount.frame++;
+			IPC_LOG_MSG(msm_port->console_log,
+				"%s.sirq 0x%x frame:%d\n",
+				__func__, s_irq_status, uport->icount.frame);
+		}
 		drop_rx = true;
 	} else if (s_irq_status & (S_GP_IRQ_2_EN | S_GP_IRQ_3_EN)) {
 		uport->icount.brk++;
@@ -2701,23 +2711,38 @@ static bool handle_rx_dma_xfer(u32 s_irq_status, struct uart_port *uport)
 			goto exit;
 		}
 
-		if (dma_rx_status & UART_DMA_RX_ERRS) {
-			if (dma_rx_status & UART_DMA_RX_PARITY_ERR)
+		if (dma_rx_status & (UART_DMA_RX_ERRS | UART_DMA_RX_BREAK)) {
+			if (dma_rx_status & UART_DMA_RX_PARITY_ERR) {
 				uport->icount.parity++;
-			IPC_LOG_MSG(msm_port->ipc_log_misc,
-				"%s.Rx Errors.  0x%x parity:%d\n",
+				IPC_LOG_MSG(msm_port->ipc_log_misc,
+					"%s.Rx Errors.  0x%x parity:%d\n",
 					__func__, dma_rx_status,
 					uport->icount.parity);
-			msm_geni_update_uart_error_code(msm_port, UART_ERROR_RX_PARITY_ERROR);
-			drop_rx = true;
-		} else if (dma_rx_status & UART_DMA_RX_BREAK) {
-			uport->icount.brk++;
-			IPC_LOG_MSG(msm_port->ipc_log_misc,
-				"%s.Rx Errors.  0x%x break:%d\n",
-				__func__, dma_rx_status,
-				uport->icount.brk);
 				msm_geni_update_uart_error_code(msm_port,
-				UART_ERROR_RX_BREAK_ERROR);
+					UART_ERROR_RX_PARITY_ERROR);
+				drop_rx = true;
+			}
+
+			if (dma_rx_status & UART_DMA_RX_FRAME_ERR) {
+				uport->icount.frame++;
+				IPC_LOG_MSG(msm_port->ipc_log_misc,
+					"%s.Rx Errors. 0x%x frame:%d\n",
+					__func__, dma_rx_status,
+					uport->icount.frame);
+				msm_geni_update_uart_error_code(msm_port,
+					UART_ERROR_RX_FRAME_ERROR);
+				drop_rx = true;
+			}
+
+			if (dma_rx_status & UART_DMA_RX_BREAK) {
+				uport->icount.brk++;
+				IPC_LOG_MSG(msm_port->ipc_log_misc,
+					"%s.Rx Errors.  0x%x break:%d\n",
+					__func__, dma_rx_status,
+					uport->icount.brk);
+				msm_geni_update_uart_error_code(msm_port,
+					UART_ERROR_RX_BREAK_ERROR);
+			}
 		}
 
 		if (dma_rx_status & RX_EOT ||
