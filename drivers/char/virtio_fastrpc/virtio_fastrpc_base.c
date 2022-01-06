@@ -18,6 +18,46 @@
 #include "virtio_fastrpc_mem.h"
 #include "virtio_fastrpc_queue.h"
 
+#define VIRTIO_ID_FASTRPC				34
+/* indicates remote invoke with buffer attributes is supported */
+#define VIRTIO_FASTRPC_F_INVOKE_ATTR			1
+/* indicates remote invoke with CRC is supported */
+#define VIRTIO_FASTRPC_F_INVOKE_CRC			2
+/* indicates remote mmap/munmap is supported */
+#define VIRTIO_FASTRPC_F_MMAP				3
+/* indicates QOS setting is supported */
+#define VIRTIO_FASTRPC_F_CONTROL			4
+/* indicates version check is supported */
+#define VIRTIO_FASTRPC_F_VERSION			5
+
+#define NUM_CHANNELS			4 /* adsp, mdsp, slpi, cdsp0*/
+#define NUM_DEVICES			2 /* adsprpc-smd, adsprpc-smd-secure */
+#define MINOR_NUM_DEV			0
+#define MINOR_NUM_SECURE_DEV		1
+
+#define INIT_FILELEN_MAX		(2*1024*1024)
+#define INIT_MEMLEN_MAX			(8*1024*1024)
+
+#define MAX_FASTRPC_BUF_SIZE		(128*1024)
+#define DEBUGFS_SIZE			3072
+#define PID_SIZE			10
+#define UL_SIZE				25
+
+/*
+ * Increase only for critical patches which must be consistent with BE,
+ * if not, the basic function is broken.
+ */
+#define FE_MAJOR_VER 0x1
+/* Increase for new features. */
+#define FE_MINOR_VER 0x0
+#define FE_VERSION (FE_MAJOR_VER << 16 | FE_MINOR_VER)
+#define BE_MAJOR_VER(ver) (((ver) >> 16) & 0xffff)
+
+struct virtio_fastrpc_config {
+	u32 version;
+} __packed;
+
+
 static struct fastrpc_apps gfa;
 
 static struct dentry *debugfs_root;
@@ -556,10 +596,23 @@ static int virt_fastrpc_probe(struct virtio_device *vdev)
 	struct fastrpc_apps *me = &gfa;
 	struct device *dev = NULL;
 	struct device *secure_dev = NULL;
+	struct virtio_fastrpc_config config;
 	int err, i;
 
 	if (!virtio_has_feature(vdev, VIRTIO_F_VERSION_1))
 		return -ENODEV;
+
+	memset(&config, 0x0, sizeof(config));
+	if (virtio_has_feature(vdev, VIRTIO_FASTRPC_F_VERSION)) {
+		virtio_cread(vdev, struct virtio_fastrpc_config, version, &config.version);
+		if (BE_MAJOR_VER(config.version) != FE_MAJOR_VER) {
+			dev_err(&vdev->dev, "vdev major version does not match 0x%x:0x%x\n",
+					FE_VERSION, config.version);
+			return -ENODEV;
+		}
+	}
+	dev_info(&vdev->dev, "virtio fastrpc version 0x%x:0x%x\n",
+			FE_VERSION, config.version);
 
 	memset(me, 0, sizeof(*me));
 	spin_lock_init(&me->msglock);
@@ -695,6 +748,7 @@ static unsigned int features[] = {
 	VIRTIO_FASTRPC_F_INVOKE_CRC,
 	VIRTIO_FASTRPC_F_MMAP,
 	VIRTIO_FASTRPC_F_CONTROL,
+	VIRTIO_FASTRPC_F_VERSION,
 };
 
 static struct virtio_driver virtio_fastrpc_driver = {

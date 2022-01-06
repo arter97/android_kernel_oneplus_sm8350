@@ -5,6 +5,8 @@
 #include <linux/ion.h>
 #include "virtio_fastrpc_mem.h"
 
+#define MAX_CACHE_BUF_SIZE		(8*1024*1024)
+
 static inline void fastrpc_free_pages(struct page **pages, int count)
 {
 	while (count--)
