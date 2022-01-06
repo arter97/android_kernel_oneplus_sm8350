@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2019-2022, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -28,6 +28,8 @@
 #include <linux/uaccess.h>
 #include <uapi/linux/hgsl.h>
 #include <linux/delay.h>
+#include <trace/events/gpu_mem.h>
+
 #include "hgsl.h"
 #include "hgsl_tcsr.h"
 #include "hgsl_memory.h"
@@ -389,7 +391,25 @@ struct qcom_hgsl {
 	struct list_head release_list;
 	struct workqueue_struct *release_wq;
 	struct work_struct release_work;
+
+	atomic64_t total_mem_size;
 };
+
+#ifdef CONFIG_TRACE_GPU_MEM
+static inline void hgsl_trace_gpu_mem_total(struct hgsl_priv *priv, int64_t delta)
+{
+	struct qcom_hgsl *hgsl = priv->dev;
+	uint64_t size = atomic64_add_return(delta, &priv->total_mem_size);
+	uint64_t global_size = atomic64_add_return(delta, &hgsl->total_mem_size);
+
+	trace_gpu_mem_total(0, priv->pid, size);
+	trace_gpu_mem_total(0, 0, global_size);
+}
+#else
+static inline void hgsl_trace_gpu_mem_total(struct hgsl_priv *priv, int64_t delta)
+{
+}
+#endif
 
 static int hgsl_reg_map(struct platform_device *pdev,
 			char *res_name, struct reg *reg);
@@ -1734,6 +1754,7 @@ static int hgsl_ioctl_mem_alloc(struct file *filep, unsigned long arg)
 		mutex_lock(&priv->lock);
 		list_add(&mem_node->node, &priv->mem_allocated);
 		mutex_unlock(&priv->lock);
+		hgsl_trace_gpu_mem_total(priv, mem_node->memdesc.size64);
 	}
 
 out:
@@ -1790,9 +1811,11 @@ static int hgsl_ioctl_mem_free(struct file *filep, unsigned long arg)
 
 	if (node_found) {
 		ret = hgsl_hyp_mem_unmap_smmu(hab_channel, node_found);
-		if (!ret)
+		if (!ret) {
+			hgsl_trace_gpu_mem_total(priv,
+					-(node_found->memdesc.size64));
 			hgsl_sharedmem_free(node_found);
-		else {
+		} else {
 			LOGE("hgsl_hyp_mem_unmap_smmu failed %d", ret);
 			mutex_lock(&priv->lock);
 			list_add(&node_found->node, &priv->mem_allocated);
@@ -1904,6 +1927,8 @@ static int hgsl_ioctl_mem_map_smmu(struct file *filep, unsigned long arg)
 		mutex_lock(&priv->lock);
 		list_add(&mem_node->node, &priv->mem_mapped);
 		mutex_unlock(&priv->lock);
+
+		hgsl_trace_gpu_mem_total(priv, mem_node->memdesc.size64);
 	}
 
 out:
@@ -1955,6 +1980,8 @@ static int hgsl_ioctl_mem_unmap_smmu(struct file *filep, unsigned long arg)
 			list_add(&node_found->node, &priv->mem_mapped);
 			mutex_unlock(&priv->lock);
 		} else {
+			hgsl_trace_gpu_mem_total(priv,
+					-(node_found->memdesc.size64));
 			hgsl_free(node_found);
 		}
 	} else {
@@ -2760,7 +2787,11 @@ static int hgsl_cleanup(struct hgsl_priv *priv)
 		ret = hgsl_hyp_mem_unmap_smmu(hab_channel, node_found);
 		if (ret)
 			LOGE("Failed to clean mapped buffer %u, 0x%llx, ret %d",
-			node_found->export_id, node_found->memdesc.gpuaddr, ret);
+				node_found->export_id,
+				node_found->memdesc.gpuaddr, ret);
+		else
+			hgsl_trace_gpu_mem_total(priv,
+				-(node_found->memdesc.size64));
 		list_del(&node_found->node);
 		hgsl_free(node_found);
 	}
@@ -2770,6 +2801,7 @@ static int hgsl_cleanup(struct hgsl_priv *priv)
 			LOGE("Failed to clean mapped buffer %u, 0x%llx, ret %d",
 			node_found->export_id, node_found->memdesc.gpuaddr, ret);
 		list_del(&node_found->node);
+		hgsl_trace_gpu_mem_total(priv, -(node_found->memdesc.size64));
 		hgsl_sharedmem_free(node_found);
 	}
 	mutex_unlock(&priv->lock);
