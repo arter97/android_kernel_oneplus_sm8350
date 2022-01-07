@@ -1685,7 +1685,7 @@ static void msm_pinctrl_hibernation_resume(void)
 	const struct msm_pinctrl_soc_data *soc = pctrl->soc;
 	void __iomem *tile_addr = NULL;
 
-	if (likely(!hibernation) || !pctrl->gpio_regs || !pctrl->msm_tile_regs)
+	if (likely(!hibernation) || !pctrl->gpio_regs)
 		return;
 
 	if (soc->dir_conn_addr) {
