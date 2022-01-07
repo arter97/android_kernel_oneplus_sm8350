@@ -1396,6 +1396,13 @@ static int slatecom_pm_suspend(struct device *dev)
 		atomic_set(&ok_to_sleep, 1);
 	}
 	pr_info("suspended with : %d\n", ret);
+
+	/*
+	 * spi driver needs to perform the suspend only then
+	 * we can proceed with suspend routine
+	 */
+	mdelay(5);
+
 	return ret;
 }
 
