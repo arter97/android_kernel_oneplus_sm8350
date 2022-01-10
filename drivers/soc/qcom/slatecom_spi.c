@@ -1354,6 +1354,7 @@ static int slate_spi_remove(struct spi_device *spi)
 
 static void slate_spi_shutdown(struct spi_device *spi)
 {
+	disable_irq(slate_irq);
 	slate_spi_remove(spi);
 }
 
