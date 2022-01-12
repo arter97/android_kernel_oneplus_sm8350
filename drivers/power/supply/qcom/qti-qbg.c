@@ -726,6 +726,7 @@ static int qbg_process_fifo(struct qti_qbg *chip, u32 fifo_count)
 		chip->kdata.fifo[i].tbat = tbat;
 		chip->kdata.fifo[i].ibat = ibat_t;
 		chip->kdata.fifo[i].data_tag = fifo[i].data_tag;
+		chip->kdata.fifo[i].qg_sts = fifo[i].qg_sts;
 	}
 
 	if (!chip->enable_fifo_depth_half && ((-1 * ibat) > chip->rated_capacity)) {
