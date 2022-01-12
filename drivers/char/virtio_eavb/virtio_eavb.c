@@ -70,7 +70,7 @@ do { \
 	} \
 } while (0)
 
-static unsigned int timeout_msec = 10000; /* default 10s */
+static unsigned int timeout_msec = 5000; /* default 5s */
 
 /*
  *    device_priv (struct virtio_eavb_priv)
@@ -169,6 +169,37 @@ struct eavb_file {
 	int stream_count;
 	spinlock_t streamlock;
 };
+
+
+static inline const char *cmd2str(uint32_t cmd)
+{
+	switch (cmd) {
+	case VIRTIO_EAVB_T_CREATE_STREAM:
+		return "VIRTIO_EAVB_T_CREATE_STREAM";
+	case VIRTIO_EAVB_T_GET_STREAM_INFO:
+		return "VIRTIO_EAVB_T_GET_STREAM_INFO";
+	case VIRTIO_EAVB_T_CONNECT_STREAM:
+		return "VIRTIO_EAVB_T_CONNECT_STREAM";
+	case VIRTIO_EAVB_T_RECEIVE:
+		return "VIRTIO_EAVB_T_RECEIVE";
+	case VIRTIO_EAVB_T_TRANSMIT:
+		return "VIRTIO_EAVB_T_TRANSMIT";
+	case VIRTIO_EAVB_T_DISCONNECT_STREAM:
+		return "VIRTIO_EAVB_T_DISCONNECT_STREAM";
+	case VIRTIO_EAVB_T_DESTROY_STREAM:
+		return "VIRTIO_EAVB_T_DESTROY_STREAM";
+	case VIRTIO_EAVB_T_CREATE_STREAM_PATH:
+		return "VIRTIO_EAVB_T_CREATE_STREAM_PATH";
+	case VIRTIO_EAVB_T_MMAP:
+		return "VIRTIO_EAVB_T_MMAP";
+	case VIRTIO_EAVB_T_MUNMAP:
+		return "VIRTIO_EAVB_T_MUNMAP";
+	case VIRTIO_EAVB_T_UPDATE_CLK:
+		return "VIRTIO_EAVB_T_UPDATE_CLK";
+	default:
+		return "not supported";
+	}
+}
 
 #ifdef EAVB_DEBUGFS
 void update_crf_ts(struct virtio_eavb_priv *priv, u64 value);
@@ -608,26 +639,35 @@ static void reclaim_function(struct work_struct *work)
 
 static int send_msg(struct virtio_eavb_priv *priv, struct fe_msg *msg)
 {
-	struct vio_msg_hdr *vhdr, *rsp;
+	struct vio_msg_hdr *req, *rsp = NULL;
 	struct scatterlist sg[1];
-	int ret;
+	int ret = 0;
 	int rsv;
+	uint32_t cmd_req, cmd_rsp = 0;
+	int32_t stream_idx_req, stream_idx_rsp = 0;
+	uint16_t msgid_req, msgid_rsp = 0;
 
-	vhdr = (struct vio_msg_hdr *)msg->txbuf;
+	req = (struct vio_msg_hdr *)msg->txbuf;
+	msgid_req = msg->msgid;
+	cmd_req = req->cmd;
+	stream_idx_req = req->stream_idx;
 	msg->rxbuf = NULL;
 
-	LOG_EAVB(LEVEL_DEBUG, "msgid %d\n", msg->msgid);
+	if ((cmd_req != VIRTIO_EAVB_T_RECEIVE) && (cmd_req != VIRTIO_EAVB_T_TRANSMIT))
+		LOG_EAVB(LEVEL_INFO, "[eavb#%d] request: msgid %d, cmd %s\n",
+			stream_idx_req, msgid_req, cmd2str(cmd_req));
+
 	mutex_lock(&priv->lock);
-	vhdr->msgid = msg->msgid;
-	sg_init_one(sg, vhdr, vhdr->len);
-	ret = virtqueue_add_outbuf(priv->svq, sg, 1, vhdr, GFP_KERNEL);
+	req->msgid = msg->msgid;
+	sg_init_one(sg, req, req->len);
+	ret = virtqueue_add_outbuf(priv->svq, sg, 1, req, GFP_KERNEL);
 	if (ret) {
 		LOG_EAVB(LEVEL_ERR, "fail to add output buffer, return %d\n",
 			ret);
 		mutex_unlock(&priv->lock);
-		kfree(vhdr);
+		kfree(req);
 		msg->txbuf = NULL;
-		return ret;
+		goto error;
 	}
 	virtqueue_kick(priv->svq);
 	mutex_unlock(&priv->lock);
@@ -635,52 +675,44 @@ static int send_msg(struct virtio_eavb_priv *priv, struct fe_msg *msg)
 	rsv = wait_for_completion_timeout(&msg->work, msecs_to_jiffies(timeout_msec));
 	if (rsv == 0) {
 		LOG_EAVB(LEVEL_ERR, "msgid %d timeout\n", msg->msgid);
-		return -ETIMEDOUT;
+		ret = -ETIMEDOUT;
+		goto error;
+	}
+	rsp = (struct vio_msg_hdr *)msg->rxbuf;
+	msgid_rsp = msg->msgid;
+	if (msgid_req != msgid_rsp) {
+		LOG_EAVB(LEVEL_ERR, "msgid mismatch, msgid_req %d, msgid_rsp %d\n",
+			msgid_req, msgid_rsp);
+		ret = -EFAULT;
+		goto error;
 	}
 
-	rsp = msg->rxbuf;
 	if (rsp) {
+		cmd_rsp = rsp->cmd;
+		stream_idx_rsp = rsp->stream_idx;
 		if (rsp->result) {
-			LOG_EAVB(LEVEL_ERR, "msgid %d, result = %d\n",
-			msg->msgid, rsp->result);
-			return -EINVAL;
+			LOG_EAVB(LEVEL_ERR, "[eavb#%d] unexpected rsp: msgid %d, cmd %s, ret %d\n",
+				stream_idx_req, msgid_req, cmd2str(cmd_req), rsp->result);
+			ret = -EINVAL;
 		}
+	} else {
+		LOG_EAVB(LEVEL_ERR, "fail to get rsp buffer, msgid %d\n",
+			msgid_rsp);
+		ret = -ENOMEM;
+		goto error;
 	}
+
+	if ((ret != 0) ||
+		((cmd_rsp != VIRTIO_EAVB_T_RECEIVE) && (cmd_rsp != VIRTIO_EAVB_T_TRANSMIT)))
+		LOG_EAVB(LEVEL_INFO, "[eavb#%d] response: msgid %d, cmd %s, ret %d\n",
+			stream_idx_rsp, msgid_rsp, cmd2str(cmd_rsp), ret);
+	return ret;
+error:
+	LOG_EAVB(LEVEL_ERR, "[eavb#%d] REQ/RSP ERROR: msgid %d, cmd %s, ret %d\n",
+		stream_idx_req, msgid_req, cmd2str(cmd_req), ret);
 	return ret;
 }
 
-static int vio_eavb_version(struct eavb_file *fl, struct stream *stream)
-{
-	struct virtio_eavb_priv *priv = fl->priv;
-	struct fe_msg *msg;
-	struct vio_version_msg *vmsg;
-	int tsize, rsize;
-	int ret;
-
-	tsize = rsize = sizeof(struct vio_version_msg);
-	msg = virt_alloc_msg(priv, tsize, rsize);
-	if (!msg) {
-		LOG_EAVB(LEVEL_ERR, "stream%d alloc msg fail!\n",
-			stream->index);
-		return -ENOMEM;
-	}
-	fill_vmsg_hdr(msg, stream, VIRTIO_EAVB_T_VERSION);
-	vmsg = (struct vio_version_msg *)msg->txbuf;
-	vmsg->major = VERSION_MAJOR;
-	vmsg->minor = VERSION_MINOR;
-
-	ret = send_msg(priv, msg);
-
-	vmsg = (struct vio_version_msg *)msg->rxbuf;
-	if (!ret && vmsg) {
-		ret = vmsg->mhdr.result;
-		LOG_EAVB(LEVEL_INFO, "BE version(%d.%d)\n",
-			vmsg->major, vmsg->minor);
-	}
-
-	virt_free_msg(priv, msg);
-	return 0;
-}
 
 static int vio_eavb_disconnect(struct eavb_file *fl, struct stream *stream)
 {
@@ -1050,7 +1082,6 @@ static int qavb_get_stream_info(struct eavb_file *fl, void __user *buf)
 		return -EFAULT;
 	}
 
-	vio_eavb_version(fl, stream);
 	return ret;
 }
 
