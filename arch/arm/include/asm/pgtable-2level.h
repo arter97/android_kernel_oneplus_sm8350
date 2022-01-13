@@ -184,6 +184,7 @@
 #define pud_present(pud)	(1)
 #define pud_clear(pudp)		do { } while (0)
 #define set_pud(pud,pudp)	do { } while (0)
+static inline bool pud_sect(pud_t pud) { return false; }
 
 static inline pmd_t *pmd_offset(pud_t *pud, unsigned long addr)
 {
@@ -193,6 +194,8 @@ static inline pmd_t *pmd_offset(pud_t *pud, unsigned long addr)
 #define pmd_large(pmd)		(pmd_val(pmd) & 2)
 #define pmd_bad(pmd)		(pmd_val(pmd) & 2)
 #define pmd_present(pmd)	(pmd_val(pmd))
+#define pmd_sect(pmd)		((pmd_val(pmd) & PMD_TYPE_MASK) == \
+					PMD_TYPE_SECT)
 
 #define copy_pmd(pmdpd,pmdps)		\
 	do {				\
