@@ -1043,6 +1043,7 @@ struct ufs_hba {
 #ifdef CONFIG_SCSI_UFSHCD_QTI
 	/* distinguish between resume and restore */
 	bool restore;
+	bool abort_triggered_wlun;
 #endif
 };
 
