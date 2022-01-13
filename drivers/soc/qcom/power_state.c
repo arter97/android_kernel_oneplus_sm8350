@@ -339,7 +339,7 @@ static long ps_ioctl(struct file *filp, unsigned int ui_power_state_cmd, unsigne
 		ret = start_timer();
 		if (ret < 0) {
 			/*Take Wakeup Source*/
-			__pm_stay_awake(notify_ws);
+			pr_debug("Start Timer completed\n");
 		}
 		break;
 #endif
