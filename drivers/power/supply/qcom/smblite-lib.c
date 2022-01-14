@@ -383,7 +383,7 @@ int smblite_lib_get_prop_from_bms(struct smb_charger *chg, int channel, int *val
 
 	if (chg->is_fg_remote) {
 		rc = remote_bms_get_prop(channel, val, BMS_GLINK);
-		if (rc < 0)
+		if ((rc < 0) && (rc != -EAGAIN))
 			smblite_lib_err(chg, "Couldn't get prop from remote bms, rc = %d",
 					rc);
 	} else {
@@ -699,7 +699,8 @@ int smblite_lib_set_icl_current(struct smb_charger *chg, const int icl_ua)
 	/* suspend if 25mA or less is requested */
 	bool suspend = (icl_ua <= USBIN_25UA);
 
-	schgm_flashlite_torch_priority(chg, suspend ? TORCH_BOOST_MODE :
+	if (chg->subtype == PM2250)
+		schgm_flashlite_torch_priority(chg, suspend ? TORCH_BOOST_MODE :
 							TORCH_BUCK_MODE);
 	/* Do not configure ICL from SW for DAM */
 	if (smblite_lib_get_prop_typec_mode(chg) ==
@@ -941,7 +942,7 @@ int smblite_lib_get_prop_batt_capacity(struct smb_charger *chg,
 
 	rc = smblite_lib_get_prop_from_bms(chg, SMB5_QG_CAPACITY,
 						&val->intval);
-	if (rc < 0)
+	if ((rc < 0) && (rc != -EAGAIN))
 		smblite_lib_err(chg, "Couldn't get capacity prop rc=%d\n", rc);
 
 	return rc;
@@ -2817,7 +2818,8 @@ irqreturn_t smblite_usbin_uv_irq_handler(int irq, void *data)
 
 unsuspend_input:
 		/* Force torch in boost mode to ensure it works with low ICL */
-		schgm_flashlite_torch_priority(chg, TORCH_BOOST_MODE);
+		if (chg->subtype == PM2250)
+			schgm_flashlite_torch_priority(chg, TORCH_BOOST_MODE);
 
 		if (chg->aicl_max_reached) {
 			smblite_lib_dbg(chg, PR_MISC,
