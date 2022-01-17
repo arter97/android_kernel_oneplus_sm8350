@@ -163,21 +163,19 @@ struct ethqos_io_macro {
 	u32 loopback_en;
 	u32 rx_prog_swap;
 	u32 tx_clk_phase_shift_en;
-
 	u32 dll_clock_dis;
 	u32 mclk_freq_calc;
 	u32 ddr_traffic_init_sel;
 	u32 ddr_traffic_init_sw;
 	u32 ddr_cal_en;
-
 	u32 tcx0_cycles_dly_line;
 	u32 tcx0_cycles_cnt;
-
 	u32 test_ctl;
 	u32 usr_ctl;
-
 	u32 pps_create;
 	u32 pps_remove;
+	u32 l3_master_dev;
+	u32 ipv6_wq;
 };
 
 struct qcom_ethqos {
