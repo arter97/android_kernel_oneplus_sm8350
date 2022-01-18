@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2020, 2022 The Linux Foundation. All rights reserved.
  */
 
 #include <linux/cdev.h>
@@ -111,9 +111,10 @@ static int qiib_driver_data_init(void)
 
 	qiib_info->log_ctx = ipc_log_context_create(NUM_LOG_PAGES,
 						"qsee_ipc_irq_bridge", 0);
+#if IS_ENABLED(CONFIG_IPC_LOGGING)
 	if (!qiib_info->log_ctx)
 		QIIB_ERR("%s: unable to create logging context\n", __func__);
-
+#endif
 	return 0;
 }
 
