@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2012-2020 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -3433,9 +3434,9 @@ sir_convert_assoc_resp_frame2_struct(struct mac_context *mac,
 	 */
 	auth_type = session_entry->connected_akm;
 	sha384_akm = lim_is_sha384_akm(auth_type);
+	ie_ptr = frame + FIXED_PARAM_OFFSET_ASSOC_RSP;
+	ie_len = frame_len - FIXED_PARAM_OFFSET_ASSOC_RSP;
 	if (sha384_akm) {
-		ie_ptr = frame + FIXED_PARAM_OFFSET_ASSOC_RSP;
-		ie_len = frame_len - FIXED_PARAM_OFFSET_ASSOC_RSP;
 		qdf_status = wlan_parse_ftie_sha384(ie_ptr, ie_len, pAssocRsp);
 		if (QDF_IS_STATUS_ERROR(qdf_status)) {
 			pe_err("FT IE parsing failed status:%d", status);
