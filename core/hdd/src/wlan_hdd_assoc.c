@@ -3085,12 +3085,6 @@ hdd_association_completion_handler(struct hdd_adapter *adapter,
 				  sta_ctx->ap_supports_immediate_power_save);
 		}
 
-		if (policy_mgr_is_mcc_in_24G(hdd_ctx->psoc)) {
-			if (hdd_ctx->miracast_value)
-				wlan_hdd_set_mas(adapter,
-					hdd_ctx->miracast_value);
-		}
-
 		/* Initialize the Linkup event completion variable */
 		INIT_COMPLETION(adapter->linkup_event_var);
 
@@ -3307,6 +3301,12 @@ hdd_association_completion_handler(struct hdd_adapter *adapter,
 			/* Indicate 'connect' status to user space */
 			hdd_send_association_event(dev, roam_info);
 
+			if (policy_mgr_is_mcc_in_24G(hdd_ctx->psoc)) {
+				if (hdd_ctx->miracast_value)
+					wlan_hdd_set_mas(adapter,
+						hdd_ctx->miracast_value);
+			}
+
 			if ((roam_info->u.pConnectedProfile->AuthType ==
 			     eCSR_AUTH_TYPE_FT_RSN) ||
 			    (roam_info->u.pConnectedProfile->AuthType ==
@@ -3492,6 +3492,12 @@ hdd_association_completion_handler(struct hdd_adapter *adapter,
 
 			/* Indicate 'connect' status to user space */
 			hdd_send_association_event(dev, roam_info);
+
+			if (policy_mgr_is_mcc_in_24G(hdd_ctx->psoc)) {
+				if (hdd_ctx->miracast_value)
+					wlan_hdd_set_mas(adapter,
+						hdd_ctx->miracast_value);
+			}
 
 			/*
 			 * wpa supplicant expecting WPA/RSN IE in connect result
