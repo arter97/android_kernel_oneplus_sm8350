@@ -10831,6 +10831,11 @@ static int pt_core_suspend(struct device *dev)
 		if (cd->cpdata->flags & PT_CORE_FLAG_SKIP_SYS_SLEEP)
 			return 0;
 
+		cancel_work_sync(&cd->resume_offload_work);
+		cancel_work_sync(&cd->suspend_offload_work);
+		cancel_work_sync(&cd->resume_work);
+		cancel_work_sync(&cd->suspend_work);
+
 		queue_work(cd->pt_workqueue, &cd->suspend_offload_work);
 		pt_debug(cd->dev, DL_ERROR, "%s End\n", __func__);
 
@@ -11003,6 +11008,11 @@ static int pt_core_resume(struct device *dev)
 	int rc = 0;
 	if (cd->cpdata->flags & PT_CORE_FLAG_SKIP_SYS_SLEEP)
 		return 0;
+
+	cancel_work_sync(&cd->resume_offload_work);
+	cancel_work_sync(&cd->suspend_offload_work);
+	cancel_work_sync(&cd->resume_work);
+	cancel_work_sync(&cd->suspend_work);
 
 	queue_work(cd->pt_workqueue, &cd->resume_offload_work);
 	pt_debug(cd->dev, DL_ERROR, "%s End\n", __func__);
@@ -12845,6 +12855,11 @@ static int drm_notifier_callback(struct notifier_block *self,
 			if (cd->fb_state != FB_ON) {
 				pt_debug(cd->dev, DL_INFO, "%s: Resume notifier called!\n",
 					__func__);
+				cancel_work_sync(&cd->resume_offload_work);
+				cancel_work_sync(&cd->suspend_offload_work);
+				cancel_work_sync(&cd->resume_work);
+				cancel_work_sync(&cd->suspend_work);
+
 				queue_work(cd->pt_workqueue, &cd->resume_work);
 #if defined(CONFIG_PM_SLEEP)
 				pt_debug(cd->dev, DL_INFO, "%s: Resume notifier called!\n",
@@ -12866,7 +12881,11 @@ static int drm_notifier_callback(struct notifier_block *self,
 				if (cd->cpdata->flags & PT_CORE_FLAG_SKIP_RUNTIME)
 					pt_core_suspend_(cd->dev);
 #endif
+				cancel_work_sync(&cd->resume_offload_work);
+				cancel_work_sync(&cd->suspend_offload_work);
 				cancel_work_sync(&cd->resume_work);
+				cancel_work_sync(&cd->suspend_work);
+
 				queue_work(cd->pt_workqueue, &cd->suspend_work);
 				cd->fb_state = FB_OFF;
 				pt_debug(cd->dev, DL_INFO, "%s: Suspend notified!\n", __func__);
@@ -17937,6 +17956,12 @@ int pt_release(struct pt_core_data *cd)
 	call_atten_cb(cd, PT_ATTEN_CANCEL_LOADER, 0);
 	cancel_work_sync(&cd->ttdl_restart_work);
 	cancel_work_sync(&cd->enum_work);
+	cancel_work_sync(&cd->resume_offload_work);
+	cancel_work_sync(&cd->suspend_offload_work);
+	cancel_work_sync(&cd->resume_work);
+	cancel_work_sync(&cd->suspend_work);
+	destroy_workqueue(cd->pt_workqueue);
+
 	pt_stop_wd_timer(cd);
 
 	pt_release_modules(cd);
