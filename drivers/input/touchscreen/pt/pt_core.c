@@ -10536,43 +10536,35 @@ regulator_put:
 #ifdef ENABLE_I2C_REG_ONLY
 static int pt_enable_i2c_regulator(struct pt_core_data *cd, bool en)
 {
-	int rc;
+	int rc = 0;
 
+	pt_debug(cd->dev, DL_INFO, "%s: Enter flag = %d\n", __func__, en);
 	if (!en) {
 		rc = 0;
 		goto disable_vcc_i2c_reg_only;
 	}
 
 	if (cd->vcc_i2c) {
-		if (regulator_count_voltages(cd->vcc_i2c) > 0) {
-			rc = regulator_set_voltage(cd->vcc_i2c, FT_I2C_VTG_MIN_UV,
-							FT_I2C_VTG_MAX_UV);
-			if (rc) {
-				dev_err(cd->dev,
-					"Regulator set_vtg failed vcc_i2c rc=%d\n", rc);
-				goto disable_vcc_i2c_reg_only;
-			}
-		}
+		rc = regulator_set_load(cd->vcc_i2c, I2C_ACTIVE_LOAD_MA);
+		if (rc < 0)
+			pt_debug(cd->dev, DL_INFO,
+				"%s: I2c unable to set active current rc = %d\n", __func__, rc);
 
-		rc = regulator_enable(cd->vcc_i2c);
-		if (rc) {
-			dev_err(cd->dev,
-				"Regulator vcc_i2c enable failed rc=%d\n", rc);
-			goto disable_vcc_i2c_reg_only;
-		}
+		pt_debug(cd->dev, DL_INFO, "%s: i2c set I2C_ACTIVE_LOAD_MA rc = %d\n",
+			__func__, rc);
 	}
-
 
 	return 0;
 
 disable_vcc_i2c_reg_only:
 	if (cd->vcc_i2c) {
-		if (regulator_count_voltages(cd->vcc_i2c) > 0)
-			regulator_set_voltage(cd->vcc_i2c, FT_I2C_VTG_MIN_UV,
-						FT_I2C_VTG_MAX_UV);
+		rc = regulator_set_load(cd->vcc_i2c, I2C_SUSPEND_LOAD_UA);
+		if (rc < 0)
+			pt_debug(cd->dev, DL_INFO, "%s: i2c unable to set 0 uAm rc = %d\n",
+				__func__, rc);
 
-		regulator_disable(cd->vcc_i2c);
 	}
+	pt_debug(cd->dev, DL_INFO, "%s: Exit rc = %d I2C_SUSPEND_LOAD_UA\n", __func__, rc);
 
 	return rc;
 }
@@ -10582,8 +10574,9 @@ disable_vcc_i2c_reg_only:
 #ifdef ENABLE_VDD_REG_ONLY
 static int pt_enable_vdd_regulator(struct pt_core_data *cd, bool en)
 {
-	int rc;
+	int rc = 0, status = 0;
 
+	pt_debug(cd->dev, DL_INFO, "%s: Enter flag = %d\n", __func__, en);
 	if (!en) {
 		rc = 0;
 		goto disable_vdd_reg_only;
@@ -10606,6 +10599,13 @@ static int pt_enable_vdd_regulator(struct pt_core_data *cd, bool en)
 				"Regulator vdd enable failed rc=%d\n", rc);
 			goto disable_vdd_reg_only;
 		}
+
+		rc = regulator_set_load(cd->vdd, PWR_ACTIVE_LOAD_MA);
+		if (rc < 0)
+			pt_debug(cd->dev, DL_INFO, "%s: vdd unable to set active current rc = %d\n",
+				__func__, rc);
+
+		pt_debug(cd->dev, DL_INFO, "%s: vdd regulator enabled rc = %d\n", __func__, rc);
 	}
 
 	return 0;
@@ -10616,9 +10616,17 @@ disable_vdd_reg_only:
 			regulator_set_voltage(cd->vdd, FT_VTG_MIN_UV,
 						FT_VTG_MAX_UV);
 
-		regulator_disable(cd->vdd);
-	}
+		rc = regulator_set_load(cd->vdd, 0);
+		if (rc < 0)
+			pt_debug(cd->dev, DL_INFO, "%s: vdd unable to set 0 uAm rc = %d\n",
+				__func__, rc);
 
+		status = regulator_disable(cd->vdd);
+		if (!en)
+			rc = status;
+		pt_debug(cd->dev, DL_INFO, "%s: vdd regulator disabled rc = %d\n", __func__, rc);
+	}
+	pt_debug(cd->dev, DL_INFO, "%s: Exit rc = %d\n", __func__, rc);
 	return rc;
 }
 #endif
@@ -10766,11 +10774,11 @@ static int pt_core_suspend_(struct device *dev)
 	int rc;
 	struct pt_core_data *cd = dev_get_drvdata(dev);
 
-	pt_debug(dev, DL_INFO, "%s: Entering into suspend mode:\n",
-		__func__);
+	pt_debug(dev, DL_INFO, "%s: Enter\n", __func__);
 	rc = pt_core_sleep(cd);
 	if (rc) {
-		pt_debug(dev, DL_ERROR, "%s: Error on sleep\n", __func__);
+		pt_debug(dev, DL_ERROR, "%s: Error on sleep rc =%d\n",
+			__func__, rc);
 		return -EAGAIN;
 	}
 
@@ -10806,6 +10814,7 @@ static int pt_core_suspend_(struct device *dev)
 			__func__);
 	}
 
+	pt_debug(dev, DL_INFO, "%s: Exit :\n", __func__);
 	return rc;
 }
 
@@ -10836,8 +10845,8 @@ static int pt_core_suspend(struct device *dev)
 		cancel_work_sync(&cd->resume_work);
 		cancel_work_sync(&cd->suspend_work);
 
-		queue_work(cd->pt_workqueue, &cd->suspend_offload_work);
-		pt_debug(cd->dev, DL_ERROR, "%s End\n", __func__);
+		rc = pt_core_suspend_(cd->dev);
+		pt_debug(cd->dev, DL_INFO, "%s Exit - rc = %d\n", __func__, rc);
 
 		return rc;
 }
@@ -10937,6 +10946,7 @@ static void pt_suspend_offload_work(struct work_struct *work)
 	struct pt_core_data *cd = container_of(work, struct pt_core_data,
 				suspend_offload_work);
 
+	pt_debug(cd->dev, DL_INFO, "%s start\n", __func__);
 	if (cd->cpdata->flags & PT_CORE_FLAG_SKIP_SYS_SLEEP)
 		return;
 
@@ -10966,6 +10976,7 @@ static void pt_resume_offload_work(struct work_struct *work)
 	struct pt_core_data *pt_data = container_of(work, struct pt_core_data,
 					resume_offload_work);
 
+	pt_debug(pt_data->dev, DL_INFO, "%s start\n", __func__);
 	do {
 		retry_count--;
 	rc = pt_core_resume_(pt_data->dev);
@@ -11015,7 +11026,7 @@ static int pt_core_resume(struct device *dev)
 	cancel_work_sync(&cd->suspend_work);
 
 	queue_work(cd->pt_workqueue, &cd->resume_offload_work);
-	pt_debug(cd->dev, DL_ERROR, "%s End\n", __func__);
+	pt_debug(cd->dev, DL_INFO, "%s workqueued\n", __func__);
 
 	return rc;
 }
@@ -12775,6 +12786,7 @@ static void pt_resume_work(struct work_struct *work)
 					resume_work);
 	int rc = 0;
 
+	pt_debug(pt_data->dev, DL_INFO, "%s start ", __func__);
 	if (pt_data->cpdata->flags & PT_CORE_FLAG_SKIP_RUNTIME)
 		return;
 
@@ -12783,6 +12795,7 @@ static void pt_resume_work(struct work_struct *work)
 		pt_debug(pt_data->dev, DL_ERROR,
 			"%s: Error on wake\n", __func__);
 	}
+	pt_debug(pt_data->dev, DL_INFO, "%s touch to wake disabled ", __func__);
 	return;
 }
 
@@ -12792,7 +12805,7 @@ static void pt_suspend_work(struct work_struct *work)
 					suspend_work);
 	int rc = 0;
 
-	pt_debug(pt_data->dev, DL_INFO, "%s Start\n", __func__);
+	pt_debug(pt_data->dev, DL_INFO, "%s start\n", __func__);
 
 	if (pt_data->cpdata->flags & PT_CORE_FLAG_SKIP_RUNTIME)
 		return;
@@ -12802,7 +12815,7 @@ static void pt_suspend_work(struct work_struct *work)
 		pt_debug(pt_data->dev, DL_ERROR, "%s: Error on sleep\n", __func__);
 		return;
 	}
-	pt_debug(pt_data->dev, DL_INFO, "%s Exit\n", __func__);
+	pt_debug(pt_data->dev, DL_INFO, "%s Exit touch to wake enabled\n", __func__);
 	return;
 }
 
