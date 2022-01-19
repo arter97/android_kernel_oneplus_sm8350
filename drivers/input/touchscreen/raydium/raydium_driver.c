@@ -2146,9 +2146,9 @@ static int raydium_ts_probe(struct i2c_client *client,
 	LOGD(LOG_DEBUG, "[touch]RAD Touch driver ver :0x%X\n", g_u32_driver_version);
 
 	/*fw update check*/
-	ret = raydium_fw_update_check(u16_i2c_data);
+	ret = raydium_fw_update_init(u16_i2c_data);
 	if (ret < 0) {
-		LOGD(LOG_ERR, "[touch]FW update check failed\n");
+		LOGD(LOG_ERR, "[touch]FW update init failed\n");
 		ret = -ENODEV;
 		goto exit_irq_request_failed;
 	}
