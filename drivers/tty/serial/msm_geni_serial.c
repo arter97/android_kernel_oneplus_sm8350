@@ -280,6 +280,7 @@ struct msm_geni_serial_port {
 	struct completion tx_xfer;
 	unsigned int count;
 	atomic_t xfer_inprogress;
+	atomic_t stop_rx_inprogress;
 	spinlock_t tx_lock;
 	struct msm_geni_serial_ssr uart_ssr;
 };
@@ -2146,13 +2147,19 @@ static int stop_rx_sequencer(struct uart_port *uport)
 						__func__, geni_status);
 		complete(&port->xfer);
 		return 0;
+	} else if (atomic_read(&port->stop_rx_inprogress)) {
+		IPC_LOG_MSG(port->ipc_log_misc,
+			"%s: Stop Rx is inprogress\n", __func__);
+		return 0;
 	}
+	atomic_set(&port->stop_rx_inprogress, 1);
 
 	if (port->gsi_mode) {
 		IPC_LOG_MSG(port->ipc_log_misc, "%s: Queue Rx Work\n",
 						 __func__);
 		reinit_completion(&port->xfer);
 		queue_work(port->rx_wq, &port->rx_cancel_work);
+		atomic_set(&port->stop_rx_inprogress, 0);
 		return 0;
 	}
 
@@ -2188,6 +2195,7 @@ static int stop_rx_sequencer(struct uart_port *uport)
 					"%s: Abort Stop Rx, extend the PM timer, usage_count:%d\n",
 					__func__, usage_count);
 				pm_runtime_mark_last_busy(uport->dev);
+				atomic_set(&port->stop_rx_inprogress, 0);
 				return -EBUSY;
 			}
 		}
@@ -2291,6 +2299,7 @@ exit_rx_seq:
 		    geni_read_reg(uport->membase, SE_DMA_DEBUG_REG0));
 
 	complete(&port->xfer);
+	atomic_set(&port->stop_rx_inprogress, 0);
 	is_rx_active = geni_status & S_GENI_CMD_ACTIVE;
 	if (is_rx_active)
 		return -EBUSY;
