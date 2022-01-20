@@ -1782,6 +1782,7 @@ static int dwc3_probe(struct platform_device *pdev)
 	if (ret)
 		goto err2;
 
+	dwc3_debugfs_init(dwc);
 	if (!notify_event) {
 		ret = dwc3_core_init(dwc);
 		if (ret) {
@@ -1827,10 +1828,10 @@ static int dwc3_probe(struct platform_device *pdev)
 	count++;
 
 	pm_runtime_allow(dev);
-	dwc3_debugfs_init(dwc);
 	return 0;
 
 err3:
+	dwc3_debugfs_exit(dwc);
 	dwc3_free_scratch_buffers(dwc);
 err2:
 	dwc3_free_event_buffers(dwc);
@@ -1850,8 +1851,8 @@ static int dwc3_remove(struct platform_device *pdev)
 {
 	struct dwc3	*dwc = platform_get_drvdata(pdev);
 
-	dwc3_debugfs_exit(dwc);
 	dwc3_gadget_exit(dwc);
+	dwc3_debugfs_exit(dwc);
 	pm_runtime_disable(&pdev->dev);
 	pm_runtime_put_noidle(&pdev->dev);
 	pm_runtime_set_suspended(&pdev->dev);
