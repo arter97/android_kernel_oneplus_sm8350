@@ -248,15 +248,14 @@ static int compat_get_fastrpc_ioctl_invoke(
 	compat_uint_t u = 0;
 	compat_size_t s;
 	compat_uptr_t p, k;
-	union compat_remote_arg __user *pra32;
-	union remote_arg __user *pra;
+	union compat_remote_arg *pra32;
+	union remote_arg *pra;
 	int err = 0, len = 0, j = 0;
 
 	len = REMOTE_SCALARS_LENGTH(sc);
 
-	err = get_user(p, (compat_uptr_t __user *)&inv);
-	p += sizeof(struct fastrpc_ioctl_invoke_async);
-	err |= put_user(p, (compat_uptr_t __user *)&inv->inv.pra);
+	pra = (union remote_arg *)(inv + 1);
+	err = put_user(pra, &inv->inv.pra);
 	err |= put_user(sc, &inv->inv.sc);
 	err |= get_user(u, &inv32->inv.handle);
 	err |= put_user(u, &inv->inv.handle);
@@ -264,10 +263,10 @@ static int compat_get_fastrpc_ioctl_invoke(
 	if (err)
 		return err;
 	pra32 = compat_ptr(p);
-	pra = (union remote_arg __user *)(inv + 1);
+	pra = (union remote_arg *)(inv + 1);
 	for (j = 0; j < len; j++) {
 		err |= get_user(p, &pra32[j].buf.pv);
-		err |= put_user(p, (compat_uptr_t __user *)&pra[j].buf.pv);
+		err |= put_user(p, (uintptr_t *)&pra[j].buf.pv);
 		err |= get_user(s, &pra32[j].buf.len);
 		err |= put_user(s, &pra[j].buf.len);
 	}
@@ -275,7 +274,7 @@ static int compat_get_fastrpc_ioctl_invoke(
 	err |= put_user(NULL, &inv->fds);
 	if (cmd != COMPAT_FASTRPC_IOCTL_INVOKE) {
 		err |= get_user(p, &inv32->fds);
-		err |= put_user(p, (compat_uptr_t __user *)&inv->fds);
+		err |= put_user(p, (compat_uptr_t *)&inv->fds);
 	}
 	err |= put_user(NULL, &inv->attrs);
 	if ((cmd == COMPAT_FASTRPC_IOCTL_INVOKE_ATTRS) ||
@@ -283,9 +282,9 @@ static int compat_get_fastrpc_ioctl_invoke(
 		(cmd == COMPAT_FASTRPC_IOCTL_INVOKE_PERF) ||
 		(cmd == FASTRPC_INVOKE2_ASYNC)) {
 		err |= get_user(p, &inv32->attrs);
-		err |= put_user(p, (compat_uptr_t __user *)&inv->attrs);
+		err |= put_user(p, (compat_uptr_t *)&inv->attrs);
 	}
-	err |= put_user(NULL, &inv->crc);
+	err |= put_user(NULL, (compat_uptr_t __user **)&inv->crc);
 	if ((cmd == COMPAT_FASTRPC_IOCTL_INVOKE_CRC) ||
 		(cmd == COMPAT_FASTRPC_IOCTL_INVOKE_PERF)) {
 		err |= get_user(p, &inv32->crc);
@@ -543,7 +542,7 @@ static int compat_get_fastrpc_ioctl_mmap(
 	err |= get_user(u, &map32->flags);
 	err |= put_user(u, &map->flags);
 	err |= get_user(p, &map32->vaddrin);
-	err |= put_user(p, (uintptr_t __user *)&map->vaddrin);
+	err |= put_user(p, (uintptr_t *)&map->vaddrin);
 	err |= get_user(s, &map32->size);
 	err |= put_user(s, &map->size);
 
@@ -683,13 +682,13 @@ static int compat_get_fastrpc_ioctl_init(
 	err |= put_user(0, &init->attrs);
 	if (cmd == COMPAT_FASTRPC_IOCTL_INIT_ATTRS) {
 		err |= get_user(i, &init32->attrs);
-		err |= put_user(i, &init->attrs);
+		err |= put_user(i, (compat_uptr_t *)&init->attrs);
 	}
 
 	err |= put_user(0, &init->siglen);
 	if (cmd == COMPAT_FASTRPC_IOCTL_INIT_ATTRS) {
 		err |= get_user(i, &init32->siglen);
-		err |= put_user(i, &init->siglen);
+		err |= put_user(i, (compat_uptr_t *)&init->siglen);
 	}
 
 	return err;
