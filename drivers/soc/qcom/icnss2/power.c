@@ -607,6 +607,24 @@ static int icnss_clk_off(struct list_head *clk_list)
 	return 0;
 }
 
+void icnss_enable_regulator(struct icnss_priv *priv)
+{
+	struct list_head *vreg_list = &priv->vreg_list;
+	struct icnss_vreg_info *vreg;
+
+	/*
+	 * Parse through all regulators and enable it if no_vote_on_wifi_active
+	 * parameter is set.
+	 */
+	list_for_each_entry(vreg, vreg_list, list) {
+		if (IS_ERR_OR_NULL(vreg->reg) || !vreg->cfg.is_supported ||
+		    !vreg->cfg.no_vote_on_wifi_active)
+			continue;
+
+		icnss_vreg_on_single(vreg);
+	}
+}
+
 int icnss_hw_power_on(struct icnss_priv *priv)
 {
 	int ret = 0;
