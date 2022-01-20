@@ -17791,6 +17791,7 @@ int pt_probe(const struct pt_bus_ops *ops, struct device *dev,
 		pt_debug(cd->dev, DL_ERROR,
 			"%s: Enumeration Failed r=%d\n", __func__, rc);
 		/* For PtSBC don't error out, allow TTDL to stay up */
+		rc = -EPROBE_DEFER;
 		goto error_after_startup;
 	}
 	/* Suspend scanning until probe is complete to avoid asyc touches */
