@@ -1113,6 +1113,7 @@ static int geni_i2c_xfer(struct i2c_adapter *adap,
 			"IO lines in bad state, Power the slave\n");
 		pm_runtime_mark_last_busy(gi2c->dev);
 		pm_runtime_put_autosuspend(gi2c->dev);
+		mutex_unlock(&gi2c->i2c_ssr.ssr_lock);
 		return -ENXIO;
 	}
 

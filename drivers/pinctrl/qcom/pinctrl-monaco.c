@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2020-2022, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -1595,7 +1595,7 @@ static struct pinctrl_qup monaco_qup_regs[] = {
 };
 
 static const int monaco_reserved_gpios[] = {
-	0, 1, 2, 3, 9, -1
+	0, 1, 2, 3, 9, 111, -1
 };
 
 static const struct msm_gpio_wakeirq_map monaco_mpm_map[] = {

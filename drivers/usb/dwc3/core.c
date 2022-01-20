@@ -1150,13 +1150,6 @@ int dwc3_core_init(struct dwc3 *dwc)
 		dwc3_writel(dwc->regs, DWC31_LCSR_TX_DEEMPH_3(0),
 			dwc->gen2_tx_de_emph3 & DWC31_TX_DEEMPH_MASK);
 
-	/* set inter-packet gap 199.794ns to improve EL_23 margin */
-	if (dwc->revision >= DWC3_USB31_REVISION_170A) {
-		reg = dwc3_readl(dwc->regs, DWC3_GUCTL1);
-		reg |= DWC3_GUCTL1_IP_GAP_ADD_ON(1);
-		dwc3_writel(dwc->regs, DWC3_GUCTL1, reg);
-	}
-
 	/* Force Gen1 speed on Gen2 controller if "force_gen1" is present */
 	if (dwc->force_gen1) {
 		for (i = 0; i < dwc->num_ssphy; i++) {
@@ -1167,6 +1160,8 @@ int dwc3_core_init(struct dwc3 *dwc)
 	}
 
 	/*
+	 * Set inter-packet gap 199.794ns to improve EL_23 margin.
+	 *
 	 * STAR 9001346572: Host: When a Single USB 2.0 Endpoint Receives NAKs Continuously, Host
 	 * Stops Transfers to Other Endpoints. When an active endpoint that is not currently cached
 	 * in the host controller is chosen to be cached to the same cache index as the endpoint
@@ -1177,8 +1172,11 @@ int dwc3_core_init(struct dwc3 *dwc)
 	 * The workaround is to disable lower layer LSP retrying the USB2.0 NAKed transfer. Forcing
 	 * this to LSP upper layer allows next EP to evict the stuck EP from cache.
 	 */
-	if ((dwc->revision == DWC3_USB31_REVISION_170A) &&
-		(dwc->version_type == DWC31_VERSIONTYPE_GA)) {
+	if (dwc->revision >= DWC3_USB31_REVISION_170A) {
+		reg = dwc3_readl(dwc->regs, DWC3_GUCTL1);
+		reg |= DWC3_GUCTL1_IP_GAP_ADD_ON(1);
+		dwc3_writel(dwc->regs, DWC3_GUCTL1, reg);
+
 		reg = dwc3_readl(dwc->regs, DWC3_GUCTL3);
 		reg |= DWC3_GUCTL3_USB20_RETRY_DISABLE;
 		dwc3_writel(dwc->regs, DWC3_GUCTL3, reg);

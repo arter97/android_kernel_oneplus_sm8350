@@ -12,56 +12,15 @@
 #include <linux/virtio.h>
 #include <linux/slab.h>
 #include <linux/scatterlist.h>
+#include <linux/completion.h>
 #include "../adsprpc_compat.h"
 #include "../adsprpc_shared.h"
 
-#define VIRTIO_ID_FASTRPC				34
-/* indicates remote invoke with buffer attributes is supported */
-#define VIRTIO_FASTRPC_F_INVOKE_ATTR			1
-/* indicates remote invoke with CRC is supported */
-#define VIRTIO_FASTRPC_F_INVOKE_CRC			2
-/* indicates remote mmap/munmap is supported */
-#define VIRTIO_FASTRPC_F_MMAP				3
-/* indicates QOS setting is supported */
-#define VIRTIO_FASTRPC_F_CONTROL			4
-/* indicates smmu passthrough is supported */
-#define VIRTIO_FASTRPC_F_SMMU_PASSTHROUGH		5
-
-#define NUM_CHANNELS			4 /* adsp, mdsp, slpi, cdsp0*/
-#define NUM_DEVICES			2 /* adsprpc-smd, adsprpc-smd-secure */
-#define M_FDLIST			16
-#define MINOR_NUM_DEV			0
-#define MINOR_NUM_SECURE_DEV		1
 #define ADSP_MMAP_HEAP_ADDR		4
 #define ADSP_MMAP_REMOTE_HEAP_ADDR	8
-#define FASTRPC_DMAHANDLE_NOMAP		16
 #define ADSP_MMAP_ADD_PAGES		0x1000
 
-#define INIT_FILELEN_MAX		(2*1024*1024)
-#define INIT_MEMLEN_MAX			(8*1024*1024)
-#define MAX_CACHE_BUF_SIZE		(8*1024*1024)
-
 #define FASTRPC_MSG_MAX			256
-#define MAX_FASTRPC_BUF_SIZE		(128*1024)
-#define DEBUGFS_SIZE			3072
-#define PID_SIZE			10
-#define UL_SIZE				25
-
-#define VIRTIO_FASTRPC_CMD_OPEN		1
-#define VIRTIO_FASTRPC_CMD_CLOSE	2
-#define VIRTIO_FASTRPC_CMD_INVOKE	3
-#define VIRTIO_FASTRPC_CMD_MMAP		4
-#define VIRTIO_FASTRPC_CMD_MUNMAP	5
-#define VIRTIO_FASTRPC_CMD_CONTROL	6
-
-#define ADSP_DOMAIN_ID			0
-#define MDSP_DOMAIN_ID			1
-#define SDSP_DOMAIN_ID			1
-#define CDSP_DOMAIN_ID			3
-
-#define STATIC_PD			0
-#define DYNAMIC_PD			1
-#define GUEST_OS			2
 
 #define K_COPY_FROM_USER(err, kernel, dst, src, size) \
 	do {\
@@ -82,9 +41,6 @@
 			memmove((dst), (src), (size));\
 	} while (0)
 
-#define FASTRPC_STATIC_HANDLE_KERNEL	1
-#define FASTRPC_STATIC_HANDLE_LISTENER	3
-#define FASTRPC_STATIC_HANDLE_MAX	20
 
 struct virt_fastrpc_vq {
 	/* protects vq */
@@ -95,6 +51,13 @@ struct virt_fastrpc_vq {
 struct fastrpc_ctx_lst {
 	struct hlist_head pending;
 	struct hlist_head interrupted;
+};
+
+struct virt_fastrpc_msg {
+	struct completion work;
+	u16 msgid;
+	void *txbuf;
+	void *rxbuf;
 };
 
 struct fastrpc_apps {
@@ -144,16 +107,6 @@ struct fastrpc_file {
 	char *debug_buf;
 };
 
-struct virt_fastrpc_buf {
-	u64 pv;		/* buffer physical address, 0 for non-ION buffer */
-	u64 len;	/* buffer length */
-};
-
-struct virt_fastrpc_dmahandle {
-	u32 fd;
-	u32 offset;
-};
-
 struct fastrpc_invoke_ctx {
 	struct virt_fastrpc_msg *msg;
 	size_t size;
@@ -171,6 +124,16 @@ struct fastrpc_invoke_ctx {
 	uint32_t handle;
 };
 
+struct virt_msg_hdr {
+	u32 pid;	/* GVM pid */
+	u32 tid;	/* GVM tid */
+	s32 cid;	/* channel id connected to DSP */
+	u32 cmd;	/* command type */
+	u32 len;	/* command length */
+	u16 msgid;	/* unique message id */
+	u32 result;	/* message return value */
+} __packed;
+
 struct fastrpc_file *fastrpc_file_alloc(void);
 int fastrpc_file_free(struct fastrpc_file *fl);
 int fastrpc_ioctl_get_info(struct fastrpc_file *fl,
@@ -187,5 +150,4 @@ int fastrpc_internal_munmap_fd(struct fastrpc_file *fl,
 				struct fastrpc_ioctl_munmap_fd *ud);
 int fastrpc_internal_invoke(struct fastrpc_file *fl,
 		uint32_t mode, struct fastrpc_ioctl_invoke_crc *inv);
-
 #endif /*__VIRTIO_FASTRPC_CORE_H__*/

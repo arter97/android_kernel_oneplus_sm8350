@@ -291,6 +291,7 @@ struct smb_charger {
 	/* locks */
 	struct mutex		typec_lock;
 	struct mutex		dpdm_lock;
+	struct mutex		dpdm_pulse_lock;
 
 	/* power supplies */
 	struct power_supply		*batt_psy;
@@ -436,7 +437,7 @@ irqreturn_t smblite_temp_change_irq_handler(int irq, void *data);
 irqreturn_t smblite_usbin_ov_irq_handler(int irq, void *data);
 irqreturn_t smblite_usb_id_irq_handler(int irq, void *data);
 irqreturn_t smblite_usb_source_change_irq_handler(int irq, void *data);
-irqreturn_t smblite_boost_mode_active_irq_handler(int irq, void *data);
+irqreturn_t smblite_boost_mode_sw_en_irq_handler(int irq, void *data);
 
 int smblite_lib_get_prop_batt_present(struct smb_charger *chg,
 				union power_supply_propval *val);

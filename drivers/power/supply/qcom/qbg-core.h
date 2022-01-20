@@ -138,11 +138,13 @@ enum QBG_ACCUM_INTERVAL_TYPE {
  * @rconn_mohm:	Battery connector resistance
  * @previous_ep_time:	Previous timestamp when essential params stored
  * @current_time:	Current time stamp
+ * @rated_capacity	rated capacity of battery
  * @context_count:	Size of the last QBG context dump stored
  * @profile_loaded:	Flag to indicated battery profile is loaded
  * @battery_missing:	Flag to indicate battery is missing
  * @data_ready:		Flag to indicate QBG data is ready
  * @in_fast_char:	Flag to indicate QBG is in fast char mode
+ * @enable_fifo_depth_half	Flag to indicate QBG fifo reduce half
  */
 struct qti_qbg {
 	struct device		*dev;
@@ -231,10 +233,12 @@ struct qti_qbg {
 	unsigned long		previous_ep_time;
 	unsigned long		current_time;
 	int			context_count;
+	int			rated_capacity;
 	bool			profile_loaded;
 	bool			battery_missing;
 	bool			battery_unknown;
 	bool			data_ready;
 	bool			in_fast_char;
+	bool			enable_fifo_depth_half;
 };
 #endif /* __QBG_CORE_H__ */

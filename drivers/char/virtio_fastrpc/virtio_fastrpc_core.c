@@ -7,15 +7,126 @@
 #include "virtio_fastrpc_mem.h"
 #include "virtio_fastrpc_queue.h"
 
-static inline int64_t getnstimediff(struct timespec64 *start)
-{
-	int64_t ns;
-	struct timespec64 ts, b;
+#define M_FDLIST			16
+#define FASTRPC_DMAHANDLE_NOMAP		16
 
-	ktime_get_real_ts64(&ts);
-	b = timespec64_sub(ts, *start);
-	ns = timespec64_to_ns(&b);
-	return ns;
+#define VIRTIO_FASTRPC_CMD_OPEN		1
+#define VIRTIO_FASTRPC_CMD_CLOSE	2
+#define VIRTIO_FASTRPC_CMD_INVOKE	3
+#define VIRTIO_FASTRPC_CMD_MMAP		4
+#define VIRTIO_FASTRPC_CMD_MUNMAP	5
+#define VIRTIO_FASTRPC_CMD_CONTROL	6
+
+#define STATIC_PD			0
+#define DYNAMIC_PD			1
+#define GUEST_OS			2
+
+#define FASTRPC_STATIC_HANDLE_KERNEL	1
+#define FASTRPC_STATIC_HANDLE_LISTENER	3
+#define FASTRPC_STATIC_HANDLE_MAX	20
+
+struct virt_fastrpc_buf {
+	u64 pv;		/* buffer physical address, 0 for non-ION buffer */
+	u64 len;	/* buffer length */
+};
+
+struct virt_fastrpc_dmahandle {
+	u32 fd;
+	u32 offset;
+};
+
+struct virt_open_msg {
+	struct virt_msg_hdr hdr;	/* virtio fastrpc message header */
+	u32 domain;			/* DSP domain id */
+	u32 pd;				/* DSP PD */
+} __packed;
+
+struct virt_control_msg {
+	struct virt_msg_hdr hdr;	/* virtio fastrpc message header */
+	u32 enable;			/* latency control enable */
+	u32 latency;			/* latency value */
+} __packed;
+
+struct virt_invoke_msg {
+	struct virt_msg_hdr hdr;	/* virtio fastrpc message header */
+	u32 handle;			/* remote handle */
+	u32 sc;				/* scalars describing the data */
+	struct virt_fastrpc_buf pra[0];	/* remote arguments list */
+} __packed;
+
+struct virt_mmap_msg {
+	struct virt_msg_hdr hdr;	/* virtio fastrpc message header */
+	u32 nents;                      /* number of map entries */
+	u32 flags;			/* mmap flags */
+	u64 size;			/* mmap length */
+	u64 vapp;			/* application virtual address */
+	u64 vdsp;			/* dsp address */
+	struct virt_fastrpc_buf sgl[0]; /* sg list */
+} __packed;
+
+struct virt_munmap_msg {
+	struct virt_msg_hdr hdr;	/* virtio fastrpc message header */
+	u64 vdsp;			/* dsp address */
+	u64 size;			/* mmap length */
+} __packed;
+
+static struct virt_fastrpc_msg *virt_alloc_msg(struct fastrpc_file *fl, int size)
+{
+	struct fastrpc_apps *me = fl->apps;
+	struct virt_fastrpc_msg *msg;
+	void *buf;
+	unsigned long flags;
+	int i;
+
+	if (size > me->buf_size) {
+		dev_err(me->dev, "message is too big (%d)\n", size);
+		return NULL;
+	}
+
+	msg = kzalloc(sizeof(*msg), GFP_KERNEL);
+	if (!msg)
+		return NULL;
+
+	buf = get_a_tx_buf(fl);
+	if (!buf) {
+		dev_err(me->dev, "can't get tx buffer\n");
+		kfree(msg);
+		return NULL;
+	}
+
+	msg->txbuf = buf;
+	init_completion(&msg->work);
+	spin_lock_irqsave(&me->msglock, flags);
+	for (i = 0; i < FASTRPC_MSG_MAX; i++) {
+		if (!me->msgtable[i]) {
+			me->msgtable[i] = msg;
+			msg->msgid = i;
+			break;
+		}
+	}
+	spin_unlock_irqrestore(&me->msglock, flags);
+
+	if (i == FASTRPC_MSG_MAX) {
+		dev_err(me->dev, "message queue is full\n");
+		kfree(msg);
+		return NULL;
+	}
+	return msg;
+}
+
+static void virt_free_msg(struct fastrpc_file *fl, struct virt_fastrpc_msg *msg)
+{
+	struct fastrpc_apps *me = fl->apps;
+	unsigned long flags;
+
+	spin_lock_irqsave(&me->msglock, flags);
+	if (me->msgtable[msg->msgid] == msg)
+		me->msgtable[msg->msgid] = NULL;
+	else
+		dev_err(me->dev, "can't find msg %d in table\n", msg->msgid);
+	spin_unlock_irqrestore(&me->msglock, flags);
+
+	kfree(msg);
 }
 
 static void context_list_ctor(struct fastrpc_ctx_lst *me)
@@ -50,10 +161,8 @@ static void context_free(struct fastrpc_invoke_ctx *ctx)
 {
 	int i;
 	struct fastrpc_file *fl = ctx->fl;
-	struct scatterlist sg[1];
 	struct fastrpc_apps *me = fl->apps;
 	struct virt_invoke_msg *rsp = NULL;
-	unsigned long flags;
 	int nbufs = REMOTE_SCALARS_INBUFS(ctx->sc) +
 			REMOTE_SCALARS_OUTBUFS(ctx->sc);
 
@@ -68,18 +177,8 @@ static void context_free(struct fastrpc_invoke_ctx *ctx)
 
 	if (ctx->msg) {
 		rsp = ctx->msg->rxbuf;
-		if (rsp) {
-			sg_init_one(sg, rsp, me->buf_size);
-
-			spin_lock_irqsave(&me->rvq.vq_lock, flags);
-			/* add the buffer back to the remote processor's virtqueue */
-			if (virtqueue_add_inbuf(me->rvq.vq, sg, 1, rsp, GFP_KERNEL))
-				dev_err(me->dev,
-					"%s: fail to add input buffer\n", __func__);
-			else
-				virtqueue_kick(me->rvq.vq);
-			spin_unlock_irqrestore(&me->rvq.vq_lock, flags);
-		}
+		if (rsp)
+			fastrpc_rxbuf_send(fl, rsp, me->buf_size);
 
 		virt_free_msg(fl, ctx->msg);
 		ctx->msg = NULL;
@@ -165,6 +264,53 @@ static void fastrpc_cached_buf_list_free(struct fastrpc_file *fl)
 		if (free)
 			fastrpc_buf_free(free, 0);
 	} while (free);
+}
+
+static int virt_fastrpc_close(struct fastrpc_file *fl)
+{
+	struct fastrpc_apps *me = fl->apps;
+	struct virt_msg_hdr *vmsg, *rsp = NULL;
+	struct virt_fastrpc_msg *msg;
+	int err;
+
+	if (fl->cid < 0) {
+		dev_err(me->dev, "channel id %d is invalid\n", fl->cid);
+		return -EINVAL;
+	}
+
+	msg = virt_alloc_msg(fl, sizeof(*vmsg));
+	if (!msg) {
+		dev_err(me->dev, "%s: no memory\n", __func__);
+		return -ENOMEM;
+	}
+
+	vmsg = (struct virt_msg_hdr *)msg->txbuf;
+	vmsg->pid = fl->tgid;
+	vmsg->tid = current->pid;
+	vmsg->cid = fl->cid;
+	vmsg->cmd = VIRTIO_FASTRPC_CMD_CLOSE;
+	vmsg->len = sizeof(*vmsg);
+	vmsg->msgid = msg->msgid;
+	vmsg->result = 0xffffffff;
+
+	err = fastrpc_txbuf_send(fl, vmsg, sizeof(*vmsg));
+	if (err)
+		goto bail;
+
+	wait_for_completion(&msg->work);
+
+	rsp = msg->rxbuf;
+	if (!rsp)
+		goto bail;
+
+	err = rsp->result;
+bail:
+	if (rsp)
+		fastrpc_rxbuf_send(fl, rsp, me->buf_size);
+
+	virt_free_msg(fl, msg);
+
+	return err;
 }
 
 int fastrpc_file_free(struct fastrpc_file *fl)
@@ -594,6 +740,30 @@ bail:
 	return err;
 }
 
+static int virt_fastrpc_invoke(struct fastrpc_file *fl, struct fastrpc_invoke_ctx *ctx)
+{
+	struct fastrpc_apps *me = fl->apps;
+	struct virt_fastrpc_msg *msg = ctx->msg;
+	struct virt_invoke_msg *vmsg;
+	int err = 0;
+
+	if (!msg) {
+		dev_err(me->dev, "%s: ctx msg is NULL\n", __func__);
+		err = -EINVAL;
+		goto bail;
+	}
+	vmsg = (struct virt_invoke_msg *)msg->txbuf;
+	if (!vmsg) {
+		dev_err(me->dev, "%s: invoke msg is NULL\n", __func__);
+		err = -EINVAL;
+		goto bail;
+	}
+
+	err = fastrpc_txbuf_send(fl, vmsg, ctx->size);
+bail:
+	return err;
+}
+
 int fastrpc_internal_invoke(struct fastrpc_file *fl,
 			uint32_t mode, struct fastrpc_ioctl_invoke_crc *inv)
 {
@@ -649,6 +819,48 @@ bail:
 		context_save_interrupted(ctx);
 	else if (ctx)
 		context_free(ctx);
+
+	return err;
+}
+
+static int virt_fastrpc_munmap(struct fastrpc_file *fl, uintptr_t raddr,
+				size_t size)
+{
+	struct fastrpc_apps *me = fl->apps;
+	struct virt_munmap_msg *vmsg, *rsp = NULL;
+	struct virt_fastrpc_msg *msg;
+	int err;
+
+	msg = virt_alloc_msg(fl, sizeof(*vmsg));
+	if (!msg)
+		return -ENOMEM;
+
+	vmsg = (struct virt_munmap_msg *)msg->txbuf;
+	vmsg->hdr.pid = fl->tgid;
+	vmsg->hdr.tid = current->pid;
+	vmsg->hdr.cid = fl->cid;
+	vmsg->hdr.cmd = VIRTIO_FASTRPC_CMD_MUNMAP;
+	vmsg->hdr.len = sizeof(*vmsg);
+	vmsg->hdr.msgid = msg->msgid;
+	vmsg->hdr.result = 0xffffffff;
+	vmsg->vdsp = raddr;
+	vmsg->size = size;
+
+	err = fastrpc_txbuf_send(fl, vmsg, sizeof(*vmsg));
+	if (err)
+		goto bail;
+
+	wait_for_completion(&msg->work);
+
+	rsp = msg->rxbuf;
+	if (!rsp)
+		goto bail;
+
+	err = rsp->hdr.result;
+bail:
+	if (rsp)
+		fastrpc_rxbuf_send(fl, rsp, me->buf_size);
+	virt_free_msg(fl, msg);
 
 	return err;
 }
@@ -742,6 +954,72 @@ bail:
 	return err;
 }
 
+static int virt_fastrpc_mmap(struct fastrpc_file *fl, uint32_t flags,
+			uintptr_t va, struct scatterlist *table,
+			unsigned int nents, size_t size, uintptr_t *raddr)
+{
+	struct fastrpc_apps *me = fl->apps;
+	struct virt_mmap_msg *vmsg, *rsp = NULL;
+	struct virt_fastrpc_msg *msg;
+	struct virt_fastrpc_buf *sgbuf;
+	int err, sgbuf_size, total_size;
+	struct scatterlist *sgl = NULL;
+	int sgl_index = 0;
+
+	sgbuf_size = nents * sizeof(*sgbuf);
+	total_size = sizeof(*vmsg) + sgbuf_size;
+
+	msg = virt_alloc_msg(fl, total_size);
+	if (!msg)
+		return -ENOMEM;
+
+	vmsg = (struct virt_mmap_msg *)msg->txbuf;
+	vmsg->hdr.pid = fl->tgid;
+	vmsg->hdr.tid = current->pid;
+	vmsg->hdr.cid = fl->cid;
+	vmsg->hdr.cmd = VIRTIO_FASTRPC_CMD_MMAP;
+	vmsg->hdr.len = total_size;
+	vmsg->hdr.msgid = msg->msgid;
+	vmsg->hdr.result = 0xffffffff;
+	vmsg->flags = flags;
+	vmsg->size = size;
+	vmsg->vapp = va;
+	vmsg->vdsp = 0;
+	vmsg->nents = nents;
+	sgbuf = vmsg->sgl;
+
+	for_each_sg(table, sgl, nents, sgl_index) {
+		if (sg_dma_len(sgl)) {
+			sgbuf[sgl_index].pv = sg_dma_address(sgl);
+			sgbuf[sgl_index].len = sg_dma_len(sgl);
+		} else {
+			sgbuf[sgl_index].pv = page_to_phys(sg_page(sgl));
+			sgbuf[sgl_index].len = sgl->length;
+		}
+	}
+
+	err = fastrpc_txbuf_send(fl, vmsg, total_size);
+	if (err)
+		goto bail;
+
+	wait_for_completion(&msg->work);
+
+	rsp = msg->rxbuf;
+	if (!rsp)
+		goto bail;
+
+	err = rsp->hdr.result;
+	if (err)
+		goto bail;
+	*raddr = (uintptr_t)rsp->vdsp;
+bail:
+	if (rsp)
+		fastrpc_rxbuf_send(fl, rsp, me->buf_size);
+	virt_free_msg(fl, msg);
+
+	return err;
+}
+
 int fastrpc_internal_mmap(struct fastrpc_file *fl,
 				 struct fastrpc_ioctl_mmap *ud)
 {
@@ -810,6 +1088,48 @@ int fastrpc_internal_mmap(struct fastrpc_file *fl,
 	return err;
 }
 
+static int virt_fastrpc_control(struct fastrpc_file *fl,
+				struct fastrpc_ctrl_latency *lp)
+{
+	struct fastrpc_apps *me = fl->apps;
+	struct virt_control_msg *vmsg, *rsp = NULL;
+	struct virt_fastrpc_msg *msg;
+	int err;
+
+	msg = virt_alloc_msg(fl, sizeof(*vmsg));
+	if (!msg)
+		return -ENOMEM;
+
+	vmsg = (struct virt_control_msg *)msg->txbuf;
+	vmsg->hdr.pid = fl->tgid;
+	vmsg->hdr.tid = current->pid;
+	vmsg->hdr.cid = fl->cid;
+	vmsg->hdr.cmd = VIRTIO_FASTRPC_CMD_CONTROL;
+	vmsg->hdr.len = sizeof(*vmsg);
+	vmsg->hdr.msgid = msg->msgid;
+	vmsg->hdr.result = 0xffffffff;
+	vmsg->enable = lp->enable;
+	vmsg->latency = lp->latency;
+
+	err = fastrpc_txbuf_send(fl, vmsg, sizeof(*vmsg));
+	if (err)
+		goto bail;
+
+	wait_for_completion(&msg->work);
+
+	rsp = msg->rxbuf;
+	if (!rsp)
+		goto bail;
+
+	err = rsp->hdr.result;
+bail:
+	if (rsp)
+		fastrpc_rxbuf_send(fl, rsp, me->buf_size);
+	virt_free_msg(fl, msg);
+
+	return err;
+}
+
 int fastrpc_internal_control(struct fastrpc_file *fl,
 					struct fastrpc_ioctl_control *cp)
 {
@@ -864,32 +1184,79 @@ bail:
 	return err;
 }
 
+static int virt_fastrpc_open(struct fastrpc_file *fl)
+{
+	struct fastrpc_apps *me = fl->apps;
+	struct virt_open_msg *vmsg, *rsp = NULL;
+	struct virt_fastrpc_msg *msg;
+	int err;
+
+	msg = virt_alloc_msg(fl, sizeof(*vmsg));
+	if (!msg) {
+		dev_err(me->dev, "%s: no memory\n", __func__);
+		return -ENOMEM;
+	}
+
+	vmsg = (struct virt_open_msg *)msg->txbuf;
+	vmsg->hdr.pid = fl->tgid;
+	vmsg->hdr.tid = current->pid;
+	vmsg->hdr.cid = -1;
+	vmsg->hdr.cmd = VIRTIO_FASTRPC_CMD_OPEN;
+	vmsg->hdr.len = sizeof(*vmsg);
+	vmsg->hdr.msgid = msg->msgid;
+	vmsg->hdr.result = 0xffffffff;
+	vmsg->domain = fl->domain;
+	vmsg->pd = fl->pd;
+
+	err = fastrpc_txbuf_send(fl, vmsg, sizeof(*vmsg));
+	if (err)
+		goto bail;
+	wait_for_completion(&msg->work);
+
+	rsp = msg->rxbuf;
+	if (!rsp)
+		goto bail;
+
+	err = rsp->hdr.result;
+	if (err)
+		goto bail;
+	if (rsp->hdr.cid < 0) {
+		dev_err(me->dev, "channel id %d is invalid\n", rsp->hdr.cid);
+		err = -EINVAL;
+		goto bail;
+	}
+	fl->cid = rsp->hdr.cid;
+bail:
+	if (rsp)
+		fastrpc_rxbuf_send(fl, rsp, me->buf_size);
+	virt_free_msg(fl, msg);
+
+	return err;
+}
+
 int fastrpc_init_process(struct fastrpc_file *fl,
 				struct fastrpc_ioctl_init_attrs *uproc)
 {
 	int err = 0;
 	struct fastrpc_ioctl_init *init = &uproc->init;
 
-	if (init->flags == FASTRPC_INIT_ATTACH ||
-			init->flags == FASTRPC_INIT_ATTACH_SENSORS) {
+	switch (init->flags) {
+	case FASTRPC_INIT_ATTACH:
+	case FASTRPC_INIT_ATTACH_SENSORS:
 		fl->pd = GUEST_OS;
-		err = virt_fastrpc_open(fl);
-		if (err)
-			goto bail;
-	} else if (init->flags == FASTRPC_INIT_CREATE) {
+		break;
+	case FASTRPC_INIT_CREATE:
 		fl->pd = DYNAMIC_PD;
-		err = virt_fastrpc_open(fl);
-		if (err)
-			goto bail;
-	} else if (init->flags == FASTRPC_INIT_CREATE_STATIC) {
+		break;
+	case FASTRPC_INIT_CREATE_STATIC:
 		fl->pd = STATIC_PD;
-		err = virt_fastrpc_open(fl);
-		if (err)
-			goto bail;
-	} else {
-		err = -ENOTTY;
-		goto bail;
+		break;
+	default:
+		return -ENOTTY;
 	}
+	err = virt_fastrpc_open(fl);
+	if (err)
+		goto bail;
 	fl->dsp_proc_init = 1;
 bail:
 	return err;

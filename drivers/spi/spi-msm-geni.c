@@ -2031,7 +2031,10 @@ static int spi_geni_probe(struct platform_device *pdev)
 	bool rt_pri, slave_en;
 	char boot_marker[40];
 
-	spi = spi_alloc_master(&pdev->dev, sizeof(struct spi_geni_master));
+	slave_en  = of_property_read_bool(pdev->dev.of_node,
+			 "qcom,slv-ctrl");
+
+	spi = __spi_alloc_controller(&pdev->dev, sizeof(struct spi_geni_master), slave_en);
 	if (!spi) {
 		ret = -ENOMEM;
 		dev_err(&pdev->dev, "Failed to alloc spi struct\n");
@@ -2233,8 +2236,6 @@ static int spi_geni_probe(struct platform_device *pdev)
 	if (of_property_read_bool(pdev->dev.of_node, "qcom,master-cross-connect"))
 		geni_mas->master_cross_connect = true;
 
-	slave_en  = of_property_read_bool(pdev->dev.of_node,
-			 "qcom,slv-ctrl");
 	if (slave_en) {
 		spi->slave = true;
 		spi->slave_abort = spi_slv_abort;

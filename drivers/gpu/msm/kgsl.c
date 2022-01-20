@@ -4148,17 +4148,21 @@ static unsigned long get_svm_unmapped_area(struct file *file,
 	unsigned long ret, iova;
 	u64 start = 0, end = 0;
 	struct vm_area_struct *vma;
+	bool hint_valid = true;
+
+	if (addr > current->mm->mmap_base)
+		hint_valid = false;
 
 	if (flags & MAP_FIXED) {
 		/* Even fixed addresses need to obey alignment */
-		if (!IS_ALIGNED(addr, align))
+		if (!hint_valid || !IS_ALIGNED(addr, align))
 			return -EINVAL;
 
 		return set_svm_area(file, entry, addr, len, flags);
 	}
 
 	/* If a hint was provided, try to use that first */
-	if (addr) {
+	if (addr && hint_valid) {
 		if (IS_ALIGNED(addr, align)) {
 			ret = set_svm_area(file, entry, addr, len, flags);
 			if (!IS_ERR_VALUE(ret))
@@ -4169,6 +4173,11 @@ static unsigned long get_svm_unmapped_area(struct file *file,
 	/* Get the SVM range for the current process */
 	if (kgsl_mmu_svm_range(private->pagetable, &start, &end,
 		entry->memdesc.flags))
+		return -ERANGE;
+
+	/* clamp the range based on the CPU's requirements */
+	end = min_t(uint64_t, end, current->mm->mmap_base);
+	if (start >= end)
 		return -ERANGE;
 
 	/* Find the first gap in the iova map */

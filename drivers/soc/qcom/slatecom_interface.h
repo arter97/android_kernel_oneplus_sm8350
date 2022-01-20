@@ -112,6 +112,12 @@ enum WMSlateCtrlChnlOpcode {
 	 */
 	GMI_MGR_DST = 15,			/* payload struct: dst_t*/
 
+	/*
+	 * DEBUG Opcodes
+	 */
+	GMI_MGR_ENABLE_QCLI = 91,		/* Enable QCLI */
+
+	GMI_MGR_DISABLE_QCLI = 92,		/* Disable QCLI */
 };
 #endif /* SLATECOM_INTERFACE_H */
 

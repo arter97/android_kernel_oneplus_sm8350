@@ -31,8 +31,12 @@
 #define desc_to_data(d)	container_of(d, struct pil_slate_data, desc)
 #define subsys_to_data(d) container_of(d, struct pil_slate_data, subsys_desc)
 #define SLATE_RAMDUMP_SZ	(0x00102000*8)
+#define SLATE_MINIRAMDUMP_SZ	(0x400*40)
 #define SLATE_VERSION_SZ	32
 #define SLATE_CRASH_IN_TWM	-2
+#define SLATE_RAMDUMP	3
+#define SLATE_MINIDUMP	4
+
 /**
  * struct pil_slate_data
  * @qseecom_handle: handle of TZ app
@@ -45,6 +49,7 @@
  * @desc: PIL descriptor
  * @address_fw: address where firmware binaries loaded
  * @ramdump_dev: ramdump device pointer
+ * @minidump_dev: minidump device pointer
  * @size_fw: size of slate firmware binaries
  * @status_irq: irq to indicate slate status
  * @app_status: status of tz app loading
@@ -64,6 +69,7 @@ struct pil_slate_data {
 	struct pil_desc desc;
 	phys_addr_t address_fw;
 	void *ramdump_dev;
+	void *minidump_dev;
 	u32 cmd_status;
 	size_t size_fw;
 	int app_status;
@@ -489,30 +495,41 @@ static int slate_ramdump(int enable, const struct subsys_desc *subsys)
 	void *region;
 	int ret;
 	struct device dev;
-
+	unsigned long size = SLATE_RAMDUMP_SZ;
+	uint32_t dump_info;
 	arch_setup_dma_ops(&dev, 0, 0, NULL, 0);
 
 	desc.attrs = 0;
 	desc.attrs |= DMA_ATTR_SKIP_ZEROING;
-
-	region = dma_alloc_attrs(desc.dev, SLATE_RAMDUMP_SZ,
+	slate_tz_req.tzapp_slate_cmd = SLATEPIL_DUMPINFO;
+	ret = slatepil_tzapp_comm(slate_data, &slate_tz_req);
+	dump_info = slate_data->cmd_status;
+	if (slate_data->cmd_status == SLATE_RAMDUMP)
+		size = SLATE_RAMDUMP_SZ;
+	else if (slate_data->cmd_status == SLATE_MINIDUMP)
+		size = SLATE_MINIRAMDUMP_SZ;
+	else if (ret || slate_data->cmd_status) {
+		dev_dbg(desc.dev, "%s: SLATE PIL ramdump collection failed\n",
+			 __func__);
+		return slate_data->cmd_status;
+	}
+	region = dma_alloc_attrs(desc.dev, size,
 				&start_addr, GFP_KERNEL, desc.attrs);
-
 	if (region == NULL) {
 		dev_dbg(desc.dev,
 			"SLATE PIL failure to allocate ramdump region of size %zx\n",
-			SLATE_RAMDUMP_SZ);
+			size);
 		return -ENOMEM;
 	}
 
-	ret = qtee_shmbridge_register(start_addr, SLATE_RAMDUMP_SZ,
+	ret = qtee_shmbridge_register(start_addr, size,
 		ns_vmids, ns_vm_perms, 1, PERM_READ|PERM_WRITE,
 		&shm_bridge_handle);
 
 	if (ret) {
 		pr_err("Failed to create shm bridge with physical address %p size  %ld ret=%d\n",
-		start_addr, (long)SLATE_RAMDUMP_SZ, ret);
-		dma_free_attrs(desc.dev, SLATE_RAMDUMP_SZ, region,
+		start_addr, (long)size, ret);
+		dma_free_attrs(desc.dev, size, region,
 			start_addr, desc.attrs);
 		return ret;
 	}
@@ -520,26 +537,28 @@ static int slate_ramdump(int enable, const struct subsys_desc *subsys)
 	ramdump_segments = kcalloc(1, sizeof(*ramdump_segments), GFP_KERNEL);
 	if (!ramdump_segments)
 		return -ENOMEM;
-
 	slate_tz_req.tzapp_slate_cmd = SLATEPIL_RAMDUMP;
 	slate_tz_req.address_fw = start_addr;
-	slate_tz_req.size_fw = SLATE_RAMDUMP_SZ;
+	slate_tz_req.size_fw = size;
 
 	ret = slatepil_tzapp_comm(slate_data, &slate_tz_req);
-	if (ret || slate_data->cmd_status) {
-		dev_dbg(desc.dev, "%s: SLATE PIL ramdump collection failed\n",
-			__func__);
+
+	ramdump_segments->address = start_addr;
+	ramdump_segments->size = size;
+	ramdump_segments->v_address = region;
+	if (slate_data->cmd_status == 0) {
+		if (dump_info == SLATE_RAMDUMP)
+			do_ramdump(slate_data->ramdump_dev, ramdump_segments, 1);
+		else if (dump_info == SLATE_MINIDUMP)
+			do_ramdump(slate_data->minidump_dev, ramdump_segments, 1);
+	} else  if (ret || slate_data->cmd_status) {
+		dev_dbg(desc.dev, "%s: SLATE PIL ramdump collection failed\n", __func__);
 		return slate_data->cmd_status;
 	}
 
-	ramdump_segments->address = start_addr;
-	ramdump_segments->size = SLATE_RAMDUMP_SZ;
-	ramdump_segments->v_address = region;
-
-	do_ramdump(slate_data->ramdump_dev, ramdump_segments, 1);
 	kfree(ramdump_segments);
 	qtee_shmbridge_deregister(shm_bridge_handle);
-	dma_free_attrs(desc.dev, SLATE_RAMDUMP_SZ, region,
+	dma_free_attrs(desc.dev, size, region,
 		       start_addr, desc.attrs);
 	return 0;
 }
@@ -571,6 +590,8 @@ static irqreturn_t slate_status_change(int irq, void *dev_id)
 {
 	bool value;
 	struct pil_slate_data *drvdata = (struct pil_slate_data *)dev_id;
+	struct tzapp_slate_req slate_tz_req;
+	int ret;
 
 	if (!drvdata)
 		return IRQ_HANDLED;
@@ -581,6 +602,13 @@ static irqreturn_t slate_status_change(int irq, void *dev_id)
 			"SLATE services are up and running: irq state changed 0->1\n");
 		drvdata->is_ready = true;
 		complete(&drvdata->err_ready);
+		slate_tz_req.tzapp_slate_cmd = SLATEPIL_UP_INFO;
+		ret = slatepil_tzapp_comm(drvdata, &slate_tz_req);
+		if (ret || drvdata->cmd_status) {
+			dev_err(drvdata->desc.dev, "%s: SLATE PIL get SLATE version failed error %d\n",
+				__func__, drvdata->cmd_status);
+			return drvdata->cmd_status;
+		}
 	} else if (!value && drvdata->is_ready) {
 		dev_err(drvdata->desc.dev,
 			"SLATE got unexpected reset: irq state changed 1->0\n");
@@ -623,8 +651,8 @@ static int setup_slate_gpio_irq(struct platform_device *pdev,
 	}
 
 	drvdata->status_irq = irq;
-	ret = devm_request_irq(drvdata->desc.dev, drvdata->status_irq,
-		slate_status_change,
+	ret = devm_request_threaded_irq(drvdata->desc.dev, drvdata->status_irq,
+		NULL, slate_status_change,
 		IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
 		"slate2ap_status", drvdata);
 
@@ -701,6 +729,7 @@ static int pil_slate_driver_probe(struct platform_device *pdev)
 {
 	struct pil_slate_data *slate_data;
 	int rc;
+	char md_node[20];
 
 	slate_data = devm_kzalloc(&pdev->dev, sizeof(*slate_data), GFP_KERNEL);
 	if (!slate_data)
@@ -731,8 +760,15 @@ static int pil_slate_driver_probe(struct platform_device *pdev)
 	slate_data->subsys_desc.ramdump = slate_ramdump;
 	slate_data->subsys_desc.free_memory = NULL;
 	slate_data->subsys_desc.crash_shutdown = slate_app_shutdown_notify;
-	slate_data->ramdump_dev =
-		create_ramdump_device(slate_data->subsys_desc.name, &pdev->dev);
+	scnprintf(md_node, sizeof(md_node), "md_%s", slate_data->subsys_desc.name);
+	slate_data->minidump_dev = create_ramdump_device(md_node, &pdev->dev);
+	if (!slate_data->minidump_dev) {
+		pr_err("%s: Unable to create a %s minidump device.\n",
+			 __func__, slate_data->subsys_desc.name);
+		rc = -ENOMEM;
+		goto err_minidump;
+	}
+	slate_data->ramdump_dev = create_ramdump_device(slate_data->subsys_desc.name, &pdev->dev);
 	if (!slate_data->ramdump_dev) {
 		rc = -ENOMEM;
 		goto err_ramdump;
@@ -742,7 +778,6 @@ static int pil_slate_driver_probe(struct platform_device *pdev)
 		rc = PTR_ERR(slate_data->subsys);
 		goto err_subsys;
 	}
-
 	slate_data->reboot_blk.notifier_call = slate_app_reboot_notify;
 	register_reboot_notifier(&slate_data->reboot_blk);
 
@@ -755,10 +790,13 @@ static int pil_slate_driver_probe(struct platform_device *pdev)
 	INIT_WORK(&slate_data->restart_work, slate_restart_work);
 	return 0;
 err_subsys:
+	destroy_ramdump_device(slate_data->minidump_dev);
 	destroy_ramdump_device(slate_data->ramdump_dev);
 err_ramdump:
+err_minidump:
 	pil_desc_release(&slate_data->desc);
 	return rc;
+
 }
 
 static int pil_slate_driver_exit(struct platform_device *pdev)
@@ -766,6 +804,7 @@ static int pil_slate_driver_exit(struct platform_device *pdev)
 	struct pil_slate_data *slate_data = platform_get_drvdata(pdev);
 
 	subsys_unregister(slate_data->subsys);
+	destroy_ramdump_device(slate_data->minidump_dev);
 	destroy_ramdump_device(slate_data->ramdump_dev);
 	pil_desc_release(&slate_data->desc);
 
