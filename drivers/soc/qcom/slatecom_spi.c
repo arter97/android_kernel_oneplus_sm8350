@@ -1385,7 +1385,7 @@ static void slate_spi_shutdown(struct spi_device *spi)
 	slate_spi_remove(spi);
 }
 
-static int slatecom_pm_suspend(struct device *dev)
+static int slatecom_pm_prepare(struct device *dev)
 {
 	struct slate_context clnt_handle;
 	uint32_t cmnd_reg = 0;
@@ -1394,16 +1394,6 @@ static int slatecom_pm_suspend(struct device *dev)
 	int ret = 0;
 
 	clnt_handle.slate_spi = slate_spi;
-	if (atomic_read(&state) == SLATECOM_STATE_SUSPEND)
-		return 0;
-
-	if (atomic_read(&state) == SLATECOM_STATE_RUNTIME_SUSPEND) {
-		atomic_set(&state, SLATECOM_STATE_SUSPEND);
-		atomic_set(&slate_is_spi_active, 0);
-		atomic_set(&slate_is_runtime_suspend, 0);
-		SLATECOM_INFO("suspended\n");
-		return 0;
-	}
 
 	if (!(g_slav_status_reg & BIT(31))) {
 		SLATECOM_ERR("Slate boot is not complete, skip SPI suspend\n");
@@ -1417,21 +1407,33 @@ static int slatecom_pm_suspend(struct device *dev)
 
 	ret = slatecom_reg_write_cmd(&clnt_handle, SLATE_CMND_REG, 1, &cmnd_reg);
 	sleep_time_start = ktime_get();
-	if (ret == 0) {
-		atomic_set(&state, SLATECOM_STATE_SUSPEND);
-		atomic_set(&slate_is_spi_active, 0);
-		atomic_set(&slate_is_runtime_suspend, 0);
-		atomic_set(&ok_to_sleep, 1);
-	}
-	pr_info("suspended with : %d\n", ret);
-	SLATECOM_INFO("suspended with : %d\n", ret);
-	/*
-	 * spi driver needs to perform the suspend only then
-	 * we can proceed with suspend routine
-	 */
-	mdelay(5);
 
+	SLATECOM_INFO("reg write status: %d\n", ret);
 	return ret;
+}
+
+static void slatecom_pm_complete(struct device *dev)
+{
+	/* nothing to do */
+}
+
+static int slatecom_pm_suspend(struct device *dev)
+{
+	if (atomic_read(&state) == SLATECOM_STATE_SUSPEND)
+		return 0;
+
+	if (!(g_slav_status_reg & BIT(31))) {
+		SLATECOM_ERR("Slate boot is not complete, skip SPI suspend\n");
+		return 0;
+	}
+
+	atomic_set(&state, SLATECOM_STATE_SUSPEND);
+	atomic_set(&slate_is_spi_active, 0);
+	atomic_set(&slate_is_runtime_suspend, 0);
+	atomic_set(&ok_to_sleep, 1);
+
+	SLATECOM_INFO("suspended\n");
+	return 0;
 }
 
 static int slatecom_pm_resume(struct device *dev)
@@ -1589,6 +1591,8 @@ static int slatecom_pm_restore(struct device *dev)
 }
 
 static const struct dev_pm_ops slatecom_pm = {
+	.prepare = slatecom_pm_prepare,
+	.complete = slatecom_pm_complete,
 	.runtime_suspend = slatecom_pm_runtime_suspend,
 	.runtime_resume = slatecom_pm_runtime_resume,
 	.suspend = slatecom_pm_suspend,
