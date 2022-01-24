@@ -221,8 +221,19 @@ int cqhci_host_init_crypto_qti_spec(struct cqhci_host *host,
 	num_slots = cqhci_num_keyslots(host);
 
 #if IS_ENABLED(CONFIG_QTI_CRYPTO_FDE)
-	if (num_slots > 0)
-		--num_slots;
+	if (num_slots > crypto_qti_ice_get_num_fde_slots()) {
+		//Reduce the total number of slots available to FBE
+		//(by the number reserved for the FDE)
+		//Check at least one slot for backward compatibility,
+		//otherwise return failure
+		if (num_slots - crypto_qti_ice_get_num_fde_slots() < 1) {
+			pr_err("%s: Too much slots allocated to fde\n", __func__);
+			err = -ENOMEM;
+			goto out;
+		} else {
+			num_slots = num_slots - crypto_qti_ice_get_num_fde_slots();
+		}
+	}
 #endif
 	host->mmc->ksm = keyslot_manager_create(host->mmc->parent,
 						num_slots, ksm_ops,
