@@ -33,6 +33,7 @@ static struct cqhci_host_crypto_variant_ops __maybe_unused cqhci_crypto_qti_vari
 	.resume = cqhci_crypto_qti_resume,
 	.debug = cqhci_crypto_qti_debug,
 	.recovery_finish = cqhci_crypto_qti_recovery_finish,
+	.restore_from_hibernation = cqhci_crypto_qti_restore_from_hibernation,
 #if IS_ENABLED(CONFIG_QTI_CRYPTO_FDE)
 	.prepare_crypto_desc = cqhci_crypto_qti_prep_desc,
 #endif
@@ -391,6 +392,13 @@ int cqhci_crypto_qti_resume(struct cqhci_host *host)
 int cqhci_crypto_qti_recovery_finish(struct cqhci_host *host)
 {
 	keyslot_manager_reprogram_all_keys(host->mmc->ksm);
+	return 0;
+}
+
+int cqhci_crypto_qti_restore_from_hibernation(struct cqhci_host *host)
+{
+	cqhci_crypto_enable(host);
+	cqhci_crypto_recovery_finish(host);
 	return 0;
 }
 
