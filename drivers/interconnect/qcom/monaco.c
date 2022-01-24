@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2020-2022, The Linux Foundation. All rights reserved.
  *
  */
 
@@ -14,6 +14,8 @@
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
+#include <linux/pm.h>
+#include <linux/suspend.h>
 
 #include <linux/soc/qcom/smd-rpm.h>
 #include <soc/qcom/rpm-smd.h>
@@ -1507,6 +1509,75 @@ qcom_icc_map(struct platform_device *pdev, const struct qcom_icc_desc *desc)
 	return devm_regmap_init_mmio(dev, base, &icc_regmap_config);
 }
 
+static int qnoc_monaco_resume(struct device *dev)
+{
+#ifdef CONFIG_DEEPSLEEP
+	const struct qcom_icc_desc *desc;
+	struct platform_device *pdev = to_platform_device(dev);
+	struct qcom_icc_provider *qp = platform_get_drvdata(pdev);
+	struct qcom_icc_node **qnodes;
+	int ret, i;
+
+	if (mem_sleep_current == PM_SUSPEND_MEM) {
+		desc = of_device_get_match_data(dev);
+		qnodes = desc->nodes;
+		ret = clk_bulk_prepare_enable(qp->num_qos_clks, qp->qos_clks);
+		if (ret) {
+			pr_err("Clock enable failed during resume\n");
+			return ret;
+		}
+
+		for (i = 0; i < desc->num_nodes; i++) {
+			if (!qnodes[i])
+				continue;
+
+			if (qnodes[i]->qosbox) {
+				qnodes[i]->noc_ops->set_qos(qnodes[i]);
+				qnodes[i]->qosbox->initialized = true;
+			}
+		}
+		clk_bulk_disable_unprepare(qp->num_qos_clks, qp->qos_clks);
+	}
+
+#endif
+	return 0;
+}
+
+static int qnoc_monaco_restore(struct device *dev)
+{
+	const struct qcom_icc_desc *desc;
+	struct platform_device *pdev = to_platform_device(dev);
+	struct qcom_icc_provider *qp = platform_get_drvdata(pdev);
+	struct qcom_icc_node **qnodes;
+	int ret, i;
+
+	desc = of_device_get_match_data(dev);
+	qnodes = desc->nodes;
+	ret = clk_bulk_prepare_enable(qp->num_qos_clks, qp->qos_clks);
+	if (ret) {
+		pr_err("Clock enable failed during restore\n");
+		return ret;
+	}
+
+	for (i = 0; i < desc->num_nodes; i++) {
+		if (!qnodes[i])
+			continue;
+
+		if (qnodes[i]->qosbox) {
+			qnodes[i]->noc_ops->set_qos(qnodes[i]);
+			qnodes[i]->qosbox->initialized = true;
+		}
+	}
+
+	clk_bulk_disable_unprepare(qp->num_qos_clks, qp->qos_clks);
+	return 0;
+}
+
+static const struct dev_pm_ops qnoc_monaco_pm_ops = {
+	.restore = qnoc_monaco_restore,
+	.resume = qnoc_monaco_resume,
+};
+
 static int qnoc_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -1721,6 +1792,7 @@ static struct platform_driver qnoc_driver = {
 	.driver = {
 		.name = "qnoc-monaco",
 		.of_match_table = qnoc_of_match,
+		.pm = &qnoc_monaco_pm_ops,
 		.sync_state = qnoc_sync_state,
 	},
 };
