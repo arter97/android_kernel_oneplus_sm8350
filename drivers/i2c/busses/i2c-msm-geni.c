@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2022, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -141,6 +141,7 @@ struct geni_i2c_dev {
 	bool gpi_reset;
 	bool disable_dma_mode;
 	bool prev_cancel_pending; //Halt cancel till IOS in good state
+	bool is_deep_sleep; /* For deep sleep restore the config similar to the probe. */
 	struct geni_i2c_ssr i2c_ssr;
 };
 
@@ -494,11 +495,11 @@ static void gi2c_ev_cb(struct dma_chan *ch, struct msm_gpi_cb const *cb_str,
 			geni_i2c_err(gi2c, I2C_BUS_PROTO);
 		if (m_stat & M_GP_IRQ_4_EN)
 			geni_i2c_err(gi2c, I2C_ARB_LOST);
-		complete(&gi2c->xfer);
 		break;
 	default:
 		break;
 	}
+	complete(&gi2c->xfer);
 	if (cb_str->cb_event != MSM_GPI_QUP_NOTIFY)
 		GENI_SE_ERR(gi2c->ipcl, true, gi2c->dev,
 				"GSI QN err:0x%x, status:0x%x, err:%d\n",
@@ -1396,6 +1397,7 @@ static int geni_i2c_probe(struct platform_device *pdev)
 		dev_info(&pdev->dev, "LE-VM usecase\n");
 	}
 
+	gi2c->is_deep_sleep = false;
 	if (of_property_read_bool(pdev->dev.of_node, "qcom,leica-used-i2c"))
 		gi2c->i2c_rsc.skip_bw_vote = true;
 
@@ -1560,8 +1562,10 @@ static int geni_i2c_resume_early(struct device *device)
 	struct geni_i2c_dev *gi2c = dev_get_drvdata(device);
 
 #ifdef CONFIG_DEEPSLEEP
-	if (mem_sleep_current == PM_SUSPEND_MEM)
+	if (mem_sleep_current == PM_SUSPEND_MEM) {
 		gi2c->se_mode = UNINITIALIZED;
+		gi2c->is_deep_sleep = true;
+	}
 #endif
 	GENI_SE_DBG(gi2c->ipcl, false, gi2c->dev, "%s\n", __func__);
 	return 0;
@@ -1576,23 +1580,37 @@ static int geni_i2c_hib_resume_noirq(struct device *device)
 	return 0;
 }
 
-static int geni_i2c_gpi_suspend_resume(struct geni_i2c_dev *gi2c, bool flag)
+static int geni_i2c_gpi_suspend_resume(struct geni_i2c_dev *gi2c, bool is_suspend)
 {
-	int tx_ret = 0, rx_ret = 0;
+	int tx_ret = 0;
 
-	if ((gi2c->tx_c != NULL) && (gi2c->rx_c != NULL)) {
-		if (flag) {
+	/* Do dma operations only for tx channel here, as it takes care of rx channel
+	 * also internally from the GPI driver functions. if we call for both channels,
+	 * will see channels in wrong state due to double operations.
+	 */
+	if (gi2c->tx_c != NULL) {
+		if (is_suspend) {
 			tx_ret = dmaengine_pause(gi2c->tx_c);
-			rx_ret = dmaengine_pause(gi2c->rx_c);
 		} else {
+			/* For deep sleep need to restore the config similar to the probe,
+			 * hence using MSM_GPI_DEEP_SLEEP_INIT flag, in gpi_resume it wil
+			 * do similar to the probe. After this we should set this flag to
+			 * MSM_GPI_DEFAULT, means gpi probe state is restored.
+			 */
+			if (gi2c->is_deep_sleep)
+				gi2c->tx_ev.cmd = MSM_GPI_DEEP_SLEEP_INIT;
+
 			tx_ret = dmaengine_resume(gi2c->tx_c);
-			rx_ret = dmaengine_resume(gi2c->rx_c);
+			if (gi2c->is_deep_sleep) {
+				gi2c->tx_ev.cmd = MSM_GPI_DEFAULT;
+				gi2c->is_deep_sleep = false;
+			}
 		}
 
-		if (tx_ret || rx_ret) {
+		if (tx_ret) {
 			GENI_SE_ERR(gi2c->ipcl, true, gi2c->dev,
-			"%s failed: tx:%d rx:%d flag:%d\n",
-			__func__, tx_ret, rx_ret, flag);
+				"%s failed: tx:%d status:%d\n",
+				__func__, tx_ret, is_suspend);
 			return -EINVAL;
 		}
 	}
