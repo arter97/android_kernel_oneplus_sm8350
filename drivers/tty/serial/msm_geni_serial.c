@@ -4071,7 +4071,8 @@ static int msm_geni_serial_read_dtsi(struct platform_device *pdev,
 
 	dev_port->wrapper_dev = &wrapper_pdev->dev;
 	dev_port->serial_rsc.wrapper_dev = &wrapper_pdev->dev;
-
+	dev_port->serial_rsc.rsc_ssr.ssr_enable = of_property_read_bool(
+		pdev->dev.of_node, "ssr-enable");
 	if (is_console)
 		ret = geni_se_resources_init(&dev_port->serial_rsc,
 			UART_CONSOLE_CORE2X_VOTE,
@@ -4261,8 +4262,6 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 	 * SSR functionalities are required for SSC QUP in
 	 * Automotive platform only
 	 */
-	dev_port->serial_rsc.rsc_ssr.ssr_enable = of_property_read_bool(
-			pdev->dev.of_node, "ssr-enable");
 	dev_port->serial_rsc.rsc_ssr.force_suspend =
 			msm_geni_serial_ssr_down;
 	dev_port->serial_rsc.rsc_ssr.force_resume =

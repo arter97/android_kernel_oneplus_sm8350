@@ -1176,6 +1176,12 @@ int geni_se_resources_init(struct se_geni_rsc *rsc,
 	if (unlikely(!geni_se_dev))
 		return -EPROBE_DEFER;
 
+	if (geni_se_dev->ssr.subsys_name && rsc->rsc_ssr.ssr_enable) {
+		INIT_LIST_HEAD(&rsc->rsc_ssr.active_list);
+		list_add(&rsc->rsc_ssr.active_list,
+			&geni_se_dev->ssr.active_list_head);
+	}
+
 	/* Driver shouldn't crash, if ICC support is not present */
 	if (geni_se_dev->vectors == NULL)
 		return 0;
@@ -1225,12 +1231,6 @@ int geni_se_resources_init(struct se_geni_rsc *rsc,
 
 	INIT_LIST_HEAD(&rsc->ab_list);
 	INIT_LIST_HEAD(&rsc->ib_list);
-
-	if (geni_se_dev->ssr.subsys_name && rsc->rsc_ssr.ssr_enable) {
-		INIT_LIST_HEAD(&rsc->rsc_ssr.active_list);
-		list_add(&rsc->rsc_ssr.active_list,
-				&geni_se_dev->ssr.active_list_head);
-	}
 
 	return 0;
 }
