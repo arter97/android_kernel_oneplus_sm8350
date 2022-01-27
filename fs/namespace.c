@@ -2825,12 +2825,13 @@ static int do_new_mount_fc(struct fs_context *fc, struct path *mountpoint,
 	return error;
 }
 
+extern struct file_system_type shmem_fs_type;
 /*
  * create a new mount for userspace and request it to be added into the
  * namespace's tree
  */
-static int do_new_mount(struct path *path, const char *fstype, int sb_flags,
-			int mnt_flags, const char *name, void *data)
+static int do_new_mount(const char __user *dir_name, struct path *path, const char *fstype,
+			int sb_flags, int mnt_flags, const char *name, void *data)
 {
 	struct file_system_type *type;
 	struct fs_context *fc;
@@ -2843,6 +2844,34 @@ static int do_new_mount(struct path *path, const char *fstype, int sb_flags,
 	type = get_fs_type(fstype);
 	if (!type)
 		return -ENODEV;
+
+	/*
+	 * Check if Android is attempting to mount /dev/op_cgroup and block & rmdir it.
+	 *
+	 * OnePlus uses cgroup /dev/op_cgroup/freezer for its specialized process freezing feature,
+	 * which we lack due to binder clean-up, causing processes to suspend but not resume,
+	 * ultimately triggering ANRs.
+	 *
+	 * Prevent Android from using /dev/op_cgroup at all by detecting tmpfs mount
+	 * and replace it with `rmdir` system-call.
+	 */
+	if (unlikely(type == &shmem_fs_type)) {
+		char dirname[32], *p;
+		long ret;
+
+		p = dentry_path_raw(path->dentry, dirname, sizeof(dirname) - 1);
+		if (IS_ERR(p)) {
+			pr_err("%s: failed to lookup path for cgroup check\n", __func__);
+		} else {
+			if (unlikely(!strcmp(p, "/op_cgroup"))) {
+				put_filesystem(type);
+				ret = ksys_rmdir(dir_name);
+				if (ret)
+					pr_err("%s: failed to rmdir /dev/op_cgroup: %d\n", __func__, ret);
+				return -EINVAL;
+			}
+		}
+	}
 
 	if (type->fs_flags & FS_HAS_SUBTYPE) {
 		subtype = strchr(fstype, '.');
@@ -3190,8 +3219,8 @@ long do_mount(const char *dev_name, const char __user *dir_name,
 	else if (flags & MS_MOVE)
 		retval = do_move_mount_old(&path, dev_name);
 	else
-		retval = do_new_mount(&path, type_page, sb_flags, mnt_flags,
-				      dev_name, data_page);
+		retval = do_new_mount(dir_name, &path, type_page, sb_flags,
+				      mnt_flags, dev_name, data_page);
 dput_out:
 	path_put(&path);
 	return retval;
