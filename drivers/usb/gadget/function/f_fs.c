@@ -2013,8 +2013,10 @@ static void ffs_data_clear(struct ffs_data *ffs)
 		ffs->epfiles = NULL;
 	}
 
-	if (ffs->ffs_eventfd)
+	if (ffs->ffs_eventfd) {
 		eventfd_ctx_put(ffs->ffs_eventfd);
+		ffs->ffs_eventfd = NULL;
+	}
 
 	kfree(ffs->raw_descs_data);
 	ffs->raw_descs_data = NULL;
