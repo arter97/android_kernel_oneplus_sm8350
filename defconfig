@@ -2,11 +2,11 @@
 # Automatically generated file; DO NOT EDIT.
 # Linux/arm64 5.4 Kernel Configuration
 #
-CONFIG_CC_VERSION_TEXT="Android (7714059, based on r416183c1) clang version 12.0.8 (https://android.googlesource.com/toolchain/llvm-project c935d99d7cf2016289302412d708641d52d2f7ee)"
+CONFIG_CC_VERSION_TEXT="Android (7685531, based on r433403) clang version 13.0.2 (https://android.googlesource.com/toolchain/llvm-project d3e1bef2bc2bdec355d4fd0163aeb0aabbe4b66c)"
 CONFIG_GCC_VERSION=0
 CONFIG_CC_IS_CLANG=y
 CONFIG_LD_IS_LLD=y
-CONFIG_CLANG_VERSION=120008
+CONFIG_CLANG_VERSION=130002
 CONFIG_CC_CAN_LINK=y
 CONFIG_CC_HAS_ASM_GOTO=y
 CONFIG_TOOLS_SUPPORT_RELR=y
@@ -447,6 +447,7 @@ CONFIG_ARM64_SVE=y
 CONFIG_RELOCATABLE=y
 CONFIG_RANDOMIZE_BASE=y
 CONFIG_RANDOMIZE_MODULE_REGION_FULL=y
+CONFIG_CC_HAVE_STACKPROTECTOR_SYSREG=y
 # end of Kernel Features
 
 #
