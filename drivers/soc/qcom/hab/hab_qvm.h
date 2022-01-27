@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2016-2019, 2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 #ifndef __HAB_QNX_H
 #define __HAB_QNX_H
@@ -60,7 +60,7 @@ struct qvm_plugin_info {
 extern struct qvm_plugin_info qvm_priv_info;
 
 /* Shared mem size in each direction for communication pipe */
-#define PIPE_SHMEM_SIZE (128 * 1024)
+#define PIPE_SHMEM_SIZE (512 * 1024)
 
 void hab_pipe_reset(struct physical_channel *pchan);
 void habhyp_notify(void *commdev);

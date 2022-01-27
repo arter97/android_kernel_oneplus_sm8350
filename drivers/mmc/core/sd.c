@@ -855,7 +855,7 @@ try_again:
 	 */
 	if (!mmc_host_is_spi(host) && rocr &&
 #if defined(CONFIG_SDC_QTI)
-		(ocr & SD_OCR_S18R) &&
+	   (ocr & SD_OCR_S18R) &&
 #endif
 	   (*rocr & 0x01000000)) {
 		err = mmc_set_uhs_voltage(host, pocr);

@@ -221,7 +221,7 @@ int hab_stat_show_expimp(struct hab_driver *driver,
 #define HAB_PIPE_DUMP_FILE_NAME "/sdcard/habpipe-"
 #define HAB_PIPE_DUMP_FILE_EXT ".dat"
 
-#define HAB_PIPEDUMP_SIZE (768*1024)
+#define HAB_PIPEDUMP_SIZE (768*1024*4)
 static char *filp;
 static int pipedump_idx;
 

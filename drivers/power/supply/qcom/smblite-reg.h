@@ -369,4 +369,7 @@ enum {
 #define BOOST_BST_STATUS_REG(base)			(base.boost_base + 0x0D)
 #define BOOST_SOFTSTART_DONE_BIT			BIT(3)
 
+#define BOOST_BST_EN_REG(base)				(base.boost_base + 0x46)
+#define DCIN_BST_EN_BIT					BIT(1)
+
 #endif /* __SMBLITE_CHARGER_REG_H */

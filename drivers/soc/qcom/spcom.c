@@ -1947,10 +1947,10 @@ static long spcom_device_ioctl(struct file *file,
 
 	switch (ioctl) {
 	case SPCOM_SET_IONFD:
-		ret = get_user(spcom_dev->nvm_ion_fd, (int32_t *)arg);
+		ret = copy_from_user(&spcom_dev->nvm_ion_fd, argp, sizeof(int));
 		break;
 	case SPCOM_GET_IONFD:
-		ret = put_user(spcom_dev->nvm_ion_fd, (int32_t *)arg);
+		ret = copy_to_user(argp, &spcom_dev->nvm_ion_fd, sizeof(int));
 		break;
 	case SPCOM_POLL_STATE:
 		ret = copy_from_user(&op, argp,
@@ -2638,11 +2638,8 @@ static int spcom_remove(struct platform_device *pdev)
 		rx_item = list_last_entry(&spcom_dev->rx_list_head,
 					  struct rx_buff_list, list);
 		list_del(&rx_item->list);
-		if (!rx_item) {
+		if (!rx_item)
 			spcom_pr_err("empty entry in pending rx list\n");
-			spin_lock_irqsave(&spcom_dev->rx_lock, flags);
-			continue;
-		}
 		kfree(rx_item);
 	}
 	spin_unlock_irqrestore(&spcom_dev->rx_lock, flags);

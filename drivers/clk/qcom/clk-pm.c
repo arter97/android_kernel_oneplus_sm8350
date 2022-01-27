@@ -25,7 +25,16 @@ static int clock_pm_restore_early(struct device *dev)
 static int clock_pm_resume_early(struct device *dev)
 {
 #ifdef CONFIG_DEEPSLEEP
-	if (!(mem_sleep_current == PM_SUSPEND_STANDBY)) {
+	/*
+	 * Targets where Deep Sleep is supported, the mem_sleep_current value
+	 * is PM_SUSPEND_MEM for Deep Sleep state and PM_SUSPEND_TO_IDLE for
+	 * RBSC state it is. Some targets have RBSC represented by
+	 * PM_SUSPEND_MEM, so to avoid the code to be called for RBSC for
+	 * targets not having Deep Sleep feature and using the common clk pm
+	 * ops the above CONFIG_DEEPSLEEP is kept. This CONFIG_DEEPSLEEP is
+	 * qcom power code specific config.
+	 */
+	if (mem_sleep_current == PM_SUSPEND_MEM) {
 		clk_restore_context();
 		clk_restore_critical_clocks(dev);
 	}

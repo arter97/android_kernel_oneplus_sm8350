@@ -27,6 +27,7 @@
 enum slatecom_spi_state {
 	SLATECOM_SPI_FREE = 0,
 	SLATECOM_SPI_BUSY,
+	SLATECOM_SPI_PAUSE,
 };
 
 /* Enums to identify Blackghost events */
@@ -180,6 +181,16 @@ int slatecom_fifo_write(void *handle, uint32_t num_words,
 int slatecom_ahb_read(void *handle, uint32_t ahb_start_addr,
 		uint32_t num_words, void *read_buf);
 
+/**
+ * slatecom_ahb_write_bytes() - Write byte data to the AHB memory.
+ * @handle: SLATECOM handle associated with the channel
+ * @ahb_start_addr : Memory start address from where to start write
+ * @num_bytes : number of bytes to read from AHB
+ * @write_buf : Buffer to write in AHB.
+ * Return 0 on success or -Ve on error
+ */
+int slatecom_ahb_write_bytes(void *handle, uint32_t ahb_start_addr,
+		uint32_t num_bytes, void *write_buf);
 /**
  * slatecom_ahb_write() - Write data to the AHB memory.
  * @handle: SLATECOM handle associated with the channel

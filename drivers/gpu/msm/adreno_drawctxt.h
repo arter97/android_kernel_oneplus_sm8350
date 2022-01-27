@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2002,2007-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2002,2007-2021, The Linux Foundation. All rights reserved.
  */
 #ifndef __ADRENO_DRAWCTXT_H
 #define __ADRENO_DRAWCTXT_H
@@ -15,6 +15,13 @@ struct adreno_context_type {
 };
 
 #define ADRENO_CONTEXT_DRAWQUEUE_SIZE 128
+
+#define DRAWCTXT_SHADOW_OFFSET(field)	\
+	offsetof(struct kgsl_devmemstore, field)
+
+#define DRAWCTXT_SHADOW_GPU_ADDR(drawctxt, field)	\
+	((drawctxt)->shadow_timestamp_mem->memdesc.gpuaddr + \
+	 DRAWCTXT_SHADOW_OFFSET(field))
 
 struct kgsl_device;
 struct adreno_device;
@@ -41,6 +48,8 @@ struct kgsl_device_private;
  * @rb: The ringbuffer in which this context submits commands.
  * @active_node: Linkage for nodes in active_list
  * @active_time: Time when this context last seen
+ * @shadow_timestamp_mem: per-context shadow timestamp memory entry when
+ * requested by user
  */
 struct adreno_context {
 	struct kgsl_context base;
@@ -67,6 +76,7 @@ struct adreno_context {
 
 	struct list_head active_node;
 	unsigned long active_time;
+	struct kgsl_mem_entry *shadow_timestamp_mem;
 };
 
 /* Flag definitions for flag field in adreno_context */
@@ -116,5 +126,11 @@ void adreno_drawctxt_invalidate(struct kgsl_device *device,
 
 void adreno_drawctxt_dump(struct kgsl_device *device,
 		struct kgsl_context *context);
+
+int adreno_drawctxt_set_shadow_mem(struct kgsl_device_private *dev_priv,
+		struct kgsl_context *context, unsigned int gpuobj_id);
+
+void adreno_drawctxt_write_shadow_timestamp(struct kgsl_context *context,
+		unsigned int timestamp);
 
 #endif  /* __ADRENO_DRAWCTXT_H */

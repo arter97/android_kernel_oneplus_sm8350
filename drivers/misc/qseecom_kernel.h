@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
  */
 
 #ifndef __QSEECOM_KERNEL_H_
@@ -43,5 +43,8 @@ int qseecom_process_listener_from_smcinvoke(uint32_t *result,
 }
 #endif
 
+#ifdef CONFIG_GHS_VMM
+struct device *qseecom_get_dev(void);
+#endif /*CONFIG_GHS_VMM*/
 
 #endif /* __QSEECOM_KERNEL_H_ */

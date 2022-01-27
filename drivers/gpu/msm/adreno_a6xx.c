@@ -4,6 +4,7 @@
  */
 
 #include <linux/clk/qcom.h>
+#include <linux/clk-provider.h>
 #include <linux/io.h>
 #include <linux/of.h>
 #include <linux/of_fdt.h>
@@ -200,7 +201,8 @@ int a6xx_init(struct adreno_device *adreno_dev)
 			adreno_is_a643(adreno_dev))
 			adreno_dev->highest_bank_bit = 14;
 		else if ((adreno_is_a650(adreno_dev) ||
-				adreno_is_a660(adreno_dev)))
+				adreno_is_a660(adreno_dev) ||
+				adreno_is_a690(adreno_dev)))
 			adreno_dev->highest_bank_bit = 15;
 	}
 
@@ -391,6 +393,39 @@ void a6xx_cx_regulator_disable_wait(struct regulator *reg,
 
 	if (ADRENO_QUIRK(adreno_dev, ADRENO_QUIRK_CX_GDSC))
 		regulator_set_mode(reg, REGULATOR_MODE_NORMAL);
+}
+
+static void a6xx_gx_parent_regulator_disable_wait(struct regulator *reg,
+				struct kgsl_device *device, u32 timeout)
+{
+	if (IS_ERR_OR_NULL(reg))
+		return;
+
+	regulator_disable(reg);
+	for (;;) {
+		if (!regulator_is_enabled(reg))
+			return;
+
+		if (ktime_compare(ktime_get(), timeout) > 0) {
+			if (regulator_is_enabled(reg))
+				dev_err(device->dev, "Regulator is stuck on\n");
+			return;
+		}
+
+		usleep_range((100 >> 2) + 1, 100);
+	}
+}
+
+void a6xx_regulator_disable_wait(struct a6xx_gmu_device *gmu,
+				struct kgsl_device *device, u32 timeout)
+{
+	/* Poll to make sure that the CX is off */
+	a6xx_cx_regulator_disable_wait(gmu->cx_gdsc, device, timeout);
+
+	if (gmu->gx_gdsc_parent) {
+		a6xx_gx_parent_regulator_disable_wait(gmu->gx_gdsc_parent, device, timeout);
+		regulator_set_voltage(gmu->gx_gdsc_parent, 0, INT_MAX);
+	}
 }
 
 static void set_holi_sptprac_clock(struct adreno_device *adreno_dev, bool enable)
@@ -587,6 +622,19 @@ static void a6xx_deassert_gbif_halt(struct adreno_device *adreno_dev)
 		kgsl_regwrite(device, A6XX_RBBM_GBIF_HALT, 0x0);
 }
 
+bool a6xx_gx_is_on(struct adreno_device *adreno_dev)
+{
+	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
+	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
+	bool gdsc_on, clk_on;
+
+	clk_on = __clk_is_enabled(pwr->grp_clks[0]);
+
+	gdsc_on = regulator_is_enabled(pwr->gx_gdsc);
+
+	return (gdsc_on & clk_on);
+}
+
 /*
  * Some targets support marking certain transactions as always privileged which
  * allows us to mark more memory as privileged without having to explicitly set
@@ -682,6 +730,12 @@ void a6xx_start(struct adreno_device *adreno_dev)
 
 	if (adreno_is_a660(adreno_dev))
 		kgsl_regwrite(device, A6XX_CP_LPAC_PROG_FIFO_SIZE, 0x00000020);
+
+	if (adreno_is_a690(adreno_dev)) {
+		kgsl_regwrite(device, A6XX_RBBM_GBIF_CLIENT_QOS_CNTL, 0x0);
+		kgsl_regwrite(device, A6XX_RBBM_LPAC_GBIF_CLIENT_QOS_CNTL, 0x0);
+		kgsl_regwrite(device, A6XX_CP_LPAC_PROG_FIFO_SIZE, 0x00000020);
+	}
 
 	if (adreno_is_a612(adreno_dev) || adreno_is_a610(adreno_dev)) {
 		/* For A612 and A610 Mem pool size is reduced to 48 */
@@ -1614,7 +1668,8 @@ static void a6xx_llc_configure_gpu_scid(struct adreno_device *adreno_dev)
 	 * GFO ENABLE BIT(8) : LLC uses a 64 byte cache line size enabling
 	 * GFO allows it allocate partial cache lines
 	 */
-	if (adreno_is_a660(adreno_dev))
+	if (adreno_is_a660(adreno_dev) ||
+			adreno_is_a690(adreno_dev))
 		kgsl_regrmw(device, A6XX_GBIF_SCACHE_CNTL0, (0x1f << 10) |
 				BIT(8), (gpu_scid << 10) | BIT(8));
 }
@@ -2668,6 +2723,7 @@ const struct adreno_gpudev adreno_a6xx_gpudev = {
 	.power_ops = &adreno_power_operations,
 	.clear_pending_transactions = a6xx_clear_pending_transactions,
 	.deassert_gbif_halt = a6xx_deassert_gbif_halt,
+	.gx_is_on = a6xx_gx_is_on,
 };
 
 const struct adreno_gpudev adreno_a6xx_hwsched_gpudev = {
@@ -2710,6 +2766,7 @@ const struct adreno_gpudev adreno_a6xx_gmu_gpudev = {
 #endif
 	.read_alwayson = a6xx_read_alwayson,
 	.power_ops = &a6xx_gmu_power_ops,
+	.gx_is_on = a6xx_gmu_gx_is_on,
 };
 
 const struct adreno_gpudev adreno_a6xx_rgmu_gpudev = {
@@ -2737,6 +2794,7 @@ const struct adreno_gpudev adreno_a6xx_rgmu_gpudev = {
 #endif
 	.read_alwayson = a6xx_read_alwayson,
 	.power_ops = &a6xx_rgmu_power_ops,
+	.gx_is_on = a6xx_rgmu_gx_is_on,
 };
 
 const struct adreno_gpudev adreno_a619_holi_gpudev = {
@@ -2773,6 +2831,7 @@ const struct adreno_gpudev adreno_a619_holi_gpudev = {
 	.clear_pending_transactions = a6xx_clear_pending_transactions,
 	.deassert_gbif_halt = a6xx_deassert_gbif_halt,
 	.regulator_disable_poll = a619_holi_regulator_disable_poll,
+	.gx_is_on = a619_holi_gx_is_on,
 };
 
 const struct adreno_gpudev adreno_a630_gpudev = {
@@ -2803,4 +2862,5 @@ const struct adreno_gpudev adreno_a630_gpudev = {
 #endif
 	.read_alwayson = a6xx_read_alwayson,
 	.power_ops = &a630_gmu_power_ops,
+	.gx_is_on = a6xx_gmu_gx_is_on,
 };

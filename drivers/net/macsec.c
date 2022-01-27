@@ -3367,11 +3367,6 @@ static netdev_tx_t macsec_start_xmit(struct sk_buff *skb,
 
 	if (macsec_is_offloaded(netdev_priv(dev))) {
 		skb->dev = macsec->real_dev;
-		return dev_queue_xmit(skb);
-	}
-
-	if (macsec_is_offloaded(netdev_priv(dev))) {
-		skb->dev = macsec->real_dev;
 		ret = dev_queue_xmit(skb);
 		len = skb->len;
 		count_tx(dev, ret, len);

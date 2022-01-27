@@ -1328,21 +1328,8 @@ static int synx_handle_bind(struct synx_private_ioctl_arg *k_ioctl,
 static int synx_handle_addrefcount(struct synx_private_ioctl_arg *k_ioctl,
 	struct synx_session session_id)
 {
-	struct synx_addrefcount addrefcount_info;
-
-	if (k_ioctl->size != sizeof(addrefcount_info))
-		return -EINVAL;
-
-	if (copy_from_user(&addrefcount_info,
-		u64_to_user_ptr(k_ioctl->ioctl_ptr),
-		k_ioctl->size))
-		return -EFAULT;
-
-	k_ioctl->result = synx_addrefcount(session_id,
-		addrefcount_info.synx_obj,
-		addrefcount_info.count);
-
-	return k_ioctl->result;
+	/* API deprecated for userspace */
+	return 0;
 }
 
 static int synx_handle_release(struct synx_private_ioctl_arg *k_ioctl,

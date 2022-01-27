@@ -3259,6 +3259,13 @@ void adreno_isense_regread(struct adreno_device *adreno_dev,
 	rmb();
 }
 
+bool adreno_gx_is_on(struct adreno_device *adreno_dev)
+{
+	const struct adreno_gpudev *gpudev  = ADRENO_GPU_DEVICE(adreno_dev);
+
+	return gpudev->gx_is_on(adreno_dev);
+}
+
 void adreno_cx_misc_regwrite(struct adreno_device *adreno_dev,
 	unsigned int offsetwords, unsigned int value)
 {
@@ -3932,6 +3939,7 @@ static const struct kgsl_functable adreno_functable = {
 	.gpu_clock_set = adreno_gpu_clock_set,
 	.gpu_bus_set = adreno_gpu_bus_set,
 	.deassert_gbif_halt = adreno_deassert_gbif_halt,
+	.drawctxt_set_shadow_mem = adreno_drawctxt_set_shadow_mem,
 };
 
 static const struct component_master_ops adreno_ops = {

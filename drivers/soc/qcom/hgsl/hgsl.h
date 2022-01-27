@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2020-2022, The Linux Foundation. All rights reserved.
  */
 
 #ifndef __HGSL_H_
@@ -65,6 +65,8 @@ struct hgsl_priv {
 	struct mutex lock;
 	struct list_head mem_mapped;
 	struct list_head mem_allocated;
+
+	atomic64_t total_mem_size;
 };
 
 
@@ -129,8 +131,8 @@ struct hgsl_isync_timeline {
 };
 
 struct hgsl_isync_fence {
-	struct list_head free_list;  /* For free in batch */
 	struct dma_fence fence;
+	struct list_head free_list;  /* For free in batch */
 	struct hgsl_isync_timeline *timeline;
 	struct list_head child_list;
 	u32 ts;

@@ -12,9 +12,12 @@
 #include <linux/of_device.h>
 #include <linux/platform_device.h>
 #include <linux/suspend.h>
+#include <linux/syscore_ops.h>
 #include <linux/regmap.h>
 
 #define QTI_PMIC_LPM_DEV_NAME	"qti,pmic-lpm"
+
+#define SDAM_PBS_ARG_REG	0x42
 
 #define SDAM_INT_REASON_REG	0x47
 #define APPS_LPM_EXIT_BIT	BIT(1)
@@ -25,6 +28,8 @@
 
 #define SDAM_INT_TEST_VAL	0xE1
 #define SDAM_INT_TEST_VAL_BIT	BIT(1)
+
+static void qti_pmic_lpm_syscore_shutdown(void);
 
 /**
  * struct qti_pmic_lpm - Structure for QTI pmic lpm device
@@ -40,7 +45,11 @@ struct qti_pmic_lpm {
 	struct class		twm_class;
 	int			sdam_base;
 	bool			twm_enable;
+	bool			twm_exit;
+	bool			ds_exit;
 };
+
+static struct qti_pmic_lpm *gchip;
 
 static int pmic_lpm_read(struct qti_pmic_lpm *chip, int addr, u8 *data, int len)
 {
@@ -121,13 +130,69 @@ static ssize_t pmic_twm_enable_show(struct class *c,
 
 	return scnprintf(buf, PAGE_SIZE, "%d\n", chip->twm_enable);
 }
+
+static ssize_t pmic_twm_exit_show(struct class *c,
+			struct class_attribute *attr, char *buf)
+{
+	struct qti_pmic_lpm *chip = container_of(c, struct qti_pmic_lpm,
+						twm_class);
+
+	return scnprintf(buf, PAGE_SIZE, "%x\n", chip->twm_exit);
+}
+
+static ssize_t pmic_ds_exit_show(struct class *c,
+			struct class_attribute *attr, char *buf)
+{
+	struct qti_pmic_lpm *chip = container_of(c, struct qti_pmic_lpm,
+						twm_class);
+
+	return scnprintf(buf, PAGE_SIZE, "%x\n", chip->ds_exit);
+}
+
 static CLASS_ATTR_RW(pmic_twm_enable);
+static CLASS_ATTR_RO(pmic_twm_exit);
+static CLASS_ATTR_RO(pmic_ds_exit);
 
 static struct attribute *twm_attrs[] = {
 	&class_attr_pmic_twm_enable.attr,
+	&class_attr_pmic_twm_exit.attr,
+	&class_attr_pmic_ds_exit.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(twm);
+
+static struct syscore_ops qti_pmic_lpm_syscore_ops = {
+	.shutdown = qti_pmic_lpm_syscore_shutdown,
+};
+
+static int pmic_get_wakeup_status(struct qti_pmic_lpm *chip)
+{
+	u8 val = 0;
+	int rc = 0;
+
+	chip->twm_exit = false;
+	chip->ds_exit = false;
+
+	rc = pmic_lpm_read(chip, SDAM_PBS_ARG_REG, &val, 1);
+	if (rc < 0) {
+		pr_err("Failed to read pmic sdam offset %#x, rc=%d\n",
+			SDAM_PBS_ARG_REG, rc);
+		return rc;
+	}
+
+	switch (val) {
+	case 0x06:
+		chip->twm_exit = true;
+		break;
+	case 0x04:
+		chip->ds_exit = true;
+		break;
+	default:
+		break;
+	}
+
+	return rc;
+}
 
 static int qti_pmic_lpm_probe(struct platform_device *pdev)
 {
@@ -169,6 +234,12 @@ static int qti_pmic_lpm_probe(struct platform_device *pdev)
 		}
 	}
 
+	rc = pmic_get_wakeup_status(chip);
+	if (rc < 0) {
+		pr_err("Failed to get the twm exit status rc=%d\n", rc);
+		return rc;
+	}
+
 	chip->dev = &pdev->dev;
 	dev_set_drvdata(&pdev->dev, chip);
 
@@ -180,6 +251,17 @@ static int qti_pmic_lpm_probe(struct platform_device *pdev)
 		pr_err("Failed to register twm_class class rc=%d\n", rc);
 		return rc;
 	}
+
+	gchip = chip;
+
+	/**
+	 * There is a possiblity where-in driver shutdown callback of
+	 * LPM driver is called first before other PM drivers shutdown
+	 * callback. This can lead to misconfiguration of INT registers.
+	 * Hence notify co-proc in syscore_ops shutdown callback which is
+	 * called after all the driver shutdown callbacks are called.
+	 */
+	register_syscore_ops(&qti_pmic_lpm_syscore_ops);
 
 	dev_info(chip->dev, "qti-pmic-lpm probe successful\n");
 
@@ -204,15 +286,21 @@ static int qti_pmic_lpm_remove(struct platform_device *pdev)
 	return rc;
 }
 
-static void qti_pmic_lpm_shutdown(struct platform_device *pdev)
+static void qti_pmic_lpm_syscore_shutdown(void)
 {
-	struct qti_pmic_lpm *chip = platform_get_drvdata(pdev);
 	int rc = 0;
 
-	if (chip->twm_enable) {
-		rc = qti_pmic_handle_lpm(chip, true);
+	if (gchip == NULL) {
+		pr_err("gchip is NULL\n");
+		return;
+	}
+
+	pr_debug("LPM Syscore shutdown twm_state : %d\n", gchip->twm_enable);
+
+	if (gchip->twm_enable) {
+		rc = qti_pmic_handle_lpm(gchip, true);
 		if (rc < 0)
-			dev_err(chip->dev, "Failed to handle twm entry, rc:%d\n",
+			dev_err(gchip->dev, "Failed to handle twm entry, rc:%d\n",
 				rc);
 		pr_debug("PMIC TWM enabled\n");
 	}
@@ -243,9 +331,14 @@ static int qti_pmic_lpm_resume_early(struct device *dev)
 	/* mem_sleep_current = PM_SUSPEND_MEM in DeepSleep */
 	if (mem_sleep_current == PM_SUSPEND_MEM) {
 		rc = qti_pmic_handle_lpm(chip, false);
-		if (rc < 0)
+		if (rc < 0) {
 			dev_err(dev, "Failed to handle resume_early(), rc:%d\n",
 				rc);
+			return rc;
+		}
+		rc = pmic_get_wakeup_status(chip);
+		if (rc < 0)
+			dev_err(dev, "Failed to get deepsleep exit status, rc:%d\n", rc);
 	}
 
 	return rc;
@@ -292,7 +385,6 @@ static const struct of_device_id qti_pmic_lpm_match_table[] = {
 
 static struct platform_driver qti_pmic_lpm_driver = {
 	.probe		= qti_pmic_lpm_probe,
-	.shutdown	= qti_pmic_lpm_shutdown,
 	.remove		= qti_pmic_lpm_remove,
 	.driver		= {
 		.name		= "qti,pmic-lpm",

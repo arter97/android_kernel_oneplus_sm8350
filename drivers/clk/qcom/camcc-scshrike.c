@@ -25,6 +25,11 @@
 static DEFINE_VDD_REGULATORS(vdd_mm, VDD_MM_NUM, 1, vdd_corner);
 static DEFINE_VDD_REGULATORS(vdd_mx, VDD_NUM, 1, vdd_corner);
 
+static struct clk_vdd_class *cam_cc_scshrike_regulators[] = {
+	&vdd_mm,
+	&vdd_mx,
+};
+
 enum {
 	P_BI_TCXO,
 	P_CAM_CC_PLL0_OUT_EVEN,
@@ -3213,10 +3218,12 @@ static const struct regmap_config cam_cc_scshrike_regmap_config = {
 	.fast_io = true,
 };
 
-static const struct qcom_cc_desc cam_cc_scshrike_desc = {
+static struct qcom_cc_desc cam_cc_scshrike_desc = {
 	.config = &cam_cc_scshrike_regmap_config,
 	.clks = cam_cc_scshrike_clocks,
 	.num_clks = ARRAY_SIZE(cam_cc_scshrike_clocks),
+	.clk_regulators = cam_cc_scshrike_regulators,
+	.num_clk_regulators = ARRAY_SIZE(cam_cc_scshrike_regulators),
 };
 
 static const struct of_device_id cam_cc_scshrike_match_table[] = {
@@ -3258,22 +3265,6 @@ static int cam_cc_scshrike_probe(struct platform_device *pdev)
 {
 	struct regmap *regmap;
 	int ret;
-
-	vdd_mx.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_mx");
-	if (IS_ERR(vdd_mx.regulator[0])) {
-		if (PTR_ERR(vdd_mx.regulator[0]) != -EPROBE_DEFER)
-			dev_err(&pdev->dev,
-				"Unable to get vdd_mx regulator\n");
-		return PTR_ERR(vdd_mx.regulator[0]);
-	}
-
-	vdd_mm.regulator[0] = devm_regulator_get(&pdev->dev, "vdd_mm");
-	if (IS_ERR(vdd_mm.regulator[0])) {
-		if (PTR_ERR(vdd_mm.regulator[0]) != -EPROBE_DEFER)
-			dev_err(&pdev->dev,
-				"Unable to get vdd_mm regulator\n");
-		return PTR_ERR(vdd_mm.regulator[0]);
-	}
 
 	pm_runtime_enable(&pdev->dev);
 	ret = pm_clk_create(&pdev->dev);
@@ -3324,6 +3315,11 @@ disable_pm_runtime:
 	return ret;
 }
 
+static void cam_cc_scshrike_sync_state(struct device *dev)
+{
+	qcom_cc_sync_state(dev, &cam_cc_scshrike_desc);
+}
+
 static const struct dev_pm_ops cam_cc_scshrike_pm_ops = {
 	SET_RUNTIME_PM_OPS(pm_clk_suspend, pm_clk_resume, NULL)
 };
@@ -3333,6 +3329,7 @@ static struct platform_driver cam_cc_scshrike_driver = {
 	.driver = {
 		.name = "cam_cc-scshrike",
 		.of_match_table = cam_cc_scshrike_match_table,
+		.sync_state = cam_cc_scshrike_sync_state,
 		.pm = &cam_cc_scshrike_pm_ops,
 	},
 };

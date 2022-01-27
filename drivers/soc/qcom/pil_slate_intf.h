@@ -18,6 +18,8 @@ enum slate_tz_commands {
 	SLATEPIL_DLOAD_CONT,
 	SLATEPIL_GET_SLATE_VERSION,
 	SLATEPIL_SHUTDOWN,
+	SLATEPIL_DUMPINFO,
+	SLATEPIL_UP_INFO,
 };
 
 /* tzapp bg request.*/

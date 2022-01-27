@@ -19,6 +19,7 @@
 #include <linux/mmc/pm.h>
 #include <linux/dma-direction.h>
 #include <linux/ipc_logging.h>
+#include <linux/blkdev.h>
 
 struct mmc_ios {
 	unsigned int	clock;			/* clock rate */
@@ -603,6 +604,13 @@ struct mmc_host {
 #if defined(CONFIG_SDC_QTI)
 	atomic_t active_reqs;
 #endif
+
+#if defined(CONFIG_SDC_QTI)
+	bool			crash_on_err;
+	bool                    hiber_notifier;
+#endif
+	bool			deepsleep;
+
 	unsigned long		private[0] ____cacheline_aligned;
 };
 

@@ -199,3 +199,11 @@ config QTI_DEVFREQ_VDD_COOLING_DEVICE
 	  on a particular devfreq device. This mitigation device will be used by
 	  low temperature reliability rules to mitigate a devfreq device at
 	  minimum operating level.
+
+config QTI_BCL_OFF_COOLING_DEVICE
+	tristate "QTI Ibat threshold update cooling devices"
+	depends on THERMAL_OF && QTI_THERMAL
+	help
+	   This enables the bcl off cooling devices.
+	   These cooling devices will be used to disable bcl
+	   whenever RF calibration is performed.

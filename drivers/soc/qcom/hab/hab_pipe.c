@@ -190,9 +190,11 @@ uint32_t hab_pipe_read(struct hab_pipe_endpoint *ep,
 retry:
 
 			if (unlikely(head->signature != 0xBEE1BEE1)) {
-				pr_debug("hab head corruption detected at %pK buf %pK %08X %08X %08X %08X rd %d wr %d index %X saved %X retry %d\n",
+				pr_debug("hab head corruption detected at %pK buf %pK %08X %08X %08X %08X %08X rd %d wr %d index %X saved %X retry %d\n",
 					head, &sh_buf->data[0],
-					head->id_type_size, head->session_id,
+					head->id_type,
+					head->payload_size,
+					head->session_id,
 					head->signature, head->sequence,
 					sh_buf->rd_count, sh_buf->wr_count,
 					ep->rx_info.index, index_saved,
@@ -207,8 +209,9 @@ retry:
 					if (!signature_mismatch)
 						goto retry;
 				} else
-					pr_err("quit retry after %d time may fail %X %X %X %X rd %d wr %d index %X\n",
-						retry_cnt, head->id_type_size,
+					pr_err("quit retry after %d time may fail %X %X %X %X %X rd %d wr %d index %X\n",
+						retry_cnt, head->id_type,
+						head->payload_size,
 						head->session_id,
 						head->signature,
 						head->sequence,

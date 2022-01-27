@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
  */
 #include "hab.h"
 #include "hab_ghs.h"
@@ -15,13 +15,13 @@ int physical_channel_read(struct physical_channel *pchan,
 	if (dev->read_size < read_size + sizeof(struct hab_header)) {
 		pr_warn("read %zd is less than requested %zd plus header %zd\n",
 			dev->read_size, read_size, sizeof(struct hab_header));
-		read_size = dev->read_size;
+		read_size = 0;
+	} else {
+		/* always skip the header */
+		memcpy(payload, (unsigned char *)dev->read_data +
+			sizeof(struct hab_header) + dev->read_offset, read_size);
+		dev->read_offset += read_size;
 	}
-
-	/* always skip the header */
-	memcpy(payload, (unsigned char *)dev->read_data +
-		sizeof(struct hab_header) + dev->read_offset, read_size);
-	dev->read_offset += read_size;
 
 	return read_size;
 }
@@ -83,12 +83,12 @@ int physical_channel_send(struct physical_channel *pchan,
 		memcpy(msg+sizeof(*header), payload, sizebytes);
 
 	result = GIPC_IssueMessage(dev->endpoint, sizebytes+sizeof(*header),
-		header->id_type_size);
+		header->id_type);
 	hab_spin_unlock(&dev->io_lock, irqs_disabled);
 	if (result != GIPC_Success) {
-		pr_err("send error %d, sz %zd, prot %x\n",
+		pr_err("send error %d, sz %zd, id type %x, size %x\n",
 			result, sizebytes+sizeof(*header),
-			   header->id_type_size);
+			   header->id_type, header->payload_size);
 		return -EAGAIN;
 	}
 
@@ -120,7 +120,7 @@ void physical_channel_rx_dispatch_common(unsigned long physical_channel)
 				dev->read_data,
 				GIPC_RECV_BUFF_SIZE_BYTES,
 				&dev->read_size,
-				&header.id_type_size);
+				&header.id_type);
 
 		if (result == GIPC_Success || dev->read_size > 0) {
 			 /* handle corrupted msg? */

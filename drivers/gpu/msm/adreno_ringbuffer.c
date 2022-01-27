@@ -413,6 +413,7 @@ adreno_ringbuffer_addcmds(struct adreno_ringbuffer *rb,
 	struct adreno_context *drawctxt = rb->drawctxt_active;
 	struct kgsl_context *context = NULL;
 	bool secured_ctxt = false;
+	bool write_separate_shadow;
 	static unsigned int _seq_cnt;
 
 	if (drawctxt != NULL && kgsl_context_detached(&drawctxt->base) &&
@@ -509,6 +510,15 @@ adreno_ringbuffer_addcmds(struct adreno_ringbuffer *rb,
 		total_sizedwords += 5;
 	}
 
+	write_separate_shadow = (drawctxt &&
+				 drawctxt->shadow_timestamp_mem &&
+				 !is_internal_cmds(flags));
+
+	if (write_separate_shadow) {
+		total_sizedwords += 4; /* sop mem_write */
+		total_sizedwords += 5; /* eop event_write */
+	}
+
 	if (flags & KGSL_CMD_FLAGS_WFI)
 		total_sizedwords += 2; /* WFI */
 
@@ -584,6 +594,12 @@ adreno_ringbuffer_addcmds(struct adreno_ringbuffer *rb,
 	/* start-of-pipeline timestamp for the ringbuffer */
 	ringcmds += cp_mem_write(adreno_dev, ringcmds,
 		MEMSTORE_RB_GPU_ADDR(device, rb, soptimestamp), rb->timestamp);
+
+	/* start-of-pipeline timestamp for context separate shadow memory */
+	if (write_separate_shadow)
+		ringcmds += cp_mem_write(adreno_dev, ringcmds,
+			DRAWCTXT_SHADOW_GPU_ADDR(drawctxt, soptimestamp),
+			timestamp);
 
 	if (secured_ctxt)
 		ringcmds += cp_secure_mode(adreno_dev, ringcmds, 1);
@@ -675,6 +691,15 @@ adreno_ringbuffer_addcmds(struct adreno_ringbuffer *rb,
 	} else {
 		ringcmds += cp_gpuaddr(adreno_dev, ringcmds,
 			MEMSTORE_RB_GPU_ADDR(device, rb, eoptimestamp));
+		*ringcmds++ = timestamp;
+	}
+
+	/* write end-of-pipeline to context separate shadow memory */
+	if (write_separate_shadow) {
+		*ringcmds++ = cp_mem_packet(adreno_dev, CP_EVENT_WRITE, 3, 1);
+		*ringcmds++ = CACHE_FLUSH_TS;
+		ringcmds += cp_gpuaddr(adreno_dev, ringcmds,
+			DRAWCTXT_SHADOW_GPU_ADDR(drawctxt, eoptimestamp));
 		*ringcmds++ = timestamp;
 	}
 

@@ -1198,24 +1198,24 @@ static ssize_t ffs_epfile_io(struct file *file, struct ffs_io_data *io_data)
 			}
 		}
 
-		ffs_log("%s:ep status %d for req %pK", epfile->name, ep->status,
-				req);
-
 		if (interrupted) {
 			ret = -EINTR;
 			goto error_mutex;
 		}
 
-		ret = -ENODEV;
 		spin_lock_irq(&epfile->ffs->eps_lock);
 		/*
 		 * While we were acquiring lock endpoint got
 		 * disabled (disconnect) or changed
 		 * (composition switch) ?
 		 */
-		if (epfile->ep == ep)
-			ret = ep->status;
+		if (epfile->ep != ep) {
+			ret = -ESHUTDOWN;
+			goto error_lock;
+		}
+		ret = ep->status;
 		spin_unlock_irq(&epfile->ffs->eps_lock);
+		ffs_log("%s:ep status %d for req %pK", epfile->name, ret, req);
 		if (io_data->read && ret > 0)
 			ret = __ffs_epfile_read_data(epfile, data, ep->status,
 						     &io_data->data);

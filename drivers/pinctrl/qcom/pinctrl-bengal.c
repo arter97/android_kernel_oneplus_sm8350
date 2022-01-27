@@ -1526,7 +1526,7 @@ static const struct msm_pingroup bengal_groups[] = {
 };
 
 static const int bengal_reserved_gpios[] = {
-	0, 1, 2, 3, 14, 15, 16, 17, -1
+	2, 3, -1
 };
 
 static const struct msm_pinctrl_soc_data bengal_pinctrl = {

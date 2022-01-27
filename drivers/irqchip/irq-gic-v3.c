@@ -596,9 +596,19 @@ static int gic_suspend_notifier(struct notifier_block *nb,
 				unsigned long event,
 				void *dummy)
 {
+#ifdef CONFIG_DEEPSLEEP
+	if ((event == PM_HIBERNATION_PREPARE) || ((event == PM_SUSPEND_PREPARE)
+			&& (mem_sleep_current == PM_SUSPEND_MEM)))
+#else
 	if (event == PM_HIBERNATION_PREPARE)
+#endif
 		hibernation = true;
+#ifdef CONFIG_DEEPSLEEP
+	else if ((event == PM_POST_HIBERNATION) || ((event == PM_POST_SUSPEND)
+			&& (mem_sleep_current == PM_SUSPEND_MEM)))
+#else
 	else if (event == PM_POST_HIBERNATION)
+#endif
 		hibernation = false;
 	return NOTIFY_OK;
 }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/bitops.h>
@@ -8,6 +9,7 @@
 #include <linux/delay.h>
 #include <linux/err.h>
 #include <linux/interrupt.h>
+#include <linux/irq.h>
 #include <linux/kernel.h>
 #include <linux/log2.h>
 #include <linux/math64.h>
@@ -243,6 +245,7 @@ struct adc5_chip {
 	struct list_head		list;
 	struct list_head		*device_list;
 	struct work_struct	tm_handler_work;
+	int			irq_eoc;
 };
 
 static const struct vadc_prescale_ratio adc5_prescale_ratios[] = {
@@ -1631,7 +1634,7 @@ static int adc5_gen3_probe(struct platform_device *pdev)
 	struct regmap *regmap;
 	const char *irq_name;
 	const __be32 *prop_addr;
-	int ret, irq_eoc, i;
+	int ret, i;
 	u32 reg;
 
 	regmap = dev_get_regmap(dev->parent, NULL);
@@ -1678,12 +1681,17 @@ static int adc5_gen3_probe(struct platform_device *pdev)
 
 	adc_tm_register_tzd(adc);
 
-	irq_eoc = platform_get_irq(pdev, 0);
+	adc->irq_eoc = platform_get_irq(pdev, 0);
+	if (adc->irq_eoc < 0) {
+		ret = adc->irq_eoc;
+		goto fail;
+	}
+
 	irq_name = "pm-adc5";
 	if (adc->data->name)
 		irq_name = adc->data->name;
 
-	ret = devm_request_irq(dev, irq_eoc, adc5_gen3_isr, 0,
+	ret = devm_request_irq(dev, adc->irq_eoc, adc5_gen3_isr, 0,
 			       irq_name, adc);
 	if (ret < 0)
 		goto fail;
@@ -1721,7 +1729,7 @@ static int adc5_gen3_exit(struct platform_device *pdev)
 
 	mutex_lock(&adc->lock);
 	for (i = 0; i < adc->nchannels; i++) {
-		if (adc->chan_props[i].req_wq)
+		if (adc->chan_props[i].req_wq && adc->chan_props[i].adc_tm == ADC_TM_NON_THERMAL)
 			destroy_workqueue(adc->chan_props[i].req_wq);
 		adc->chan_props[i].timer = MEAS_INT_DISABLE;
 	}
@@ -1751,12 +1759,36 @@ static int adc5_gen3_exit(struct platform_device *pdev)
 	return 0;
 }
 
+static void adc5_gen3_shutdown(struct platform_device *pdev)
+{
+	struct adc5_chip *adc = platform_get_drvdata(pdev);
+	int i;
+	u8 data = 0;
+
+	if (adc->irq_eoc > 0)
+		devm_free_irq(adc->dev, adc->irq_eoc, adc);
+
+	/* Disable all available channels */
+	for (i = 0; i < 8; i++) {
+		data = MEAS_INT_DISABLE;
+		adc5_write(adc, ADC5_GEN3_TIMER_SEL, &data, 1);
+
+		/* To indicate there is an actual conversion request */
+		data = ADC5_GEN3_CHAN_CONV_REQ | i;
+		adc5_write(adc, ADC5_GEN3_PERPH_CH, &data, 1);
+
+		data = ADC5_GEN3_CONV_REQ_REQ;
+		adc5_write(adc, ADC5_GEN3_CONV_REQ, &data, 1);
+	}
+}
+
 static struct platform_driver adc5_gen3_driver = {
 	.driver = {
-		.name = "qcom-spmi-adc5-gen3.c",
+		.name = "qcom-spmi-adc5-gen3",
 		.of_match_table = adc5_match_table,
 	},
 	.probe = adc5_gen3_probe,
+	.shutdown = adc5_gen3_shutdown,
 	.remove = adc5_gen3_exit,
 };
 module_platform_driver(adc5_gen3_driver);

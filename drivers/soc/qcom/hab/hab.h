@@ -101,17 +101,17 @@ enum hab_payload_type {
 	((settings)->vmid_mmid_list[_vmid_].is_listener[_mmid_])
 
 struct hab_header {
-	uint32_t id_type_size;
+	uint32_t id_type;
+	uint32_t payload_size;
 	uint32_t session_id;
 	uint32_t signature;
 	uint32_t sequence;
 } __packed;
 
 /* "Size" of the HAB_HEADER_ID and HAB_VCID_ID must match */
-#define HAB_HEADER_SIZE_SHIFT 0
 #define HAB_HEADER_TYPE_SHIFT 16
 #define HAB_HEADER_ID_SHIFT 20
-#define HAB_HEADER_SIZE_MASK 0x0000FFFF
+#define HAB_HEADER_SIZE_MASK 0x0003FFFF
 #define HAB_HEADER_TYPE_MASK 0x000F0000
 #define HAB_HEADER_ID_MASK   0xFFF00000
 #define HAB_HEADER_INITIALIZER {0}
@@ -133,33 +133,29 @@ struct hab_header {
 	((header).session_id = (sid))
 
 #define HAB_HEADER_SET_SIZE(header, size) \
-	((header).id_type_size = ((header).id_type_size & \
-			(~HAB_HEADER_SIZE_MASK)) | \
-			(((size) << HAB_HEADER_SIZE_SHIFT) & \
-			HAB_HEADER_SIZE_MASK))
+	((header).payload_size = (size) & HAB_HEADER_SIZE_MASK)
 
 #define HAB_HEADER_SET_TYPE(header, type) \
-	((header).id_type_size = ((header).id_type_size & \
+	((header).id_type = ((header).id_type & \
 			(~HAB_HEADER_TYPE_MASK)) | \
 			(((type) << HAB_HEADER_TYPE_SHIFT) & \
 			HAB_HEADER_TYPE_MASK))
 
 #define HAB_HEADER_SET_ID(header, id) \
-	((header).id_type_size = ((header).id_type_size & \
+	((header).id_type = ((header).id_type & \
 			(~HAB_HEADER_ID_MASK)) | \
 			((HAB_VCID_GET_ID(id) << HAB_HEADER_ID_SHIFT) & \
 			HAB_HEADER_ID_MASK))
 
 #define HAB_HEADER_GET_SIZE(header) \
-	(((header).id_type_size & \
-		HAB_HEADER_SIZE_MASK) >> HAB_HEADER_SIZE_SHIFT)
+	((header).payload_size & HAB_HEADER_SIZE_MASK)
 
 #define HAB_HEADER_GET_TYPE(header) \
-	(((header).id_type_size & \
+	(((header).id_type & \
 		HAB_HEADER_TYPE_MASK) >> HAB_HEADER_TYPE_SHIFT)
 
 #define HAB_HEADER_GET_ID(header) \
-	((((header).id_type_size & HAB_HEADER_ID_MASK) >> \
+	((((header).id_type & HAB_HEADER_ID_MASK) >> \
 	(HAB_HEADER_ID_SHIFT - HAB_VCID_ID_SHIFT)) & HAB_VCID_ID_MASK)
 
 #define HAB_HEADER_GET_SESSION_ID(header) ((header).session_id)

@@ -295,6 +295,9 @@ static inline bool a6xx_is_smmu_stalled(struct kgsl_device *device)
 void a6xx_cx_regulator_disable_wait(struct regulator *reg,
 				struct kgsl_device *device, u32 timeout);
 
+void a6xx_regulator_disable_wait(struct a6xx_gmu_device *gmu,
+				struct kgsl_device *device, u32 timeout);
+
 /* Preemption functions */
 void a6xx_preemption_trigger(struct adreno_device *adreno_dev);
 void a6xx_preemption_schedule(struct adreno_device *adreno_dev);
@@ -326,6 +329,7 @@ void a6xx_holi_gmu_sptprac_disable(struct adreno_device *adreno_dev);
 
 bool a6xx_gmu_sptprac_is_on(struct adreno_device *adreno_dev);
 bool a6xx_holi_gmu_sptprac_is_on(struct adreno_device *adreno_dev);
+bool a619_holi_gx_is_on(struct adreno_device *adreno_dev);
 
 
 /**

@@ -354,8 +354,58 @@ static void kgsl_destroy_ion(struct kgsl_memdesc *memdesc)
 	memdesc->sgt = NULL;
 }
 
+static int kgsl_dmabuf_map_kernel(struct kgsl_memdesc *memdesc)
+{
+	struct kgsl_mem_entry *entry = container_of(memdesc,
+		struct kgsl_mem_entry, memdesc);
+	struct kgsl_dma_buf_meta *meta = entry->priv_data;
+	int ret = 0;
+
+	mutex_lock(&kgsl_driver.kernel_map_mutex);
+	if (!(memdesc->hostptr) && meta && meta->dmabuf) {
+		memdesc->hostptr = dma_buf_vmap(meta->dmabuf);
+		if (memdesc->hostptr) {
+			dma_buf_begin_cpu_access(meta->dmabuf, DMA_BIDIRECTIONAL);
+			KGSL_STATS_ADD(memdesc->size,
+				&kgsl_driver.stats.vmalloc,
+				&kgsl_driver.stats.vmalloc_max);
+		} else
+			ret = -ENOMEM;
+	}
+	if (memdesc->hostptr)
+		memdesc->hostptr_count++;
+
+	mutex_unlock(&kgsl_driver.kernel_map_mutex);
+
+	return ret;
+}
+
+static void kgsl_dmabuf_unmap_kernel(struct kgsl_memdesc *memdesc)
+{
+	struct kgsl_mem_entry *entry = container_of(memdesc,
+		struct kgsl_mem_entry, memdesc);
+	struct kgsl_dma_buf_meta *meta = entry->priv_data;
+
+	mutex_lock(&kgsl_driver.kernel_map_mutex);
+	if (memdesc->hostptr && meta && meta->dmabuf) {
+		memdesc->hostptr_count--;
+		if (memdesc->hostptr_count)
+			goto done;
+
+		dma_buf_end_cpu_access(meta->dmabuf, DMA_BIDIRECTIONAL);
+		dma_buf_vunmap(meta->dmabuf, memdesc->hostptr);
+		atomic_long_sub(memdesc->size, &kgsl_driver.stats.vmalloc);
+		memdesc->hostptr = NULL;
+	}
+
+done:
+	mutex_unlock(&kgsl_driver.kernel_map_mutex);
+}
+
 static const struct kgsl_memdesc_ops kgsl_dmabuf_ops = {
 	.free = kgsl_destroy_ion,
+	.map_kernel = kgsl_dmabuf_map_kernel,
+	.unmap_kernel = kgsl_dmabuf_unmap_kernel,
 };
 #endif
 
@@ -1300,9 +1350,9 @@ kgsl_sharedmem_find(struct kgsl_process_private *private, uint64_t gpuaddr)
 	if (!private)
 		return NULL;
 
-	if (!kgsl_mmu_gpuaddr_in_range(private->pagetable, gpuaddr) &&
+	if (!kgsl_mmu_gpuaddr_in_range(private->pagetable, gpuaddr, 0) &&
 		!kgsl_mmu_gpuaddr_in_range(
-			private->pagetable->mmu->securepagetable, gpuaddr))
+			private->pagetable->mmu->securepagetable, gpuaddr, 0))
 		return NULL;
 
 	spin_lock(&private->mem_lock);
@@ -3843,6 +3893,30 @@ long kgsl_ioctl_timestamp_event(struct kgsl_device_private *dev_priv,
 	return ret;
 }
 
+long kgsl_ioctl_drawctxt_set_shadow_mem(struct kgsl_device_private *dev_priv,
+					unsigned int cmd, void *data)
+{
+	struct kgsl_drawctxt_set_shadow_mem *param = data;
+	struct kgsl_device *device = dev_priv->device;
+	long result;
+	struct kgsl_context *context;
+
+	/* Separate timestamp shadow memory is not supported
+	 * until it is enabled in GMU
+	 */
+	if (test_bit(GMU_DISPATCH, &device->gmu_core.flags))
+		return -EOPNOTSUPP;
+
+	context = kgsl_context_get_owner(dev_priv, param->drawctxt_id);
+	if (!context)
+		return -EINVAL;
+
+	result = device->ftbl->drawctxt_set_shadow_mem(dev_priv, context,
+						param->gpuobj_id);
+	kgsl_context_put(context);
+	return result;
+}
+
 static vm_fault_t
 kgsl_memstore_vm_fault(struct vm_fault *vmf)
 {
@@ -4075,17 +4149,21 @@ static unsigned long get_svm_unmapped_area(struct file *file,
 	unsigned long ret, iova;
 	u64 start = 0, end = 0;
 	struct vm_area_struct *vma;
+	bool hint_valid = true;
+
+	if (addr > current->mm->mmap_base)
+		hint_valid = false;
 
 	if (flags & MAP_FIXED) {
 		/* Even fixed addresses need to obey alignment */
-		if (!IS_ALIGNED(addr, align))
+		if (!hint_valid || !IS_ALIGNED(addr, align))
 			return -EINVAL;
 
 		return set_svm_area(file, entry, addr, len, flags);
 	}
 
 	/* If a hint was provided, try to use that first */
-	if (addr) {
+	if (addr && hint_valid) {
 		if (IS_ALIGNED(addr, align)) {
 			ret = set_svm_area(file, entry, addr, len, flags);
 			if (!IS_ERR_VALUE(ret))
@@ -4096,6 +4174,11 @@ static unsigned long get_svm_unmapped_area(struct file *file,
 	/* Get the SVM range for the current process */
 	if (kgsl_mmu_svm_range(private->pagetable, &start, &end,
 		entry->memdesc.flags))
+		return -ERANGE;
+
+	/* clamp the range based on the CPU's requirements */
+	end = min_t(uint64_t, end, current->mm->mmap_base);
+	if (start >= end)
 		return -ERANGE;
 
 	/* Find the first gap in the iova map */
@@ -4282,6 +4365,7 @@ struct kgsl_driver kgsl_driver  = {
 	.proclist_lock = __RW_LOCK_UNLOCKED(kgsl_driver.proclist_lock),
 	.ptlock = __SPIN_LOCK_UNLOCKED(kgsl_driver.ptlock),
 	.devlock = __MUTEX_INITIALIZER(kgsl_driver.devlock),
+	.kernel_map_mutex = __MUTEX_INITIALIZER(kgsl_driver.kernel_map_mutex),
 	/*
 	 * Full cache flushes are faster than line by line on at least
 	 * 8064 and 8974 once the region to be flushed is > 16mb.

@@ -54,6 +54,8 @@ static int virtio_clk_prepare(struct clk_hw *hw)
 	unsigned int len;
 	int ret = 0;
 
+	pr_debug("%s\n", clk_hw_get_name(hw));
+
 	req = kzalloc(sizeof(struct virtio_clk_msg), GFP_KERNEL);
 	if (!req)
 		return -ENOMEM;
@@ -100,6 +102,8 @@ static void virtio_clk_unprepare(struct clk_hw *hw)
 	struct scatterlist sg[1];
 	unsigned int len;
 	int ret = 0;
+
+	pr_debug("%s\n", clk_hw_get_name(hw));
 
 	req = kzalloc(sizeof(struct virtio_clk_msg), GFP_KERNEL);
 	if (!req)
@@ -149,6 +153,9 @@ static int virtio_clk_set_rate(struct clk_hw *hw,
 	unsigned int len;
 	int ret = 0;
 
+	pr_debug("%s, rate: %lu, parent_rate: %lu\n", clk_hw_get_name(hw),
+			rate, parent_rate);
+
 	req = kzalloc(sizeof(struct virtio_clk_msg), GFP_KERNEL);
 	if (!req)
 		return -ENOMEM;
@@ -197,6 +204,8 @@ static long virtio_clk_round_rate(struct clk_hw *hw, unsigned long rate,
 	struct scatterlist sg[1];
 	unsigned int len;
 	int ret = 0;
+
+	pr_debug("%s, rate: %lu\n", clk_hw_get_name(hw), rate);
 
 	req = kzalloc(sizeof(struct virtio_clk_msg), GFP_KERNEL);
 	if (!req)
@@ -284,7 +293,11 @@ static unsigned long virtio_clk_get_rate(struct clk_hw *hw,
 	}
 
 	if (rsp->result) {
-		pr_err("%s: error response (%d)\n", clk_hw_get_name(hw),
+		/*
+		 * Some clocks do not support getting rate.
+		 * If getting clock rate is failing, return 0.
+		 */
+		pr_debug("%s: error response (%d)\n", clk_hw_get_name(hw),
 				rsp->result);
 		ret = 0;
 	} else
@@ -306,7 +319,7 @@ static int virtio_clk_set_parent(struct clk_hw *hw, u8 index)
 	unsigned int len;
 	int ret = 0;
 
-	pr_debug("%s parent index: %d\n", clk_hw_get_name(hw), index);
+	pr_debug("%s, parent index: %d\n", clk_hw_get_name(hw), index);
 
 	req = kzalloc(sizeof(struct virtio_clk_msg), GFP_KERNEL);
 	if (!req)
@@ -372,6 +385,8 @@ __virtio_reset(struct reset_controller_dev *rcdev, unsigned long id,
 	struct scatterlist sg[1];
 	unsigned int len;
 	int ret = 0;
+
+	pr_debug("%s, action: %d\n", vclk->desc->reset_names[id], action);
 
 	req = kzalloc(sizeof(struct virtio_clk_msg), GFP_KERNEL);
 	if (!req)

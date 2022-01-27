@@ -206,6 +206,7 @@ enum adreno_gpurev {
 	ADRENO_REV_A650 = 650,
 	ADRENO_REV_A660 = 660,
 	ADRENO_REV_A680 = 680,
+	ADRENO_REV_A690 = 690,
 	ADRENO_REV_A702 = 702,
 };
 
@@ -790,6 +791,7 @@ struct adreno_gpudev {
 	int (*clear_pending_transactions)(struct adreno_device *adreno_dev);
 	void (*deassert_gbif_halt)(struct adreno_device *adreno_dev);
 	void (*regulator_disable_poll)(struct kgsl_device *device);
+	bool (*gx_is_on)(struct adreno_device *adreno_dev);
 };
 
 /**
@@ -936,6 +938,7 @@ void adreno_cx_misc_regrmw(struct adreno_device *adreno_dev,
 		unsigned int mask, unsigned int bits);
 void adreno_isense_regread(struct adreno_device *adreno_dev,
 		unsigned int offsetwords, unsigned int *value);
+bool adreno_gx_is_on(struct adreno_device *adreno_dev);
 
 /**
  * adreno_irq_pending - Return true if an interrupt is pending
@@ -1003,6 +1006,7 @@ void adreno_active_count_put(struct adreno_device *adreno_dev);
 #define adreno_is_a620v1(x) false
 #define adreno_is_a640v2(x) false
 #define adreno_is_a660v2(x) false
+#define adreno_is_a690(x) false
 
 #define adreno_is_a6xx(x) true
 #define adreno_is_a650_family(x) true

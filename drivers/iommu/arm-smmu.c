@@ -47,7 +47,9 @@
 
 #include <linux/amba/bus.h>
 #include <linux/fsl/mc.h>
-
+#ifdef CONFIG_DEEPSLEEP
+#include <linux/suspend.h>
+#endif
 #include "arm-smmu.h"
 #include "iommu-logger.h"
 
@@ -5222,7 +5224,7 @@ static int __maybe_unused arm_smmu_runtime_suspend(struct device *dev)
 	return 0;
 }
 
-static int __maybe_unused arm_smmu_pm_resume(struct device *dev)
+static int __maybe_unused arm_smmu_pm_resume_common(struct device *dev)
 {
 	struct arm_smmu_device *smmu = dev_get_drvdata(dev);
 
@@ -5234,14 +5236,6 @@ static int __maybe_unused arm_smmu_pm_resume(struct device *dev)
 	smmu->smmu_restore = false;
 
 	return 0;
-}
-
-static int __maybe_unused arm_smmu_pm_suspend(struct device *dev)
-{
-	if (pm_runtime_suspended(dev))
-		return 0;
-
-	return arm_smmu_runtime_suspend(dev);
 }
 
 static int __maybe_unused arm_smmu_pm_restore_early(struct device *dev)
@@ -5292,7 +5286,7 @@ static int __maybe_unused arm_smmu_pm_restore_early(struct device *dev)
 					smmu_domain->pgtbl_info);
 	}
 	smmu->smmu_restore = true;
-	ret = arm_smmu_pm_resume(dev);
+	ret = arm_smmu_pm_resume_common(dev);
 	smmu->smmu_restore = false;
 	return ret;
 }
@@ -5329,6 +5323,28 @@ static int __maybe_unused arm_smmu_pm_freeze_late(struct device *dev)
 	}
 	arm_smmu_power_off(smmu, smmu->pwr);
 	return 0;
+}
+
+static int __maybe_unused arm_smmu_pm_suspend(struct device *dev)
+{
+
+#ifdef CONFIG_DEEPSLEEP
+	if (mem_sleep_current == PM_SUSPEND_MEM)
+		return arm_smmu_pm_freeze_late(dev);
+#endif
+	if (pm_runtime_suspended(dev))
+		return 0;
+
+	return arm_smmu_runtime_suspend(dev);
+}
+
+static int __maybe_unused arm_smmu_pm_resume(struct device *dev)
+{
+#ifdef CONFIG_DEEPSLEEP
+	if (mem_sleep_current == PM_SUSPEND_MEM)
+		return arm_smmu_pm_restore_early(dev);
+#endif
+		return arm_smmu_pm_resume_common(dev);
 }
 
 static const struct dev_pm_ops arm_smmu_pm_ops = {
