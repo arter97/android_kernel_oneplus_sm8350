@@ -10834,21 +10834,27 @@ static int pt_core_suspend_(struct device *dev)
  ******************************************************************************/
 static int pt_core_suspend(struct device *dev)
 {
-		struct pt_core_data *cd = dev_get_drvdata(dev);
-		int rc = 0;
+	struct pt_core_data *cd = dev_get_drvdata(dev);
+	int rc = 0, status = 0;
 
-		if (cd->cpdata->flags & PT_CORE_FLAG_SKIP_SYS_SLEEP)
-			return 0;
+	if (cd->cpdata->flags & PT_CORE_FLAG_SKIP_SYS_SLEEP)
+		return 0;
 
-		cancel_work_sync(&cd->resume_offload_work);
-		cancel_work_sync(&cd->suspend_offload_work);
-		cancel_work_sync(&cd->resume_work);
-		cancel_work_sync(&cd->suspend_work);
+	pt_debug(cd->dev, DL_INFO, "%s start\n", __func__);
+	cancel_work_sync(&cd->resume_work);
+	cancel_work_sync(&cd->suspend_work);
 
-		rc = pt_core_suspend_(cd->dev);
-		pt_debug(cd->dev, DL_INFO, "%s Exit - rc = %d\n", __func__, rc);
+	rc = pt_core_easywake_on(cd);
+	if (rc < 0) {
+		pt_debug(cd->dev, DL_ERROR, "%s: Error on sleep\n", __func__);
+		return true;
+	}
+	cd->fb_state = FB_OFF;
 
-		return rc;
+	status = pt_enable_i2c_regulator(cd, false);
+	pt_debug(cd->dev, DL_INFO, "%s Exit - rc = %d\n", __func__, status);
+
+	return rc;
 }
 
 /*******************************************************************************
@@ -11016,17 +11022,15 @@ static void pt_resume_offload_work(struct work_struct *work)
 static int pt_core_resume(struct device *dev)
 {
 	struct pt_core_data *cd = dev_get_drvdata(dev);
-	int rc = 0;
+	int rc = 0, status = 0;
 	if (cd->cpdata->flags & PT_CORE_FLAG_SKIP_SYS_SLEEP)
 		return 0;
 
-	cancel_work_sync(&cd->resume_offload_work);
-	cancel_work_sync(&cd->suspend_offload_work);
-	cancel_work_sync(&cd->resume_work);
-	cancel_work_sync(&cd->suspend_work);
+	pt_debug(cd->dev, DL_INFO, "%s start\n", __func__);
+	status = pt_enable_i2c_regulator(cd, true);
+	pt_debug(cd->dev, DL_INFO, "%s i2c regulator rc %d\n", __func__, status);
 
-	queue_work(cd->pt_workqueue, &cd->resume_offload_work);
-	pt_debug(cd->dev, DL_INFO, "%s workqueued\n", __func__);
+	pt_debug(cd->dev, DL_INFO, "%s End\n", __func__);
 
 	return rc;
 }
