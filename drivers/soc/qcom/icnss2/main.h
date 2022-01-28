@@ -142,6 +142,7 @@ struct icnss_vreg_cfg {
 	u32 need_unvote;
 	bool required;
 	bool is_supported;
+	u32 no_vote_on_wifi_active;
 };
 
 struct icnss_vreg_info {
