@@ -102,6 +102,7 @@ static const char * const gsl_rpc_func_names[] = {
 	"RPC_SUB_HANDSHAKE",
 	"RPC_DISCONNECT",
 	"RPC_MEMORY_SET_METAINFO",
+	"RPC_COMMAND_RESETSTATUS",
 	"RPC_GET_SYSTEM_TIME",
 	"RPC_GET_DBQ_INFO",
 	"RPC_DBQ_CREATE",
