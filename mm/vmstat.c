@@ -1576,6 +1576,31 @@ static bool is_zone_first_populated(pg_data_t *pgdat, struct zone *zone)
 	return false;
 }
 
+static inline bool __print_workingset(struct seq_file *m, pg_data_t *pgdat,
+				      int *i, unsigned long count)
+{
+	char *p;
+
+	switch (*i) {
+	case WORKINGSET_REFAULT_ANON:
+		p = "workingset_refault";
+		break;
+	case WORKINGSET_ACTIVATE_ANON:
+		p = "workingset_activate";
+		break;
+	case WORKINGSET_RESTORE_ANON:
+		p = "workingset_restore";
+		break;
+	default:
+		return false;
+	}
+
+	seq_printf(m, "\n      %-12s %lu",
+		p, count + node_page_state(pgdat, ++(*i)));
+
+	return true;
+}
+
 static void zoneinfo_show_print(struct seq_file *m, pg_data_t *pgdat,
 							struct zone *zone)
 {
@@ -1584,10 +1609,13 @@ static void zoneinfo_show_print(struct seq_file *m, pg_data_t *pgdat,
 	if (is_zone_first_populated(pgdat, zone)) {
 		seq_printf(m, "\n  per-node stats");
 		for (i = 0; i < NR_VM_NODE_STAT_ITEMS; i++) {
-			seq_printf(m, "\n      %-12s %lu",
-				vmstat_text[i + NR_VM_ZONE_STAT_ITEMS +
-				NR_VM_NUMA_STAT_ITEMS],
-				node_page_state(pgdat, i));
+			unsigned long count = node_page_state(pgdat, i);
+			if (!__print_workingset(m, pgdat, &i, count)) {
+				seq_printf(m, "\n      %-12s %lu",
+					vmstat_text[i + NR_VM_ZONE_STAT_ITEMS +
+					NR_VM_NUMA_STAT_ITEMS],
+					count);
+			}
 		}
 	}
 	seq_printf(m,
@@ -1629,6 +1657,8 @@ static void zoneinfo_show_print(struct seq_file *m, pg_data_t *pgdat,
 				vmstat_text[i + NR_VM_ZONE_STAT_ITEMS],
 				zone_numa_state_snapshot(zone, i));
 #endif
+
+	seq_printf(m, "\n      nr_free_defrag 0");
 
 	seq_printf(m, "\n  pagesets");
 	for_each_online_cpu(i) {
