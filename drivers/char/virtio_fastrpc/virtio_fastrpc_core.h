@@ -41,6 +41,27 @@
 			memmove((dst), (src), (size));\
 	} while (0)
 
+#define K_COPY_TO_USER_WITHOUT_ERR(kernel, dst, src, size) \
+	do {\
+		if (!(kernel))\
+			(void)copy_to_user((void __user *)(dst),\
+			(src), (size));\
+		else\
+			memmove((dst), (src), (size));\
+	} while (0)
+
+struct fastrpc_perf {
+	uint64_t count;
+	uint64_t flush;
+	uint64_t map;
+	uint64_t copy;
+	uint64_t link;
+	uint64_t getargs;
+	uint64_t putargs;
+	uint64_t invargs;
+	uint64_t invoke;
+	uint64_t tid;
+};
 
 struct virt_fastrpc_vq {
 	/* protects vq */
@@ -105,6 +126,7 @@ struct fastrpc_file {
 	/* Identifies the device (MINOR_NUM_DEV / MINOR_NUM_SECURE_DEV) */
 	int dev_minor;
 	char *debug_buf;
+	uint32_t profile;
 };
 
 struct fastrpc_invoke_ctx {
@@ -122,6 +144,9 @@ struct fastrpc_invoke_ctx {
 	int tgid;
 	uint32_t sc;
 	uint32_t handle;
+	struct fastrpc_perf *perf;
+	uint64_t *perf_kernel;
+	uint64_t *perf_dsp;
 };
 
 struct virt_msg_hdr {
@@ -149,5 +174,9 @@ int fastrpc_internal_munmap(struct fastrpc_file *fl,
 int fastrpc_internal_munmap_fd(struct fastrpc_file *fl,
 				struct fastrpc_ioctl_munmap_fd *ud);
 int fastrpc_internal_invoke(struct fastrpc_file *fl,
-		uint32_t mode, struct fastrpc_ioctl_invoke_crc *inv);
+		uint32_t mode, struct fastrpc_ioctl_invoke_perf *inv);
+
+int fastrpc_ioctl_get_dsp_info(struct fastrpc_ioctl_capability *cap,
+		void *param, struct fastrpc_file *fl);
+
 #endif /*__VIRTIO_FASTRPC_CORE_H__*/
