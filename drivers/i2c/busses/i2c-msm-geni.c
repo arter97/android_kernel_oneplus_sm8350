@@ -1402,6 +1402,8 @@ static int geni_i2c_probe(struct platform_device *pdev)
 	gi2c->i2c_rsc.wrapper_dev = &wrapper_pdev->dev;
 	gi2c->i2c_rsc.ctrl_dev = gi2c->dev;
 
+	gi2c->i2c_rsc.rsc_ssr.ssr_enable = of_property_read_bool(
+				pdev->dev.of_node, "ssr-enable");
 	/*
 	 * For LE, clocks, gpio and icb voting will be provided by
 	 * by LA. The I2C operates in GSI mode only for LE usecase,
@@ -1482,9 +1484,6 @@ static int geni_i2c_probe(struct platform_device *pdev)
 		gi2c->is_shared = true;
 		dev_info(&pdev->dev, "Multi-EE usecase\n");
 	}
-
-	gi2c->i2c_rsc.rsc_ssr.ssr_enable = of_property_read_bool(
-		pdev->dev.of_node, "ssr-enable");
 
 	if (of_property_read_u32(pdev->dev.of_node, "qcom,clk-freq-out",
 				&gi2c->i2c_rsc.clk_freq_out))
