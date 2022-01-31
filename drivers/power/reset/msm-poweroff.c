@@ -203,6 +203,9 @@ static int dload_set(const char *val, const struct kernel_param *kp)
 
 	set_dload_mode(download_mode);
 
+	if (!download_mode)
+		qcom_scm_disable_sdi();
+
 	return 0;
 }
 
