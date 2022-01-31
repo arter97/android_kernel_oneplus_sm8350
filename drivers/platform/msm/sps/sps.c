@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2011-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2019, 2022, The Linux Foundation. All rights reserved.
  */
 /* Smart-Peripheral-Switch (SPS) Module. */
 
@@ -285,12 +285,12 @@ static ssize_t sps_set_bam_addr(struct file *file, const char __user *buf,
 
 	switch (reg_dump_option) {
 	case 1: /* output all registers of this BAM */
-		print_bam_reg(bam->base);
+		print_bam_reg(vir_addr);
 		for (i = 0; i < num_pipes; i++)
-			print_bam_pipe_reg(bam->base, i);
+			print_bam_pipe_reg(vir_addr, i);
 		break;
 	case 2: /* output BAM-level registers */
-		print_bam_reg(bam->base);
+		print_bam_reg(vir_addr);
 		break;
 	case 3: /* output selected BAM-level registers */
 		print_bam_selected_reg(vir_addr, bam->props.ee);
@@ -364,7 +364,7 @@ static ssize_t sps_set_bam_addr(struct file *file, const char __user *buf,
 	case 16: /* output all registers of selected pipes */
 		for (i = 0; i < num_pipes; i++)
 			if (bam_pipe_sel & (1UL << i))
-				print_bam_pipe_reg(bam->base, i);
+				print_bam_pipe_reg(vir_addr, i);
 		break;
 	case 91: /*
 		  * output testbus register, BAM global regisers
@@ -472,9 +472,9 @@ static ssize_t sps_set_bam_addr(struct file *file, const char __user *buf,
 		break;
 	case 99: /* output all registers, desc FIFOs and partial data blocks */
 		print_bam_test_bus_reg(vir_addr, testbus_sel);
-		print_bam_reg(bam->base);
+		print_bam_reg(vir_addr);
 		for (i = 0; i < num_pipes; i++)
-			print_bam_pipe_reg(bam->base, i);
+			print_bam_pipe_reg(vir_addr, i);
 		print_bam_selected_reg(vir_addr, bam->props.ee);
 		for (i = 0; i < num_pipes; i++)
 			print_bam_pipe_selected_reg(vir_addr, i);
@@ -639,12 +639,12 @@ int sps_get_bam_debug_info(unsigned long dev, u32 option, u32 para,
 
 	switch (option) {
 	case 1: /* output all registers of this BAM */
-		print_bam_reg(bam->base);
+		print_bam_reg(vir_addr);
 		for (i = 0; i < num_pipes; i++)
-			print_bam_pipe_reg(bam->base, i);
+			print_bam_pipe_reg(vir_addr, i);
 		break;
 	case 2: /* output BAM-level registers */
-		print_bam_reg(bam->base);
+		print_bam_reg(vir_addr);
 		break;
 	case 3: /* output selected BAM-level registers */
 		print_bam_selected_reg(vir_addr, bam->props.ee);
@@ -716,7 +716,7 @@ int sps_get_bam_debug_info(unsigned long dev, u32 option, u32 para,
 	case 16: /* output all registers of selected pipes */
 		for (i = 0; i < num_pipes; i++)
 			if (para & (1UL << i))
-				print_bam_pipe_reg(bam->base, i);
+				print_bam_pipe_reg(vir_addr, i);
 		break;
 	case 91: /*
 		  * output testbus register, BAM global regisers
@@ -824,9 +824,9 @@ int sps_get_bam_debug_info(unsigned long dev, u32 option, u32 para,
 		break;
 	case 99: /* output all registers, desc FIFOs and partial data blocks */
 		print_bam_test_bus_reg(vir_addr, tb_sel);
-		print_bam_reg(bam->base);
+		print_bam_reg(vir_addr);
 		for (i = 0; i < num_pipes; i++)
-			print_bam_pipe_reg(bam->base, i);
+			print_bam_pipe_reg(vir_addr, i);
 		print_bam_selected_reg(vir_addr, bam->props.ee);
 		for (i = 0; i < num_pipes; i++)
 			print_bam_pipe_selected_reg(vir_addr, i);
@@ -1115,6 +1115,7 @@ EXPORT_SYMBOL(sps_phy2h);
 int sps_setup_bam2bam_fifo(struct sps_mem_buffer *mem_buffer,
 		  u32 addr, u32 size, int use_offset)
 {
+
 	SPS_DBG1(sps, "Enter\n");
 
 	if ((mem_buffer == NULL) || (size == 0)) {
@@ -1147,10 +1148,11 @@ int sps_setup_bam2bam_fifo(struct sps_mem_buffer *mem_buffer,
 		}
 	}
 
-	mem_buffer->base = spsi_get_mem_ptr(mem_buffer->phys_base);
+	mem_buffer->base =
+		(void  __iomem *) spsi_get_mem_ptr(mem_buffer->phys_base);
 	mem_buffer->size = size;
 
-	memset(mem_buffer->base, 0, mem_buffer->size);
+	memset(spsi_get_mem_ptr(mem_buffer->phys_base), 0, mem_buffer->size);
 
 	return 0;
 }
@@ -1917,7 +1919,7 @@ int sps_alloc_mem(struct sps_pipe *h, enum sps_mem mem,
 		return SPS_ERROR;
 	}
 
-	mem_buffer->base = spsi_get_mem_ptr(mem_buffer->phys_base);
+	mem_buffer->base = (void  __iomem *) spsi_get_mem_ptr(mem_buffer->phys_base);
 
 	return 0;
 }
