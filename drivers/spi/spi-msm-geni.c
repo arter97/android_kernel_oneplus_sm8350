@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2022, The Linux Foundation. All rights reserved.
  */
 
 
@@ -2072,6 +2072,9 @@ static int spi_geni_probe(struct platform_device *pdev)
 		goto spi_geni_probe_err;
 	}
 
+	if (slave_en)
+		spi->slave_abort = spi_slv_abort;
+
 	snprintf(boot_marker, sizeof(boot_marker),
 			"M - DRIVER GENI_SPI Init");
 	place_marker(boot_marker);
@@ -2269,11 +2272,6 @@ static int spi_geni_probe(struct platform_device *pdev)
 
 	if (of_property_read_bool(pdev->dev.of_node, "qcom,master-cross-connect"))
 		geni_mas->master_cross_connect = true;
-
-	if (slave_en) {
-		spi->slave = true;
-		spi->slave_abort = spi_slv_abort;
-	}
 
 	geni_mas->slave_cross_connected =
 		of_property_read_bool(pdev->dev.of_node, "slv-cross-connected");
