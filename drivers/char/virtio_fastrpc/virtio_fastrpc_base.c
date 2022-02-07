@@ -47,7 +47,7 @@
  * Increase only for critical patches which must be consistent with BE,
  * if not, the basic function is broken.
  */
-#define FE_MAJOR_VER 0x1
+#define FE_MAJOR_VER 0x2
 /* Increase for new features. */
 #define FE_MINOR_VER 0x0
 #define FE_VERSION (FE_MAJOR_VER << 16 | FE_MINOR_VER)
