@@ -346,26 +346,32 @@ static void hsusb_phy_write_seq(void __iomem *base, u32 *seq, int cnt,
 }
 
 #define EUD_EN2 BIT(0)
+static inline bool is_msm_hsphy_eud_enabled(struct msm_hsphy *phy)
+{
+	u32 val = 0;
+
+	if (phy->eud_enable_reg)
+		val = readl_relaxed(phy->eud_enable_reg);
+
+	return (val & EUD_EN2);
+}
+
 static int msm_hsphy_init(struct usb_phy *uphy)
 {
 	struct msm_hsphy *phy = container_of(uphy, struct msm_hsphy, phy);
 	int ret;
-	u32 rcal_code = 0, eud_csr_reg = 0;
+	u32 rcal_code = 0;
 
 	dev_dbg(uphy->dev, "%s phy_flags:0x%x\n", __func__, phy->phy.flags);
-	if (phy->eud_enable_reg) {
-		eud_csr_reg = readl_relaxed(phy->eud_enable_reg);
-		if (eud_csr_reg & EUD_EN2) {
-			dev_dbg(phy->phy.dev, "csr:0x%x eud is enabled\n",
-							eud_csr_reg);
-			/* if in host mode, disable EUD */
-			if (phy->phy.flags & PHY_HOST_MODE) {
-				qcom_scm_io_writel(phy->eud_reg, 0x0);
-				phy->re_enable_eud = true;
-			} else {
-				ret = msm_hsphy_enable_power(phy, true);
-				return ret;
-			}
+	if (is_msm_hsphy_eud_enabled(phy)) {
+		dev_dbg(phy->phy.dev, "eud is enabled\n");
+		/* if in host mode, disable EUD */
+		if (phy->phy.flags & PHY_HOST_MODE) {
+			qcom_scm_io_writel(phy->eud_reg, 0x0);
+			phy->re_enable_eud = true;
+		} else {
+			ret = msm_hsphy_enable_power(phy, true);
+			return ret;
 		}
 	}
 
@@ -633,7 +639,7 @@ static int msm_hsphy_dpdm_regulator_enable(struct regulator_dev *rdev)
 	dev_dbg(phy->phy.dev, "%s dpdm_enable:%d\n",
 				__func__, phy->dpdm_enable);
 
-	if (phy->eud_enable_reg && readl_relaxed(phy->eud_enable_reg)) {
+	if (is_msm_hsphy_eud_enabled(phy)) {
 		dev_err(phy->phy.dev, "eud is enabled\n");
 		return 0;
 	}
@@ -922,7 +928,7 @@ static int msm_hsphy_probe(struct platform_device *pdev)
 	 * kernel boot till USB phy driver is initialized based on cable status,
 	 * keep LDOs on here.
 	 */
-	if (phy->eud_enable_reg && readl_relaxed(phy->eud_enable_reg))
+	if (is_msm_hsphy_eud_enabled(phy))
 		msm_hsphy_enable_power(phy, true);
 	return 0;
 
