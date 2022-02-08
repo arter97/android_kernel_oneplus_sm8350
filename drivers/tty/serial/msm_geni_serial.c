@@ -314,6 +314,7 @@ static void msm_geni_serial_allow_rx(struct msm_geni_serial_port *port);
 static int uart_line_id;
 static void msm_geni_serial_ssr_down(struct device *dev);
 static void msm_geni_serial_ssr_up(struct device *dev);
+static void msm_geni_serial_init_gsi(struct uart_port *uport);
 
 #define GET_DEV_PORT(uport) \
 	container_of(uport, struct msm_geni_serial_port, uport)
@@ -1479,6 +1480,7 @@ static int msm_geni_allocate_chan(struct uart_port *uport)
 		if (ret) {
 			dev_err(uport->dev, "Failed to Config Tx\n");
 			msm_geni_deallocate_chan(uport);
+			ret = -EIO;
 			goto out;
 		}
 	}
@@ -1514,7 +1516,12 @@ static void msm_geni_uart_gsi_xfer_tx(struct work_struct *work)
 	dump_ipc(msm_port->ipc_log_tx, "DMA Tx",
 		(char *)&xmit->buf[xmit->tail], 0, xmit_size);
 
-	msm_geni_allocate_chan(uport);
+	ret = msm_geni_allocate_chan(uport);
+	if (ret) {
+		dev_err(uport->dev, "%s: Allocation of Channel failed:%d\n",
+						__func__, ret);
+		return;
+	}
 	sg_init_table(msm_port->gsi->tx_sg, 3);
 	sg_set_buf(msm_port->gsi->tx_sg, &msm_port->gsi->tx_cfg0_t,
 				sizeof(msm_port->gsi->tx_cfg0_t));
@@ -1596,9 +1603,18 @@ static int msm_geni_uart_gsi_xfer_rx(struct uart_port *uport)
 	dma_cookie_t rx_cookie;
 	struct msm_gpi_tre *go_t = &msm_port->gsi->rx_go_t;
 	struct device *rx_dev = msm_port->wrapper_dev;
-	int i, k, index = 0;
+	int i, k, index = 0, ret = 0;
 
-	msm_geni_allocate_chan(uport);
+	if (!msm_port->port_setup) {
+		dev_err(uport->dev, "%s: Port setup not yet done\n", __func__);
+		return -EINVAL;
+	}
+
+	ret = msm_geni_allocate_chan(uport);
+	if (ret) {
+		dev_err(uport->dev, "%s: Allocation of Channel failed\n", __func__);
+		return -ENOMEM;
+	}
 	sg_init_table(msm_port->gsi->rx_sg, 6);
 	sg_set_buf(msm_port->gsi->rx_sg, &msm_port->gsi->rx_cfg0_t,
 				sizeof(msm_port->gsi->rx_cfg0_t));
@@ -2011,7 +2027,7 @@ static void msm_geni_serial_stop_tx(struct uart_port *uport)
 
 static void start_rx_sequencer(struct uart_port *uport)
 {
-	unsigned int geni_status;
+	unsigned int geni_status, ret = 0;
 	struct msm_geni_serial_port *port = GET_DEV_PORT(uport);
 	u32 geni_se_param = UART_PARAM_RFR_OPEN;
 
@@ -2033,7 +2049,10 @@ static void start_rx_sequencer(struct uart_port *uport)
 	} else if (port->xfer_mode == GSI_DMA) {
 		IPC_LOG_MSG(port->ipc_log_misc, "%s: start xfer_rx\n",
 								__func__);
-		msm_geni_uart_gsi_xfer_rx(uport);
+		ret = msm_geni_uart_gsi_xfer_rx(uport);
+		if (!ret)
+			IPC_LOG_MSG(port->ipc_log_misc,
+				"%s: RX xfer is failed\n", __func__);
 		return;
 	}
 	if (geni_status & S_GENI_CMD_ACTIVE) {
@@ -3155,13 +3174,6 @@ static int msm_geni_serial_port_setup(struct uart_port *uport)
 	geni_write_reg_nolog(rxstale, uport->membase, SE_UART_RX_STALE_CNT);
 	if (msm_port->gsi_mode) {
 		msm_port->xfer_mode = GSI_DMA;
-		msm_port->tx_wq = alloc_workqueue("%s", WQ_HIGHPRI, 1,
-							dev_name(uport->dev));
-		msm_port->rx_wq = alloc_workqueue("%s", WQ_HIGHPRI, 1,
-							dev_name(uport->dev));
-		INIT_WORK(&msm_port->tx_xfer_work, msm_geni_uart_gsi_xfer_tx);
-		INIT_WORK(&msm_port->rx_cancel_work,
-						msm_geni_uart_gsi_cancel_rx);
 	} else if (!uart_console(uport)) {
 		/* For now only assume FIFO mode. */
 		msm_port->xfer_mode = SE_DMA;
@@ -3913,6 +3925,27 @@ static const struct of_device_id msm_geni_device_tbl[] = {
 	{},
 };
 
+static void msm_geni_serial_init_gsi(struct uart_port *uport)
+{
+	struct msm_geni_serial_port *msm_port = GET_DEV_PORT(uport);
+
+	msm_port->gsi_mode = geni_read_reg(uport->membase,
+				GENI_IF_FIFO_DISABLE_RO) & FIFO_IF_DISABLE;
+	dev_info(uport->dev, "gsi_mode:%d\n", msm_port->gsi_mode);
+	if (msm_port->gsi_mode) {
+		msm_port->gsi = devm_kzalloc(uport->dev,
+					sizeof(*msm_port->gsi), GFP_KERNEL);
+		msm_port->xfer_mode = GSI_DMA;
+		msm_port->tx_wq = alloc_workqueue("%s", WQ_HIGHPRI, 1,
+							dev_name(uport->dev));
+		msm_port->rx_wq = alloc_workqueue("%s", WQ_HIGHPRI, 1,
+							dev_name(uport->dev));
+		INIT_WORK(&msm_port->tx_xfer_work, msm_geni_uart_gsi_xfer_tx);
+		INIT_WORK(&msm_port->rx_cancel_work,
+						msm_geni_uart_gsi_cancel_rx);
+	}
+}
+
 static int msm_geni_serial_get_ver_info(struct uart_port *uport)
 {
 	int hw_ver, ret = 0;
@@ -3950,15 +3983,6 @@ static int msm_geni_serial_get_ver_info(struct uart_port *uport)
 
 	msm_port->ver_info.hw_ver = geni_se_qupv3_get_hw_version(msm_port->wrapper_dev);
 	dev_err(uport->dev, "%s:HW version %d\n", __func__, msm_port->ver_info.hw_ver);
-
-	/* GSI mode changes */
-	msm_port->gsi_mode = geni_read_reg(uport->membase,
-				GENI_IF_FIFO_DISABLE_RO) & FIFO_IF_DISABLE;
-	dev_info(uport->dev, "gsi_mode:%d\n", msm_port->gsi_mode);
-	if (msm_port->gsi_mode) {
-		msm_port->gsi = devm_kzalloc(uport->dev,
-					sizeof(*msm_port->gsi), GFP_KERNEL);
-	}
 
 	msm_geni_serial_enable_interrupts(uport);
 exit_ver_info:
@@ -4316,6 +4340,10 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Failed to Read FW ver: %d\n", ret);
 		goto exit_geni_serial_probe;
 	}
+
+	/* Initialize the GSI mode */
+	msm_geni_serial_init_gsi(uport);
+
 	/*
 	 * In abrupt kill scenarios, previous state of the uart causing runtime
 	 * resume, lead to spinlock bug in stop_rx_sequencer, so initializing it
@@ -4360,6 +4388,10 @@ static int msm_geni_serial_remove(struct platform_device *pdev)
 	if (port->pm_auto_suspend_disable)
 		pm_runtime_allow(&pdev->dev);
 	uart_remove_one_port(drv, &port->uport);
+	if (port->gsi_mode) {
+		destroy_workqueue(port->tx_wq);
+		destroy_workqueue(port->rx_wq);
+	}
 	if (port->rx_dma) {
 		geni_se_iommu_free_buf(port->wrapper_dev, &port->rx_dma,
 					port->rx_buf, DMA_RX_BUF_SIZE);
