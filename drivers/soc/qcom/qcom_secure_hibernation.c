@@ -68,7 +68,7 @@ static struct qcom_crypto_params *params;
 static struct crypto_aead *tfm;
 static struct aead_request *req;
 static u8 iv_size;
-static u8 key[32];
+static u8 key[AES256_KEY_SIZE];
 static struct qseecom_handle *app_handle;
 static int first_encrypt;
 static void *temp_out_buf;
@@ -90,12 +90,9 @@ static void save_auth(uint8_t *out_buf)
 
 int encrypt_page(void *buf)
 {
-	int ret;
 	struct scatterlist sg_in[2], sg_out[2];
 	struct crypto_wait wait;
-
-	if (first_encrypt)
-		temp_out_buf = (void *)__get_free_pages(GFP_KERNEL, 1);
+	int ret = 0;
 
 	/* Allocate a request object */
 	req = aead_request_alloc(tfm, GFP_KERNEL);
@@ -113,7 +110,7 @@ int encrypt_page(void *buf)
 	if (iv_size && first_encrypt)
 		memset(params->iv, 0xff, iv_size);
 
-	ret = crypto_aead_setkey(tfm, key, 32);
+	ret = crypto_aead_setkey(tfm, key, AES256_KEY_SIZE);
 	if (ret) {
 		pr_err("Error setting key: %d\n", ret);
 		goto out;
@@ -138,10 +135,9 @@ int encrypt_page(void *buf)
 
 	if (first_encrypt)
 		first_encrypt = 0;
-
-	return 0;
 out:
 	aead_request_free(req);
+	return ret;
 err_aead:
 	free_pages((unsigned long)temp_out_buf, 1);
 	return ret;
@@ -164,12 +160,6 @@ unsigned int get_authpage_count(void)
 void populate_secure_params(struct qcom_crypto_params *p)
 {
 	memcpy(p, params, sizeof(struct qcom_crypto_params));
-
-	/*
-	 * This function will be called once the enccryption is
-	 * complete. Clear the plain key.
-	 */
-	memset(key, 0, 32);
 }
 
 void get_auth_params(void **authpage, int *authpage_count)
@@ -264,6 +254,15 @@ static int alloc_auth_memory(void)
 	return 0;
 }
 
+void deinit_aes_encrypt(void)
+{
+	free_pages((unsigned long)temp_out_buf, 1);
+	memset(params->key_blob, 0, WRAPPED_KEY_SIZE);
+	memset(key, 0, AES256_KEY_SIZE);
+	crypto_free_aead(tfm);
+	kfree(params);
+}
+
 int init_aes_encrypt(void)
 {
 	int ret;
@@ -299,16 +298,19 @@ int init_aes_encrypt(void)
 
 	first_encrypt = 1;
 	pos = 0;
-
+	temp_out_buf = (void *)__get_free_pages(GFP_KERNEL, 1);
+	if (!temp_out_buf) {
+		pr_err("%s: Failed alloc_auth_memory %d\n", __func__, ret);
+		ret = -1;
+		goto err_auth;
+	}
 	memcpy(params->aad, "SECURE_S2D!!", sizeof(params->aad));
 	params->authsize = AUTH_SIZE;
-
 	return 0;
-
 err_auth:
 	qseecom_shutdown_app(&app_handle);
 	memset(params->key_blob, 0, WRAPPED_KEY_SIZE);
-	memset(key, 0, 32);
+	memset(key, 0, AES256_KEY_SIZE);
 err_setkey:
 	crypto_free_aead(tfm);
 err_aead:
