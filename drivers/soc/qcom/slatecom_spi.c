@@ -224,10 +224,12 @@ int slatecom_set_spi_state(enum slatecom_spi_state state)
 			delta = ktime_sub(ktime_get(), time_start);
 			time_elapsed = ktime_to_ms(delta);
 			WARN_ON(time_elapsed > 5 * MSEC_PER_SEC);
+			SLATECOM_INFO("Waiting to set state busy....\n");
 			msleep(100);
 		}
 	}
 	spi_state = state;
+	SLATECOM_INFO("state = %d\n", state);
 	mutex_unlock(&slate_spi->xfer_mutex);
 	return 0;
 }
