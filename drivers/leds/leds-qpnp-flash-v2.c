@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"flashv2: %s: " fmt, __func__
@@ -1551,6 +1552,7 @@ static int qpnp_flash_led_symmetry_config(struct flash_switch_data *snode)
 	return 0;
 }
 
+#define  FLASH_VREG_OK_SETTLE_TIME_US 1000
 static int qpnp_flash_led_module_enable(struct flash_switch_data *snode)
 {
 	struct qpnp_flash_led *led = dev_get_drvdata(&snode->pdev->dev);
@@ -1563,6 +1565,11 @@ static int qpnp_flash_led_module_enable(struct flash_switch_data *snode)
 		if (rc < 0)
 			return rc;
 	}
+
+	/* For PMI632, wait 1ms to allow flash to settle */
+	if (led->pmic_type == PMI632)
+		udelay(FLASH_VREG_OK_SETTLE_TIME_US);
+
 	led->enable++;
 
 	return rc;

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "SCHG-FLASH: %s: " fmt, __func__
@@ -60,6 +61,13 @@ irqreturn_t smb5_schgm_flash_state_change_irq_handler(int irq, void *data)
 	else
 		pr_debug("Flash status changed state=[%x]\n",
 					(reg && FLASH_STATE_MASK));
+
+	if ((reg & FLASH_STATE_MASK) == FLASH_ERROR_VAL) {
+		rc = smblib_read(chg, SCHGM_FLASH_STATUS_5_REG,
+				&reg);
+		if (!rc)
+			pr_err("Flash Error: status=0x%02x\n", reg);
+	}
 
 	return IRQ_HANDLED;
 }
