@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/atomic.h>
@@ -23,14 +24,12 @@
 #include <linux/regmap.h>
 #include <linux/regulator/driver.h>
 #include <linux/slab.h>
-#include <linux/suspend.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
 #include <linux/qpnp/qpnp-pbs.h>
 
 /* status register definitions in HAPTICS_CFG module */
-#define HAP_CFG_REVISION1_REG			0x00
-
+#define HAP_CFG_REVISION2_REG			0x01
 #define HAP_CFG_V1				0x1
 #define HAP_CFG_V2				0x2
 #define HAP_CFG_V3				0x3
@@ -371,7 +370,6 @@ enum pmic_type {
 
 enum wa_flags {
 	TOGGLE_CAL_RC_CLK = BIT(0),
-	TOGGLE_MODULE_EN = BIT(1),
 };
 
 static const char * const src_str[] = {
@@ -524,7 +522,6 @@ struct haptics_chip {
 	u32				hbst_addr_base;
 	u32				wa_flags;
 	u8				cfg_revision;
-	u8				cfg_rev1;
 	u8				ptn_revision;
 	u8				hpwr_intf_ctl;
 	u16				hbst_revision;
@@ -894,7 +891,12 @@ static int haptics_get_status_data(struct haptics_chip *chip,
 	mod_sel_val[0] = sel & 0xff;
 	mod_sel_val[1] = (sel >> 8) & 0xff;
 	rc = haptics_write(chip, chip->cfg_addr_base,
-			HAP_CFG_MOD_STATUS_SEL_REG, mod_sel_val, 2);
+			HAP_CFG_MOD_STATUS_XT_V2_REG, &mod_sel_val[1], 1);
+	if (rc < 0)
+		return rc;
+
+	rc = haptics_write(chip, chip->cfg_addr_base,
+			HAP_CFG_MOD_STATUS_SEL_REG, mod_sel_val, 1);
 	if (rc < 0)
 		return rc;
 
@@ -1514,33 +1516,6 @@ static int haptics_open_loop_drive_config(struct haptics_chip *chip, bool en)
 	return rc;
 }
 
-static int haptics_module_enable(struct haptics_chip *chip, bool enable)
-{
-	u8 val;
-	int rc;
-
-	val = enable ? HAPTICS_EN_BIT : 0;
-	rc = haptics_write(chip, chip->cfg_addr_base,
-		HAP_CFG_EN_CTL_REG, &val, 1);
-	if (rc < 0)
-		return rc;
-
-	dev_dbg(chip->dev, "haptics module %s\n",
-			enable ? "enabled" : "disabled");
-	return 0;
-}
-
-static int haptics_toggle_module_enable(struct haptics_chip *chip)
-{
-	int rc;
-
-	rc = haptics_module_enable(chip, false);
-	if (rc < 0)
-		return rc;
-
-	return haptics_module_enable(chip, true);
-}
-
 #define BOOST_VREG_OFF_DELAY_SECONDS	2
 static int haptics_enable_play(struct haptics_chip *chip, bool en)
 {
@@ -1589,9 +1564,6 @@ static int haptics_enable_play(struct haptics_chip *chip, bool en)
 				ktime_set(BOOST_VREG_OFF_DELAY_SECONDS, 0),
 				HRTIMER_MODE_REL);
 	}
-
-	if ((chip->wa_flags & TOGGLE_MODULE_EN) && !en)
-		rc = haptics_toggle_module_enable(chip);
 
 	return rc;
 }
@@ -1935,6 +1907,40 @@ static void haptics_fifo_empty_irq_config(struct haptics_chip *chip,
 	}
 }
 
+static int haptics_module_enable(struct haptics_chip *chip, bool enable)
+{
+	u8 val;
+	int rc;
+
+	val = enable ? HAPTICS_EN_BIT : 0;
+	rc = haptics_write(chip, chip->cfg_addr_base,
+		HAP_CFG_EN_CTL_REG, &val, 1);
+	if (rc < 0)
+		return rc;
+
+	dev_dbg(chip->dev, "haptics module %s\n",
+			enable ? "enabled" : "disabled");
+	return 0;
+}
+
+static int haptics_toggle_module_enable(struct haptics_chip *chip)
+{
+	int rc;
+
+	/*
+	 * Updating HAPTICS_EN would vote hBoost enable status. Add 100us
+	 * delay before updating HAPTICS_EN for hBoost to have enough time
+	 * to handle its power transition.
+	 */
+	usleep_range(100, 101);
+	rc = haptics_module_enable(chip, false);
+	if (rc < 0)
+		return rc;
+
+	usleep_range(100, 101);
+	return haptics_module_enable(chip, true);
+}
+
 static int haptics_set_fifo(struct haptics_chip *chip, struct fifo_cfg *fifo)
 {
 	struct fifo_play_status *status = &chip->play.fifo_status;
@@ -2073,19 +2079,8 @@ static int haptics_load_predefined_effect(struct haptics_chip *chip,
 		return -EINVAL;
 
 	play->effect = effect;
-	if (play->pattern_src == FIFO) {
-		/* Toggle HAPTICS_EN for a clear start point of FIFO playing */
-		rc = haptics_toggle_module_enable(chip);
-		if (rc < 0)
-			return rc;
-	}
-
 	/* Clamp VMAX for different vibration strength */
 	rc = haptics_set_vmax_mv(chip, play->vmax_mv);
-	if (rc < 0)
-		return rc;
-
-	rc = haptics_enable_autores(chip, !play->effect->auto_res_disable);
 	if (rc < 0)
 		return rc;
 
@@ -2097,6 +2092,17 @@ static int haptics_load_predefined_effect(struct haptics_chip *chip,
 				play->pattern_src);
 		return -EINVAL;
 	}
+
+	if (play->pattern_src == FIFO) {
+		/* Toggle HAPTICS_EN for a clear start point of FIFO playing */
+		rc = haptics_toggle_module_enable(chip);
+		if (rc < 0)
+			return rc;
+	}
+
+	rc = haptics_enable_autores(chip, !play->effect->auto_res_disable);
+	if (rc < 0)
+		return rc;
 
 	play->brake = play->effect->brake;
 	/* Config brake settings if it's necessary */
@@ -2261,12 +2267,12 @@ static int haptics_load_custom_effect(struct haptics_chip *chip,
 	play->effect = chip->custom_effect;
 	play->brake = NULL;
 	play->vmax_mv = (magnitude * chip->custom_effect->vmax_mv) / 0x7fff;
-	/* Toggle HAPTICS_EN for a clear start point of FIFO playing */
-	rc = haptics_toggle_module_enable(chip);
+	rc = haptics_set_vmax_mv(chip, play->vmax_mv);
 	if (rc < 0)
 		goto cleanup;
 
-	rc = haptics_set_vmax_mv(chip, play->vmax_mv);
+	/* Toggle HAPTICS_EN for a clear start point of FIFO playing */
+	rc = haptics_toggle_module_enable(chip);
 	if (rc < 0)
 		goto cleanup;
 
@@ -2383,6 +2389,46 @@ static u8 get_direct_play_max_amplitude(struct haptics_chip *chip)
 	return (u8)amplitude;
 }
 
+static int haptics_stop_fifo_play(struct haptics_chip *chip)
+{
+	int rc;
+	u8 val;
+
+	if (atomic_read(&chip->play.fifo_status.is_busy) == 0) {
+		dev_dbg(chip->dev, "FIFO playing is not in progress\n");
+		return 0;
+	}
+
+	rc = haptics_enable_play(chip, false);
+	if (rc < 0)
+		return rc;
+
+	/* restore FIFO play rate back to T_LRA */
+	rc = haptics_set_fifo_playrate(chip, T_LRA);
+	if (rc < 0)
+		return rc;
+
+	haptics_fifo_empty_irq_config(chip, false);
+	kvfree(chip->custom_effect->fifo->samples);
+	chip->custom_effect->fifo->samples = NULL;
+
+	atomic_set(&chip->play.fifo_status.is_busy, 0);
+
+	/*
+	 * All other playing modes would use AUTO mode RC
+	 * calibration except FIFO streaming mode, so restore
+	 * back to AUTO RC calibration after FIFO playing.
+	 */
+	val = CAL_RC_CLK_AUTO_VAL << CAL_RC_CLK_SHIFT;
+	rc = haptics_masked_write(chip, chip->cfg_addr_base,
+			HAP_CFG_CAL_EN_REG, CAL_RC_CLK_MASK, val);
+	if (rc < 0)
+		return rc;
+
+	dev_dbg(chip->dev, "stopped FIFO playing successfully\n");
+	return 0;
+}
+
 static int haptics_upload_effect(struct input_dev *dev,
 		struct ff_effect *effect, struct ff_effect *old)
 {
@@ -2452,46 +2498,21 @@ static int haptics_upload_effect(struct input_dev *dev,
 		return rc;
 	}
 
-	return haptics_wait_hboost_ready(chip);
-}
-
-static int haptics_stop_fifo_play(struct haptics_chip *chip)
-{
-	int rc;
-	u8 val;
-
-	if (atomic_read(&chip->play.fifo_status.is_busy) == 0) {
-		dev_dbg(chip->dev, "FIFO playing is not in progress\n");
-		return 0;
+	rc = haptics_wait_hboost_ready(chip);
+	if (rc < 0 && chip->play.pattern_src == FIFO) {
+		/*
+		 * Call haptics_stop_fifo_play(chip) explicitly if hBoost is
+		 * not ready for the FIFO play. This drops current FIFO play
+		 * but it restores the SW back to initial status so that the
+		 * following FIFO play requests can still be served.
+		 */
+		dev_dbg(chip->dev, "stop FIFO play explicitly to restore SW status\n");
+		mutex_lock(&chip->play.lock);
+		haptics_stop_fifo_play(chip);
+		mutex_unlock(&chip->play.lock);
+		return rc;
 	}
 
-	rc = haptics_enable_play(chip, false);
-	if (rc < 0)
-		return rc;
-
-	/* restore FIFO play rate back to T_LRA */
-	rc = haptics_set_fifo_playrate(chip, T_LRA);
-	if (rc < 0)
-		return rc;
-
-	haptics_fifo_empty_irq_config(chip, false);
-	kvfree(chip->custom_effect->fifo->samples);
-	chip->custom_effect->fifo->samples = NULL;
-
-	atomic_set(&chip->play.fifo_status.is_busy, 0);
-
-	/*
-	 * All other playing modes would use AUTO mode RC
-	 * calibration except FIFO streaming mode, so restore
-	 * back to AUTO RC calibration after FIFO playing.
-	 */
-	val = CAL_RC_CLK_AUTO_VAL << CAL_RC_CLK_SHIFT;
-	rc = haptics_masked_write(chip, chip->cfg_addr_base,
-			HAP_CFG_CAL_EN_REG, CAL_RC_CLK_MASK, val);
-	if (rc < 0)
-		return rc;
-
-	dev_dbg(chip->dev, "stopped FIFO playing successfully\n");
 	return 0;
 }
 
@@ -2640,8 +2661,6 @@ static int haptics_config_wa(struct haptics_chip *chip)
 		chip->wa_flags |= TOGGLE_CAL_RC_CLK;
 		break;
 	case PM5100:
-		if (!chip->cfg_rev1)
-			chip->wa_flags |= TOGGLE_MODULE_EN;
 		break;
 	default:
 		dev_err(chip->dev, "PMIC type %d does not match\n",
@@ -3905,13 +3924,11 @@ static int haptics_get_revision(struct haptics_chip *chip)
 	u8 val[2];
 
 	rc = haptics_read(chip, chip->cfg_addr_base,
-			HAP_CFG_REVISION1_REG, val, 2);
+			HAP_CFG_REVISION2_REG, val, 1);
 	if (rc < 0)
 		return rc;
 
-	chip->cfg_rev1 = val[0];
-	chip->cfg_revision = val[1];
-
+	chip->cfg_revision = val[0];
 	rc = haptics_read(chip, chip->ptn_addr_base,
 			HAP_PTN_REVISION2_REG, val, 1);
 	if (rc < 0)
@@ -4776,50 +4793,17 @@ static int haptics_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static void haptics_ds_suspend_config(struct device *dev)
-{
-	struct haptics_chip *chip = dev_get_drvdata(dev);
-
-	if (chip->fifo_empty_irq > 0)
-		devm_free_irq(dev, chip->fifo_empty_irq, chip);
-}
-
-static int haptics_ds_resume_config(struct device *dev)
-{
-	struct haptics_chip *chip = dev_get_drvdata(dev);
-	int rc = 0;
-
-	rc = haptics_hw_init(chip);
-	if (rc < 0) {
-		dev_err(chip->dev, "Initialize HW failed, rc = %d\n", rc);
-		return rc;
-	}
-
-	if (chip->fifo_empty_irq > 0) {
-		rc = devm_request_threaded_irq(chip->dev, chip->fifo_empty_irq,
-					NULL, fifo_empty_irq_handler,
-					IRQF_ONESHOT, "fifo-empty", chip);
-		if (rc < 0) {
-			dev_err(chip->dev, "request fifo-empty IRQ failed, rc=%d\n",
-					rc);
-			return rc;
-		}
-
-		disable_irq_nosync(chip->fifo_empty_irq);
-		chip->fifo_empty_irq_en = false;
-	}
-
-	return rc;
-}
-
 #ifdef CONFIG_PM_SLEEP
-static int haptics_suspend_config(struct device *dev)
+static int haptics_suspend(struct device *dev)
 {
 	struct haptics_chip *chip = dev_get_drvdata(dev);
 	struct haptics_play_info *play = &chip->play;
 	int rc;
 
 	return 0;
+
+	if (chip->cfg_revision == HAP_CFG_V1)
+		return 0;
 
 	mutex_lock(&play->lock);
 	if ((play->pattern_src == FIFO) &&
@@ -4857,26 +4841,6 @@ static int haptics_suspend_config(struct device *dev)
 	return haptics_module_enable(chip, false);
 }
 
-static int haptics_suspend(struct device *dev)
-{
-	struct haptics_chip *chip = dev_get_drvdata(dev);
-	int rc = 0;
-
-	if (chip->cfg_revision == HAP_CFG_V1)
-		return 0;
-
-	rc = haptics_suspend_config(dev);
-	if (rc < 0)
-		return rc;
-
-#ifdef CONFIG_DEEPSLEEP
-	if (mem_sleep_current == PM_SUSPEND_MEM)
-		haptics_ds_suspend_config(dev);
-#endif
-
-	return 0;
-}
-
 static int haptics_resume(struct device *dev)
 {
 	struct haptics_chip *chip = dev_get_drvdata(dev);
@@ -4886,50 +4850,12 @@ static int haptics_resume(struct device *dev)
 	if (chip->cfg_revision == HAP_CFG_V1)
 		return 0;
 
-#ifdef CONFIG_DEEPSLEEP
-	if (mem_sleep_current == PM_SUSPEND_MEM) {
-		int rc = 0;
-
-		rc = haptics_ds_resume_config(dev);
-		if (rc < 0)
-			return rc;
-	}
-#endif
-
 	return haptics_module_enable(chip, true);
 }
 #endif
-
-static int haptics_freeze(struct device *dev)
-{
-	int rc = 0;
-
-	rc = haptics_suspend_config(dev);
-	if (rc < 0)
-		return rc;
-
-	haptics_ds_suspend_config(dev);
-
-	return 0;
-}
-
-static int haptics_restore(struct device *dev)
-{
-	struct haptics_chip *chip = dev_get_drvdata(dev);
-	int rc = 0;
-
-	rc = haptics_ds_resume_config(dev);
-	if (rc < 0)
-		return rc;
-
-	return haptics_module_enable(chip, true);
-}
 
 static const struct dev_pm_ops haptics_pm_ops = {
-	.suspend = haptics_suspend,
-	.resume = haptics_resume,
-	.freeze = haptics_freeze,
-	.restore = haptics_restore,
+	SET_SYSTEM_SLEEP_PM_OPS(haptics_suspend, haptics_resume)
 };
 
 static const struct of_device_id haptics_match_table[] = {
