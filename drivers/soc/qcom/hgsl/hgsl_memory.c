@@ -316,7 +316,7 @@ static struct dma_buf_ops dma_buf_ops = {
 
 static inline gfp_t hgsl_gfp_mask(unsigned int page_order)
 {
-	unsigned int gfp_mask = __GFP_HIGHMEM;
+	unsigned int gfp_mask = __GFP_HIGHMEM | __GFP_ZERO;
 
 	if (page_order > 0) {
 		gfp_mask |= __GFP_COMP | __GFP_NORETRY | __GFP_NOWARN;
@@ -509,7 +509,7 @@ static int hgsl_alloc_pages(struct device *dev, uint32_t requested_pcount,
 			pcount = requested_pcount;
 		for (i = 0; i < pcount; i++)
 			pages[i] = nth_page(page, i);
-		_dma_cache_op(dev, page, pcount, GSL_CACHEFLAGS_INVALIDATE);
+		_dma_cache_op(dev, page, pcount, GSL_CACHEFLAGS_FLUSH);
 	}
 
 	return pcount;
