@@ -251,6 +251,33 @@
 #define PINCTRL_STATE_SUSPEND    "pmx_ts_suspend"
 #define PINCTRL_STATE_RELEASE    "pmx_ts_release"
 
+/* Power Management Macros Enablement */
+
+#ifndef CONFIG_PM
+#define CONFIG_PM
+#endif
+
+
+#ifndef CONFIG_DRM
+#define CONFIG_DRM
+#endif
+
+#include <linux/device.h>
+#include <linux/fb.h>
+#include <linux/notifier.h>
+#ifdef CONFIG_HAS_EARLYSUSPEND
+#include <linux/earlysuspend.h>
+#elif defined(CONFIG_DRM)
+#include <drm/drm_panel.h>
+#endif
+
+
+enum raydium_fb_state {
+	FB_ON,
+	FB_OFF,
+};
+
+
 struct raydium_ts_data {
 	unsigned int irq;
 	unsigned int irq_gpio;
@@ -276,9 +303,10 @@ struct raydium_ts_data {
 	bool irq_enabled;
 	bool irq_wake;
 
-#if defined(CONFIG_FB)
+#if defined(CONFIG_FB) || defined(CONFIG_DRM)
 	struct notifier_block fb_notif;
 	int blank;
+	enum raydium_fb_state fb_state;
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
 	struct early_suspend early_suspend;
 #endif /*end of CONFIG_FB*/
@@ -323,6 +351,7 @@ struct raydium_ts_platform_data {
 	u32 soft_rst_dly;
 	u32 num_max_touches;
 	u32 fw_id;
+	struct  drm_panel *active_panel;
 };
 
 /* TODO: Using struct+memcpy instead of array+offset*/
