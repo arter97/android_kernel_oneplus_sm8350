@@ -1298,7 +1298,39 @@ static ssize_t force_screenfp_store(struct device *dev,
 	return count;
 }
 
+int oneplus_auth_status = 0;
+int oneplus_cancel_status = 0;
 int oneplus_panel_status = 0;
+static ssize_t op_display_get_auth_status(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", oneplus_auth_status);
+}
+
+static ssize_t op_display_set_auth_status(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	sscanf(buf, "%d", &oneplus_auth_status);
+
+	return count;
+}
+
+static ssize_t op_display_get_cancel_status(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", oneplus_cancel_status);
+}
+
+static ssize_t op_display_set_cancel_status(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	sscanf(buf, "%d", &oneplus_cancel_status);
+
+	return count;
+}
+
 static ssize_t op_display_get_power_status(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
@@ -1442,6 +1474,8 @@ static DEVICE_ATTR_RW(dp_en);
 static DEVICE_ATTR_RW(dither_en);
 static DEVICE_ATTR_RW(panel_dither_en);
 static DEVICE_ATTR_RW(seed_lp);
+static DEVICE_ATTR(auth_status, S_IRUGO|S_IWUSR, op_display_get_auth_status, op_display_set_auth_status);
+static DEVICE_ATTR(cancel_status, S_IRUGO|S_IWUSR, op_display_get_cancel_status, op_display_set_cancel_status);
 static DEVICE_ATTR(power_status, S_IRUGO|S_IWUSR, op_display_get_power_status, op_display_set_power_status);
 #ifdef CONFIG_PXLW_IRIS
 static DEVICE_ATTR(adfr_debug, S_IRUGO|S_IWUSR, oplus_adfr_get_debug, oplus_adfr_set_debug);
@@ -1485,6 +1519,8 @@ static struct attribute *connector_dev_attrs[] = {
 	&dev_attr_dimlayer_bl_en.attr,
 	&dev_attr_dp_en.attr,
 	&dev_attr_dither_en.attr,
+	&dev_attr_auth_status.attr,
+	&dev_attr_cancel_status.attr,
 	&dev_attr_power_status.attr,
 	&dev_attr_panel_dither_en.attr,
 	&dev_attr_seed_lp.attr,
