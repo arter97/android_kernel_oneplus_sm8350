@@ -2523,7 +2523,7 @@
 				qcom,mdss-dsi-v-pulse-width = <8>;
 
 				/* SDC MFR */
-				qcom,mdss-dsi-h-sync-skew = <1>;
+				qcom,mdss-dsi-h-sync-skew = <0>;
 				qcom,mdss-dsi-qsync-min-fps-0 = <1314>;
 
 				qcom,mdss-dsi-timing-switch-command = [
