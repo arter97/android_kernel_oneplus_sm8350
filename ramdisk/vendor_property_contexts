@@ -1,113 +1,8 @@
-#line 1 "vendor/oneplus/sepolicy/vendor/common/property_contexts"
-# All the vendor property need to follow the below naming rule
-#             "ctl.odm.",
-#             "ctl.vendor.",
-#             "ctl.start$odm.",
-#             "ctl.start$vendor.",
-#             "ctl.stop$odm.",
-#             "ctl.stop$vendor.",
-#             "init.svc.odm.",
-#             "init.svc.vendor.",
-#             "ro.boot.",
-#             "ro.hardware.",
-#             "ro.odm.",
-#             "ro.vendor.",
-#             "odm.",
-#             "persist.odm.",
-#             "persist.vendor.",
-#             "vendor.
-
-persist.vendor.oem.bt.debug              u:object_r:vendor_oem_bluetooth_prop:s0
-persist.vendor.oem.btenhanced.debug      u:object_r:vendor_oem_bluetooth_prop:s0
-persist.vendor.oem.btsnoop.debug         u:object_r:vendor_oem_bluetooth_prop:s0
-
-# lynn.guo@display, 2020/07/20, add for cwb debug
-persist.vendor.cwb.debug                 u:object_r:vendor_cwb_prop:s0
-persist.vendor.cwb.dump                  u:object_r:vendor_cwb_prop:s0
-
-#add by connectivity team for Bluetooth log
-persist.vendor.bluetooth.bt.uart.log     u:object_r:vendor_oem_bluetooth_prop:s0
-persist.vendor.service.bdroid.soclog     u:object_r:vendor_bluetooth_prop:s0
-persist.vendor.service.bdroid.snooplog   u:object_r:vendor_bluetooth_prop:s0
-
-#brandon.zeng@conn , 2020/04/16, add for nfc
-persist.vendor.nfc.                      u:object_r:vendor_nfc_prop:s0
-vendor.nfc.                              u:object_r:vendor_nfc_prop:s0
-persist.vendor.ese.                      u:object_r:vendor_nfc_prop:s0
-
-# add for whether calibration data exist or not
-vendor.calibration.fingerprint           u:object_r:vendor_fingerprint_prop:s0
-#vendor.calibration.fingerprint           u:object_r:exported_system_prop:s0
-
-# bin.zhong@ASTI, 2019/05/28, add for memory+
-vendor.sys.memplus.postboot       u:object_r:vendor_memplus_prop:s0
-
-# yuquan.fei@connectivity, 2020/4/14, porting wlan log mechanism
-persist.vendor.oem.wifi.debug            u:object_r:vendor_oem_wifi_prop:s0
-persist.vendor.oem.wifi.cnssdiag         u:object_r:vendor_oem_wifi_prop:s0
-persist.vendor.oem.wifi.logpath          u:object_r:vendor_oem_wifi_prop:s0
-persist.vendor.oem.wifi.copytosd         u:object_r:vendor_oem_wifi_prop:s0
-persist.vendor.oem.wifi.chain            u:object_r:vendor_oem_wifi_prop:s0
-persist.vendor.tcpdump.copy              u:object_r:vendor_oem_wifi_prop:s0
-persist.vendor.tcpdump.dir               u:object_r:vendor_oem_wifi_prop:s0
-persist.vendor.tcpdump.mdpermission      u:object_r:vendor_oem_wifi_prop:s0
-persist.vendor.tcpdump.location          u:object_r:vendor_oem_wifi_prop:s0
-vendor.wlan.write.con_mode               u:object_r:vendor_set_wlan_prop:s0
-vendor.wlan.hotspot.forceChannel         u:object_r:vendor_oem_wifi_prop:s0
-vendor.wlan.sniffer.iface                u:object_r:vendor_oem_wifi_prop:s0
-vendor.wlan.sniffer.channel              u:object_r:vendor_oem_wifi_prop:s0
-vendor.wlan.sniffer.bandwidth            u:object_r:vendor_oem_wifi_prop:s0
-vendor.wlan.sniffer.output_dir           u:object_r:vendor_oem_wifi_prop:s0
-vendor.wlan.sniffer.vendor_dir           u:object_r:vendor_oem_wifi_prop:s0
-vendor.wlan.sniffer.file                 u:object_r:vendor_oem_wifi_prop:s0
-vendor.wlan.sniffer.status               u:object_r:vendor_oem_wifi_prop:s0
-vendor.wlan.sniffer.enabled              u:object_r:vendor_oem_wifi_prop:s0
-vendor.wlan.sniffer.dump                 u:object_r:vendor_oem_wifi_prop:s0
-vendor.wlan.ftm.up                       u:object_r:vendor_set_wlan_prop:s0
-vendor.wlan.ftm.daemon                   u:object_r:vendor_set_wlan_prop:s0
-vendor.wlan.driver.status                u:object_r:vendor_set_wlan_prop:s0
-
-persist.vendor.oem.fp.version            u:object_r:vendor_fingerprint_prop:s0
-
-# alex.haung@connectivity, 2020/4/23, add for *#8019# system app set property
-vendor.oem.wifi.socket.quit              u:object_r:vendor_set_wlan_prop:s0
-vendor.service.wifi.socket.mdm.enable    u:object_r:vendor_oem_wifi_prop:s0
-vendor.service.wifi.socket.lahaina.enable    u:object_r:vendor_oem_wifi_prop:s0
-vendor.diag.pid                              u:object_r:vendor_set_wlan_prop:s0
-vendor.service.wifi.socket.enable        u:object_r:vendor_oem_wifi_prop:s0
-
-# alex.huang@connectivity, 2020/05/25, add for RF test
-persist.vendor.oem.wifi.txenable         u:object_r:vendor_oem_wifi_prop:s0
-
-#kawhi.chen@connectivity, 2020/04/22, add for gps
-persist.vendor.oem.gps.debug             u:object_r:vendor_gps_prop:s0
-
-# kim.ba@bsp, 2020/4/27, add for 5G diag port
-persist.vendor.sdx50m.online             u:object_r:vendor_usb_prop:s0
-
-# gt.chang@Connectivity, 2019/09/02, [ITN-61] Select Antenna for BTtestmode
-persist.vendor.oneplus.bt               u:object_r:vendor_oem_bluetooth_prop:s0
-persist.vendor.oneplus.bttestmode       u:object_r:vendor_oem_bluetooth_prop:s0
-
-# bruce.chenyc@Network, 2020/08/20, add for fingerprint
-ro.vendor.build.display.full_id           u:object_r:vendor_rild_prop:s0
-
-# ajinath@SYSTEM, 2020/01/24, [OSP-2080] Recovery boot reason
-vendor.oem.rbr.log.clean             u:object_r:vendor_default_prop:s0
-
-# oscar.wei@SYSTEM, 2020/09/21, [AN-604] add for opdiagnose
-vendor.copy.opdiagnose.data              u:object_r:vendor_shell_prop:s0
-
-vendor.diag.mdpid     u:object_r:vendor_modem_diag_prop:s0
-
-#heilay.he@MM.Audio, 2020/09/30, add permission for vendor_db_security_prop
-ro.vendor.product.manufacturer.db  u:object_r:vendor_db_security_prop:s0
-ro.vendor.product.device.db  u:object_r:vendor_db_security_prop:s0
-
-# henry@system, 2021/02/05, add prop for trigger delete
-vendor.oem.flashvaltest.clear           u:object_r:vendor_oem_wifi_prop:s0
-#line 1 "device/qcom/sepolicy_vndr/generic/vendor/common/property_contexts"
-# Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+#line 1 "out/soong/.intermediates/system/sepolicy/vendor_property_contexts/android_common/gen/namespace_checked/device/oneplus/oneplus9/sepolicy/vendor/property_contexts"
+# Camera
+vendor.sys.op.disable_ufstw                                        u:object_r:vendor_oplus_prop:s0
+#line 1 "out/soong/.intermediates/system/sepolicy/vendor_property_contexts/android_common/gen/namespace_checked/device/qcom/sepolicy_vndr/generic/vendor/common/property_contexts"
+# Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are
@@ -179,6 +74,7 @@ vendor.wlan.firmware.version     u:object_r:vendor_wifi_version:s0
 persist.vendor.usb.        u:object_r:vendor_usb_prop:s0
 ro.vendor.usb.             u:object_r:vendor_usb_prop:s0
 vendor.display.               u:object_r:vendor_display_prop:s0
+vendor.display.disable_rounded_corner_thread  u:object_r:vendor_display_prop:s0
 ro.vendor.display.            u:object_r:vendor_display_prop:s0
 persist.vendor.display.       u:object_r:vendor_display_prop:s0
 vendor.gralloc.            u:object_r:vendor_gralloc_prop:s0
@@ -245,15 +141,19 @@ ctl.vendor.authsecret.qti-1-0      u:object_r:vendor_km_strongbox_version_prop:s
 #vendor-adsprpc
 vendor.fastrpc.                  u:object_r:vendor_adsprpc_prop:s0
 
-# QCV properties for storing soc_id and soc_name
+# QCV properties for storing soc_id, soc_name and soc_model
 ro.vendor.qti.soc_id         u:object_r:vendor_soc_id_prop:s0
 ro.vendor.qti.soc_name       u:object_r:vendor_soc_name_prop:s0
+ro.vendor.qti.soc_model      u:object_r:vendor_soc_model_prop:s0
 
 #kernel console log level
 persist.vendor.console.silent.config    u:object_r:vendor_console_log_level_prop:s0
 
+#qteeconnector properties
+persist.vendor.qteeconnector.           u:object_r:vendor_qteeconnector_opti_prop:s0
+
 vendor.dcvs.prop                 u:object_r:vendor_dcvs_prop:s0
-#line 1 "device/qcom/sepolicy_vndr/qva/vendor/common/property_contexts"
+#line 1 "out/soong/.intermediates/system/sepolicy/vendor_property_contexts/android_common/gen/namespace_checked/device/qcom/sepolicy_vndr/qva/vendor/common/property_contexts"
 # Copyright (c) 2018-2019, The Linux Foundation. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -289,6 +189,7 @@ ctl.vendor.dataadpl                          u:object_r:vendor_dataadpl_prop:s0
 vendor.spcom.                                u:object_r:vendor_spcomlib_prop:s0
 persist.vendor.bt.soc.scram_freqs            u:object_r:vendor_bluetooth_prop:s0
 ctl.vendor.mdm_helper                        u:object_r:vendor_mdm_helper_prop:s0
+ctl.vendor.hvdcp_opti                        u:object_r:vendor_hvdcp_opti_prop:s0
 
 # qcc property
 vendor.qti.qdma.                             u:object_r:vendor_qcc_prop:s0
@@ -326,6 +227,9 @@ vendor.sys.boot_mode                         u:object_r:vendor_boot_mode_prop:s0
 vendor.media.target.version                  u:object_r:vendor_video_prop:s0
 vendor.video.disable.ubwc                    u:object_r:vendor_video_prop:s0
 vendor.media.target_variant                  u:object_r:vendor_video_prop:s0
+vendor.media.target.qssi                     u:object_r:vendor_video_prop:s0
+vendor.media.system.build_codename           u:object_r:vendor_video_prop:s0
+vendor.netflix.bsp_rev                       u:object_r:vendor_video_prop:s0
 
 # factory properties
 ctl.vendor.mmid                              u:object_r:vendor_ctl_vendor_mmid_prop:s0
@@ -391,7 +295,7 @@ ro.vendor.pasr.                              u:object_r:vendor_pasr_prop:s0
 
 #MWQEM
 persist.vendor.mwqem.                        u:object_r:vendor_mwqem_prop:s0
-#line 1 "device/qcom/sepolicy_vndr/qva/vendor/lahaina/property_contexts"
+#line 1 "out/soong/.intermediates/system/sepolicy/vendor_property_contexts/android_common/gen/namespace_checked/device/qcom/sepolicy_vndr/qva/vendor/lahaina/property_contexts"
 # Copyright (c) 2020, The Linux Foundation. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -421,7 +325,72 @@ persist.vendor.mwqem.                        u:object_r:vendor_mwqem_prop:s0
 
 #face3d
 persist.vendor.biometricsface.pr u:object_r:vendor_face3d_producer_prop:s0
-#line 1 "system/sepolicy/reqd_mask/property_contexts"
-# empty property_contexts file - this file is used to generate an empty
-# non-platform property context for devices without any property_contexts
-# customizations.
+#line 1 "out/soong/.intermediates/system/sepolicy/vendor_property_contexts/android_common/gen/namespace_checked/device/qcom/sepolicy_vndr/generic/vendor/test/property_contexts"
+# Copyright (c) 2018, 2019 The Linux Foundation. All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are
+# met:
+#     * Redistributions of source code must retain the above copyright
+#       notice, this list of conditions and the following disclaimer.
+#     * Redistributions in binary form must reproduce the above
+#       copyright notice, this list of conditions and the following
+#       disclaimer in the documentation and/or other materials provided
+#       with the distribution.
+#     * Neither the name of The Linux Foundation nor the names of its
+#       contributors may be used to endorse or promote products derived
+#       from this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED "AS IS" AND ANY EXPRESS OR IMPLIED
+# WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT
+# ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS
+# BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+# BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+# WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+# OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+# IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+persist.vendor.debug.sensors.             u:object_r:vendor_sensors_dbg_prop:s0
+
+#Wifi Display
+persist.vendor.debug.mux.                    u:object_r:vendor_wfd_vendor_debug_prop:s0
+persist.vendor.debug.rtp.                    u:object_r:vendor_wfd_vendor_debug_prop:s0
+persist.vendor.debug.wfd.                    u:object_r:vendor_wfd_vendor_debug_prop:s0
+
+#CNE IWLAN Logging
+persist.vendor.iwlan.logging.logcat          u:object_r:vendor_cnd_prop:s0
+#line 1 "out/soong/.intermediates/system/sepolicy/vendor_property_contexts/android_common/gen/namespace_checked/device/qcom/sepolicy_vndr/qva/vendor/test/property_contexts"
+
+# Copyright (c) 2019, The Linux Foundation. All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are
+# met:
+#     * Redistributions of source code must retain the above copyright
+#       notice, this list of conditions and the following disclaimer.
+#     * Redistributions in binary form must reproduce the above
+#       copyright notice, this list of conditions and the following
+#       disclaimer in the documentation and/or other materials provided
+#       with the distribution.
+#     * Neither the name of The Linux Foundation nor the names of its
+#       contributors may be used to endorse or promote products derived
+#       from this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED "AS IS" AND ANY EXPRESS OR IMPLIED
+# WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT
+# ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS
+# BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+# BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+# WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+# OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+# IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+#qspm debug prop
+vendor.debug.qspm u:object_r:vendor_qspm_dbg_prop:s0
+vendor.debug.breakpoint.continue  u:object_r:vendor_dbg_brkpoint_prop:s0
+vendor.fda.property.            u:object_r:vendor_fda_prop:s0

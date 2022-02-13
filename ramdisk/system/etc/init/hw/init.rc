@@ -24,9 +24,6 @@ on init
     symlink /system/bin /bin
     symlink /system/etc /etc
 
-    mount cgroup none /acct cpuacct
-    mkdir /acct/uid
-
     mkdir /sdcard
     mkdir /system
     mkdir /data
@@ -40,6 +37,9 @@ on init
 
     write /proc/sys/kernel/panic_on_oops 1
     write /proc/sys/vm/max_map_count 1000000
+
+    # pstore/ramoops previous console log
+    mount pstore pstore /sys/fs/pstore
 
 on boot
     ifup lo

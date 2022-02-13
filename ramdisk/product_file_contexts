@@ -1,1 +1,5 @@
+/(system|system_ext|system/system_ext)/bin/hw/vendor.aospa.biometrics.fingerprint.inscreen@1.0-service    u:object_r:vendor_fod_aospa_exec:s0
 /(product|system/product)/bin/init\.qti\.display\.sh             u:object_r:vendor_sys_qti_display_exec:s0
+/(product|system|system_ext)/bin/qvirtmgr                        u:object_r:vendor_qvirtmgr_exec:s0
+/(product|system|system_ext)/bin/qcrosvm                         u:object_r:vendor_qcrosvm_exec:s0
+/sys/kernel/pocket_judge(/.*)?	        u:object_r:pocket_judge_sysfs:s0
