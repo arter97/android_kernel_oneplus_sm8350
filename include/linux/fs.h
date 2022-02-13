@@ -85,9 +85,6 @@ extern int sysctl_protected_symlinks;
 extern int sysctl_protected_hardlinks;
 extern int sysctl_protected_fifos;
 extern int sysctl_protected_regular;
-#ifdef CONFIG_FUSE_DECOUPLING
-extern char *inode_name(struct inode *ino);
-#endif
 
 typedef __kernel_rwf_t rwf_t;
 
