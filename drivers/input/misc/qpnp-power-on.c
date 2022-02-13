@@ -528,7 +528,7 @@ static int qpnp_pon_set_dbc(struct qpnp_pon *pon, u32 delay)
 
 static int qpnp_pon_get_dbc(struct qpnp_pon *pon, u32 *delay)
 {
-	*delay = 15625;
+	*delay = 62500;
 	return 0;
 }
 
