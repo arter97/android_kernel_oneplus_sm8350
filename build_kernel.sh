@@ -3,8 +3,8 @@ export KERNELDIR=`readlink -f .`
 export RAMFS_SOURCE=`readlink -f $KERNELDIR/ramdisk`
 export PARTITION_SIZE=134217728
 
-export OS="11.0.0"
-export SPL="2021-11"
+export OS="12.0.0"
+export SPL="2022-01"
 
 echo "kerneldir = $KERNELDIR"
 echo "ramfs_source = $RAMFS_SOURCE"
@@ -41,14 +41,14 @@ cd $KERNELDIR
 rm -rf $RAMFS_TMP/tmp/*
 
 cd $RAMFS_TMP
-find . | fakeroot cpio -H newc -o | pigz > $RAMFS_TMP.cpio.gz
-ls -lh $RAMFS_TMP.cpio.gz
+find . | fakeroot cpio -H newc -o | lz4 -l > $RAMFS_TMP.cpio.lz4
+ls -lh $RAMFS_TMP.cpio.lz4
 cd $KERNELDIR
 
 echo "Making new boot image"
 mkbootimg \
     --kernel $KERNELDIR/arch/arm64/boot/Image.gz \
-    --ramdisk $RAMFS_TMP.cpio.gz \
+    --ramdisk $RAMFS_TMP.cpio.lz4 \
     --pagesize 4096 \
     --os_version     $OS \
     --os_patch_level $SPL \
