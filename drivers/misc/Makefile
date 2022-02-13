@@ -66,4 +66,4 @@ obj-$(CONFIG_PROFILER)			+= profiler.o
 obj-$(CONFIG_WIGIG_SENSING_SPI)	+= wigig_sensing.o
 obj-$(CONFIG_HISI_HIKEY_USB)	+= hisi_hikey_usb.o
 
-obj-y += oos-spoof/
+#obj-y += oos-spoof/
