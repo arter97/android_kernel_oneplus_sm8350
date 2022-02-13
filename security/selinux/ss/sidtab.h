@@ -139,7 +139,7 @@ int sidtab_hash_stats(struct sidtab *sidtab, char *page);
 void sidtab_sid2str_put(struct sidtab *s, struct sidtab_entry *entry,
 			const char *str, u32 str_len);
 int sidtab_sid2str_get(struct sidtab *s, struct sidtab_entry *entry,
-		       char **out, u32 *out_len);
+		       char **out, u32 *out_len, bool alloc);
 #else
 static inline void sidtab_sid2str_put(struct sidtab *s,
 				      struct sidtab_entry *entry,
@@ -148,7 +148,7 @@ static inline void sidtab_sid2str_put(struct sidtab *s,
 }
 static inline int sidtab_sid2str_get(struct sidtab *s,
 				     struct sidtab_entry *entry,
-				     char **out, u32 *out_len)
+				     char **out, u32 *out_len, bool alloc)
 {
 	return -ENOENT;
 }
