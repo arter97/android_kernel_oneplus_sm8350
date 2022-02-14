@@ -2391,7 +2391,7 @@ static int spi_geni_runtime_suspend(struct device *dev)
 	if (geni_mas->is_le_vm)
 		return spi_geni_levm_suspend_proc(geni_mas, spi);
 
-	GENI_SE_DBG(geni_mas->ipc, false, NULL, "%s:\n", __func__);
+	GENI_SE_DBG(geni_mas->ipc, false, NULL, "%s: start\n", __func__);
 
 	if (geni_mas->gsi_mode) {
 		ret = spi_geni_gpi_suspend_resume(geni_mas, true);
@@ -2415,6 +2415,7 @@ exit_rt_suspend:
 	if (ret)
 		dev_err(geni_mas->dev, "%s: resurces_off Error ret %d\n",
 			__func__, ret);
+	GENI_SE_DBG(geni_mas->ipc, false, NULL, "%s: end\n", __func__);
 	return ret;
 }
 
