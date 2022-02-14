@@ -1400,7 +1400,14 @@ static int slatecom_pm_prepare(struct device *dev)
 	else
 		cmnd_reg |= SLATE_OK_SLP_RBSC;
 
+	(!atomic_read(&slate_is_spi_active)) ? pm_runtime_get_sync(&s_dev->dev)
+			: SLATECOM_INFO("spi is already active, skip get_sync...\n");
+
 	ret = slatecom_reg_write_cmd(&clnt_handle, SLATE_CMND_REG, 1, &cmnd_reg);
+
+	(!atomic_read(&slate_is_spi_active)) ? pm_runtime_put_sync(&s_dev->dev)
+			: SLATECOM_INFO("spi is already active, skip put_sync...\n");
+
 	sleep_time_start = ktime_get();
 
 	SLATECOM_INFO("reg write status: %d\n", ret);
