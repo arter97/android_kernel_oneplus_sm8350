@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -10,8 +11,9 @@
 #include <linux/of.h>
 #include <linux/debugfs.h>
 
-#define HLOS_AWAKE_ID 0
-#define AWAKE_BIT BIT(HLOS_AWAKE_ID)
+#define AWAKE_BITS	3
+#define ADSP_VOTE	2
+#define ADSP_UNVOTE	1
 
 static struct qcom_smem_state *state;
 static struct dentry *dent_adsp_vote, *adsp_vote;
@@ -21,12 +23,12 @@ static int adsp_vote_pm_notifier(struct notifier_block *nb,
 {
 	switch (event) {
 	case PM_SUSPEND_PREPARE:
-		pr_info("ADSP unvoting initiated\n");
-		qcom_smem_state_update_bits(state, AWAKE_BIT, 0);
+		pr_info("ADSP unvoting over smp2p initiated\n");
+		qcom_smem_state_update_bits(state, AWAKE_BITS, ADSP_UNVOTE);
 		break;
 	case PM_POST_SUSPEND:
-		pr_info("ADSP voting initiated\n");
-		qcom_smem_state_update_bits(state, AWAKE_BIT, AWAKE_BIT);
+		pr_info("ADSP voting over smp2p initiated\n");
+		qcom_smem_state_update_bits(state, AWAKE_BITS, ADSP_VOTE);
 		break;
 	}
 
