@@ -782,12 +782,6 @@ def gen_headers(
     The number of errors encountered.
   """
 
-  if headers_diff(old_gen_headers_bp, new_gen_headers_bp):
-    print('error: gen_headers blueprints file is out of date, suggested fix:')
-    print('#######Please add or remove the above mentioned headers from %s' % (old_gen_headers_bp))
-    print('then re-run the build')
-    #return 1
-
   error_count = 0
 
   if not gen_version_h(verbose, gen_dir, version_makefile):
