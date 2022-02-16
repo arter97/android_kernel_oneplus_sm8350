@@ -2135,8 +2135,7 @@ static int stop_rx_sequencer(struct uart_port *uport)
 				&port->rx_dma, port->rx_buf, DMA_RX_BUF_SIZE);
 			port->rx_dma = (dma_addr_t)NULL;
 		}
-		complete(&port->xfer);
-		return 0;
+		return -EBUSY;
 	}
 
 	geni_status = geni_read_reg_nolog(uport->membase, SE_GENI_STATUS);
@@ -2150,7 +2149,7 @@ static int stop_rx_sequencer(struct uart_port *uport)
 	} else if (atomic_read(&port->stop_rx_inprogress)) {
 		IPC_LOG_MSG(port->ipc_log_misc,
 			"%s: Stop Rx is inprogress\n", __func__);
-		return 0;
+		return -EBUSY;
 	}
 	atomic_set(&port->stop_rx_inprogress, 1);
 
