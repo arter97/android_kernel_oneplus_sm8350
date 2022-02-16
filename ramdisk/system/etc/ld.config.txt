@@ -1,6 +1,0 @@
-dir.recovery = /system/bin
-[recovery]
-namespace.default.isolated = false
-namespace.default.search.paths = /system/${LIB}
-namespace.default.asan.search.paths = /data/asan/system/${LIB}
-namespace.default.asan.search.paths += /system/${LIB}
