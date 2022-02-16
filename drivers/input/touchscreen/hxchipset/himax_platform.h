@@ -113,6 +113,8 @@ struct himax_i2c_platform_data {
 #endif
 };
 
+struct drm_panel *himax_get_panel(void);
+
 extern int i2c_error_count;
 extern int irq_enable_count;
 extern int himax_bus_read(uint8_t command, uint8_t *data, uint32_t length, uint8_t toRetry);
