@@ -29,6 +29,8 @@ if [ -n "$(sed -n -e "/SPDX-License-Identifier:.*GPL-/{/WITH Linux-syscall-note/
 	exit 1
 fi
 
+mkdir -p $(dirname $TMPFILE)
+
 sed -E -e '
 	s/([[:space:](])(__user|__force|__iomem)[[:space:]]/\1/g
 	s/__attribute_const__([[:space:]]|$)/\1/g
