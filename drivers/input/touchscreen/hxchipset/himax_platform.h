@@ -1,4 +1,6 @@
-/*
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
  * Himax Android Driver Sample Code for QCT platform
  *
  * Copyright (C) 2018 Himax Corporation.
@@ -111,6 +113,8 @@ struct himax_i2c_platform_data {
 	struct regulator *vcc_i2c; /* For Dragon Board */
 #endif
 };
+
+struct drm_panel *himax_get_panel(void);
 
 extern int i2c_error_count;
 extern int irq_enable_count;

@@ -1,4 +1,6 @@
-/*
+// SPDX-License-Identifier: GPL-2.0-only
+/* Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
  * Himax Android Driver Sample Code for common functions
  *
  * Copyright (C) 2018 Himax Corporation.
@@ -90,6 +92,7 @@ static int probe_fail_flag;
 	bool USB_detect_flag;
 #endif
 
+static struct drm_panel *active_panel;
 
 #if defined(CONFIG_DRM)
 int drm_notifier_callback(struct notifier_block *self, unsigned long event, void *data);
@@ -1903,12 +1906,16 @@ void himax_update_register(struct work_struct *work)
 int himax_fb_register(struct himax_ts_data *ts)
 {
 	int ret = 0;
+	struct drm_panel *active_panel = himax_get_panel();
 
 	D(" %s in\n", __func__);
 	ts->fb_notif.notifier_call = drm_notifier_callback;
-	ret = msm_drm_register_client(&ts->fb_notif);
-	if (ret)
-		E(" Unable to register fb_notifier: %d\n", ret);
+	if (active_panel) {
+		ret = drm_panel_notifier_register(active_panel,
+				&ts->fb_notif);
+		if (ret)
+			E(" Unable to register fb_notifier: %d\n", ret);
+	}
 
 	return ret;
 }
@@ -2138,8 +2145,11 @@ void himax_chip_common_deinit(void)
 #endif
 
 #ifdef CONFIG_DRM
-	if (msm_drm_unregister_client(&ts->fb_notif))
-		E("Error occurred while unregistering fb_notifier.\n");
+	if (active_panel) {
+		if (drm_panel_notifier_unregister(active_panel,
+				&ts->fb_notif))
+			E("Error occurred while unregistering fb_notifier.\n");
+	}
 #elif defined(CONFIG_FB)
 	if (fb_unregister_client(&ts->fb_notif))
 		E("Error occurred while unregistering fb_notifier.\n");

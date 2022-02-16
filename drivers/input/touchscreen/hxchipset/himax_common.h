@@ -1,4 +1,6 @@
-/*
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
  * Himax Android Driver Sample Code for common functions
  *
  * Copyright (C) 2018 Himax Corporation.
@@ -17,7 +19,6 @@
 #ifndef HIMAX_COMMON_H
 #define HIMAX_COMMON_H
 
-#include <asm/segment.h>
 #include <linux/uaccess.h>
 #include <linux/atomic.h>
 
@@ -42,7 +43,7 @@
 #include "himax_platform.h"
 
 #ifdef CONFIG_DRM
-	#include <linux/msm_drm_notify.h>
+	#include <drm/drm_panel.h>
 #elif defined(CONFIG_FB)
 	#include <linux/notifier.h>
 	#include <linux/fb.h>

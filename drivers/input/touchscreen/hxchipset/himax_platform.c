@@ -1,4 +1,6 @@
-/*
+// SPDX-License-Identifier: GPL-2.0-only
+/* Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
  * Himax Android Driver Sample Code for QCT platform
  *
  * Copyright (C) 2018 Himax Corporation.
@@ -17,9 +19,17 @@
 #include "himax_platform.h"
 #include "himax_common.h"
 #include "himax_ic_core.h"
+#include "linux/moduleparam.h"
 
 int i2c_error_count;
 int irq_enable_count;
+
+static struct drm_panel *active_himax_panel;
+struct drm_panel *himax_get_panel(void)
+{
+	return active_himax_panel;
+}
+EXPORT_SYMBOL(himax_get_panel);
 
 int himax_dev_set(struct himax_ts_data *ts)
 {
@@ -716,21 +726,21 @@ static int himax_common_resume(struct device *dev)
 int drm_notifier_callback(struct notifier_block *self,
 				unsigned long event, void *data)
 {
-	struct msm_drm_notifier *evdata = data;
+	struct drm_panel_notifier *evdata = data;
 	int *blank;
 	struct himax_ts_data *ts =
 		container_of(self, struct himax_ts_data, fb_notif);
 
-	if (!evdata || (evdata->id != 0))
+	if (!evdata)
 		return 0;
 
 	D("DRM  %s\n", __func__);
 
-	if (evdata->data && event == MSM_DRM_EARLY_EVENT_BLANK && ts &&
+	if (evdata->data && event == DRM_PANEL_EARLY_EVENT_BLANK && ts &&
 							ts->client) {
 		blank = evdata->data;
 		switch (*blank) {
-		case MSM_DRM_BLANK_POWERDOWN:
+		case DRM_PANEL_BLANK_POWERDOWN:
 			if (!ts->initialized)
 				return -ECANCELED;
 			himax_common_suspend(&ts->client->dev);
@@ -738,10 +748,10 @@ int drm_notifier_callback(struct notifier_block *self,
 		}
 	}
 
-	if (evdata->data && event == MSM_DRM_EVENT_BLANK && ts && ts->client) {
+	if (evdata->data && event == DRM_PANEL_EVENT_BLANK && ts && ts->client) {
 		blank = evdata->data;
 		switch (*blank) {
-		case MSM_DRM_BLANK_UNBLANK:
+		case DRM_PANEL_BLANK_UNBLANK:
 			himax_common_resume(&ts->client->dev);
 			break;
 		}
@@ -783,6 +793,59 @@ int fb_notifier_callback(struct notifier_block *self,
 }
 #endif
 
+static int syna_himax_check_dt(struct device_node *np)
+{
+	int i;
+	int count;
+	struct device_node *node;
+	struct drm_panel *panel;
+
+	count = of_count_phandle_with_args(np, "panel", NULL);
+	if (count <= 0)
+		return 0;
+
+	for (i = 0; i < count; i++) {
+		node = of_parse_phandle(np, "panel", i);
+		panel = of_drm_find_panel(node);
+		of_node_put(node);
+		if (!IS_ERR(panel)) {
+			active_himax_panel = panel;
+			return 0;
+		}
+	}
+
+	return PTR_ERR(panel);
+}
+
+static int syna_himax_check_default_tp(struct device_node *dt, const char *prop)
+{
+	const char *active_tp;
+	const char *compatible;
+	char *start;
+	int ret;
+
+	ret = of_property_read_string(dt->parent, prop, &active_tp);
+	if (ret) {
+		pr_err(" %s:fail to read %s %d\n", __func__, prop, ret);
+		return -ENODEV;
+	}
+
+	ret = of_property_read_string(dt, "compatible", &compatible);
+	if (ret < 0) {
+		pr_err(" %s:fail to read %s %d\n", __func__, "compatible", ret);
+		return -ENODEV;
+	}
+
+	start = strnstr(active_tp, compatible, strlen(active_tp));
+	if (start == NULL) {
+		pr_err(" %s:no match compatible, %s, %s\n",
+			__func__, compatible, active_tp);
+		ret = -ENODEV;
+	}
+
+	return ret;
+}
+
 int himax_chip_common_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
 	int ret = 0;
@@ -791,6 +854,12 @@ int himax_chip_common_probe(struct i2c_client *client, const struct i2c_device_i
 	struct himax_i2c_platform_data *pdata;
 
 	D("%s:Enter\n", __func__);
+
+	if (syna_himax_check_dt(dt) < 0)
+		goto err_dt_not_match;
+
+	if (syna_himax_check_default_tp(dt, "qcom,i2c-touch-active") < 0)
+		goto err_dt_not_match;
 
 	/* Check I2C functionality */
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
@@ -896,6 +965,7 @@ err_alloc_i2c_data:
 	kfree(ts);
 err_alloc_data_failed:
 err_check_functionality_failed:
+err_dt_not_match:
 
 	return ret;
 }
@@ -954,7 +1024,7 @@ static void __exit himax_common_exit(void)
 	i2c_del_driver(&himax_common_driver);
 }
 
-module_init(himax_common_init);
+late_initcall(himax_common_init);
 module_exit(himax_common_exit);
 
 MODULE_DESCRIPTION("Himax_common driver");
