@@ -4529,7 +4529,11 @@ EXPORT_SYMBOL_GPL(ufshcd_make_hba_operational);
  * @hba: per adapter instance
  * @can_sleep: perform sleep or just spin
  */
+#if defined(CONFIG_SCSI_UFSHCD_QTI)
+void ufshcd_hba_stop(struct ufs_hba *hba, bool can_sleep)
+#else
 static inline void ufshcd_hba_stop(struct ufs_hba *hba, bool can_sleep)
+#endif
 {
 	int err;
 
