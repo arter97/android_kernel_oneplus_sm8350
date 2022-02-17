@@ -329,6 +329,11 @@ static int slatecom_transfer(void *handle, uint8_t *tx_buf,
 	tx_xfer->len = txn_len;
 	SLATECOM_INFO("txn_len = %d\n", txn_len);
 	tx_xfer->speed_hz = freq;
+	if (spi_state == SLATECOM_SPI_BUSY) {
+		SLATECOM_ERR("SPI is held by TZ, skip spi_sync\n");
+		mutex_unlock(&slate_spi->xfer_mutex);
+		return -EBUSY;
+	}
 	ret = spi_sync(spi, &slate_spi->msg1);
 	mutex_unlock(&slate_spi->xfer_mutex);
 
