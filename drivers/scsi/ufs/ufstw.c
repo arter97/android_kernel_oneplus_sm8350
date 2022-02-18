@@ -509,6 +509,7 @@ static int ufstw_lu_init(struct ufsf_feature *ufsf, int lun)
 #if defined(CONFIG_UFSTW_BOOT_ENABLED)
 	pm_runtime_get_sync(ufsf->hba->dev);
 	ufstw_set_lu_flag(tw, QUERY_FLAG_IDN_TW_EN, &tw->tw_enable);
+	ufstw_set_lu_flag(tw, QUERY_FLAG_IDN_TW_BUF_FLUSH_EN, &tw->flush_enable);
 	ufstw_set_lu_flag(tw, QUERY_FLAG_IDN_TW_FLUSH_DURING_HIBERN,
 			  &tw->flush_during_hibern_enter);
 	pm_runtime_put_sync(ufsf->hba->dev);
