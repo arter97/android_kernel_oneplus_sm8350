@@ -693,7 +693,7 @@ static int slatecom_resume_l(void *handle)
 error:
 	mutex_unlock(&slate_resume_mutex);
 	/* SLATE failed to resume. Trigger watchdog. */
-		SLATECOM_ERR("SLATE failed to resume\n");
+		SLATECOM_ERR("SLATE failed to resume, gpio#95 value is: %d\n", gpio_get_value(95));
 		BUG();
 		return -ETIMEDOUT;
 
