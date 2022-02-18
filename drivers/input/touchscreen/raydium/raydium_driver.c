@@ -1238,15 +1238,13 @@ static void raydium_work_handler(struct work_struct *work)
 			g_raydium_ts->is_palm = 0;
 			/*goto exit;*/
 		}
-	}
-	/*else if (g_raydium_ts->blank == DRM_PANEL_BLANK_LP ||*/
-	 /*g_raydium_ts->blank == DRM_PANEL_BLANK_POWERDOWN)*/
-	{
+	} else if (g_raydium_ts->blank == DRM_PANEL_BLANK_LP ||
+	 g_raydium_ts->blank == DRM_PANEL_BLANK_POWERDOWN) {
 		LOGD(LOG_INFO, "[touch] elseif u8_tp_status:%x\n", u8_tp_status[POS_GES_STATUS]);
 		/*need check small area*/
-		/*if (u8_tp_status[POS_GES_STATUS] == RAD_WAKE_UP*/
-		/* && g_u8_wakeup_flag == false) {*/
-		if (u8_tp_status[POS_GES_STATUS] == 0)	{
+		if (u8_tp_status[POS_GES_STATUS] == RAD_WAKE_UP
+		 && g_u8_wakeup_flag == false) {
+		/*if (u8_tp_status[POS_GES_STATUS] == 0)	{*/
 			input_report_key(g_raydium_ts->input_dev, KEY_POWER, true);
 			usleep_range(9500, 10500);
 			input_sync(g_raydium_ts->input_dev);
@@ -1621,6 +1619,7 @@ static int drm_notifier_callback(struct notifier_block *self,
 	}
 
 	blank = evdata->data;
+	g_raydium_ts->blank = (*blank);
 	LOGD(LOG_INFO, "%s: DRM event:%lu,blank:%d fb_state %d ",
 		__func__, event, *blank, g_raydium_ts->fb_state);
 	LOGD(LOG_INFO, "%s: DRM Power - %s - FB state %d ",
