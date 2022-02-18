@@ -7,6 +7,6 @@
 #ifndef _MSM_GLINK_SSR_H__
 #define _MSM_GLINK_SSR_H__
 
-void glink_ssr_notify_rpm(void);
+extern void glink_ssr_notify_rpm(void);
 
 #endif
