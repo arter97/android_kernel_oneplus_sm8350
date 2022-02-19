@@ -230,7 +230,7 @@ int oplus_chg_wls_rx_set_vout_step(struct oplus_wls_chg_rx *wls_rx, int target_v
 				   int step_mv, int wait_time_s)
 {
 	int next_step_mv;
-	unsigned long remaining_time_ms;
+	unsigned long remaining_time_ms = 500;
 	unsigned long stop_time;
 	unsigned long start_time = jiffies;
 	bool no_timeout;

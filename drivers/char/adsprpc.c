@@ -1903,6 +1903,7 @@ static int context_build_overlap(struct smq_invoke_ctx *ctx)
 	sort(ctx->overps, nbufs, sizeof(*ctx->overps), overlap_ptr_cmp, NULL);
 	max.start = 0;
 	max.end = 0;
+	max.raix = 0;
 	for (i = 0; i < nbufs; ++i) {
 		if (ctx->overps[i]->start < max.end) {
 			ctx->overps[i]->mstart = max.end;

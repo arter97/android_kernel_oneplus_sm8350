@@ -367,7 +367,7 @@ static void Split_StrtoInt(const char* Src, int *Dest, int count) {
 
 int dsi_panel_brightness_alpha_debug(struct drm_connector *connector, const char *buf, size_t count)
 {
-	int *data;
+	int *data = NULL;
 	unsigned int length;
 	int i = 0;
   	int rc = 0;

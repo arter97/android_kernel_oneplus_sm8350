@@ -108,7 +108,7 @@ int oplus_masked_write(struct pm8350b_typec_dev *chip, u16 addr, u8 mask, u8 val
 static int oplus_get_vbus_status(struct oplus_chg_ic_dev *dev,
 					 int *vbus_rising)
 {
-	u8 stat;
+	u8 stat = 0;
 	struct pm8350b_typec_dev *chip;
 	int rc = 0;
 
@@ -136,7 +136,7 @@ static int oplus_get_vbus_status(struct oplus_chg_ic_dev *dev,
 static int oplus_get_prop_typec_cc_orientation(struct oplus_chg_ic_dev *dev,
 					 int *orientation)
 {
-	u8 stat;
+	u8 stat = 0;
 	struct pm8350b_typec_dev *chip;
 	int rc = 0;
 
@@ -216,7 +216,7 @@ static int oplus_otg_gpio_request(struct pm8350b_typec_dev *chip)
 
  static int oplus_get_prop_hw_detect(struct oplus_chg_ic_dev *dev, int *hw_detect)
 {
-	u8 stat;
+	u8 stat = 0;
 	struct pm8350b_typec_dev *chip;
 	int rc = 0;
 
