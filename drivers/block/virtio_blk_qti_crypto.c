@@ -2,7 +2,8 @@
 /*
  * virtio block crypto ops QTI implementation.
  *
- * Copyright (c) 2021-2022, Linux Foundation. All rights reserved.
+ * Copyright (c) 2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/device.h>
