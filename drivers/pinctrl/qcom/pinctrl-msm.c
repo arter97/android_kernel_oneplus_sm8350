@@ -1179,8 +1179,8 @@ static int msm_gpio_irq_set_type(struct irq_data *d, unsigned int type)
 	u32 offset = 0;
 	u32 val;
 
-	if (d->parent_data && test_bit(d->hwirq, pctrl->skip_wake_irqs)) {
-		if (pctrl->n_dir_conns > 0) {
+	if (d->parent_data) {
+		if (pctrl->n_dir_conns > 0 && test_bit(d->hwirq, pctrl->skip_wake_irqs)) {
 			if (type == IRQ_TYPE_EDGE_BOTH)
 				add_dirconn_tlmm(d, pctrl);
 			else if (is_gpio_dual_edge(d, &irq))
