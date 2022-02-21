@@ -323,7 +323,8 @@ int btfm_slim_disable_ch(struct btfmslim *btfmslim, struct btfmslim_ch *ch,
 
 	chipset_ver = btpower_get_chipset_version();
 	BTFMSLIM_INFO("chipset soc version:%x", chipset_ver);
-	if (chipset_ver == QCA_SLATE_SOC_ID_0100) {
+	if (chipset_ver == QCA_SLATE_SOC_ID_0100 ||
+		chipset_ver == QCA_SLATE_SOC_ID_0200) {
 		BTFMSLIM_INFO("chipset is Slate, calling slim suspend for LPI");
 		slim_vote_for_suspend(btfmslim->slim_pgd);
 	}
