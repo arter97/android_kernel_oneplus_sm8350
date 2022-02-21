@@ -237,6 +237,7 @@ int cqhci_host_init_crypto_qti_spec(struct cqhci_host *host,
 #endif
 	host->mmc->ksm = keyslot_manager_create(host->mmc->parent,
 						num_slots, ksm_ops,
+						BLK_CRYPTO_FEATURE_STANDARD_KEYS |
 						BLK_CRYPTO_FEATURE_WRAPPED_KEYS,
 						crypto_modes_supported,
 						host);
