@@ -15,14 +15,54 @@
 #include <linux/blkdev.h>
 #include <linux/regulator/consumer.h>
 #include <linux/clk.h>
+#include <linux/kobject.h>
+#include <linux/genhd.h>
+#include <linux/kernel.h>
+#include <linux/stat.h>
+#include <linux/stringify.h>
+#include <linux/mutex.h>
+#include "../../misc/qseecom_kernel.h"
 
-#define CRYPTO_ICE_TYPE_NAME_LEN	8
-#define CRYPTO_ICE_ENCRYPT		0x1
-#define CRYPTO_ICE_DECRYPT		0x2
-#define CRYPTO_SECT_LEN_IN_BYTE		512
-#define CRYPTO_ICE_CXT_FDE		1
+#define CRYPTO_ICE_TYPE_NAME_LEN		8
+#define CRYPTO_ICE_ENCRYPT				0x1
+#define CRYPTO_ICE_DECRYPT				0x2
+#define CRYPTO_SECT_LEN_IN_BYTE			512
+#define TOTAL_NUMBER_ICE_SLOTS			32
+#define CRYPTO_ICE_UDEV_PARTITION_NAME	96
+
 #define CRYPTO_ICE_FDE_KEY_INDEX	31
-#define CRYPTO_UD_VOLNAME		"userdata"
+#define CRYPTO_UD_VOLNAME			"userdata"
+#define CRYPTO_ICE_FDE_LEGACY_UFS	"UFS ICE Full Disk Encryption"
+#define CRYPTO_ICE_FDE_LEGACY_EMMC	"SDCC ICE Full Disk Encryption"
+#define QSEECOM_KEY_ID_EXISTS		-65
+
+
+#define _INIT_ATTRIBUTE(_name, _mode) \
+	{ \
+		.name = __stringify(_name), \
+		.mode = (_mode), \
+	}
+
+#define PART_CFG_ATTR_RW(_name) \
+	struct kobj_attribute part_cfg_attr_##_name = { \
+		.attr = _INIT_ATTRIBUTE(_name, 0660), \
+		.show = crypto_qti_ice_part_cfg_show, \
+		.store = crypto_qti_ice_part_cfg_store, \
+	}
+
+/*
+ * Encapsulates configuration information for each supported partition
+ */
+struct ice_part_cfg {
+	struct list_head list;
+	char volname[PARTITION_META_INFO_VOLNAMELTH + 1]; /* NULL terminated */
+	uint32_t key_slot; /*ICE keyslot 0..31 */
+	uint32_t add_partition_result; /*Add partition operation res*/
+	bool encr_bypass;
+	bool decr_bypass;
+	struct kobject kobj;
+	struct kobj_type kobj_type;
+};
 #endif //CONFIG_QTI_CRYPTO_FDE
 
 static int ice_check_fuse_setting(struct crypto_vops_qti_entry *ice_entry)
@@ -498,7 +538,6 @@ int crypto_qti_derive_raw_secret(void *priv_data,
 EXPORT_SYMBOL(crypto_qti_derive_raw_secret);
 
 #if IS_ENABLED(CONFIG_QTI_CRYPTO_FDE)
-static int ice_fde_flag;
 struct ice_clk_info {
 	struct list_head list;
 	struct clk *clk;
@@ -515,6 +554,8 @@ static LIST_HEAD(ice_devices);
  */
 struct ice_device {
 	struct list_head	list;
+	struct kset			*fde_partitions;
+	struct mutex		mutex;
 	struct device		*pdev;
 	dev_t			device_no;
 	void __iomem		*mmio;
@@ -528,10 +569,424 @@ struct ice_device {
 	char			ice_instance_type[CRYPTO_ICE_TYPE_NAME_LEN];
 	struct regulator	*reg;
 	bool			is_regulator_available;
+
+	bool			sysfs_groups_created;
+
+	/* Partition list for full disk encryption */
+	struct list_head	part_cfg_list;
+	struct kobj_type	partitions_kobj_type;
+	u32					num_fde_slots;
+	u32					num_fde_slots_in_use;
 };
 
 static int crypto_qti_ice_init(struct ice_device *ice_dev, void *host_controller_data,
 							   ice_error_cb error_cb);
+
+static struct ice_part_cfg *crypto_qti_ice_get_part_cfg(struct ice_device *ice_dev,
+	char const * const volname)
+{
+	struct ice_part_cfg *part_cfg = NULL;
+	struct ice_part_cfg *ret = NULL;
+
+	if (!ice_dev) {
+		pr_err_ratelimited("%s: %s: no ICE device\n",
+			__func__, volname);
+		return NULL;
+	}
+
+	list_for_each_entry(part_cfg, &ice_dev->part_cfg_list, list) {
+		if (!strcmp(part_cfg->volname, volname))
+			return part_cfg;
+	}
+
+	return ret;
+}
+
+/*
+ * Stub function to satisfy kobject lifecycle
+ */
+static void crypto_qti_ice_release_kobj(struct kobject *kobj)
+{
+	char const *name = kobject_name(kobj);
+
+	if (name)
+		pr_debug("Releasing %s\n", name);
+
+	/* Nothing to do */
+}
+
+static inline struct ice_part_cfg *to_ice_part_cfg(struct kobject *kobject)
+{
+	return container_of(kobject, struct ice_part_cfg, kobj);
+}
+
+/*
+ * Attribute "show" method for per-partition attributes.
+ */
+static ssize_t crypto_qti_ice_part_cfg_show(struct kobject *kobj,
+	struct kobj_attribute *attr, char *buf)
+{
+	struct ice_part_cfg *cfg = to_ice_part_cfg(kobj);
+
+	if (!strcmp(attr->attr.name, "decr_bypass"))
+		return scnprintf(buf, PAGE_SIZE, "%d\n", cfg->decr_bypass);
+	if (!strcmp(attr->attr.name, "encr_bypass"))
+		return scnprintf(buf, PAGE_SIZE, "%d\n", cfg->encr_bypass);
+	if (!strcmp(attr->attr.name, "add_partition_result"))
+		return scnprintf(buf, PAGE_SIZE, "%d\n", cfg->add_partition_result);
+
+	pr_err("%s: Unhandled attribute %s\n", __func__, buf);
+	return -EFAULT;
+}
+
+/*
+ * Attribute "store" method for per-partition attributes.
+ */
+static ssize_t crypto_qti_ice_part_cfg_store(struct kobject *kobj,
+	struct kobj_attribute *attr, const char *buf, size_t count)
+{
+	struct ice_part_cfg *cfg = to_ice_part_cfg(kobj);
+	ssize_t ret = count;
+	int op_result = -EFAULT;
+
+	if (!strcmp(attr->attr.name, "decr_bypass"))
+		op_result = kstrtobool(buf, &cfg->decr_bypass);
+	else if (!strcmp(attr->attr.name, "encr_bypass"))
+		op_result = kstrtobool(buf, &cfg->encr_bypass);
+	else
+		pr_err("%s: Unhandled attribute %s\n", __func__, buf);
+
+	/* Notify userspace of the change */
+	if (!op_result) {
+		pr_info("%s: Change %s:%s=%s\n", __func__, cfg->volname,
+			attr->attr.name, buf);
+		kobject_uevent(kobj, KOBJ_CHANGE);
+	} else {
+		pr_err("%s: Failed %s:%s=%s : %d\n", __func__, cfg->volname,
+			attr->attr.name, buf, op_result);
+		ret = op_result;
+	}
+
+	return ret;
+}
+
+static PART_CFG_ATTR_RW(add_partition_result);
+static PART_CFG_ATTR_RW(decr_bypass);
+static PART_CFG_ATTR_RW(encr_bypass);
+
+static struct attribute *ice_part_cfg_attrs[] = {
+	&part_cfg_attr_add_partition_result.attr,
+	&part_cfg_attr_decr_bypass.attr,
+	&part_cfg_attr_encr_bypass.attr,
+	NULL,
+};
+
+
+/**
+ * Add a new partition for the ICE to manage
+ *
+ * Full encryption/decryption is enabled by default!
+ *
+ * @ice_dev:		ICE device node
+ * @new_volname:	Null-terminated volume name
+ *	partition.
+ * @enable:			Whether the partition is enabled
+ * @return			0 on success or -errno on failure.
+ */
+static int crypto_qti_ice_add_new_partition(struct ice_device *ice_dev,
+	const char * const new_volname, unsigned int slot, bool new_key)
+{
+	struct list_head *new_pos = NULL;
+	struct ice_part_cfg *elem = NULL;
+	int rc = 0;
+	char *envp[2] = {0};
+	char part_name[CRYPTO_ICE_UDEV_PARTITION_NAME] = {0};
+
+	/* Check if the partition is already in the list */
+	list_for_each(new_pos, &ice_dev->part_cfg_list) {
+		elem = list_entry(new_pos, struct ice_part_cfg, list);
+		if (!strcmp(new_volname, elem->volname))
+			goto out; /* Already in list, bail */
+	}
+
+	dev_info(ice_dev->pdev, "Adding %s\n",
+		new_volname);
+
+	/* Didn't find it, add new entry at the end */
+	elem = kzalloc(sizeof(struct ice_part_cfg), GFP_KERNEL);
+	if (!elem) {
+		rc = -ENOMEM;
+		dev_err(ice_dev->pdev,
+			"%s: Error %d allocating memory for partition %s\n",
+			__func__, rc, new_volname);
+		goto out;
+	}
+
+	//Add the new partition to the KSet
+	elem->kobj.kset = ice_dev->fde_partitions;
+	/* Set up the sysfs node */
+	elem->kobj_type.release = crypto_qti_ice_release_kobj;
+	elem->kobj_type.sysfs_ops = &kobj_sysfs_ops;
+	elem->kobj_type.default_attrs = ice_part_cfg_attrs;
+	rc = kobject_init_and_add(&elem->kobj, &elem->kobj_type,
+		NULL, new_volname);
+	if (rc) {
+		dev_err(ice_dev->pdev, "%s: Error %d adding sysfs for %s\n",
+			__func__, rc, new_volname);
+		kobject_put(&elem->kobj);
+		kfree(elem);
+		goto out;
+	}
+
+	strlcpy(elem->volname, new_volname, PARTITION_META_INFO_VOLNAMELTH+1);//Null terminated
+	//Default - encryption is enabled
+	elem->decr_bypass = false;
+	elem->encr_bypass = false;
+
+	//Start using key slots from the end
+	if (ice_dev->num_fde_slots_in_use >= TOTAL_NUMBER_ICE_SLOTS) {
+		//Shouldn't be here , just some defensive check
+		rc = -ENOMEM;
+		dev_err(ice_dev->pdev, "%s: Allocating more slots than available %s\n", __func__);
+		kobject_put(&elem->kobj);
+		kfree(elem);
+		goto out;
+	}
+
+
+	elem->key_slot = slot;
+	elem->add_partition_result = new_key;
+	list_add_tail(&elem->list, new_pos);
+	//Generate the UEvent with the partition name to notify userpsace
+	snprintf(part_name, CRYPTO_ICE_UDEV_PARTITION_NAME, "FDE_PARTITION=%s", new_volname);
+	envp[0] = part_name;
+	envp[1] = NULL;
+	kobject_uevent_env(&elem->kobj, KOBJ_ADD, envp);
+out:
+	return rc;
+}
+/*
+ * Attribute "store" method for add_partition
+ *
+ * Add a partition to the list with default configuration.
+ */
+static ssize_t add_partition_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct ice_device *ice_dev = dev_get_drvdata(dev);
+	ssize_t ret = count;
+	char label[PARTITION_META_INFO_VOLNAMELTH + 1] = {0};
+	int rc = 0;
+	struct list_head *new_pos = NULL;
+	struct ice_part_cfg *elem = NULL;
+	unsigned int slot = 0;
+	bool new_key_generated = false;
+	int key_res = 0;
+
+	if (count > PARTITION_META_INFO_VOLNAMELTH) {
+		dev_err(dev, "Invalid partition '%s' (%u)\n", buf, count);
+		return -EINVAL;
+	}
+
+	if (!ice_dev) {
+		dev_err(dev, "Invalid ICE device!\n");
+		return -ENODEV;
+	}
+
+	/* Copy into a temporary buffer, stripping out newlines */
+	count = strcspn(buf, "\n\r");
+	memcpy(label, buf, count);
+	label[count] = '\0';
+
+	if (!count) {
+		dev_err(dev, "Invalid partition '%s' (%u)\n", buf, count);
+		return -EINVAL;
+	}
+
+	mutex_lock(&ice_dev->mutex);
+	/* Check if the partition is already in the list */
+	list_for_each(new_pos, &ice_dev->part_cfg_list)
+	{
+		elem = list_entry(new_pos, struct ice_part_cfg, list);
+		if (!strcmp(label, elem->volname)) {
+			ret = -EINVAL; //Already in the list , return
+			goto out;
+		}
+	}
+
+	//New partition , check if we have a free slot available
+	if (ice_dev->num_fde_slots_in_use >= ice_dev->num_fde_slots) {
+		dev_err(dev, "All ICE slots are in use!\n");
+		ret = -EINVAL; //Already in the list , return
+		goto out;
+	}
+
+#if IS_ENABLED(CONFIG_QTI_CRYPTO_LEGACY_KEY_FDE)
+	//Don't increment , using same slot for all partitions
+	slot = CRYPTO_ICE_FDE_KEY_INDEX;
+#else
+	//Increment number of slots in use
+	++ice_dev->num_fde_slots_in_use;
+	slot = TOTAL_NUMBER_ICE_SLOTS - ice_dev->num_fde_slots_in_use;
+#endif
+
+	//First need to generate/restore key and set it into the ice slot
+	//Request is accroding to storage type UFS/eMMC
+	//The unique key is generated via partition name , or legacy key if configured
+	if (strcmp(ice_dev->ice_instance_type, "ufs") == 0) {
+#if IS_ENABLED(CONFIG_QTI_CRYPTO_LEGACY_KEY_FDE)
+		key_res = qseecom_create_key_in_slot(QSEECOM_KM_USAGE_UFS_ICE_DISK_ENCRYPTION,
+			slot, CRYPTO_ICE_FDE_LEGACY_UFS, NULL);
+#else
+		key_res = qseecom_create_key_in_slot(QSEECOM_KM_USAGE_UFS_ICE_DISK_ENCRYPTION,
+			slot, label, NULL);
+#endif
+	} else if (strcmp(ice_dev->ice_instance_type, "sdcc") == 0) {
+#if IS_ENABLED(CONFIG_QTI_CRYPTO_LEGACY_KEY_FDE)
+		key_res = qseecom_create_key_in_slot(QSEECOM_KM_USAGE_SDCC_ICE_DISK_ENCRYPTION,
+			slot, CRYPTO_ICE_FDE_LEGACY_EMMC, NULL);
+#else
+		key_res = qseecom_create_key_in_slot(QSEECOM_KM_USAGE_SDCC_ICE_DISK_ENCRYPTION,
+			slot, label, NULL);
+#endif
+	} else {
+		dev_err(dev, "Not supported storage type!\n");
+		ret = -EINVAL; //Already in the list , return
+		goto out;
+	}
+
+	//Check the qseecom_create_key_in_slot result
+	if (key_res) {
+		if (key_res == QSEECOM_KEY_ID_EXISTS) {
+			new_key_generated = true;
+		} else {
+			dev_err(dev, "Failed to generate and set key!\n");
+#if IS_ENABLED(CONFIG_QTI_CRYPTO_LEGACY_KEY_FDE)
+#else
+			//Take the slot back
+			--ice_dev->num_fde_slots_in_use;
+#endif
+			ret = -EINVAL;
+			goto out;
+		}
+	}
+
+	/* Error logged in function */
+	rc = crypto_qti_ice_add_new_partition(ice_dev, label, slot, new_key_generated);
+	if (rc)
+		ret = rc;
+
+out:
+	mutex_unlock(&ice_dev->mutex);
+	return ret;
+}
+
+//Set the "add_partition" node attributes, allow user to add partitions
+#define __ATTR_WR_PARTITIONS(_name) {						\
+	.attr	= { .name = __stringify(_name), .mode = 0220 },		\
+	.store	= _name##_store,					\
+}
+static struct device_attribute dev_attr_add_partition =  __ATTR_WR_PARTITIONS(add_partition);
+
+static struct attribute *ice_attrs[] = {
+	&dev_attr_add_partition.attr,
+	NULL,
+};
+ATTRIBUTE_GROUPS(ice);
+
+unsigned int crypto_qti_ice_get_num_fde_slots(void)
+{
+	struct ice_device *ice_dev = NULL;
+
+	ice_dev = list_first_entry_or_null(&ice_devices, struct ice_device, list);
+	if (ice_dev)
+		return ice_dev->num_fde_slots;
+	else
+		return 0;
+}
+EXPORT_SYMBOL(crypto_qti_ice_get_num_fde_slots);
+
+int crypto_qti_ice_add_userdata(const unsigned char *inhash)
+{
+	struct ice_device *ice_dev = NULL;
+	struct list_head *new_pos = NULL;
+	struct ice_part_cfg *elem = NULL;
+	int ret = 0;
+	bool new_key_generated = false;
+	int key_res = 0;
+	unsigned int slot = 0;
+
+	ice_dev = list_first_entry_or_null(&ice_devices, struct ice_device, list);
+	if (ice_dev == NULL) {
+		pr_err("No ice device presetnt\n");
+		return -EINVAL;
+	}
+
+	mutex_lock(&ice_dev->mutex);
+	/* Check if the "userdata" partition is already in the list */
+	list_for_each(new_pos, &ice_dev->part_cfg_list)
+	{
+		elem = list_entry(new_pos, struct ice_part_cfg, list);
+		if (!strcmp(CRYPTO_UD_VOLNAME, elem->volname)) {
+			ret = -EINVAL; //Already in the list , return
+			goto out;
+		}
+	}
+
+	//New partition , check if we have a free slot available
+	if (ice_dev->num_fde_slots_in_use >= ice_dev->num_fde_slots) {
+		pr_err("All ICE slots are in use!\n");
+		ret = -EINVAL; //Already in the list , return
+		goto out;
+	}
+
+#if IS_ENABLED(CONFIG_QTI_CRYPTO_LEGACY_KEY_FDE)
+	//Don't increment , using same slot for all partitions
+	slot = CRYPTO_ICE_FDE_KEY_INDEX;
+#else
+	//Increment number of slots in use
+	++ice_dev->num_fde_slots_in_use;
+	slot = TOTAL_NUMBER_ICE_SLOTS - ice_dev->num_fde_slots_in_use;
+#endif
+
+	//Generate the legacy key
+	if (strcmp(ice_dev->ice_instance_type, "ufs") == 0)
+		key_res = qseecom_create_key_in_slot(QSEECOM_KM_USAGE_UFS_ICE_DISK_ENCRYPTION,
+				slot, CRYPTO_ICE_FDE_LEGACY_UFS, inhash);
+	else if (strcmp(ice_dev->ice_instance_type, "sdcc") == 0)
+		key_res = qseecom_create_key_in_slot(QSEECOM_KM_USAGE_SDCC_ICE_DISK_ENCRYPTION,
+				slot, CRYPTO_ICE_FDE_LEGACY_EMMC, inhash);
+	else {
+		pr_err("Not supported storage type!\n");
+		ret = -EINVAL; //Already in the list , return
+		goto out;
+	}
+
+
+	//Check the qseecom_create_key_in_slot result
+	if (key_res) {
+		if (key_res == QSEECOM_KEY_ID_EXISTS) {
+			new_key_generated = true;
+		} else {
+			pr_err("Failed to generate and set key!\n");
+#if IS_ENABLED(CONFIG_QTI_CRYPTO_LEGACY_KEY_FDE)
+#else
+			//Take the slot back
+			--ice_dev->num_fde_slots_in_use;
+#endif
+			ret = -EINVAL;
+			goto out;
+		}
+	}
+
+	//Add the "userdata" partition to the list
+	crypto_qti_ice_add_new_partition(ice_dev, CRYPTO_UD_VOLNAME, slot, new_key_generated);
+
+out:
+	mutex_unlock(&ice_dev->mutex);
+	return 0;
+}
+EXPORT_SYMBOL(crypto_qti_ice_add_userdata);
 
 static int crypto_qti_ice_get_vreg(struct ice_device *ice_dev)
 {
@@ -554,7 +1009,9 @@ static int crypto_qti_ice_get_vreg(struct ice_device *ice_dev)
 
 static int crypto_qti_ice_setting_config(struct request *req,
 				  struct ice_crypto_setting *crypto_data,
-				  struct ice_data_setting *setting, uint32_t cxt)
+				  struct ice_data_setting *setting,
+				  bool encr_bypass,
+				  bool decr_bypass)
 {
 	if (!setting)
 		return -EINVAL;
@@ -564,15 +1021,13 @@ static int crypto_qti_ice_setting_config(struct request *req,
 				sizeof(setting->crypto_data));
 
 		if (rq_data_dir(req) == WRITE) {
-			if (((cxt == CRYPTO_ICE_CXT_FDE) &&
-				(ice_fde_flag & CRYPTO_ICE_ENCRYPT)))
-				setting->encr_bypass = false;
+			setting->encr_bypass = encr_bypass;
 		} else if (rq_data_dir(req) == READ) {
-			if (((cxt == CRYPTO_ICE_CXT_FDE) &&
-				(ice_fde_flag & CRYPTO_ICE_DECRYPT)))
-				setting->decr_bypass = false;
+			setting->decr_bypass = decr_bypass;
 		} else {
 			/* Should I say BUG_ON */
+			pr_err("%s unhandled request 0x%x\n", __func__,
+				req->cmd_flags);
 			setting->encr_bypass = true;
 			setting->decr_bypass = true;
 		}
@@ -611,6 +1066,30 @@ static void crypto_qti_ice_parse_ice_instance_type(struct platform_device *pdev,
 	strlcpy(ice_dev->ice_instance_type, type, CRYPTO_ICE_TYPE_NAME_LEN);
 out:
 	return;
+}
+
+static void crypto_qti_ice_parse_number_of_fde_slots(struct platform_device *pdev,
+					     struct ice_device *ice_dev)
+{
+	int ret = 0;
+	struct device *dev = &pdev->dev;
+	struct device_node *np = dev->of_node;
+	u32 num_of_slots = 0;
+
+	ret =  of_property_read_u32(np, "qcom,num-fde-slots", &num_of_slots);
+	if (ret) {
+		//Backwards compatibility , assume one slot if DTS property is not deifined
+		pr_info("%s: No num of  FDE slots defined in dts,using 1 slot\n", __func__);
+		ice_dev->num_fde_slots = 1;
+		return;
+	}
+	if (num_of_slots >= TOTAL_NUMBER_ICE_SLOTS) {
+		//Limit the number of slots
+		pr_info("%s: Limiting num of FDE slots\n", __func__);
+		ice_dev->num_fde_slots = TOTAL_NUMBER_ICE_SLOTS - 1;
+	} else {
+		ice_dev->num_fde_slots = num_of_slots;
+	}
 }
 
 static int crypto_qti_ice_parse_clock_info(struct platform_device *pdev, struct ice_device *ice_dev)
@@ -696,7 +1175,9 @@ static int crypto_qti_ice_get_dts_data(struct platform_device *pdev, struct ice_
 	}
 
 	crypto_qti_ice_parse_ice_instance_type(pdev, ice_dev);
-
+#if IS_ENABLED(CONFIG_QTI_CRYPTO_FDE)
+	crypto_qti_ice_parse_number_of_fde_slots(pdev, ice_dev);
+#endif
 	return 0;
 err_dev:
 	return rc;
@@ -714,7 +1195,39 @@ static const struct file_operations crypto_qti_ice_fops = {
 	.owner = THIS_MODULE,
 };
 
+/**
+ * Remove all sysfs resources associated with the driver
+ *
+ * @ice_dev:	ICE device node
+ */
+static void crypto_qti_ice_cleanup_sysfs(struct ice_device *ice_dev)
+{
+	struct list_head *pos;
+	struct list_head *n;
+	struct ice_part_cfg *elem;
 
+	/* Platform device attributes */
+	if (ice_dev->sysfs_groups_created) {
+		sysfs_remove_groups(&ice_dev->pdev->kobj, ice_groups);
+		ice_dev->sysfs_groups_created = false;
+	}
+
+	/* Partition configuration list and sysfs nodes */
+	list_for_each_safe(pos, n, &ice_dev->part_cfg_list) {
+		elem = list_entry(pos, struct ice_part_cfg, list);
+		dev_dbg(ice_dev->pdev, "Removing %s", elem->volname);
+
+		if (elem->kobj.state_in_sysfs)
+			kobject_put(&elem->kobj);
+
+		list_del(pos);
+		kfree(elem);
+	}
+	if (ice_dev->fde_partitions != NULL)	{
+		kset_unregister(ice_dev->fde_partitions);
+	}
+
+}
 
 static int crypto_qti_ice_probe(struct platform_device *pdev)
 {
@@ -736,6 +1249,8 @@ static int crypto_qti_ice_probe(struct platform_device *pdev)
 		goto out;
 	}
 
+	/* Initialize device data to a known state */
+	INIT_LIST_HEAD(&ice_dev->part_cfg_list);
 	ice_dev->pdev = &pdev->dev;
 	if (!ice_dev->pdev) {
 		rc = -EINVAL;
@@ -754,6 +1269,27 @@ static int crypto_qti_ice_probe(struct platform_device *pdev)
 	if (rc)
 		goto err_ice_dev;
 
+	//Create a Kset for the encrypted partitions
+	ice_dev->fde_partitions = kset_create_and_add("fde_partitions", NULL, &ice_dev->pdev->kobj);
+	if (ice_dev->fde_partitions == NULL) {
+		rc = -EINVAL;
+		pr_err("%s: Failed to create partitons KSet\n", __func__);
+		goto err_ice_dev;
+	}
+
+
+	/* Set up platform device attributes in sysfs */
+	rc = sysfs_create_groups(&ice_dev->pdev->kobj, ice_groups);
+	if (rc) {
+		pr_err("%s: Failed to add pdev attributes: %d\n", __func__,
+			rc);
+		goto err_ice_dev;
+	} else {
+		ice_dev->sysfs_groups_created = true;
+	}
+
+	/* Set up partition config folder in sysfs */
+	ice_dev->partitions_kobj_type.release = crypto_qti_ice_release_kobj;
 	/*
 	 * If ICE is enabled here, it would be waste of power.
 	 * We would enable ICE when first request for crypto
@@ -764,13 +1300,20 @@ static int crypto_qti_ice_probe(struct platform_device *pdev)
 		pr_err("ice_init failed.\n");
 		goto err_ice_dev;
 	}
+	mutex_init(&ice_dev->mutex);
 	ice_dev->is_ice_enabled = true;
 	platform_set_drvdata(pdev, ice_dev);
 	list_add_tail(&ice_dev->list, &ice_devices);
 
+	dev_info(&pdev->dev, "Initialized OK\n");
+
 	goto out;
 
 err_ice_dev:
+	dev_err(&pdev->dev, "Initialization failed\n");
+
+	crypto_qti_ice_cleanup_sysfs(ice_dev);
+
 	kfree(ice_dev);
 out:
 	return rc;
@@ -784,6 +1327,9 @@ static int crypto_qti_ice_remove(struct platform_device *pdev)
 
 	if (!ice_dev)
 		return 0;
+
+	mutex_destroy(&ice_dev->mutex);
+	crypto_qti_ice_cleanup_sysfs(ice_dev);
 
 	crypto_qti_ice_disable_intr(ice_dev);
 
@@ -803,8 +1349,9 @@ int crypto_qti_ice_config_start(struct request *req, struct ice_data_setting *se
 	struct ice_crypto_setting ice_data = {0};
 	unsigned long sec_end = 0;
 	sector_t data_size;
+	struct ice_device *ice_dev;
+	struct ice_part_cfg *part_cfg;
 
-	ice_data.key_index = CRYPTO_ICE_FDE_KEY_INDEX;
 
 	if (!req) {
 		pr_err("%s: Invalid params passed\n", __func__);
@@ -825,10 +1372,13 @@ int crypto_qti_ice_config_start(struct request *req, struct ice_data_setting *se
 		/* It is not an error to have a request with no  bio */
 		return 0;
 	}
-
-	if (ice_fde_flag && req->part && req->part->info
-				&& req->part->info->volname[0]) {
-		if (!strcmp(req->part->info->volname, CRYPTO_UD_VOLNAME)) {
+	ice_dev = list_first_entry_or_null(&ice_devices, struct ice_device,
+		list);
+	if (req->part && req->part->info && req->part->info->volname[0]) {
+		part_cfg = crypto_qti_ice_get_part_cfg(ice_dev,
+			req->part->info->volname);
+		if (part_cfg) {
+			ice_data.key_index = part_cfg->key_slot;
 			sec_end = req->part->start_sect + req->part->nr_sects;
 			if ((req->__sector >= req->part->start_sect) &&
 				(req->__sector < sec_end)) {
@@ -851,7 +1401,8 @@ int crypto_qti_ice_config_start(struct request *req, struct ice_data_setting *se
 				else
 					return crypto_qti_ice_setting_config(req,
 						&ice_data, setting,
-						CRYPTO_ICE_CXT_FDE);
+						part_cfg->encr_bypass,
+						part_cfg->decr_bypass);
 			}
 		}
 	}
@@ -864,13 +1415,6 @@ int crypto_qti_ice_config_start(struct request *req, struct ice_data_setting *se
 	return 0;
 }
 EXPORT_SYMBOL(crypto_qti_ice_config_start);
-
-void crypto_qti_ice_set_fde_flag(int flag)
-{
-	ice_fde_flag = flag;
-	pr_debug("%s flag = %d\n", __func__, ice_fde_flag);
-}
-EXPORT_SYMBOL(crypto_qti_ice_set_fde_flag);
 
 /* Following struct is required to match device with driver from dts file */
 
