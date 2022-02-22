@@ -106,6 +106,9 @@ if ! mount | grep -q "$BIND" && [ ! -e /sbin/recovery ] && [ ! -e /dev/ep/.post_
   fi
   echo 120 > /sys/devices/system/cpu/cpu_boost/input_boost_ms
 
+  #liochen@SYSTEM, 2020/11/02, Add for enable ufs performance
+  echo 0 > /sys/class/scsi_host/host0/../../../clkscale_enable
+
   # Re-enable SELinux
   echo "97" > /sys/fs/selinux/enforce
 
