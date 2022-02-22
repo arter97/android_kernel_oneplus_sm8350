@@ -276,13 +276,13 @@ static int slate_powerup(const struct subsys_desc *subsys)
 	slate_data->desc.fw_name = subsys->fw_name;
 
 	/* Enable status and err fatal irqs */
+	enable_irq(slate_data->status_irq);
 	ret = pil_boot(&slate_data->desc);
 	if (ret) {
 		dev_err(slate_data->desc.dev,
 			"%s: SLATE PIL Boot failed\n", __func__);
 		return ret;
 	}
-	enable_irq(slate_data->status_irq);
 	ret = wait_for_err_ready(slate_data);
 	if (ret) {
 		dev_err(slate_data->desc.dev,
