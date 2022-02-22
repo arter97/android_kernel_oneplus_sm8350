@@ -189,7 +189,6 @@ static const char *const disp_cc_debug_mux_parent_names[] = {
 	"disp_cc_mdss_rscc_ahb_clk",
 	"disp_cc_mdss_rscc_vsync_clk",
 	"disp_cc_mdss_vsync_clk",
-	"disp_cc_xo_clk",
 };
 
 static int disp_cc_debug_mux_sels[] = {
@@ -211,7 +210,6 @@ static int disp_cc_debug_mux_sels[] = {
 	0x1E,		/* disp_cc_mdss_rscc_ahb_clk */
 	0x1D,		/* disp_cc_mdss_rscc_vsync_clk */
 	0x11,		/* disp_cc_mdss_vsync_clk */
-	0x25,		/* disp_cc_xo_clk */
 };
 
 static struct clk_debug_mux disp_cc_debug_mux = {
@@ -244,21 +242,16 @@ static const char *const gcc_debug_mux_parent_names[] = {
 	"gcc_ahb2phy_east_clk",
 	"gcc_ahb2phy_west_clk",
 	"gcc_boot_rom_ahb_clk",
-	"gcc_camera_ahb_clk",
 	"gcc_camera_hf_axi_clk",
-	"gcc_camera_xo_clk",
 	"gcc_ce1_ahb_clk",
 	"gcc_ce1_axi_clk",
 	"gcc_ce1_clk",
 	"gcc_cfg_noc_usb2_sec_axi_clk",
 	"gcc_cfg_noc_usb3_prim_axi_clk",
 	"gcc_cpuss_ahb_clk",
-	"gcc_cpuss_gnoc_clk",
 	"gcc_ddrss_gpu_axi_clk",
-	"gcc_disp_ahb_clk",
 	"gcc_disp_gpll0_div_clk_src",
 	"gcc_disp_hf_axi_clk",
-	"gcc_disp_xo_clk",
 	"gcc_emac_axi_clk",
 	"gcc_emac_ptp_clk",
 	"gcc_emac_rgmii_clk",
@@ -266,7 +259,6 @@ static const char *const gcc_debug_mux_parent_names[] = {
 	"gcc_gp1_clk",
 	"gcc_gp2_clk",
 	"gcc_gp3_clk",
-	"gcc_gpu_cfg_ahb_clk",
 	"gcc_gpu_gpll0_clk_src",
 	"gcc_gpu_gpll0_div_clk_src",
 	"gcc_gpu_memnoc_gfx_clk",
@@ -341,9 +333,7 @@ static const char *const gcc_debug_mux_parent_names[] = {
 	"gcc_usb3_prim_phy_aux_clk",
 	"gcc_usb3_prim_phy_com_aux_clk",
 	"gcc_usb3_prim_phy_pipe_clk",
-	"gcc_video_ahb_clk",
 	"gcc_video_axi0_clk",
-	"gcc_video_xo_clk",
 	"gpu_cc_debug_mux",
 	"measure_only_cnoc_clk",
 	"measure_only_ipa_2x_clk",
@@ -362,21 +352,16 @@ static int gcc_debug_mux_sels[] = {
 	0x73,		/* gcc_ahb2phy_east_clk */
 	0x6F,		/* gcc_ahb2phy_west_clk */
 	0x94,		/* gcc_boot_rom_ahb_clk */
-	0x3A,		/* gcc_camera_ahb_clk */
 	0x40,		/* gcc_camera_hf_axi_clk */
-	0x43,		/* gcc_camera_xo_clk */
 	0xA9,		/* gcc_ce1_ahb_clk */
 	0xA8,		/* gcc_ce1_axi_clk */
 	0xA7,		/* gcc_ce1_clk */
 	0x1C7,		/* gcc_cfg_noc_usb2_sec_axi_clk */
 	0x1D,		/* gcc_cfg_noc_usb3_prim_axi_clk */
 	0xCE,		/* gcc_cpuss_ahb_clk */
-	0xCF,		/* gcc_cpuss_gnoc_clk */
 	0xBB,		/* gcc_ddrss_gpu_axi_clk */
-	0x3B,		/* gcc_disp_ahb_clk */
 	0x152,		/* gcc_disp_gpll0_div_clk_src */
 	0x41,		/* gcc_disp_hf_axi_clk */
-	0x44,		/* gcc_disp_xo_clk */
 	0x16D,		/* gcc_emac_axi_clk */
 	0x1D3,		/* gcc_emac_ptp_clk */
 	0x16A,		/* gcc_emac_rgmii_clk */
@@ -384,7 +369,6 @@ static int gcc_debug_mux_sels[] = {
 	0xDE,		/* gcc_gp1_clk */
 	0xDF,		/* gcc_gp2_clk */
 	0xE0,		/* gcc_gp3_clk */
-	0x142,		/* gcc_gpu_cfg_ahb_clk */
 	0x148,		/* gcc_gpu_gpll0_clk_src */
 	0x149,		/* gcc_gpu_gpll0_div_clk_src */
 	0x145,		/* gcc_gpu_memnoc_gfx_clk */
@@ -459,9 +443,7 @@ static int gcc_debug_mux_sels[] = {
 	0x62,		/* gcc_usb3_prim_phy_aux_clk */
 	0x63,		/* gcc_usb3_prim_phy_com_aux_clk */
 	0x64,		/* gcc_usb3_prim_phy_pipe_clk */
-	0x39,		/* gcc_video_ahb_clk */
 	0x3F,		/* gcc_video_axi0_clk */
-	0x42,		/* gcc_video_xo_clk */
 	0x144,		/* gpu_cc_debug_mux */
 	0x15,		/* measure_only_cnoc_clk */
 	0x128,		/* measure_only_ipa_2x_clk */
@@ -491,7 +473,6 @@ static struct clk_debug_mux gcc_debug_mux = {
 };
 
 static const char *const gpu_cc_debug_mux_parent_names[] = {
-	"gpu_cc_ahb_clk",
 	"gpu_cc_crc_ahb_clk",
 	"gpu_cc_cx_gfx3d_clk",
 	"gpu_cc_cx_gmu_clk",
@@ -504,7 +485,6 @@ static const char *const gpu_cc_debug_mux_parent_names[] = {
 };
 
 static int gpu_cc_debug_mux_sels[] = {
-	0x10,		/* gpu_cc_ahb_clk */
 	0x11,		/* gpu_cc_crc_ahb_clk */
 	0x1A,		/* gpu_cc_cx_gfx3d_clk */
 	0x18,		/* gpu_cc_cx_gmu_clk */
@@ -543,7 +523,6 @@ static const char *const video_cc_debug_mux_parent_names[] = {
 	"video_cc_venus_ahb_clk",
 	"video_cc_venus_ctl_axi_clk",
 	"video_cc_venus_ctl_core_clk",
-	"video_cc_xo_clk",
 };
 
 static int video_cc_debug_mux_sels[] = {
@@ -553,7 +532,6 @@ static int video_cc_debug_mux_sels[] = {
 	0x9,		/* video_cc_venus_ahb_clk */
 	0x5,		/* video_cc_venus_ctl_axi_clk */
 	0x1,		/* video_cc_venus_ctl_core_clk */
-	0xC,		/* video_cc_xo_clk */
 };
 
 static struct clk_debug_mux video_cc_debug_mux = {
