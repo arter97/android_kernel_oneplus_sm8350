@@ -4176,6 +4176,7 @@ static int adreno_hibernation_resume(struct device *dev)
 {
 	struct kgsl_device *device = dev_get_drvdata(dev);
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
+	const struct adreno_a6xx_core *a6xx_core = to_a6xx_core(adreno_dev);
 	const struct adreno_power_ops *ops = ADRENO_POWER_OPS(adreno_dev);
 	int ret = 0;
 
@@ -4185,6 +4186,10 @@ static int adreno_hibernation_resume(struct device *dev)
 	mutex_lock(&device->mutex);
 
 	ret = adreno_secure_pt_restore(adreno_dev);
+	if (ret)
+		goto err;
+
+	ret = adreno_zap_shader_load(adreno_dev, a6xx_core->zap_name);
 	if (ret)
 		goto err;
 
