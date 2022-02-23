@@ -165,7 +165,7 @@ void physical_channel_rx_dispatch(unsigned long data)
 		if (ret == 0xFFFFFFFF) { /* signature mismatched first time */
 			hab_pipe_rxinfo(dev->pipe_ep, dev->rx_buf, &rd, &wr, &idx);
 
-			pr_err("!!!!! HAB signature mismatch expect %X received %X, id_type %X size %X session %X sequence %X i %d\n",
+			pr_err("!!!!! HAB signature mismatch expect %X received %X, id_type %X size %X session %X sequence %X\n",
 				HAB_HEAD_SIGNATURE, header.signature,
 				header.id_type,
 				header.payload_size,
