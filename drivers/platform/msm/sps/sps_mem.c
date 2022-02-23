@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2011, 2013, 2015, 2017-2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 /**
  * Pipe-Memory allocation/free management.
@@ -18,7 +19,7 @@
 #include "spsi.h"
 
 static phys_addr_t iomem_phys;
-static void *iomem_virt;
+static void  __iomem *iomem_virt;
 static u32 iomem_size;
 static u32 iomem_offset;
 static struct gen_pool *pool;
@@ -34,17 +35,17 @@ static u32 total_free;
  */
 void *spsi_get_mem_ptr(phys_addr_t phys_addr)
 {
-	void *virt = NULL;
+	void __iomem *virt = NULL;
 
 	if ((phys_addr >= iomem_phys) &&
 	    (phys_addr < (iomem_phys + iomem_size))) {
-		virt = (u8 *) iomem_virt + (phys_addr - iomem_phys);
+		virt = (void __iomem *)iomem_virt + (phys_addr - iomem_phys);
 	} else {
-		virt = phys_to_virt(phys_addr);
+		virt = (void __iomem *) phys_to_virt(phys_addr);
 		SPS_ERR(sps, "sps:%s.invalid phys addr=0x%pa\n",
 			__func__, &phys_addr);
 	}
-	return virt;
+	return (void *)virt;
 }
 
 /**
@@ -110,7 +111,7 @@ int sps_mem_init(phys_addr_t pipemem_phys_base, u32 pipemem_size)
 				__func__);
 			return SPS_ERROR;
 		}
-		iomem_virt = ioremap(iomem_phys, iomem_size);
+		iomem_virt = (void __iomem *) ioremap(iomem_phys, iomem_size);
 		if (!iomem_virt) {
 			SPS_ERR(sps,
 				"sps:%s:Failed to IO map pipe memory\n",
@@ -151,7 +152,7 @@ int sps_mem_de_init(void)
 	if (iomem_virt != NULL) {
 		gen_pool_destroy(pool);
 		pool = NULL;
-		iounmap(iomem_virt);
+		iounmap((void __iomem *) iomem_virt);
 		iomem_virt = NULL;
 	}
 

@@ -203,6 +203,9 @@ static int dload_set(const char *val, const struct kernel_param *kp)
 
 	set_dload_mode(download_mode);
 
+	if (!download_mode)
+		qcom_scm_disable_sdi();
+
 	return 0;
 }
 
@@ -218,7 +221,7 @@ static void __iomem *map_prop_mem(const char *propname)
 	void __iomem *addr;
 
 	if (!np) {
-		pr_err("Unable to find DT property: %s\n", propname);
+		pr_warn("Unable to find DT property: %s\n", propname);
 		return NULL;
 	}
 

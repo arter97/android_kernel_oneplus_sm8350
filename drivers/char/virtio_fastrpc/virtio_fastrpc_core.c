@@ -26,7 +26,15 @@
 #define FASTRPC_STATIC_HANDLE_MAX	20
 
 struct virt_fastrpc_buf {
-	u64 pv;		/* buffer physical address, 0 for non-ION buffer */
+	u32 type;
+	u64 pv;	/* buffer virtual address */
+	u64 buf_len;	/* buffer length */
+	u64 offset;	/* buffer offset */
+	u64 payload_len;	/* payload length */
+} __packed;
+
+struct virt_fastrpc_sgl {
+	u64 pv;		/* buffer physical address*/
 	u64 len;	/* buffer length */
 };
 
@@ -61,7 +69,7 @@ struct virt_mmap_msg {
 	u64 size;			/* mmap length */
 	u64 vapp;			/* application virtual address */
 	u64 vdsp;			/* dsp address */
-	struct virt_fastrpc_buf sgl[0]; /* sg list */
+	struct virt_fastrpc_sgl sgl[0]; /* sg list */
 } __packed;
 
 struct virt_munmap_msg {
@@ -69,6 +77,12 @@ struct virt_munmap_msg {
 	u64 vdsp;			/* dsp address */
 	u64 size;			/* mmap length */
 } __packed;
+
+static inline uint64_t ptr_to_uint64(void *ptr)
+{
+	uint64_t addr = (uint64_t)((uintptr_t)ptr);
+	return addr;
+}
 
 static struct virt_fastrpc_msg *virt_alloc_msg(struct fastrpc_file *fl, int size)
 {
@@ -492,7 +506,7 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 			if (err)
 				goto bail;
 			len = maps[i]->table->nents *
-				sizeof(struct virt_fastrpc_buf);
+				sizeof(struct virt_fastrpc_sgl);
 		}
 		copylen += len;
 		if (i < inbufs)
@@ -513,7 +527,7 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 				goto bail;
 			}
 			handle_len += maps[i]->table->nents *
-					sizeof(struct virt_fastrpc_buf);
+					sizeof(struct virt_fastrpc_sgl);
 		}
 	}
 	mutex_unlock(&fl->map_mutex);
@@ -538,7 +552,7 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 
 			if (maps[i]) {
 				len = maps[i]->table->nents *
-					sizeof(struct virt_fastrpc_buf);
+					sizeof(struct virt_fastrpc_sgl);
 				ctx->desc[i].type = FASTRPC_BUF_TYPE_ION;
 			} else if (len < PAGE_SIZE) {
 				ctx->desc[i].type = FASTRPC_BUF_TYPE_NORMAL;
@@ -550,7 +564,7 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 				if (err)
 					goto bail;
 				len = ctx->desc[i].buf->sgt.nents *
-					sizeof(struct virt_fastrpc_buf);
+					sizeof(struct virt_fastrpc_sgl);
 			}
 			copylen += len;
 			if (i < inbufs)
@@ -586,28 +600,52 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 	for (i = 0; i < bufs; i++) {
 		size_t len = lpra[i].buf.len;
 		struct sg_table *table;
-		struct virt_fastrpc_buf *sgbuf;
+		struct virt_fastrpc_sgl *sgbuf;
 		struct scatterlist *sgl = NULL;
+		uint64_t buf = ptr_to_uint64(lpra[i].buf.pv);
+		struct vm_area_struct *vma;
 		int index = 0;
+		uint64_t offset = 0;
 
 		if (maps[i]) {
 			table = maps[i]->table;
-			rpra[i].pv = len;
-			rpra[i].len = table->nents *
-				sizeof(struct virt_fastrpc_buf);
-			sgbuf = (struct virt_fastrpc_buf *)payload;
+			rpra[i].type = FASTRPC_BUF_TYPE_ION;
+			rpra[i].pv = buf;
+			rpra[i].buf_len = len;
+			rpra[i].payload_len = table->nents *
+				sizeof(struct virt_fastrpc_sgl);
+			sgbuf = (struct virt_fastrpc_sgl *)payload;
 			for_each_sg(table->sgl, sgl, table->nents, index) {
 				sgbuf[index].pv = sg_dma_address(sgl);
 				sgbuf[index].len = sg_dma_len(sgl);
 			}
-			payload += rpra[i].len;
+			down_read(&current->mm->mmap_sem);
+			VERIFY(err, NULL != (vma = find_vma(current->mm, maps[i]->va)));
+			if (err) {
+				up_read(&current->mm->mmap_sem);
+				goto bail;
+			}
+			offset = buf - vma->vm_start;
+			up_read(&current->mm->mmap_sem);
+			VERIFY(err, offset + len <= (uintptr_t)maps[i]->size);
+			if (err) {
+				dev_err(me->dev,
+						"buffer address is invalid for the fd passed for %d address 0x%llx and size %zu\n",
+						i, (uintptr_t)lpra[i].buf.pv, lpra[i].buf.len);
+				err = -EFAULT;
+				goto bail;
+			}
+			rpra[i].offset = offset;
+			payload += rpra[i].payload_len;
 		} else if (ctx->desc &&
 			   ctx->desc[i].type == FASTRPC_BUF_TYPE_INTERNAL) {
 			table = &ctx->desc[i].buf->sgt;
-			rpra[i].pv = len;
-			rpra[i].len = table->nents *
-				sizeof(struct virt_fastrpc_buf);
-			sgbuf = (struct virt_fastrpc_buf *)payload;
+			rpra[i].type = FASTRPC_BUF_TYPE_INTERNAL;
+			rpra[i].pv = buf;
+			rpra[i].buf_len = len;
+			rpra[i].payload_len = table->nents *
+				sizeof(struct virt_fastrpc_sgl);
+			sgbuf = (struct virt_fastrpc_sgl *)payload;
 			for_each_sg(table->sgl, sgl, table->nents, index) {
 				sgbuf[index].pv = page_to_phys(sg_page(sgl));
 				sgbuf[index].len = sgl->length;
@@ -619,24 +657,28 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 					goto bail;
 
 			}
-			payload += rpra[i].len;
+			rpra[i].offset = 0;
+			payload += rpra[i].payload_len;
 		} else {
 			/* copy non ion buffers */
-			rpra[i].pv = 0;
-			rpra[i].len = len;
+			rpra[i].type = FASTRPC_BUF_TYPE_NORMAL;
+			rpra[i].pv = buf;
+			rpra[i].buf_len = len;
+			rpra[i].payload_len = len;
 			if (i < inbufs && len) {
 				K_COPY_FROM_USER(err, 0, payload,
 						lpra[i].buf.pv, len);
 				if (err)
 					goto bail;
 			}
+			rpra[i].offset = 0;
 			payload += len;
 		}
 	}
 
 	for (i = bufs; i < total; i++) {
 		struct sg_table *table;
-		struct virt_fastrpc_buf *sgbuf;
+		struct virt_fastrpc_sgl *sgbuf;
 		struct scatterlist *sgl = NULL;
 		int index = 0, hlist;
 
@@ -647,15 +689,15 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 			handle[hlist].offset = (uint32_t)(uintptr_t)lpra[i].buf.pv;
 			/* copy dma handle sglist to data area */
 			table = maps[i]->table;
-			rpra[i].pv = lpra[i].buf.len;
-			rpra[i].len = table->nents *
-				sizeof(struct virt_fastrpc_buf);
-			sgbuf = (struct virt_fastrpc_buf *)payload;
+			rpra[i].buf_len = lpra[i].buf.len;
+			rpra[i].payload_len = table->nents *
+				sizeof(struct virt_fastrpc_sgl);
+			sgbuf = (struct virt_fastrpc_sgl *)payload;
 			for_each_sg(table->sgl, sgl, table->nents, index) {
 				sgbuf[index].pv = sg_dma_address(sgl);
 				sgbuf[index].len = sg_dma_len(sgl);
 			}
-			payload += rpra[i].len;
+			payload += rpra[i].payload_len;
 		}
 	}
 bail:
@@ -718,11 +760,11 @@ static int put_args(struct fastrpc_invoke_ctx *ctx)
 				goto bail;
 		} else {
 			K_COPY_TO_USER(err, 0, lpra[i].buf.pv,
-					payload, rpra[i].len);
+					payload, rpra[i].buf_len);
 			if (err)
 				goto bail;
 		}
-		payload += rpra[i].len;
+		payload += rpra[i].payload_len;
 	}
 
 	mutex_lock(&fl->map_mutex);
@@ -961,7 +1003,7 @@ static int virt_fastrpc_mmap(struct fastrpc_file *fl, uint32_t flags,
 	struct fastrpc_apps *me = fl->apps;
 	struct virt_mmap_msg *vmsg, *rsp = NULL;
 	struct virt_fastrpc_msg *msg;
-	struct virt_fastrpc_buf *sgbuf;
+	struct virt_fastrpc_sgl *sgbuf;
 	int err, sgbuf_size, total_size;
 	struct scatterlist *sgl = NULL;
 	int sgl_index = 0;

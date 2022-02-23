@@ -1527,8 +1527,8 @@ static void msm_gpio_setup_dir_connects(struct msm_pinctrl *pctrl)
 
 		gpio_irq = irq_create_mapping(child_domain, dc->gpio);
 		irq_set_parent(gpio_irq, dirconn_irq);
-		irq_set_chip_and_handler_name(gpio_irq, &(pctrl->irq_chip), NULL, NULL);
 		irq_set_chip_data(gpio_irq, &(pctrl->chip));
+		irq_set_chip_and_handler_name(gpio_irq, &(pctrl->irq_chip), NULL, NULL);
 
 		gpio_irq_data = irq_get_irq_data(gpio_irq);
 		if (!gpio_irq_data)

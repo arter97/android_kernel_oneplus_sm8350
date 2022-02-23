@@ -62,6 +62,7 @@ do  {\
 #define SDCC_HC_REG_DDR_CONFIG		0xC
 #define SDCC_HC_REG_DLL_CONFIG2		0x10
 #define SDC4_STATUS			0x14
+#define SDCC_TEST_CTL			0x8
 #define SDCC_USR_CTL			0x18
 #define RGMII_IO_MACRO_CONFIG2		0x1C
 #define EMAC_HW_NONE 0
@@ -140,6 +141,43 @@ struct ethqos_emac_driver_data {
 	unsigned int num_por;
 };
 
+#define RGMII_TCXO_CYCLES_DLY_LINE 64
+#define RGMII_TCXO_PERIOD_NS 52
+#define RGMII_TCXO_CYCLES_CNT 4
+
+#define RGMII_PRG_RCLK_CONST \
+	(RGMII_TCXO_PERIOD_NS * RGMII_TCXO_CYCLES_CNT / 2)
+
+/* register operations for EMAC_SDCC_TEST_CTL */
+#define SDCC_TEST_CTL_RGOFFADDR_OFFSET (0x0000008)
+/* register operations for EMAC_SDCC_USR_CTL */
+#define SDCC_USR_CTL_RGOFFADDR_OFFSET (0x00000018)
+
+struct ethqos_io_macro {
+	u32 config_cdr_en;
+	u32 mclk_gating_en;
+	u32 cdr_fine_phase;
+	u32 skip_calc_traffic;
+	u32 data_divide_clk_sel;
+	u32 prg_rclk_dly;
+	u32 loopback_en;
+	u32 rx_prog_swap;
+	u32 tx_clk_phase_shift_en;
+	u32 dll_clock_dis;
+	u32 mclk_freq_calc;
+	u32 ddr_traffic_init_sel;
+	u32 ddr_traffic_init_sw;
+	u32 ddr_cal_en;
+	u32 tcx0_cycles_dly_line;
+	u32 tcx0_cycles_cnt;
+	u32 test_ctl;
+	u32 usr_ctl;
+	u32 pps_create;
+	u32 pps_remove;
+	u32 l3_master_dev;
+	u32 ipv6_wq;
+};
+
 struct qcom_ethqos {
 	struct platform_device *pdev;
 	void __iomem *rgmii_base;
@@ -208,6 +246,8 @@ struct qcom_ethqos {
 	bool print_kpi;
 
 	struct dentry *debugfs_dir;
+
+	struct ethqos_io_macro io_macro;
 };
 
 struct pps_cfg {

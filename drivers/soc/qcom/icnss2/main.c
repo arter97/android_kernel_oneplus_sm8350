@@ -670,6 +670,16 @@ static int icnss_driver_event_server_arrive(struct icnss_priv *priv,
 		goto fail;
 	}
 
+	/*
+	 * If no_vote_on_wifi_active parameter is set for any regulator then
+	 * it will not be enabled from icnss_hw_power_on().
+	 *
+	 * Enable all regulators whose no_vote_on_wifi_active parameter is set.
+	 * For those regulators which have not set this parameter are enabled
+	 * from icnss_hw_power_on().
+	 */
+	icnss_enable_regulator(priv);
+
 	ret = icnss_hw_power_on(priv);
 	if (ret)
 		goto fail;

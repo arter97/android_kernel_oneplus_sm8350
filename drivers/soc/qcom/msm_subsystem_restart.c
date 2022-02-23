@@ -825,7 +825,7 @@ static int subsys_ds_entry(struct subsys_device *subsys)
 		pr_debug("deep sleep entry failed for %s\n", name);
 		notify_each_subsys_device(&subsys, 1, SUBSYS_DS_ENTRY_FAIL, NULL);
 	} else {
-		subsys->desc->enter_ds(subsys->desc);
+		subsys->desc->shutdown(subsys->desc, false);
 		notify_each_subsys_device(&subsys, 1, SUBSYS_AFTER_DS_ENTRY, NULL);
 	}
 	track->p_state = SUBSYS_IN_DEEPSLEEP;

@@ -2797,16 +2797,6 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 		}
 	}
 
-	/*
-	 * Check whether primary UFS boot device is probed using
-	 * primary_boot_device_probed flag, if its not set defer the probe.
-	 */
-	if ((of_property_read_bool(np, "secondary-storage")) && (!ufs_qcom_hosts[0]
-		|| !ufs_qcom_hosts[0]->hba->primary_boot_device_probed)) {
-		err = -EPROBE_DEFER;
-		goto out_variant_clear;
-	}
-
 	host->device_reset = devm_gpiod_get_optional(dev, "reset",
 						     GPIOD_OUT_HIGH);
 	if (IS_ERR(host->device_reset)) {
@@ -3796,6 +3786,16 @@ static int ufs_qcom_probe(struct platform_device *pdev)
 	    strlen(android_boot_dev) &&
 	    strcmp(android_boot_dev, dev_name(dev)))
 		return -ENODEV;
+
+	/*
+	 * Check whether primary UFS boot device is probed using
+	 * primary_boot_device_probed flag, if its not set defer the probe.
+	 */
+	if ((of_property_read_bool(np, "secondary-storage")) && (!ufs_qcom_hosts[0]
+		|| !ufs_qcom_hosts[0]->hba->primary_boot_device_probed)) {
+		err = -EPROBE_DEFER;
+		return err;
+	}
 
 	/* Perform generic probe */
 	err = ufshcd_pltfrm_init(pdev, &ufs_hba_qcom_vops);

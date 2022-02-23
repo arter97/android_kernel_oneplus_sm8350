@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2020, 2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -802,7 +803,8 @@ static int tsens2xxx_tsens_suspend(struct tsens_device *tmdev)
 		}
 		disable_irq_nosync(irq);
 	}
-	/*Add zeroC voting, once adsp deepsleep exit is working*/
+	/* Vote for zeroC Voltage restrictions before deep sleep entry */
+	of_thermal_handle_trip_temp(tmdev->dev, tmdev->zeroc.tzd, 1);
 	return 0;
 }
 

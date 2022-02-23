@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"QBG_K: %s: " fmt, __func__
@@ -726,6 +727,7 @@ static int qbg_process_fifo(struct qti_qbg *chip, u32 fifo_count)
 		chip->kdata.fifo[i].tbat = tbat;
 		chip->kdata.fifo[i].ibat = ibat_t;
 		chip->kdata.fifo[i].data_tag = fifo[i].data_tag;
+		chip->kdata.fifo[i].qg_sts = fifo[i].qg_sts;
 	}
 
 	if (!chip->enable_fifo_depth_half && ((-1 * ibat) > chip->rated_capacity)) {
@@ -2198,9 +2200,9 @@ static int qbg_register_interrupts(struct qti_qbg *chip)
 
 	/*
 	 * Do not register for data-full to skip processing QBG
-	 * data if a valid battery is not detected
+	 * data if a valid battery or debug battery is not detected
 	 */
-	if (chip->battery_unknown)
+	if (chip->battery_unknown || is_debug_batt_id(chip))
 		return rc;
 
 	rc = devm_request_threaded_irq(chip->dev, chip->irq, NULL,

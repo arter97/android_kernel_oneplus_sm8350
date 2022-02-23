@@ -204,6 +204,7 @@
 #define RAD_FW_3X_SIZE			0x7300
 #define RAD_PARA_3X_SIZE		0x174
 #define RAD_TESTFW_3X_SIZE		(RAD_FW_3X_SIZE + RAD_PARA_3X_SIZE + 4)
+#define RAD_ALLFW_3X_SIZE		0xF170
 
 #define RAD_CMD_UPDATE_BIN		0x80
 #define RAD_CMD_UPDATE_END		0x81
@@ -243,9 +244,39 @@
 #define RAD_SELFTEST
 #define PARA_FW_VERSION_OFFSET	4
 
+#define ENABLE_FW_LOADER	1
+#define FW_NAME      "RM6D030.bin"
+
 #define PINCTRL_STATE_ACTIVE     "pmx_ts_active"
 #define PINCTRL_STATE_SUSPEND    "pmx_ts_suspend"
 #define PINCTRL_STATE_RELEASE    "pmx_ts_release"
+
+/* Power Management Macros Enablement */
+
+#ifndef CONFIG_PM
+#define CONFIG_PM
+#endif
+
+
+#ifndef CONFIG_DRM
+#define CONFIG_DRM
+#endif
+
+#include <linux/device.h>
+#include <linux/fb.h>
+#include <linux/notifier.h>
+#ifdef CONFIG_HAS_EARLYSUSPEND
+#include <linux/earlysuspend.h>
+#elif defined(CONFIG_DRM)
+#include <drm/drm_panel.h>
+#endif
+
+
+enum raydium_fb_state {
+	FB_ON,
+	FB_OFF,
+};
+
 
 struct raydium_ts_data {
 	unsigned int irq;
@@ -272,9 +303,10 @@ struct raydium_ts_data {
 	bool irq_enabled;
 	bool irq_wake;
 
-#if defined(CONFIG_FB)
+#if defined(CONFIG_FB) || defined(CONFIG_DRM)
 	struct notifier_block fb_notif;
 	int blank;
+	enum raydium_fb_state fb_state;
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
 	struct early_suspend early_suspend;
 #endif /*end of CONFIG_FB*/
@@ -319,6 +351,7 @@ struct raydium_ts_platform_data {
 	u32 soft_rst_dly;
 	u32 num_max_touches;
 	u32 fw_id;
+	struct  drm_panel *active_panel;
 };
 
 /* TODO: Using struct+memcpy instead of array+offset*/
@@ -399,7 +432,8 @@ extern int raydium_burn_comp(struct i2c_client *client);
 extern int raydium_burn_fw(struct i2c_client *client);
 
 extern int raydium_load_test_fw(struct i2c_client *client);
-extern int raydium_fw_update_check(unsigned short u16_i2c_data);
+extern int raydium_fw_update_init(unsigned short u16_i2c_data);
+extern int raydium_fw_update_check(unsigned int u32_check_version);
 extern int raydium_i2c_pda_set_address(unsigned int u32_address,
 				       unsigned char u8_mode);
 extern void raydium_mem_table_init(unsigned short u16_id);

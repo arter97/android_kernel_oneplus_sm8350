@@ -15,18 +15,18 @@
 #include "power.h"
 
 static struct icnss_vreg_cfg icnss_wcn6750_vreg_list[] = {
-	{"vdd-cx-mx", 824000, 952000, 0, 0, 0, false, true},
-	{"vdd-1.8-xo", 1872000, 1872000, 0, 0, 0, false, true},
-	{"vdd-1.3-rfa", 1256000, 1352000, 0, 0, 0, false, true},
+	{"vdd-cx-mx", 824000, 952000, 0, 0, 0, false, true, 0},
+	{"vdd-1.8-xo", 1872000, 1872000, 0, 0, 0, false, true, 0},
+	{"vdd-1.3-rfa", 1256000, 1352000, 0, 0, 0, false, true, 0},
 };
 
 static struct icnss_vreg_cfg icnss_adrestea_vreg_list[] = {
-	{"vdd-cx-mx", 752000, 752000, 0, 0, 0, false, true},
-	{"vdd-1.8-xo", 1800000, 1800000, 0, 0, 0, false, true},
-	{"vdd-1.3-rfa", 1304000, 1304000, 0, 0, 0, false, true},
-	{"vdd-3.3-ch1", 3312000, 3312000, 0, 0, 0, false, true},
-	{"vdd-3.3-ch0", 3312000, 3312000, 0, 0, 0, false, true},
-	{"vdd-smps", 984000, 984000, 0, 0, 0, false, true},
+	{"vdd-cx-mx", 752000, 752000, 0, 0, 0, false, true, 0},
+	{"vdd-1.8-xo", 1800000, 1800000, 0, 0, 0, false, true, 0},
+	{"vdd-1.3-rfa", 1304000, 1304000, 0, 0, 0, false, true, 0},
+	{"vdd-3.3-ch1", 3312000, 3312000, 0, 0, 0, false, true, 0},
+	{"vdd-3.3-ch0", 3312000, 3312000, 0, 0, 0, false, true, 0},
+	{"vdd-smps", 984000, 984000, 0, 0, 0, false, true, 0},
 };
 
 static struct icnss_clk_cfg icnss_clk_list[] = {
@@ -130,6 +130,9 @@ static int icnss_get_vreg_single(struct icnss_priv *priv,
 			else
 				vreg->cfg.need_unvote = 0;
 			break;
+		case 5:
+			vreg->cfg.no_vote_on_wifi_active = be32_to_cpup(&prop[5]);
+			break;
 		default:
 			icnss_pr_dbg("Property %s, ignoring value at %d\n",
 				     prop_name, i);
@@ -138,10 +141,11 @@ static int icnss_get_vreg_single(struct icnss_priv *priv,
 	}
 
 done:
-	icnss_pr_dbg("Got regulator: %s, min_uv: %u, max_uv: %u, load_ua: %u, delay_us: %u, need_unvote: %u\n",
+	icnss_pr_dbg("Got regulator: %s, min_uv: %u, max_uv: %u, load_ua: %u, delay_us: %u, need_unvote: %u, no_vote_on_wifi_active: %u\n",
 		     vreg->cfg.name, vreg->cfg.min_uv,
 		     vreg->cfg.max_uv, vreg->cfg.load_ua,
-		     vreg->cfg.delay_us, vreg->cfg.need_unvote);
+		     vreg->cfg.delay_us, vreg->cfg.need_unvote,
+		     vreg->cfg.no_vote_on_wifi_active);
 
 	return 0;
 
@@ -349,6 +353,15 @@ static int icnss_vreg_on(struct icnss_priv *priv)
 				vreg->cfg.is_supported = false;
 				continue;
 			}
+		}
+
+		/*
+		 * If no_vote_on_wifi_active is set then skip voting for that
+		 * particular regulator
+		 */
+		if (vreg->cfg.no_vote_on_wifi_active) {
+			icnss_pr_err("skipping %s\n", vreg->cfg.name);
+			continue;
 		}
 
 		ret = icnss_vreg_on_single(vreg);
@@ -592,6 +605,24 @@ static int icnss_clk_off(struct list_head *clk_list)
 	}
 
 	return 0;
+}
+
+void icnss_enable_regulator(struct icnss_priv *priv)
+{
+	struct list_head *vreg_list = &priv->vreg_list;
+	struct icnss_vreg_info *vreg;
+
+	/*
+	 * Parse through all regulators and enable it if no_vote_on_wifi_active
+	 * parameter is set.
+	 */
+	list_for_each_entry(vreg, vreg_list, list) {
+		if (IS_ERR_OR_NULL(vreg->reg) || !vreg->cfg.is_supported ||
+		    !vreg->cfg.no_vote_on_wifi_active)
+			continue;
+
+		icnss_vreg_on_single(vreg);
+	}
 }
 
 int icnss_hw_power_on(struct icnss_priv *priv)
