@@ -17,6 +17,7 @@
 
 #include "himax_platform.h"
 #include "himax_common.h"
+#include "himax_ic_core.h"
 
 int i2c_error_count;
 int irq_enable_count;
@@ -173,7 +174,7 @@ int himax_bus_read(uint8_t command, uint8_t *data, uint32_t length, uint8_t toRe
 	int retry;
 	bool reallocate = false;
 	struct himax_ts_data *ts = private_ts;
-	uint8_t *buf = ts->report_i2c_data;
+	uint8_t *buf = ts->i2c_data;
 	struct i2c_client *client = ts->client;
 	struct i2c_msg msg[] = {
 		{
@@ -190,7 +191,7 @@ int himax_bus_read(uint8_t command, uint8_t *data, uint32_t length, uint8_t toRe
 		}
 	};
 
-	if (length > HX_REPORT_SZ) {
+	if (length > FLASH_RW_MAX_LEN) {
 		W("%s: data length too large %d!\n", __func__, length);
 		buf = kmalloc(length + HX_CMD_BYTE, GFP_KERNEL);
 		if (!buf) {
@@ -234,7 +235,7 @@ int himax_bus_write(uint8_t command, uint8_t *data, uint32_t length, uint8_t toR
 	int retry;
 	bool reallocate = false;
 	struct himax_ts_data *ts = private_ts;
-	uint8_t *buf = ts->report_i2c_data;
+	uint8_t *buf = ts->i2c_data;
 	struct i2c_client *client = ts->client;
 	struct i2c_msg msg[] = {
 		{
@@ -245,7 +246,7 @@ int himax_bus_write(uint8_t command, uint8_t *data, uint32_t length, uint8_t toR
 		}
 	};
 
-	if (length > HX_REPORT_SZ) {
+	if (length > FLASH_RW_MAX_LEN) {
 		W("%s: data length too large %d!\n", __func__, length);
 		buf = kmalloc(length + HX_CMD_BYTE, GFP_KERNEL);
 		if (!buf) {
@@ -254,6 +255,7 @@ int himax_bus_write(uint8_t command, uint8_t *data, uint32_t length, uint8_t toR
 			return -EIO;
 		}
 		reallocate = true;
+		msg[0].buf = buf;
 	}
 
 	mutex_lock(&ts->rw_lock);
@@ -292,7 +294,7 @@ int himax_bus_master_write(uint8_t *data, uint32_t length, uint8_t toRetry)
 	int retry;
 	bool reallocate = false;
 	struct himax_ts_data *ts = private_ts;
-	uint8_t *buf = ts->report_i2c_data;
+	uint8_t *buf = ts->i2c_data;
 	struct i2c_client *client = private_ts->client;
 	struct i2c_msg msg[] = {
 		{
@@ -303,7 +305,7 @@ int himax_bus_master_write(uint8_t *data, uint32_t length, uint8_t toRetry)
 		}
 	};
 
-	if (length > HX_REPORT_SZ) {
+	if (length > FLASH_RW_MAX_LEN) {
 		W("%s: data length too large %d!\n", __func__, length);
 		buf = kmalloc(length, GFP_KERNEL);
 		if (!buf) {
@@ -311,6 +313,7 @@ int himax_bus_master_write(uint8_t *data, uint32_t length, uint8_t toRetry)
 			return -EIO;
 		}
 		reallocate = true;
+		msg[0].buf = buf;
 	}
 
 	mutex_lock(&ts->rw_lock);
@@ -802,11 +805,11 @@ int himax_chip_common_probe(struct i2c_client *client, const struct i2c_device_i
 	mutex_init(&ts->rw_lock);
 	private_ts = ts;
 
-	ts->report_i2c_data = kmalloc(HX_REPORT_SZ + HX_CMD_BYTE, GFP_KERNEL);
-	if (ts->report_i2c_data == NULL) {
-		E("%s: allocate report_i2c_data failed\n", __func__);
+	ts->i2c_data = kmalloc(FLASH_RW_MAX_LEN + HX_CMD_BYTE, GFP_KERNEL);
+	if (ts->i2c_data == NULL) {
+		E("%s: allocate i2c_data failed\n", __func__);
 		ret = -ENOMEM;
-		goto err_report_i2c_data;
+		goto err_alloc_i2c_data;
 	}
 
 	/*
@@ -823,8 +826,8 @@ int himax_chip_common_probe(struct i2c_client *client, const struct i2c_device_i
 	return ret;
 
 err_fb_notify_reg_failed:
-	kfree(ts->report_i2c_data);
-err_report_i2c_data:
+	kfree(ts->i2c_data);
+err_alloc_i2c_data:
 	kfree(ts);
 err_alloc_data_failed:
 err_check_functionality_failed:
