@@ -1090,13 +1090,6 @@ bool out_of_memory(struct oom_control *oc)
 
 	if (oom_killer_disabled || IS_ENABLED(CONFIG_ANDROID_SIMPLE_LMK))
 		return false;
-
-	if (try_online_one_block(numa_node_id())) {
-		/* Got some memory back */
-		WARN(1, "OOM killer had to online a memory block\n");
-		return true;
-	}
-
 #ifdef CONFIG_PRIORITIZE_OOM_TASKS
 	oc->min_kill_adj = OOM_SCORE_ADJ_MIN;
 #endif
@@ -1168,6 +1161,11 @@ bool out_of_memory(struct oom_control *oc)
 #endif
 
 	if (!oc->chosen) {
+		if (try_online_one_block(numa_node_id())) {
+			/* Got some memory back */
+			WARN(1, "OOM killer had to online a memory block\n");
+			return true;
+		}
 		check_panic_on_oom(oc);
 		select_bad_process(oc);
 	}
