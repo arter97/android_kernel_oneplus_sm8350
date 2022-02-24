@@ -1362,14 +1362,12 @@ config QCOM_RTIC
 	  will trigger RTIC kernel MP.s (measurement parameters) generation
 	  during the kernel build.
 
-config RENAME_BLOCK_DEVICE
-	tristate "Rename block device node in /dev"
+config RENAME_DEVICES
+	tristate "Rename device names"
 	default n
 	help
-	  Say 'Y' to to rename the block device node assigned by generic
-	  driver to a name that is needed. This is used for rename block
-	  device names created by default as sda1, sda2 etc. to the
-	  names system is needed.this is applicable for block devices only.
+	  This driver provides the support to rename the devices.
+	  Say 'Y' to rename the device names to the names system is needed.
 
 config QCOM_ADSP_MANUAL_VOTE
 	bool "Send commands to ADSP to unvote/vote during Suspend/resume"
