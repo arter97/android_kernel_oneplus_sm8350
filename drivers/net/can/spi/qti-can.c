@@ -17,6 +17,8 @@
 #include <linux/pm.h>
 #include <asm/arch_timer.h>
 #include <asm/div64.h>
+#include <linux/suspend.h>
+#include <linux/pm_runtime.h>
 
 #define DEBUG_QTI_CAN	0
 #if DEBUG_QTI_CAN == 1
@@ -1624,6 +1626,30 @@ static const struct of_device_id qti_can_match_table[] = {
 	{ }
 };
 
+static struct device *temp_dev;
+static int qti_can_prepare(struct device *dev);
+static int qti_can_resume(struct device *dev);
+
+static int suspend_resume_notifier(struct notifier_block *nb,
+				   unsigned long event, void *unused)
+{
+	switch (event) {
+	case PM_SUSPEND_PREPARE:
+		qti_can_prepare(temp_dev);
+		break;
+	case PM_POST_SUSPEND:
+		qti_can_resume(temp_dev);
+		break;
+	}
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block qti_can_pm_nb = {
+	.notifier_call = suspend_resume_notifier,
+	.priority = INT_MAX,
+};
+
 static int qti_can_probe(struct spi_device *spi)
 {
 	int err, retry = 0, query_err = -1, i;
@@ -1752,6 +1778,12 @@ static int qti_can_probe(struct spi_device *spi)
 	}
 	dev_info(dev, "Request irq %d ret %d\n", spi->irq, err);
 
+	temp_dev = &priv_data->spidev->dev;
+	err = register_pm_notifier(&qti_can_pm_nb);
+	if (err) {
+		dev_info(&priv_data->spidev->dev, "register_pm_notifier_error\n");
+	}
+
 	while ((query_err != 0) && (retry < QTI_CAN_FW_QUERY_RETRY_COUNT)) {
 		LOGDI("Trying to query fw version %d", retry);
 		query_err = qti_can_query_firmware_version(priv_data);
@@ -1797,8 +1829,7 @@ static int qti_can_remove(struct spi_device *spi)
 	return 0;
 }
 
-#ifdef CONFIG_PM
-static int qti_can_suspend(struct device *dev)
+static int qti_can_prepare(struct device *dev)
 {
 	struct spi_device *spi = to_spi_device(dev);
 	struct qti_can *priv_data = NULL;
@@ -1844,20 +1875,11 @@ static int qti_can_resume(struct device *dev)
 	return ret;
 }
 
-static const struct dev_pm_ops qti_can_dev_pm_ops = {
-	.suspend	= qti_can_suspend,
-	.resume		= qti_can_resume,
-};
-#endif
-
 static struct spi_driver qti_can_driver = {
 	.driver = {
 		.name = "qti-can",
 		.of_match_table = qti_can_match_table,
 		.owner = THIS_MODULE,
-#ifdef CONFIG_PM
-		.pm = &qti_can_dev_pm_ops,
-#endif
 		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 	},
 	.probe = qti_can_probe,
