@@ -1415,8 +1415,7 @@ int group_send_sig_info(int sig, struct kernel_siginfo *info,
 	if (!ret && sig) {
 		ret = do_send_sig_info(sig, info, p, type);
 		if (sig == SIGKILL)
-			if (!strcmp(current->comm, ULMK_MAGIC))
-				add_to_oom_reaper(p);
+			add_to_oom_reaper(p);
 	}
 
 	return ret;
