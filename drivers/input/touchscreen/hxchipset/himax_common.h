@@ -143,6 +143,7 @@
 #define HX_FINGER_ON 1
 #define HX_FINGER_LEAVE	2
 
+#define HX_REPORT_SZ 128
 
 enum HX_TS_PATH {
 	HX_REPORT_COORD = 1,
@@ -364,6 +365,7 @@ struct himax_ts_data {
 	struct work_struct ito_test_work;
 #endif
 
+	uint8_t *report_i2c_data;
 };
 
 struct himax_debug {
