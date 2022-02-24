@@ -5,6 +5,8 @@
   add_uevent_var
   add_wait_queue
   adjust_managed_page_count
+  aes_encrypt
+  aes_expandkey
   alarm_cancel
   alarm_expires_remaining
   alarm_init
@@ -1537,6 +1539,7 @@
   __nla_parse
   nla_put
   nla_put_64bit
+  nla_strlcpy
   __nlmsg_put
   no_llseek
   nonseekable_open
