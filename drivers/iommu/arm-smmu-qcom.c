@@ -483,12 +483,12 @@ static ssize_t arm_smmu_debug_testbus_read(struct file *file,
 		if (ops == TESTBUS_SELECT) {
 			scnprintf(buf, buf_len, "TCU clk testbus sel: 0x%0x\n",
 				  arm_smmu_debug_tcu_testbus_select(phys_addr,
-					tcu_base, CLK_TESTBUS, READ, 0));
+					tcu_base, CLK_TESTBUS, READ, 0, smmu->tcu_testbus_version));
 			scnprintf(buf + strlen(buf), buf_len - strlen(buf),
 				  "TCU testbus sel : 0x%0x\n",
 				  arm_smmu_debug_tcu_testbus_select(phys_addr,
 					 tcu_base, PTW_AND_CACHE_TESTBUS,
-					 READ, 0));
+					 READ, 0, smmu->tcu_testbus_version));
 		} else {
 			scnprintf(buf, buf_len, "0x%0x\n",
 				  arm_smmu_debug_tcu_testbus_output(phys_addr));
@@ -551,10 +551,11 @@ static ssize_t arm_smmu_debug_tcu_testbus_sel_write(struct file *file,
 
 	if (sel == 1)
 		arm_smmu_debug_tcu_testbus_select(phys_addr,
-				tcu_base, CLK_TESTBUS, WRITE, val);
+				tcu_base, CLK_TESTBUS, WRITE, val, smmu->tcu_testbus_version);
 	else if (sel == 2)
 		arm_smmu_debug_tcu_testbus_select(phys_addr,
-				tcu_base, PTW_AND_CACHE_TESTBUS, WRITE, val);
+				tcu_base, PTW_AND_CACHE_TESTBUS, WRITE, val,
+				smmu->tcu_testbus_version);
 
 	arm_smmu_power_off(smmu, smmu->pwr);
 

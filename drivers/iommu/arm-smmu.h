@@ -386,6 +386,7 @@ struct arm_smmu_device {
 	unsigned long			pgsize_bitmap;
 
 	u32				num_global_irqs;
+	u32				tcu_testbus_version;
 	u32				num_context_irqs;
 	unsigned int			*irqs;
 	struct clk_bulk_data		*clks;
