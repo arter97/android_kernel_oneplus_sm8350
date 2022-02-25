@@ -75,7 +75,7 @@
 /*#define HX_USB_DETECT_GLOBAL*/
 /*#define HX_USB_DETECT_CALLBACK*/
 /*#define HX_PROTOCOL_A*/ /* for MTK special platform.If turning on,it will report to system by using specific format. */
-/*#define HX_RESUME_HW_RESET*/
+#define HX_RESUME_HW_RESET
 #define HX_PROTOCOL_B_3PA
 /*#define HX_FIX_TOUCH_INFO*/ /* if open, you need to change the touch info in the fix_touch_info*/
 /*#define HX_ZERO_FLASH*/
@@ -143,6 +143,7 @@
 #define HX_FINGER_ON 1
 #define HX_FINGER_LEAVE	2
 
+#define HX_REPORT_SZ 128
 
 enum HX_TS_PATH {
 	HX_REPORT_COORD = 1,
@@ -364,6 +365,7 @@ struct himax_ts_data {
 	struct work_struct ito_test_work;
 #endif
 
+	uint8_t *report_i2c_data;
 };
 
 struct himax_debug {
