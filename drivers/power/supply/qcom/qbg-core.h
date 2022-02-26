@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __QBG_CORE_H__
@@ -83,6 +84,7 @@ enum QBG_ACCUM_INTERVAL_TYPE {
  * @indio_dev:		Pointer to QBG IIO device
  * @iio_chan:		Pointer to QBG IIO channels
  * @sdam:		Pointer to multiple QBG SDAMs
+ * @skip_esr_state:	Pointer to nvmem_cell
  * @fifo:		QBG FIFO data
  * @essential_params:	QBG essential params
  * @status_change_work:	Power supply status change work
@@ -163,6 +165,7 @@ struct qti_qbg {
 	struct nvmem_device	**sdam;
 	struct nvmem_cell       *debug_mask_nvmem_low;
 	struct nvmem_cell       *debug_mask_nvmem_high;
+	struct nvmem_cell	*skip_esr_state;
 	struct fifo_data	fifo[MAX_FIFO_COUNT];
 	struct qbg_essential_params	essential_params;
 	struct work_struct	status_change_work;
