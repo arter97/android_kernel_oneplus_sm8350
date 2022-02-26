@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/*
+/* Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
  * Himax Android Driver Sample Code for common functions
  *
  * Copyright (C) 2018 Himax Corporation.
@@ -48,28 +49,22 @@ struct himax_target_report_data *g_target_report_data;
 
 static int HX_TOUCH_INFO_POINT_CNT;
 
-unsigned long FW_VER_MAJ_FLASH_ADDR;
-unsigned long FW_VER_MIN_FLASH_ADDR;
-unsigned long CFG_VER_MAJ_FLASH_ADDR;
-unsigned long CFG_VER_MIN_FLASH_ADDR;
-unsigned long CID_VER_MAJ_FLASH_ADDR;
-unsigned long CID_VER_MIN_FLASH_ADDR;
+/* Himax: Set FW and CFG Flash Address */
+#define FW_VER_MAJ_FLASH_ADDR  0x00C005
+#define FW_VER_MIN_FLASH_ADDR  0x00C006
+#define CFG_VER_MAJ_FLASH_ADDR 0x00C100
+#define CFG_VER_MIN_FLASH_ADDR 0x00C101
+#define CID_VER_MAJ_FLASH_ADDR 0x00C002
+#define CID_VER_MIN_FLASH_ADDR 0x00C003
 
-unsigned long FW_VER_MAJ_FLASH_LENG;
-unsigned long FW_VER_MIN_FLASH_LENG;
-unsigned long CFG_VER_MAJ_FLASH_LENG;
-unsigned long CFG_VER_MIN_FLASH_LENG;
-unsigned long CID_VER_MAJ_FLASH_LENG;
-unsigned long CID_VER_MIN_FLASH_LENG;
+#define FW_VER_MAJ_FLASH_LENG  1
+#define FW_VER_MIN_FLASH_LENG  1
+#define CFG_VER_MAJ_FLASH_LENG 1
+#define CFG_VER_MIN_FLASH_LENG 1
+#define CID_VER_MAJ_FLASH_LENG 1
+#define CID_VER_MIN_FLASH_LENG 1
 
 unsigned long FW_CFG_VER_FLASH_ADDR;
-
-#ifdef HX_AUTO_UPDATE_FW
-	int g_i_FW_VER = 0;
-	int g_i_CFG_VER = 0;
-	int g_i_CID_MAJ = 0; /* GUEST ID */
-	int g_i_CID_MIN = 0; /* VER for GUEST */
-#endif
 
 unsigned char IC_CHECKSUM;
 
@@ -97,6 +92,7 @@ static int probe_fail_flag;
 	bool USB_detect_flag;
 #endif
 
+static struct drm_panel *active_panel;
 
 #if defined(CONFIG_DRM)
 int drm_notifier_callback(struct notifier_block *self, unsigned long event, void *data);
@@ -445,9 +441,9 @@ int himax_input_register(struct himax_ts_data *ts)
 #else
 	set_bit(MT_TOOL_FINGER, ts->input_dev->keybit);
 #if defined(HX_PROTOCOL_B_3PA)
-	input_mt_init_slots(ts->input_dev, ts->nFinger_support, INPUT_MT_DIRECT);
+	input_mt_init_slots(ts->input_dev, HX_TOUCH_ID_MAX, INPUT_MT_DIRECT);
 #else
-	input_mt_init_slots(ts->input_dev, ts->nFinger_support);
+	input_mt_init_slots(ts->input_dev, HX_TOUCH_ID_MAX);
 #endif
 #endif
 	D("input_set_abs_params: mix_x %d, max_x %d, min_y %d, max_y %d\n",
@@ -514,25 +510,32 @@ static int i_update_FW(void)
 	int upgrade_times = 0;
 	unsigned char *ImageBuffer = NULL;
 	int fullFileLength = 0;
-	uint8_t ret = 0, result = 0;
+	int ret = 0, result = 0;
+	uint32_t i_FW_VER = 0, i_CFG_VER = 0;
+
+	D("file name = %s\n", i_CTPM_firmware_name);
+	if (request_firmware(&i_CTPM_FW, i_CTPM_firmware_name,
+		private_ts->dev)) {
+		I("%s: no firmware file\n", __func__);
+		return OPEN_FILE_FAIL;
+	}
+
+	fullFileLength = i_CTPM_FW->size;
+	ImageBuffer = (unsigned char *)i_CTPM_FW->data;
+
+	i_FW_VER = (ImageBuffer[FW_VER_MAJ_FLASH_ADDR] << 8)
+			| ImageBuffer[FW_VER_MIN_FLASH_ADDR];
+	i_CFG_VER = (ImageBuffer[CFG_VER_MAJ_FLASH_ADDR] << 8)
+			| ImageBuffer[CFG_VER_MIN_FLASH_ADDR];
+
+	if ((ic_data->vendor_fw_ver >= i_FW_VER)
+		&& (ic_data->vendor_config_ver >= i_CFG_VER)) {
+		D("FW_VER 0x%x, CFG_VER 0x%x\n", i_FW_VER, i_CFG_VER);
+		release_firmware(i_CTPM_FW);
+		return 0;
+	}
 
 	himax_int_enable(0);
-
-	I("file name = %s\n", i_CTPM_firmware_name);
-	ret = request_firmware(&i_CTPM_FW, i_CTPM_firmware_name, private_ts->dev);
-	if (ret < 0) {
-		E("%s,fail in line%d error code=%d\n", __func__, __LINE__, ret);
-		return OPEN_FILE_FAIL;
-	}
-
-	if (i_CTPM_FW != NULL) {
-		fullFileLength = i_CTPM_FW->size;
-		ImageBuffer = (unsigned char *)i_CTPM_FW->data;
-	} else {
-		I("%s: i_CTPM_FW = NULL\n", __func__);
-		return OPEN_FILE_FAIL;
-	}
-
 update_retry:
 
 	if (fullFileLength == FW_SIZE_32k)
@@ -560,7 +563,7 @@ update_retry:
 		g_core_fp.fp_read_FW_ver();
 		g_core_fp.fp_touch_information();
 		result = 1;/* upgrade success */
-		I("%s: TP upgrade OK\n", __func__);
+		D("%s: TP upgrade OK\n", __func__);
 	}
 
 #ifdef HX_RST_PIN_FUNC
@@ -1888,15 +1891,14 @@ static const struct t_cable_status_notifier himax_cable_status_handler = {
 #endif
 
 #ifdef HX_AUTO_UPDATE_FW
-static void himax_update_register(struct work_struct *work)
+void himax_update_register(struct work_struct *work)
 {
-	I(" %s in", __func__);
+	D(" %s in", __func__);
 
 	if (i_update_FW() <= 0)
-		I("FW =NOT UPDATE=\n");
+		D("FW =NOT UPDATE=\n");
 	else
-		I("Have new FW =UPDATE=\n");
-
+		D("Have new FW =UPDATE=\n");
 }
 #endif
 
@@ -1904,12 +1906,16 @@ static void himax_update_register(struct work_struct *work)
 int himax_fb_register(struct himax_ts_data *ts)
 {
 	int ret = 0;
+	struct drm_panel *active_panel = himax_get_panel();
 
 	D(" %s in\n", __func__);
 	ts->fb_notif.notifier_call = drm_notifier_callback;
-	ret = msm_drm_register_client(&ts->fb_notif);
-	if (ret)
-		E(" Unable to register fb_notifier: %d\n", ret);
+	if (active_panel) {
+		ret = drm_panel_notifier_register(active_panel,
+				&ts->fb_notif);
+		if (ret)
+			E(" Unable to register fb_notifier: %d\n", ret);
+	}
 
 	return ret;
 }
@@ -1943,16 +1949,9 @@ int himax_chip_common_init(void)
 #if defined(HX_AUTO_UPDATE_FW) || defined(HX_ZERO_FLASH)
 	bool auto_update_flag = false;
 #endif
-	int ret = 0, err = -1;
+	int err = -1;
 	struct himax_ts_data *ts = private_ts;
-	struct himax_i2c_platform_data *pdata;
-
-	D("PDATA START\n");
-	pdata = kzalloc(sizeof(*pdata), GFP_KERNEL);
-	if (pdata == NULL) { /* Allocate Platform data space */
-		err = -ENOMEM;
-		goto err_dt_platform_data_fail;
-	}
+	struct himax_i2c_platform_data *pdata = ts->pdata;
 
 	D("ic_data START\n");
 	ic_data = kzalloc(sizeof(*ic_data), GFP_KERNEL);
@@ -1966,12 +1965,6 @@ int himax_chip_common_init(void)
 	if (hx_touch_data == NULL) {
 		err = -ENOMEM;
 		goto err_alloc_touch_data_failed;
-	}
-
-	if (himax_parse_dt(ts, pdata) < 0) {
-		E(" pdata is NULL for DT\n");
-		err = -ECANCELED;
-		goto err_alloc_dt_pdata_failed;
 	}
 
 #ifdef HX_RST_PIN_FUNC
@@ -2006,32 +1999,11 @@ int himax_chip_common_init(void)
 		goto error_ic_detect_failed;
 	}
 
-	if (pdata->virtual_key)
-		ts->button = pdata->virtual_key;
-
-#ifdef HX_AUTO_UPDATE_FW
-	auto_update_flag = (!g_core_fp.fp_calculateChecksum(false));
-	auto_update_flag |= g_core_fp.fp_flash_lastdata_check();
-	if (auto_update_flag)
-		goto FW_force_upgrade;
-#endif
 	g_core_fp.fp_read_FW_ver();
 
 #ifdef HX_AUTO_UPDATE_FW
-FW_force_upgrade:
-	auto_update_flag |= ((ic_data->vendor_fw_ver < g_i_FW_VER) || (ic_data->vendor_config_ver < g_i_CFG_VER));
-	/* Not sure to do */
-	/* auto_update_flag |= ((ic_data->vendor_cid_maj_ver != g_i_CID_MAJ) || (ic_data->vendor_cid_min_ver < g_i_CID_MIN)); */
-	if (auto_update_flag) {
-		ts->himax_update_wq = create_singlethread_workqueue("HMX_update_request");
-		if (!ts->himax_update_wq) {
-			E(" allocate syn_update_wq failed\n");
-			err = -ENOMEM;
-			goto err_update_wq_failed;
-		}
-		INIT_DELAYED_WORK(&ts->work_update, himax_update_register);
-		queue_delayed_work(ts->himax_update_wq, &ts->work_update, msecs_to_jiffies(2000));
-	}
+	queue_delayed_work(ts->himax_update_wq, &ts->work_update,
+		msecs_to_jiffies(2000));
 #endif
 #ifdef HX_ZERO_FLASH
 	auto_update_flag = true;
@@ -2053,41 +2025,13 @@ FW_force_upgrade:
 #ifdef CONFIG_OF
 	ts->power = pdata->power;
 #endif
-	ts->pdata = pdata;
+
 	ts->x_channel = ic_data->HX_RX_NUM;
 	ts->y_channel = ic_data->HX_TX_NUM;
 	ts->nFinger_support = ic_data->HX_MAX_PT;
 	/* calculate the i2c data size */
 	calcDataSize(ts->nFinger_support);
 	D("%s: calcDataSize complete\n", __func__);
-#ifdef CONFIG_OF
-	ts->pdata->abs_pressure_min        = 0;
-	ts->pdata->abs_pressure_max        = 200;
-	ts->pdata->abs_width_min           = 0;
-	ts->pdata->abs_width_max           = 200;
-	pdata->cable_config[0]             = 0xF0;
-	pdata->cable_config[1]             = 0x00;
-#endif
-	ts->suspended                      = false;
-#if defined(HX_USB_DETECT_CALLBACK) || defined(HX_USB_DETECT_GLOBAL)
-	ts->usb_connected = 0x00;
-	ts->cable_config = pdata->cable_config;
-#endif
-#ifdef	HX_PROTOCOL_A
-	ts->protocol_type = PROTOCOL_TYPE_A;
-#else
-	ts->protocol_type = PROTOCOL_TYPE_B;
-#endif
-	D("%s: Use Protocol Type %c\n", __func__,
-	  ts->protocol_type == PROTOCOL_TYPE_A ? 'A' : 'B');
-
-	ret = himax_input_register(ts);
-	if (ret) {
-		E("%s: Unable to register %s input device\n",
-		  __func__, ts->input_dev->name);
-		err = ret;
-		goto err_input_register_device_failed;
-	}
 
 #ifdef HX_SMART_WAKEUP
 	ts->SMWP_enable = 0;
@@ -2130,21 +2074,15 @@ FW_force_upgrade:
 	if (err)
 		goto err_register_interrupt_failed;
 
-
 #ifdef CONFIG_TOUCHSCREEN_HIMAX_DEBUG
 	if (himax_debug_init())
 		E(" %s: debug initial failed!\n", __func__);
 #endif
 
-#if defined(HX_AUTO_UPDATE_FW) || defined(HX_ZERO_FLASH)
-
-	if (auto_update_flag)
-		himax_int_enable(0);
-
-#endif
 	return 0;
+
 err_register_interrupt_failed:
-remove_proc_entry(HIMAX_PROC_TOUCH_FOLDER, NULL);
+	remove_proc_entry(HIMAX_PROC_TOUCH_FOLDER, NULL);
 err_creat_proc_file_failed:
 err_report_data_init_failed:
 #if defined(CONFIG_TOUCHSCREEN_HIMAX_ITO_TEST)
@@ -2154,15 +2092,12 @@ err_ito_test_wq_failed:
 #ifdef HX_SMART_WAKEUP
 	wakeup_source_trash(&ts->ts_SMWP_wake_src);
 #endif
-err_input_register_device_failed:
-	input_free_device(ts->input_dev);
 err_detect_failed:
 #ifdef HX_AUTO_UPDATE_FW
 	if (auto_update_flag) {
 		cancel_delayed_work_sync(&ts->work_update);
 		destroy_workqueue(ts->himax_update_wq);
 	}
-err_update_wq_failed:
 #endif
 
 error_ic_detect_failed:
@@ -2170,23 +2105,18 @@ error_ic_detect_failed:
 		gpio_free(pdata->gpio_irq);
 
 #ifdef HX_RST_PIN_FUNC
-
 	if (gpio_is_valid(pdata->gpio_reset))
 		gpio_free(pdata->gpio_reset);
-
 #endif
 
 #ifndef CONFIG_OF
 err_power_failed:
 #endif
 
-err_alloc_dt_pdata_failed:
 	kfree(hx_touch_data);
 err_alloc_touch_data_failed:
 	kfree(ic_data);
 err_dt_ic_data_fail:
-	kfree(pdata);
-err_dt_platform_data_fail:
 	probe_fail_flag = 1;
 	return err;
 }
@@ -2215,8 +2145,11 @@ void himax_chip_common_deinit(void)
 #endif
 
 #ifdef CONFIG_DRM
-	if (msm_drm_unregister_client(&ts->fb_notif))
-		E("Error occurred while unregistering fb_notifier.\n");
+	if (active_panel) {
+		if (drm_panel_notifier_unregister(active_panel,
+				&ts->fb_notif))
+			E("Error occurred while unregistering fb_notifier.\n");
+	}
 #elif defined(CONFIG_FB)
 	if (fb_unregister_client(&ts->fb_notif))
 		E("Error occurred while unregistering fb_notifier.\n");
@@ -2253,6 +2186,10 @@ int himax_chip_common_suspend(struct himax_ts_data *ts)
 		I("%s: Already suspended. Skipped.\n", __func__);
 		return 0;
 	}
+
+#ifdef HX_ESD_RECOVERY
+	HX_ESD_RESET_ACTIVATE = 0;
+#endif
 
 	ts->suspended = true;
 	D("%s: enter\n", __func__);

@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-/*
+/* Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
  * Himax Android Driver Sample Code for common functions
  *
  * Copyright (C) 2018 Himax Corporation.
@@ -18,7 +19,6 @@
 #ifndef HIMAX_COMMON_H
 #define HIMAX_COMMON_H
 
-#include <asm/segment.h>
 #include <linux/uaccess.h>
 #include <linux/atomic.h>
 
@@ -43,7 +43,7 @@
 #include "himax_platform.h"
 
 #ifdef CONFIG_DRM
-	#include <linux/msm_drm_notify.h>
+	#include <drm/drm_panel.h>
 #elif defined(CONFIG_FB)
 	#include <linux/notifier.h>
 	#include <linux/fb.h>
@@ -67,7 +67,7 @@
 #define HX_RST_PIN_FUNC
 #define HX_RESUME_SEND_CMD
 #define HX_ESD_RECOVERY
-/*#define HX_AUTO_UPDATE_FW*/
+#define HX_AUTO_UPDATE_FW
 /*#define HX_SMART_WAKEUP*/
 /*#define HX_GESTURE_TRACK*/
 /*#define HX_HIGH_SENSE*/
@@ -89,6 +89,7 @@
 /*#define HX_PLATFOME_DEFINE_KEY*/  /* for specific platform to set key(button) */
 #endif
 
+#define HX_TOUCH_ID_MAX 10
 #define HX_KEY_MAX_COUNT 4
 #define DEFAULT_RETRY_CNT 3
 
@@ -120,11 +121,11 @@
 
 #define SHIFTBITS 5
 
-#define  FW_SIZE_32k 32768
-#define  FW_SIZE_60k 61440
-#define  FW_SIZE_64k 65536
-#define  FW_SIZE_124k 126976
-#define  FW_SIZE_128k 131072
+#define FW_SIZE_32k 32768
+#define FW_SIZE_60k 61440
+#define FW_SIZE_64k 65536
+#define FW_SIZE_124k 126976
+#define FW_SIZE_128k 131072
 
 #define NO_ERR 0
 #define READY_TO_SERVE 1
@@ -440,14 +441,6 @@ extern struct himax_core_fp g_core_fp;
 extern struct himax_debug *debug_data;
 extern uint8_t HX_PROC_SEND_FLAG;
 
-#ifdef HX_AUTO_UPDATE_FW
-extern int g_i_FW_VER;
-extern int g_i_CFG_VER;
-extern int g_i_CID_MAJ; /* GUEST ID */
-extern int g_i_CID_MIN; /* VER for GUEST */
-extern unsigned char i_CTPM_FW[];
-#endif
-
 extern unsigned long FW_VER_MAJ_FLASH_ADDR;
 extern unsigned long FW_VER_MIN_FLASH_ADDR;
 extern unsigned long CFG_VER_MAJ_FLASH_ADDR;
@@ -496,6 +489,8 @@ extern void himax_cable_detect_func(bool force_renew);
 extern struct himax_target_report_data *g_target_report_data;
 extern int himax_report_data(struct himax_ts_data *ts, int ts_path, int ts_status);
 /* ts_work about end */
+
+void himax_update_register(struct work_struct *work);
 
 #endif
 
