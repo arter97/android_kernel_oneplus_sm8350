@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/bitmap.h>
@@ -283,6 +284,7 @@ struct msm_geni_serial_port {
 	atomic_t stop_rx_inprogress;
 	spinlock_t tx_lock;
 	struct msm_geni_serial_ssr uart_ssr;
+	bool console_rx_wakeup;
 };
 
 static const struct uart_ops msm_geni_serial_pops;
@@ -2948,7 +2950,17 @@ static irqreturn_t msm_geni_serial_isr(int isr, void *dev)
 	return IRQ_HANDLED;
 }
 
-static irqreturn_t msm_geni_wakeup_isr(int isr, void *dev)
+static irqreturn_t msm_geni_console_wakeup_isr(int isr, void *dev)
+{
+	struct uart_port *uport = dev;
+	struct msm_geni_serial_port *port = GET_DEV_PORT(uport);
+
+	IPC_LOG_MSG(port->ipc_log_rx, "%s: Wakeup IRQ detected\n", __func__);
+
+	return IRQ_HANDLED;
+}
+
+static irqreturn_t msm_geni_hs_wakeup_isr(int isr, void *dev)
 {
 	struct uart_port *uport = dev;
 	struct msm_geni_serial_port *port = GET_DEV_PORT(uport);
@@ -3110,11 +3122,6 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 			}
 		}
 
-		if (msm_port->wakeup_irq > 0) {
-			irq_set_irq_wake(msm_port->wakeup_irq, 0);
-			disable_irq(msm_port->wakeup_irq);
-			free_irq(msm_port->wakeup_irq, uport);
-		}
 
 		if (!IS_ERR_OR_NULL(msm_port->serial_rsc.geni_gpio_shutdown)) {
 			ret = pinctrl_select_state(msm_port->serial_rsc.geni_pinctrl,
@@ -3126,6 +3133,12 @@ static void msm_geni_serial_shutdown(struct uart_port *uport)
 
 		/* Reset UART error to default during port_close() */
 		msm_port->uart_error = UART_ERROR_DEFAULT;
+	}
+
+	if (msm_port->wakeup_irq > 0) {
+		irq_set_irq_wake(msm_port->wakeup_irq, 0);
+		disable_irq(msm_port->wakeup_irq);
+		free_irq(msm_port->wakeup_irq, uport);
 	}
 	IPC_LOG_MSG(msm_port->ipc_log_misc, "%s: End\n", __func__);
 }
@@ -3281,19 +3294,35 @@ static int msm_geni_serial_startup(struct uart_port *uport)
 	if (uart_console(uport))
 		enable_irq(uport->irq);
 
-	if (msm_port->wakeup_irq > 0) {
-		ret = request_irq(msm_port->wakeup_irq, msm_geni_wakeup_isr,
+	if (msm_port->wakeup_irq > 0 && uart_console(uport)) {
+		ret = request_irq(msm_port->wakeup_irq, msm_geni_console_wakeup_isr,
 				IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
-				"hs_uart_wakeup", uport);
+				"console_uart_wakeup", uport);
 		if (unlikely(ret)) {
-			dev_err(uport->dev, "%s:Failed to get WakeIRQ ret%d\n",
+			dev_err(uport->dev, "%s:Failed to get console WakeIRQ ret%d\n",
 								__func__, ret);
 			goto exit_startup;
 		}
 		disable_irq(msm_port->wakeup_irq);
 		ret = irq_set_irq_wake(msm_port->wakeup_irq, 1);
 		if (unlikely(ret)) {
-			dev_err(uport->dev, "%s:Failed to set IRQ wake:%d\n",
+			dev_err(uport->dev, "%s:Failed to set console IRQ wake:%d\n",
+					__func__, ret);
+			goto exit_startup;
+		}
+	} else if (msm_port->wakeup_irq > 0 && !uart_console(uport)) {
+		ret = request_irq(msm_port->wakeup_irq, msm_geni_hs_wakeup_isr,
+				IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+				"hs_uart_wakeup", uport);
+		if (unlikely(ret)) {
+			dev_err(uport->dev, "%s:Failed to get HS WakeIRQ ret%d\n",
+								__func__, ret);
+			goto exit_startup;
+		}
+		disable_irq(msm_port->wakeup_irq);
+		ret = irq_set_irq_wake(msm_port->wakeup_irq, 1);
+		if (unlikely(ret)) {
+			dev_err(uport->dev, "%s:Failed to set HS IRQ wake:%d\n",
 					__func__, ret);
 			goto exit_startup;
 		}
@@ -3946,7 +3975,7 @@ static int msm_geni_serial_get_irq_pinctrl(struct platform_device *pdev,
 
 	/* Optional to use the Rx pin as wakeup irq */
 	dev_port->wakeup_irq = platform_get_irq(pdev, 1);
-	if ((dev_port->wakeup_irq < 0 && !dev_port->is_console))
+	if ((dev_port->wakeup_irq < 0 && !dev_port->console_rx_wakeup))
 		dev_info(&pdev->dev, "No wakeup IRQ configured\n");
 
 	dev_port->serial_rsc.geni_pinctrl = devm_pinctrl_get(&pdev->dev);
@@ -4097,6 +4126,9 @@ static int msm_geni_serial_read_dtsi(struct platform_device *pdev,
 	dev_port->rumi_platform = of_property_read_bool(pdev->dev.of_node,
 				"qcom,rumi_platform");
 
+	dev_port->console_rx_wakeup = of_property_read_bool(pdev->dev.of_node,
+				"qcom,console-rx-wakeup");
+
 	if (of_property_read_u32(pdev->dev.of_node, "qcom,wakeup-byte",
 					&wake_char)) {
 		dev_dbg(&pdev->dev, "No Wakeup byte specified\n");
@@ -4128,7 +4160,7 @@ static int msm_geni_serial_read_dtsi(struct platform_device *pdev,
 	if (ret)
 		return ret;
 
-	if (!is_console) {
+	if (!is_console || dev_port->console_rx_wakeup) {
 		dev_port->geni_wake = wakeup_source_register(uport->dev,
 						dev_name(&pdev->dev));
 		if (!dev_port->geni_wake) {
@@ -4323,7 +4355,7 @@ static int msm_geni_serial_remove(struct platform_device *pdev)
 	struct uart_driver *drv =
 			(struct uart_driver *)port->uport.private_data;
 
-	if (!uart_console(&port->uport))
+	if (!uart_console(&port->uport) || port->console_rx_wakeup)
 		wakeup_source_unregister(port->geni_wake);
 	if (port->pm_auto_suspend_disable)
 		pm_runtime_allow(&pdev->dev);
@@ -4476,7 +4508,38 @@ static int msm_geni_serial_sys_suspend(struct device *dev)
 	struct uart_port *uport = &port->uport;
 
 	if (uart_console(uport) || port->pm_auto_suspend_disable) {
-		IPC_LOG_MSG(port->console_log, "%s start\n", __func__);
+		uart_suspend_port((struct uart_driver *)uport->private_data,
+					uport);
+		if (port->console_rx_wakeup && port->wakeup_irq > 0)
+			enable_irq(port->wakeup_irq);
+		IPC_LOG_MSG(port->console_log, "%s\n", __func__);
+	} else {
+		struct uart_state *state = uport->state;
+		struct tty_port *tty_port = &state->port;
+
+		mutex_lock(&tty_port->mutex);
+		if (!pm_runtime_status_suspended(dev)) {
+			dev_err(dev, "%s:Active userspace vote; ioctl_cnt %d\n",
+					__func__, port->ioctl_count);
+			IPC_LOG_MSG(port->ipc_log_pwr,
+				"%s:Active userspace vote; ioctl_cnt %d\n",
+					__func__, port->ioctl_count);
+			mutex_unlock(&tty_port->mutex);
+			return -EBUSY;
+		}
+		IPC_LOG_MSG(port->ipc_log_pwr, "%s\n", __func__);
+		mutex_unlock(&tty_port->mutex);
+	}
+	return 0;
+}
+
+static int msm_geni_serial_sys_hib_suspend(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct msm_geni_serial_port *port = platform_get_drvdata(pdev);
+	struct uart_port *uport = &port->uport;
+
+	if (uart_console(uport) || port->pm_auto_suspend_disable) {
 		uart_suspend_port((struct uart_driver *)uport->private_data,
 					uport);
 		IPC_LOG_MSG(port->console_log, "%s\n", __func__);
@@ -4542,11 +4605,11 @@ static int msm_geni_serial_sys_resume(struct device *dev)
 #endif
 	if ((uart_console(uport) &&
 	    console_suspend_enabled && uport->suspended) ||
-		port->pm_auto_suspend_disable) {
-		IPC_LOG_MSG(port->console_log, "%s start\n", __func__);
+		port->pm_auto_suspend_disable || port->console_rx_wakeup) {
+		if (port->console_rx_wakeup && port->wakeup_irq > 0)
+			disable_irq(port->wakeup_irq);
 		uart_resume_port((struct uart_driver *)uport->private_data,
 									uport);
-		IPC_LOG_MSG(port->console_log, "%s End\n", __func__);
 	}
 	return 0;
 }
@@ -4575,6 +4638,11 @@ static int msm_geni_serial_sys_hib_resume(struct device *dev)
 {
 	return 0;
 }
+
+static int msm_geni_serial_sys_hib_suspend(struct device *dev)
+{
+	return 0;
+}
 #endif
 
 static const struct dev_pm_ops msm_geni_serial_pm_ops = {
@@ -4582,7 +4650,7 @@ static const struct dev_pm_ops msm_geni_serial_pm_ops = {
 	.runtime_resume = msm_geni_serial_runtime_resume,
 	.suspend = msm_geni_serial_sys_suspend,
 	.resume = msm_geni_serial_sys_resume,
-	.freeze = msm_geni_serial_sys_suspend,
+	.freeze = msm_geni_serial_sys_hib_suspend,
 	.restore = msm_geni_serial_sys_hib_resume,
 	.thaw = msm_geni_serial_sys_hib_resume,
 };
