@@ -7,6 +7,8 @@
 #ifndef _MSM_GLINK_SSR_H__
 #define _MSM_GLINK_SSR_H__
 
-extern void glink_ssr_notify_rpm(void);
+#if defined(CONFIG_DEEPSLEEP) && defined(CONFIG_RPMSG_QCOM_GLINK_RPM)
+void glink_ssr_notify_rpm(void);
+#endif
 
 #endif
