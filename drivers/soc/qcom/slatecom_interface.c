@@ -423,6 +423,33 @@ int slate_soft_reset(void)
 }
 EXPORT_SYMBOL(slate_soft_reset);
 
+int send_wlan_state(enum WMSlateCtrlChnlOpcode type)
+{
+	int ret = 0;
+	struct msg_header_t msg_header = {0, 0};
+	struct slatedaemon_priv *dev = container_of(slatecom_intf_drv,
+					struct slatedaemon_priv,
+					lhndl);
+
+	switch (type) {
+	case GMI_MGR_WLAN_BOOT_INIT:
+		msg_header.opcode = GMI_MGR_WLAN_BOOT_INIT;
+		break;
+	case GMI_MGR_WLAN_BOOT_COMPLETE:
+		msg_header.opcode = GMI_MGR_WLAN_BOOT_COMPLETE;
+		break;
+	default:
+		pr_err("Invalid WLAN State transtion cmd = %d\n", type);
+		break;
+	}
+
+	ret = slatecom_tx_msg(dev, &msg_header.opcode, sizeof(msg_header.opcode));
+	if (ret < 0)
+		pr_err("WLAN State transtion event cmd failed with = %d\n", ret);
+	return ret;
+}
+EXPORT_SYMBOL(send_wlan_state);
+
 static int modem_down2_slate(void)
 {
 	complete(&slate_modem_down_wait);
