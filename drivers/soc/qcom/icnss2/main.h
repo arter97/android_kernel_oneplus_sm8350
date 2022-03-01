@@ -473,6 +473,7 @@ struct icnss_priv {
 	u8 is_slate_rfa;
 	struct completion slate_boot_complete;
 	u8 low_power_support;
+	unsigned long device_config;
 };
 
 struct icnss_reg_info {
