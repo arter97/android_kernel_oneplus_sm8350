@@ -133,7 +133,15 @@ enum WMSlateCtrlChnlOpcode {
 /*
  * Notification to slate about WLAN state
  */
+#if IS_ENABLED(CONFIG_MSM_SLATECOM_INTERFACE)
+
 int send_wlan_state(enum WMSlateCtrlChnlOpcode type);
+#else
+static inline int send_wlan_state(enum WMSlateCtrlChnlOpcode type)
+{
+	return 0;
+}
+#endif
 
 #endif /* SLATECOM_INTERFACE_H */
 
