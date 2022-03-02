@@ -707,6 +707,7 @@ static const struct arm64_cpu_capabilities arm64_repeat_tlbi_list[] = {
 #ifdef CONFIG_ARM64_ERRATUM_1286807
 	{
 		ERRATA_MIDR_RANGE(MIDR_CORTEX_A76, 0, 0, 3, 0),
+		ERRATA_MIDR_RANGE(MIDR_KRYO4G, 12, 14, 13, 14),
 	},
 #endif
 	{},
