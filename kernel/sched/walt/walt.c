@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/syscore_ops.h>
 #include <linux/cpufreq.h>
@@ -983,7 +984,7 @@ void fixup_busy_time(struct task_struct *p, int new_cpu)
 
 	new_task = is_new_task(p);
 	/* Protected by rq_lock */
-	grp = rcu_dereference(p->wts.grp);
+	grp = rcu_dereference_sched(p->wts.grp);
 
 	/*
 	 * For frequency aggregation, we continue to do migration fixups
@@ -1577,7 +1578,7 @@ static void update_cpu_busy_time(struct task_struct *p, struct rq *rq,
 	if (!account_busy_for_cpu_time(rq, p, irqtime, event))
 		goto done;
 
-	grp = rcu_dereference(p->wts.grp);
+	grp = rcu_dereference_sched(p->wts.grp);
 	if (grp) {
 		struct group_cpu_time *cpu_time = &rq->wrq.grp_time;
 
@@ -2916,7 +2917,7 @@ static void remove_task_from_group(struct task_struct *p)
 	int empty_group = 1;
 	struct rq_flags rf;
 
-	grp = rcu_dereference(p->wts.grp);
+	grp = rcu_dereference_sched(p->wts.grp);
 	raw_spin_lock(&grp->lock);
 
 	rq = __task_rq_lock(p, &rf);
