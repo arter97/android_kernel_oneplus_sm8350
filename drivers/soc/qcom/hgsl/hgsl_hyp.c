@@ -111,6 +111,16 @@ static const char * const gsl_rpc_func_names[] = {
 	"RPC_FUNC_LAST" // insert new func BEFORE this line!
 };
 
+static inline const char *hgsl_get_rpc_fname(unsigned int opcode)
+{
+	const char *fname = "Invalid opcode";
+
+	if (opcode < RPC_FUNC_LAST)
+		fname = gsl_rpc_func_names[opcode];
+
+	return fname;
+}
+
 static int hgsl_rpc_connect(struct hgsl_hyp_priv_t *priv, int *socket)
 {
 	int err = 0;
@@ -235,9 +245,9 @@ static int gsl_rpc_transact_ext(uint32_t opcode, uint32_t version,
 				if (opcode != RPC_DISCONNECT)
 					LOGE("recv opcode %d (%s), expected %d (%s)",
 						recv_opcode,
-						gsl_rpc_func_names[recv_opcode],
+						hgsl_get_rpc_fname(recv_opcode),
 						opcode,
-						gsl_rpc_func_names[opcode]);
+						hgsl_get_rpc_fname(opcode));
 				ret = -EINVAL;
 			}
 		} else {
@@ -750,7 +760,7 @@ out:
 	RPC_TRACE_DONE();
 	if (params->cmd_id < RPC_FUNC_LAST) {
 		LOGD("cmd %d %s, ret %d, rval %p %d", params->cmd_id,
-			gsl_rpc_func_names[params->cmd_id],
+			hgsl_get_rpc_fname(params->cmd_id),
 			ret, pRval, pRval ? *((int *)pRval) : 0);
 	} else {
 		LOGE("unknown cmd id %d", params->cmd_id);
