@@ -2,6 +2,7 @@
 //
 // soc-dapm.c  --  ALSA SoC Dynamic Audio Power Management
 //
+// Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
 // Copyright 2005 Wolfson Microelectronics PLC.
 // Author: Liam Girdwood <lrg@slimlogic.co.uk>
 //
@@ -74,8 +75,6 @@ static int dapm_up_seq[] = {
 	[snd_soc_dapm_dai_link] = 3,
 	[snd_soc_dapm_dai_in] = 5,
 	[snd_soc_dapm_dai_out] = 5,
-	[snd_soc_dapm_aif_in] = 5,
-	[snd_soc_dapm_aif_out] = 5,
 	[snd_soc_dapm_mic] = 6,
 	[snd_soc_dapm_siggen] = 6,
 	[snd_soc_dapm_input] = 6,
@@ -87,6 +86,8 @@ static int dapm_up_seq[] = {
 	[snd_soc_dapm_mixer] = 9,
 	[snd_soc_dapm_mixer_named_ctl] = 9,
 	[snd_soc_dapm_pga] = 10,
+	[snd_soc_dapm_aif_in] = 10,
+	[snd_soc_dapm_aif_out] = 10,
 	[snd_soc_dapm_buffer] = 10,
 	[snd_soc_dapm_scheduler] = 10,
 	[snd_soc_dapm_effect] = 10,
@@ -107,6 +108,8 @@ static int dapm_up_seq[] = {
 static int dapm_down_seq[] = {
 	[snd_soc_dapm_pre] = 1,
 	[snd_soc_dapm_kcontrol] = 2,
+	[snd_soc_dapm_aif_in] = 2,
+	[snd_soc_dapm_aif_out] = 2,
 	[snd_soc_dapm_adc] = 3,
 	[snd_soc_dapm_hp] = 4,
 	[snd_soc_dapm_spk] = 4,
@@ -133,8 +136,6 @@ static int dapm_down_seq[] = {
 	[snd_soc_dapm_vmid] = 9,
 	[snd_soc_dapm_mux] = 10,
 	[snd_soc_dapm_demux] = 10,
-	[snd_soc_dapm_aif_in] = 11,
-	[snd_soc_dapm_aif_out] = 11,
 	[snd_soc_dapm_dai_in] = 11,
 	[snd_soc_dapm_dai_out] = 11,
 	[snd_soc_dapm_dai_link] = 12,
