@@ -975,7 +975,7 @@ bail:
 			fastrpc_update_invoke_count(invoke->handle,
 					perf_counter, &invoket);
 
-		if (ctx->perf_kernel)
+		if (fl->profile && ctx->perf && ctx->perf_kernel)
 			K_COPY_TO_USER_WITHOUT_ERR(0, ctx->perf_kernel,
 					ctx->perf, M_KERNEL_PERF_LIST*sizeof(uint64_t));
 		context_free(ctx);
