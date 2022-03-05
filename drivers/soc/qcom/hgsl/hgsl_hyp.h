@@ -74,6 +74,8 @@
 #define RPC_CLIENT_NAME_SIZE (64)
 
 /* RPC opcodes */
+/* WARNING: when inserting new opcode, please insert it to the end before RPC_FUNC_LAST */
+/* Inserting the new opcode in the middle of the list will break the protocol ! */
 enum gsl_rpc_func_t {
 	RPC_LIBRARY_OPEN = 0,
 	RPC_LIBRARY_CLOSE,
@@ -148,12 +150,12 @@ enum gsl_rpc_func_t {
 	RPC_SUB_HANDSHAKE,
 	RPC_DISCONNECT,
 	RPC_MEMORY_SET_METAINFO,
-	RPC_COMMAND_RESETSTATUS,
 	RPC_GET_SYSTEM_TIME,
 	RPC_GET_DBQ_INFO,
 	RPC_DBQ_CREATE,
 	RPC_PERFCOUNTERS_READ,
 	RPC_NOTIFY_CLEANUP,
+	RPC_COMMAND_RESETSTATUS,
 	RPC_FUNC_LAST /* insert new func BEFORE this line! */
 };
 
