@@ -676,14 +676,18 @@ static int slatecom_resume_l(void *handle)
 		goto unlock;
 	}
 	if (!is_slate_resume(handle)) {
-		if (atomic_read(&ok_to_sleep)) {
+		if (atomic_read(&ok_to_sleep) == 1) {
 			reinit_completion(&slate_resume_wait);
 			ret = wait_for_completion_timeout(
 				&slate_resume_wait, msecs_to_jiffies(
 					SLATE_RESUME_IRQ_TIMEOUT));
 			if (!ret) {
-				SLATECOM_ERR("Time out on Slate Resume\n");
-				goto error;
+				if (atomic_read(&ok_to_sleep) == 1) {
+					SLATECOM_ERR("Time out on Slate Resume\n");
+					goto error;
+				} else {
+					SLATECOM_INFO("Received interrupt\n");
+				}
 			}
 		}
 	}
