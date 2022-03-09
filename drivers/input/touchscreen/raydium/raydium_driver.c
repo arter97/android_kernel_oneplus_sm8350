@@ -1238,15 +1238,13 @@ static void raydium_work_handler(struct work_struct *work)
 			g_raydium_ts->is_palm = 0;
 			/*goto exit;*/
 		}
-	}
-	/*else if (g_raydium_ts->blank == DRM_PANEL_BLANK_LP ||*/
-	 /*g_raydium_ts->blank == DRM_PANEL_BLANK_POWERDOWN)*/
-	{
+	} else if (g_raydium_ts->blank == DRM_PANEL_BLANK_LP ||
+	 g_raydium_ts->blank == DRM_PANEL_BLANK_POWERDOWN) {
 		LOGD(LOG_INFO, "[touch] elseif u8_tp_status:%x\n", u8_tp_status[POS_GES_STATUS]);
 		/*need check small area*/
-		/*if (u8_tp_status[POS_GES_STATUS] == RAD_WAKE_UP*/
-		/* && g_u8_wakeup_flag == false) {*/
-		if (u8_tp_status[POS_GES_STATUS] == 0)	{
+		if (u8_tp_status[POS_GES_STATUS] == RAD_WAKE_UP
+		 && g_u8_wakeup_flag == false) {
+		/*if (u8_tp_status[POS_GES_STATUS] == 0)	{*/
 			input_report_key(g_raydium_ts->input_dev, KEY_POWER, true);
 			usleep_range(9500, 10500);
 			input_sync(g_raydium_ts->input_dev);
@@ -1621,6 +1619,7 @@ static int drm_notifier_callback(struct notifier_block *self,
 	}
 
 	blank = evdata->data;
+	g_raydium_ts->blank = (*blank);
 	LOGD(LOG_INFO, "%s: DRM event:%lu,blank:%d fb_state %d ",
 		__func__, event, *blank, g_raydium_ts->fb_state);
 	LOGD(LOG_INFO, "%s: DRM Power - %s - FB state %d ",
@@ -1680,14 +1679,14 @@ static void raydium_setup_drm_notifier(struct raydium_ts_data *g_raydium_ts)
 {
 	g_raydium_ts->fb_state = FB_ON;
 	g_raydium_ts->fb_notif.notifier_call = drm_notifier_callback;
-	LOGD(LOG_INFO, "%s: Setting up drm notifier\n", __func__);
+	LOGD(LOG_INFO, "[touch]%s: Setting up drm notifier\n", __func__);
 
 	if (!active_panel)
-		LOGD(LOG_ERR, "%s: Active panel not registered!\n", __func__);
+		LOGD(LOG_ERR, "[touch]%s: Active panel not registered!\n", __func__);
 
 	if (active_panel && drm_panel_notifier_register(active_panel,
 		&g_raydium_ts->fb_notif) < 0)
-		LOGD(LOG_ERR, "%s: Register notifier failed!\n", __func__);
+		LOGD(LOG_ERR, "[touch]%s: Register notifier failed!\n", __func__);
 }
 #endif /*end of CONFIG_DRM*/
 
@@ -1846,10 +1845,10 @@ static int raydium_check_dsi_panel_dt(struct device_node *np, struct drm_panel *
 	int i = 0;
 	int count = 0;
 	struct device_node *node = NULL;
-	struct drm_panel *panel = NULL;
+	struct drm_panel *panel;
 
 	count = of_count_phandle_with_args(np, "panel", NULL);
-	pr_info("%s: Active panel count: %d\n", __func__, count);
+	LOGD(LOG_ERR, "[touch]%s: Active panel count: %d\n", __func__, count);
 	if (count <= 0)
 		return 0;
 
@@ -1857,18 +1856,19 @@ static int raydium_check_dsi_panel_dt(struct device_node *np, struct drm_panel *
 		node = of_parse_phandle(np, "panel", i);
 
 		if (node != NULL)
-			pr_info("%s: Node handle successfully parsed !\n", __func__);
+			LOGD(LOG_ERR, "[touch]%s: Node handle successfully parsed !\n", __func__);
 		panel = of_drm_find_panel(node);
 		of_node_put(node);
 
 		if (!IS_ERR(panel)) {
-			pr_info("%s: Active panel selected !\n", __func__);
+			LOGD(LOG_ERR, "[touch]%s: Active panel selected !\n", __func__);
 			*active_panel = panel;
 			return 0;
 		}
 	}
-	pr_err("%s: Active panel NOT selected !\n", __func__);
-	return 0;
+	LOGD(LOG_ERR, "[touch]%s: Active panel NOT selected !\n", __func__);
+
+	return PTR_ERR(panel);
 }
 
 static int raydium_parse_dt(struct device *dev,
@@ -1905,16 +1905,16 @@ static int raydium_parse_dt(struct device *dev,
 		return pdata->irq_gpio;
 
 	rc = raydium_check_dsi_panel_dt(np, &active_panel);
-	pr_info("%s: Panel not selected, rc=%d\n", __func__, rc);
+	LOGD(LOG_ERR, "[touch]%s: Panel not selected, rc=%d\n", __func__, rc);
 	if (rc) {
-		pr_err("%s: Panel not selected, rc=%d\n", __func__, rc);
+		LOGD(LOG_ERR, "[touch]%s: Panel not selected, rc=%d\n", __func__, rc);
 		if (rc == -EPROBE_DEFER) {
-			pr_err("%s: Probe defer selected, rc=%d\n", __func__, rc);
+			LOGD(LOG_ERR, "[touch]%s: Probe defer selected, rc=%d\n", __func__, rc);
 			return rc;
 		}
 	}
 	pdata->active_panel = active_panel;
-	pr_info("%s: Successful insert of active panel in core data\n", __func__);
+	LOGD(LOG_ERR, "[touch]%s: Successful insert of active panel in core data\n", __func__);
 
 	rc = of_property_read_u32(np,
 				  "raydium,hard-reset-delay-ms", &temp_val);
@@ -2260,6 +2260,13 @@ static int raydium_ts_probe(struct i2c_client *client,
 		ret = -EPROBE_DEFER;
 		goto exit_check_i2c;
 	}
+
+	if (!pdata->active_panel) {
+//		LOGD(LOG_ERR, "[touch]active_panel null, check again!\n");
+		raydium_check_dsi_panel_dt(client->dev.of_node,
+					&pdata->active_panel);
+	}
+
 #ifdef CONFIG_DRM
 	/* Setup active dsi panel */
 	active_panel = pdata->active_panel;
