@@ -2862,6 +2862,7 @@ ssize_t notify_fppress_store(struct device *dev,
 		if (err < 0)
 			drm_atomic_state_clear(state);
 	}
+	drm_atomic_state_put(state);
 	drm_modeset_unlock_all(drm_dev);
 	SDE_ATRACE_END("notify_fppress_store");
 	return count;
@@ -2949,6 +2950,7 @@ ssize_t notify_dim_store(struct device *dev,
 		if (err < 0)
 			drm_atomic_state_clear(state);
 	}
+	drm_atomic_state_put(state);
 	drm_modeset_unlock_all(drm_dev);
 	SDE_ATRACE_END("notify_dim_store");
 	return count;
