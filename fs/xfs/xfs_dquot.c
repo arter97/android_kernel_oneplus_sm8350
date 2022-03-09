@@ -116,6 +116,8 @@ xfs_qm_adjust_dqtimers(
 	xfs_mount_t		*mp,
 	xfs_disk_dquot_t	*d)
 {
+	time64_t timer;
+
 	ASSERT(d->d_id);
 
 #ifdef DEBUG
@@ -130,15 +132,17 @@ xfs_qm_adjust_dqtimers(
 		       be64_to_cpu(d->d_rtb_hardlimit));
 #endif
 
-	if (!d->d_btimer) {
+	if (!d->d_btimer && !d->d_btimer_high) {
 		if ((d->d_blk_softlimit &&
 		     (be64_to_cpu(d->d_bcount) >
 		      be64_to_cpu(d->d_blk_softlimit))) ||
 		    (d->d_blk_hardlimit &&
 		     (be64_to_cpu(d->d_bcount) >
 		      be64_to_cpu(d->d_blk_hardlimit)))) {
-			d->d_btimer = cpu_to_be32(get_seconds() +
-					mp->m_quotainfo->qi_btimelimit);
+			timer = ktime_get_real_seconds() +
+				mp->m_quotainfo->qi_btimelimit;
+			d->d_btimer = cpu_to_be32(lower_32_bits(timer));
+			d->d_btimer_high = (u8)upper_32_bits(timer);
 		} else {
 			d->d_bwarns = 0;
 		}
@@ -150,18 +154,21 @@ xfs_qm_adjust_dqtimers(
 		    (be64_to_cpu(d->d_bcount) <=
 		     be64_to_cpu(d->d_blk_hardlimit)))) {
 			d->d_btimer = 0;
+			d->d_btimer_high = 0;
 		}
 	}
 
-	if (!d->d_itimer) {
+	if (!d->d_itimer && !d->d_itimer_high) {
 		if ((d->d_ino_softlimit &&
 		     (be64_to_cpu(d->d_icount) >
 		      be64_to_cpu(d->d_ino_softlimit))) ||
 		    (d->d_ino_hardlimit &&
 		     (be64_to_cpu(d->d_icount) >
 		      be64_to_cpu(d->d_ino_hardlimit)))) {
-			d->d_itimer = cpu_to_be32(get_seconds() +
-					mp->m_quotainfo->qi_itimelimit);
+			timer = ktime_get_real_seconds() +
+				mp->m_quotainfo->qi_itimelimit;
+			d->d_itimer = cpu_to_be32(lower_32_bits(timer));
+			d->d_itimer_high = (u8)upper_32_bits(timer);
 		} else {
 			d->d_iwarns = 0;
 		}
@@ -173,18 +180,21 @@ xfs_qm_adjust_dqtimers(
 		     (be64_to_cpu(d->d_icount) <=
 		      be64_to_cpu(d->d_ino_hardlimit)))) {
 			d->d_itimer = 0;
+			d->d_itimer_high = 0;
 		}
 	}
 
-	if (!d->d_rtbtimer) {
+	if (!d->d_rtbtimer && !d->d_rtbtimer_high) {
 		if ((d->d_rtb_softlimit &&
 		     (be64_to_cpu(d->d_rtbcount) >
 		      be64_to_cpu(d->d_rtb_softlimit))) ||
 		    (d->d_rtb_hardlimit &&
 		     (be64_to_cpu(d->d_rtbcount) >
 		      be64_to_cpu(d->d_rtb_hardlimit)))) {
-			d->d_rtbtimer = cpu_to_be32(get_seconds() +
-					mp->m_quotainfo->qi_rtbtimelimit);
+			timer = ktime_get_real_seconds() +
+				mp->m_quotainfo->qi_rtbtimelimit;
+			d->d_rtbtimer = cpu_to_be32(lower_32_bits(timer));
+			d->d_rtbtimer_high = (u8)upper_32_bits(timer);
 		} else {
 			d->d_rtbwarns = 0;
 		}
@@ -196,6 +206,7 @@ xfs_qm_adjust_dqtimers(
 		     (be64_to_cpu(d->d_rtbcount) <=
 		      be64_to_cpu(d->d_rtb_hardlimit)))) {
 			d->d_rtbtimer = 0;
+			d->d_rtbtimer_high = 0;
 		}
 	}
 }
