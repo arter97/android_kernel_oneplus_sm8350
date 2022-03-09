@@ -43,9 +43,10 @@
 #define HED_EVENT_DATA_STRT_LEN (0x05)
 #define CMA_BFFR_POOL_SIZE (128*1024)
 
-#define SLATE_OK_SLP_RBSC      BIT(30)
-#define SLATE_OK_SLP_S2R       BIT(31)
-#define SLATE_OK_SLP_S2D      (BIT(31) | BIT(30))
+#define SLATE_OK_SLP_RBSC      BIT(24)
+#define SLATE_OK_SLP_S2R       BIT(25)
+#define SLATE_OK_SLP_S2D      (BIT(25) | BIT(24))
+#define SLATE_OK_SLP_SIF       BIT(26)
 
 #define WR_PROTOCOL_OVERHEAD              (5)
 #define WR_PROTOCOL_OVERHEAD_IN_WORDS     (2)
@@ -1511,7 +1512,7 @@ static int slatecom_pm_runtime_suspend(struct device *dev)
 	if (mem_sleep_current == PM_SUSPEND_MEM)
 		cmnd_reg |= SLATE_OK_SLP_S2R;
 	else
-		cmnd_reg |= SLATE_OK_SLP_RBSC;
+		cmnd_reg |= SLATE_OK_SLP_SIF;
 
 	ret = slatecom_reg_write_cmd(&clnt_handle, SLATE_CMND_REG,
 					1, &cmnd_reg);
