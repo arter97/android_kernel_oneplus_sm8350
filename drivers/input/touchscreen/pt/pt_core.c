@@ -17721,6 +17721,10 @@ int pt_probe(const struct pt_bus_ops *ops, struct device *dev,
 		pt_debug(dev, DL_ERROR, "%s: Error, device_init_wakeup rc:%d\n",
 			__func__, rc);
 
+	if (!enable_irq_wake(cd->irq)) {
+		cd->irq_wake = 1;
+		pt_debug(cd->dev, DL_WARN, "%s Device MAY wakeup\n", __func__);
+	}
 	pm_runtime_get_noresume(dev);
 	pm_runtime_set_active(dev);
 	pm_runtime_enable(dev);
