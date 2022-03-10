@@ -109,11 +109,11 @@ static struct qcom_icc_node crypto_c0 = {
 	.name = "crypto_c0",
 	.id = MASTER_CRYPTO_CORE0,
 	.channels = 1,
-	.buswidth = 650,
+	.buswidth = 8,
 	.mas_rpm_id = ICBID_MASTER_CRYPTO_CORE0,
 	.slv_rpm_id = -1,
 	.num_links = 1,
-	.links = { SLAVE_CRVIRT_A1NOC },
+	.links = { SLAVE_ANOC_SNOC },
 };
 
 static struct qcom_icc_node mas_snoc_cnoc = {
@@ -302,17 +302,6 @@ static struct qcom_icc_node qxm_pimem = {
 	.links = { SLAVE_OCIMEM, SNOC_BIMC_SLV },
 };
 
-static struct qcom_icc_node mas_cr_virt_a1noc = {
-	.name = "mas_cr_virt_a1noc",
-	.id = MASTER_CRVIRT_A1NOC,
-	.channels = 1,
-	.buswidth = 8,
-	.mas_rpm_id = ICBID_MASTER_CRVIRT_A1NOC,
-	.slv_rpm_id = -1,
-	.num_links = 1,
-	.links = { SLAVE_ANOC_SNOC },
-};
-
 static struct qcom_icc_node qhm_qdss_bam = {
 	.name = "qhm_qdss_bam",
 	.id = MASTER_QDSS_BAM,
@@ -430,17 +419,6 @@ static struct qcom_icc_node qup0_core_slave = {
 	.mas_rpm_id = -1,
 	.slv_rpm_id = -1,
 	.num_links = 0,
-};
-
-static struct qcom_icc_node slv_cr_virt_a1noc = {
-	.name = "slv_cr_virt_a1noc",
-	.id = SLAVE_CRVIRT_A1NOC,
-	.channels = 1,
-	.buswidth = 8,
-	.mas_rpm_id = -1,
-	.slv_rpm_id = -1,
-	.num_links = 1,
-	.links = { MASTER_CRVIRT_A1NOC },
 };
 
 static struct qcom_icc_node qhs_ahb2phy_usb = {
@@ -1047,9 +1025,7 @@ static struct qcom_icc_desc bengal_bimc = {
 
 static struct qcom_icc_node *clk_virt_nodes[] = {
 	[MASTER_QUP_CORE_0] = &qup0_core_master,
-	[MASTER_CRYPTO_CORE0] = &crypto_c0,
 	[SLAVE_QUP_CORE_0] = &qup0_core_slave,
-	[SLAVE_CRVIRT_A1NOC] = &slv_cr_virt_a1noc,
 };
 
 static struct qcom_icc_desc bengal_clk_virt = {
@@ -1138,12 +1114,12 @@ static struct qcom_icc_desc bengal_mmrt_virt = {
 };
 
 static struct qcom_icc_node *sys_noc_nodes[] = {
+	[MASTER_CRYPTO_CORE0] = &crypto_c0,
 	[MASTER_SNOC_CFG] = &qhm_snoc_cfg,
 	[MASTER_TIC] = &qhm_tic,
 	[MASTER_ANOC_SNOC] = &mas_anoc_snoc,
 	[BIMC_SNOC_MAS] = &mas_bimc_snoc,
 	[MASTER_PIMEM] = &qxm_pimem,
-	[MASTER_CRVIRT_A1NOC] = &mas_cr_virt_a1noc,
 	[MASTER_QDSS_BAM] = &qhm_qdss_bam,
 	[MASTER_QPIC] = &qhm_qpic,
 	[MASTER_QUP_0] = &qhm_qup0,
