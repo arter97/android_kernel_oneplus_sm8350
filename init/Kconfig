@@ -1234,6 +1234,18 @@ source "usr/Kconfig"
 
 endif
 
+config BOOT_CONFIG
+	bool "Boot config support"
+	depends on BLK_DEV_INITRD
+	help
+	  Extra boot config allows system admin to pass a config file as
+	  complemental extension of kernel cmdline when booting.
+	  The boot config file must be attached at the end of initramfs
+	  with checksum, size and magic word.
+	  See <file:Documentation/admin-guide/bootconfig.rst> for details.
+
+	  If unsure, say Y.
+
 config EXECPROG
 	bool "Inject a binary to the userspace and execute"
 	help
@@ -1593,6 +1605,11 @@ config ADVISE_SYSCALLS
 	  usage, improving performance. If building an embedded system where no
 	  applications use these syscalls, you can disable this option to save
 	  space.
+
+config HAVE_ARCH_USERFAULTFD_MINOR
+	bool
+	help
+	  Arch has userfaultfd minor fault support
 
 config MEMBARRIER
 	bool "Enable membarrier() system call" if EXPERT

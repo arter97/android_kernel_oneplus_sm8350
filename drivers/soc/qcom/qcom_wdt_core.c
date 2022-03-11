@@ -132,7 +132,7 @@ static void print_irq_stat(struct msm_watchdog_data *wdog_dd)
 	pr_cont("\n");
 
 	pr_info("(ipi:irq_count)- ");
-	for (index = 0; index < NR_IPI; index++) {
+	for (index = 0; index < WDOG_NR_IPI; index++) {
 		info = &wdog_dd->ipi_counts[index];
 		pr_cont("%u:%u ", info->irq, info->total_count);
 	}
@@ -222,7 +222,7 @@ static void compute_irq_stat(struct work_struct *work)
 		wdog_dd->tot_irq_count[cpu] = kstat_cpu_irqs_sum(cpu);
 
 	/* per IPI counts */
-	for (index = 0; index < NR_IPI; index++) {
+	for (index = 0; index < WDOG_NR_IPI; index++) {
 		wdog_dd->ipi_counts[index].total_count = 0;
 		wdog_dd->ipi_counts[index].irq = index;
 		for_each_possible_cpu(cpu) {

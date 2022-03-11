@@ -365,6 +365,7 @@ override ARCH		:= arm64
 override CROSS_COMPILE	:= /home/arter97/arm64-gcc/bin/aarch64-elf-
 override CROSS_COMPILE_ARM32	:= /home/arter97/arm32-gcc/bin/arm-eabi-
 override LLVM := 1
+override LLVM_IAS := 1
 override CLANG_TRIPLE := aarch64-linux-gnu
 override LLVM_PATH := /home/arter97/android/clang/clang-r433403/bin/
 
@@ -957,6 +958,8 @@ endif
 ifdef CONFIG_CFI_PERMISSIVE
 CC_FLAGS_CFI	+= -fsanitize-recover=cfi \
 		   -fno-sanitize-trap=cfi
+else
+CC_FLAGS_CFI	+= -ftrap-function=__ubsan_handle_cfi_check_fail_abort
 endif
 
 # If LTO flags are filtered out, we must also filter out CFI.

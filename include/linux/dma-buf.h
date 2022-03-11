@@ -382,6 +382,7 @@ typedef int (*dma_buf_destructor)(struct dma_buf *dmabuf, void *dtor_data);
  * @poll: for userspace poll support
  * @cb_excl: for userspace poll support
  * @cb_shared: for userspace poll support
+ * @sysfs_entry: for exposing information about this buffer in sysfs.
  *
  * This represents a shared buffer, created by calling dma_buf_export(). The
  * userspace representation is a normal file descriptor, which can be created by
@@ -421,6 +422,13 @@ struct dma_buf {
 
 		__poll_t active;
 	} cb_excl, cb_shared;
+#ifdef CONFIG_DMABUF_SYSFS_STATS
+	/* for sysfs stats */
+	struct dma_buf_sysfs_entry {
+		struct kobject kobj;
+		struct dma_buf *dmabuf;
+	} *sysfs_entry;
+#endif
 };
 
 /**
@@ -464,6 +472,13 @@ struct dma_buf_attachment {
 	enum dma_data_direction dir;
 	void *priv;
 	unsigned long dma_map_attrs;
+#ifdef CONFIG_DMABUF_SYSFS_STATS
+	/* for sysfs stats */
+	struct dma_buf_attach_sysfs_entry {
+		struct kobject kobj;
+		unsigned int map_counter;
+	} *sysfs_entry;
+#endif
 };
 
 /**

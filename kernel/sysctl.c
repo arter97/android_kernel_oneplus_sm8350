@@ -770,6 +770,13 @@ static struct ctl_table kern_table[] = {
 		.mode		= 0644,
 		.proc_handler	= sysctl_sched_uclamp_handler,
 	},
+	{
+		.procname	= "sched_util_clamp_min_rt_default",
+		.data		= &sysctl_sched_uclamp_util_min_rt_default,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= sysctl_sched_uclamp_handler,
+	},
 #endif
 #ifdef CONFIG_SCHED_AUTOGROUP
 	{
@@ -1919,7 +1926,7 @@ static struct ctl_table vm_table[] = {
 		.data		= &extra_free_kbytes,
 		.maxlen		= sizeof(extra_free_kbytes),
 		.mode		= 0644,
-		.proc_handler	= min_free_kbytes_sysctl_handler,
+		.proc_handler	= extra_free_kbytes_sysctl_handler,
 		.extra1		= SYSCTL_ZERO,
 	},
 	{

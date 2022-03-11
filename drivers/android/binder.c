@@ -2889,9 +2889,28 @@ static void binder_transaction(struct binder_proc *proc,
 	if (target_node && target_node->txn_security_ctx) {
 		u32 secid;
 		size_t added_size;
+		int max_retries = 100;
 
 		security_cred_getsecid(binder_get_cred(proc), &secid);
+ retry_alloc:
 		ret = security_secid_to_secctx(secid, &secctx, &secctx_sz);
+		if (ret == -ENOMEM && max_retries-- > 0) {
+			struct page *dummy_page;
+
+			/*
+			 * security_secid_to_secctx() can fail because of a
+			 * GFP_ATOMIC allocation in which case -ENOMEM is
+			 * returned. This needs to be retried, but there is
+			 * currently no way to tell userspace to retry so we
+			 * do it here. We make sure there is still available
+			 * memory first and then retry.
+			 */
+			dummy_page = alloc_page(GFP_KERNEL);
+			if (dummy_page) {
+				__free_page(dummy_page);
+				goto retry_alloc;
+			}
+		}
 		if (ret) {
 			return_error = BR_FAILED_REPLY;
 			return_error_param = ret;
@@ -3197,7 +3216,10 @@ static void binder_transaction(struct binder_proc *proc,
 			goto err_bad_object_type;
 		}
 	}
-	tcomplete->type = BINDER_WORK_TRANSACTION_COMPLETE;
+	if (t->buffer->oneway_spam_suspect)
+		tcomplete->type = BINDER_WORK_TRANSACTION_ONEWAY_SPAM_SUSPECT;
+	else
+		tcomplete->type = BINDER_WORK_TRANSACTION_COMPLETE;
 	t->work.type = BINDER_WORK_TRANSACTION;
 
 	if (reply) {
@@ -4068,9 +4090,14 @@ retry:
 
 			binder_stat_br(proc, thread, cmd);
 		} break;
-		case BINDER_WORK_TRANSACTION_COMPLETE: {
+		case BINDER_WORK_TRANSACTION_COMPLETE:
+		case BINDER_WORK_TRANSACTION_ONEWAY_SPAM_SUSPECT: {
+			if (proc->oneway_spam_detection_enabled &&
+				   w->type == BINDER_WORK_TRANSACTION_ONEWAY_SPAM_SUSPECT)
+				cmd = BR_ONEWAY_SPAM_SUSPECT;
+			else
+				cmd = BR_TRANSACTION_COMPLETE;
 			binder_inner_proc_unlock(proc);
-			cmd = BR_TRANSACTION_COMPLETE;
 			kmem_cache_free(binder_work_pool, w);
 			binder_stats_deleted(BINDER_STAT_TRANSACTION_COMPLETE);
 			if (put_user(cmd, (uint32_t __user *)ptr))
@@ -5102,6 +5129,18 @@ static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		}
 		break;
 	}
+	case BINDER_ENABLE_ONEWAY_SPAM_DETECTION: {
+		uint32_t enable;
+
+		if (copy_from_user(&enable, ubuf, sizeof(enable))) {
+			ret = -EFAULT;
+			goto err;
+		}
+		binder_inner_proc_lock(proc);
+		proc->oneway_spam_detection_enabled = (bool)enable;
+		binder_inner_proc_unlock(proc);
+		break;
+	}
 	default:
 		ret = -EINVAL;
 		goto err;
@@ -5788,6 +5827,7 @@ static const char * const binder_return_strings[] = {
 	"BR_CLEAR_DEATH_NOTIFICATION_DONE",
 	"BR_FAILED_REPLY",
 	"BR_FROZEN_REPLY",
+	"BR_ONEWAY_SPAM_SUSPECT",
 };
 
 static const char * const binder_command_strings[] = {
