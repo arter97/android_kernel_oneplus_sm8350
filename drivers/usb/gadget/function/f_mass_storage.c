@@ -2559,6 +2559,7 @@ static void fsg_disable(struct usb_function *f)
 {
 	struct fsg_dev *fsg = fsg_from_func(f);
 
+	/* Disable the endpoints */
 	if (fsg->bulk_in_enabled) {
 		usb_ep_disable(fsg->bulk_in);
 		fsg->bulk_in->driver_data = NULL;
