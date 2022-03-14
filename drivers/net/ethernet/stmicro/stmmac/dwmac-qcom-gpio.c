@@ -106,6 +106,14 @@ int ethqos_init_regulators(struct qcom_ethqos *ethqos)
 			return PTR_ERR(ethqos->reg_emac_phy);
 		}
 
+		if (ethqos->emac_ver == EMAC_HW_v3_0_0_RG) {
+			ret = regulator_set_load(ethqos->reg_emac_phy, 100);
+			if (ret < 0) {
+				ETHQOSERR("Unable to set load for PHY regulator\n");
+				goto reg_error;
+			}
+		}
+
 		ret = regulator_enable(ethqos->reg_emac_phy);
 		if (ret) {
 			ETHQOSERR("Can not enable <%s>\n",
