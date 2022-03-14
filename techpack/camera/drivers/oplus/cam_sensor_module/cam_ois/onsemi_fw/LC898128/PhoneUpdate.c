@@ -310,7 +310,7 @@ UINT_8 ProgramFlash128_Standard( DOWNLOAD_TBL_EXT* ptr )
 
 	const UINT_8 *NcFromVal = ptr->FromCode + 64;
 	const UINT_8 *NcFromVal1st = ptr->FromCode;
-	UINT_8 UcOddEvn;
+	UINT_8 UcOddEvn = 0;
 
 	IOWrite32A( 0xE0701C, 0x00000000);
 	RamWrite32A( 0xF007, 0x00000000 );

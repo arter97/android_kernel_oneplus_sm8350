@@ -1496,7 +1496,7 @@ int bq27541_get_passedchg(int *val)
 	int rc = -1;
 	struct chip_bq27541 *chip;
 
-	u8 value;
+	u8 value = 0;
 	s16 v = 0;
 
 	if (gauge_ic == NULL)

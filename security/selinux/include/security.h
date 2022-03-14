@@ -19,7 +19,7 @@
 #include "flask.h"
 #include "policycap.h"
 
-#define SELINUX_LABEL_LENGTH 128
+#define SELINUX_LABEL_LENGTH 80
 
 #define SECSID_NULL			0x00000000 /* unspecified SID */
 #define SECSID_WILD			0xffffffff /* wildcard SID */

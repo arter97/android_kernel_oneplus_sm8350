@@ -1374,7 +1374,7 @@ static int security_sid_to_context_core(struct selinux_state *state,
 					return -ENOMEM;
 				*scontext = scontextp;
 			} else {
-				strncpy(*scontext, s, *scontext_len);
+				memcpy(*scontext, s, *scontext_len);
 			}
 			return 0;
 		}

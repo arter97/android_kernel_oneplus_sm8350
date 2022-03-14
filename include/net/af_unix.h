@@ -26,7 +26,7 @@ extern struct hlist_head unix_socket_table[2 * UNIX_HASH_SIZE];
 struct unix_address {
 	refcount_t	refcnt;
 	int		len;
-	struct sockaddr_un name[0];
+	struct sockaddr_un name[];
 };
 
 struct unix_skb_parms {

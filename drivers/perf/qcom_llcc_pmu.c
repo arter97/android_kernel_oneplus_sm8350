@@ -118,11 +118,6 @@ static unsigned long read_cnt(struct llcc_pmu *llccpmu, int cpu)
 {
 	unsigned long value;
 
-	if (!llccpmu->ver) {
-		pr_err("LLCCPMU version not correct\n");
-		return -EINVAL;
-	}
-
 	switch (llccpmu->ver) {
 	case LLCC_PMU_VER1:
 		value = readl_relaxed(MON_CNT(llccpmu, cpu));
@@ -130,6 +125,9 @@ static unsigned long read_cnt(struct llcc_pmu *llccpmu, int cpu)
 	case LLCC_PMU_VER2:
 		value = readl_relaxed(MON_CNT(llccpmu, cpu));
 		break;
+	default:
+		pr_err("LLCCPMU version not correct\n");
+		return -EINVAL;
 	}
 	return value;
 }

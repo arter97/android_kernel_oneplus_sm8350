@@ -617,7 +617,7 @@ int sidtab_sid2str_get(struct sidtab *s, struct sidtab_entry *entry,
 				if (!*out)
 					rc = -ENOMEM;
 			} else {
-				strncpy(*out, cache->str, cache->len);
+				memcpy(*out, cache->str, cache->len);
 			}
 		}
 	}

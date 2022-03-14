@@ -243,6 +243,7 @@ struct sde_encoder_virt {
 	struct kthread_work input_event_work;
 	struct kthread_work esd_trigger_work;
 	struct input_handler *input_handler;
+	bool input_handler_registered;
 	struct msm_display_topology topology;
 #if defined(CONFIG_PXLW_IRIS)
 	struct kthread_work disable_autorefresh_work;
