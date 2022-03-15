@@ -57,6 +57,7 @@
 #define QMI_WLFW_ANTENNA_GRANT_REQ_V01 0x0048
 #define QMI_WLFW_BDF_DOWNLOAD_REQ_V01 0x0025
 #define QMI_WLFW_FW_MEM_READY_IND_V01 0x0037
+#define QMI_WLFW_WLAN_HW_INIT_CFG_REQ_V01 0x0056
 #define QMI_WLFW_RESPOND_GET_INFO_IND_V01 0x004B
 #define QMI_WLFW_QDSS_TRACE_DATA_REQ_V01 0x0042
 #define QMI_WLFW_CAL_DOWNLOAD_RESP_V01 0x0027
@@ -96,6 +97,7 @@
 #define QMI_WLFW_WFC_CALL_STATUS_REQ_V01 0x0049
 #define QMI_WLFW_DEVICE_INFO_RESP_V01 0x004C
 #define QMI_WLFW_MSA_READY_RESP_V01 0x002E
+#define QMI_WLFW_WLAN_HW_INIT_CFG_RESP_V01 0x0056
 #define QMI_WLFW_QDSS_TRACE_FREE_IND_V01 0x0046
 #define QMI_WLFW_QDSS_MEM_READY_IND_V01 0x0052
 
@@ -251,6 +253,13 @@ enum cnss_feature_v01 {
 	BOOTSTRAP_CLOCK_SELECT_V01 = 0,
 	CNSS_MAX_FEATURE_V01 = 64,
 	CNSS_FEATURE_MAX_VAL_V01 = INT_MAX,
+};
+
+enum wlfw_wlan_rf_subtype_v01 {
+	WLFW_WLAN_RF_SUBTYPE_MIN_VAL_V01 = INT_MIN,
+	WLFW_WLAN_RF_SLATE_V01 = 0,
+	WLFW_WLAN_RF_APACHE_V01 = 1,
+	WLFW_WLAN_RF_SUBTYPE_MAX_VAL_V01 = INT_MAX,
 };
 
 #define QMI_WLFW_CE_ATTR_FLAGS_V01 ((u32)0x00)
@@ -1237,5 +1246,20 @@ struct wlfw_subsys_restart_level_resp_msg_v01 {
 
 #define WLFW_SUBSYS_RESTART_LEVEL_RESP_MSG_V01_MAX_MSG_LEN 7
 extern struct qmi_elem_info wlfw_subsys_restart_level_resp_msg_v01_ei[];
+
+struct wlfw_wlan_hw_init_cfg_req_msg_v01 {
+	u8 rf_subtype_valid;
+	enum wlfw_wlan_rf_subtype_v01 rf_subtype;
+};
+
+#define WLFW_WLAN_HW_INIT_CFG_REQ_MSG_V01_MAX_MSG_LEN 7
+extern struct qmi_elem_info wlfw_wlan_hw_init_cfg_req_msg_v01_ei[];
+
+struct wlfw_wlan_hw_init_cfg_resp_msg_v01 {
+	struct qmi_response_type_v01 resp;
+};
+
+#define WLFW_WLAN_HW_INIT_CFG_RESP_MSG_V01_MAX_MSG_LEN 7
+extern struct qmi_elem_info wlfw_wlan_hw_init_cfg_resp_msg_v01_ei[];
 
 #endif
