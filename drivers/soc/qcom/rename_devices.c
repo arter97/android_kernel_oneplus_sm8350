@@ -77,7 +77,7 @@ static void get_slot_updated_name(char *name)
 static void rename_net_device_name(struct device_node *np)
 {
 	struct device_node *net_node = np;
-	int index = 0, err;
+	int index = 0, err = 0;
 	const char *src, *dst;
 	struct net_device *net_dev = NULL;
 
@@ -87,14 +87,16 @@ static void rename_net_device_name(struct device_node *np)
 				"rename-dev", index, &dst)) {
 			if (rtnl_trylock()) {
 				net_dev = dev_get_by_name(&init_net, src);
-				if (net_dev)
+				if (net_dev) {
 					err = dev_change_name(net_dev, dst);
+					if (err != 0)
+						pr_err("rename-devices: Net rename err = %d\n",
+								 err);
+				}
 				else
 					pr_err("rename-devices: no net_dev\n");
 				rtnl_unlock();
-				if (err != 0)
-					pr_err("rename-devices: Net rename failed, err = %d\n",
-								 err);
+
 			}
 			index++;
 		}
