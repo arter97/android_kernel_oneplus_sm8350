@@ -353,6 +353,9 @@ static void qcom_wdt_resume(void)
 	val = BIT(EN);
 	if (wdog_data->wakeup_irq_enable) {
 #ifdef CONFIG_HIBERNATION
+		wdog_data->ops->set_bark_time(wdog_data->bark_time, wdog_data);
+		wdog_data->ops->set_bite_time(wdog_data->bark_time + 3 * 1000, wdog_data);
+
 		val |= BIT(UNMASKED_INT_EN);
 		wdog_data->ops->enable_wdt(val, wdog_data);
 		wdog_data->enabled = true;
