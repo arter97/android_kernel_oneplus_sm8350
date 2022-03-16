@@ -27,6 +27,7 @@
 #include <linux/regmap.h>
 #include <linux/rtc.h>
 #include <linux/slab.h>
+#include <linux/suspend.h>
 #include <linux/uaccess.h>
 #include <linux/workqueue.h>
 
@@ -2614,6 +2615,60 @@ static int qti_qbg_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static int qbg_freeze(struct device *dev)
+{
+	struct qti_qbg *chip = dev_get_drvdata(dev);
+	/*free irq*/
+	if (chip->irq > 0)
+		devm_free_irq(dev, chip->irq, chip);
+
+	return 0;
+}
+
+static int qbg_restore(struct device *dev)
+{
+	int ret = 0;
+	struct qti_qbg *chip = dev_get_drvdata(dev);
+
+	/* Init & clear SDAM to kick-start QBG sampling */
+	ret = qbg_init_sdam(chip);
+	if (ret < 0) {
+		dev_err(dev, "Failed to init qbg sdam rc = %d\n");
+		return ret;
+	}
+
+	ret = qbg_register_interrupts(chip);
+	if (ret < 0)
+		dev_err(dev, "Failed to register qbg interrupt rc = %d\n");
+
+	return ret;
+}
+
+static int qbg_suspend(struct device *dev)
+{
+#ifdef CONFIG_DEEPSLEEP
+	if (mem_sleep_current == PM_SUSPEND_MEM)
+		return qbg_freeze(dev);
+#endif
+	return 0;
+}
+
+static int qbg_resume(struct device *dev)
+{
+#ifdef CONFIG_DEEPSLEEP
+	if (mem_sleep_current == PM_SUSPEND_MEM)
+		return qbg_restore(dev);
+#endif
+	return 0;
+}
+
+static const struct dev_pm_ops qbg_pm_ops = {
+	.freeze = qbg_freeze,
+	.restore = qbg_restore,
+	.suspend = qbg_suspend,
+	.resume = qbg_resume,
+};
+
 static const struct of_device_id qbg_match_table[] = {
 	{ .compatible = "qcom,qbg", },
 	{ },
@@ -2623,6 +2678,7 @@ static struct platform_driver qti_qbg_driver = {
 	.driver = {
 		.name = "qti_qbg",
 		.of_match_table = qbg_match_table,
+		.pm = &qbg_pm_ops,
 	},
 	.probe = qti_qbg_probe,
 	.remove = qti_qbg_remove,
