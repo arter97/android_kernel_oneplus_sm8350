@@ -507,6 +507,8 @@ static int tps6598x_probe(struct i2c_client *client)
 	if (ret)
 		return ret;
 
+	tps6598x_write64(tps, TPS_REG_INT_MASK1, TPS_REG_INT_PLUG_EVENT);
+
 	ret = tps6598x_read32(tps, TPS_REG_STATUS, &status);
 	if (ret < 0)
 		return ret;
