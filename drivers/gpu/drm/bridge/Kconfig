@@ -50,6 +50,7 @@ config DRM_LONTIUM_LT9611
 	depends on OF
 	select DRM_PANEL_BRIDGE
 	select DRM_KMS_HELPER
+	select REGMAP_I2C
 	help
 	  Lontium LT9611 DSI/HDMI bridge chip driver.
 

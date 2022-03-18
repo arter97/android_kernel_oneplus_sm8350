@@ -964,14 +964,14 @@ static const struct drm_bridge_funcs lt9611_bridge_funcs = {
 static int lt9611_parse_dt(struct device *dev,
 	struct lt9611 *lt9611)
 {
-	lt9611->dsi0_node = of_graph_get_remote_node(dev->of_node, 1, -1);
+	lt9611->dsi0_node = of_graph_get_remote_node(dev->of_node, 0, 0);
 	if (!lt9611->dsi0_node) {
 		DRM_DEV_ERROR(dev,
 			"failed to get remote node for primary dsi\n");
 		return -ENODEV;
 	}
 
-	lt9611->dsi1_node = of_graph_get_remote_node(dev->of_node, 2, -1);
+	lt9611->dsi1_node = of_graph_get_remote_node(dev->of_node, 1, 1);
 
 	lt9611->ac_mode = of_property_read_bool(dev->of_node, "lt,ac-mode");
 	dev_dbg(lt9611->dev, "ac_mode=%d\n", lt9611->ac_mode);
@@ -1060,6 +1060,8 @@ static int lt9611_probe(struct i2c_client *client,
 	if (ret)
 		return ret;
 
+	usleep_range(15000, 20000);
+
 	lt9611_reset(lt9611);
 
 	ret = lt9611_read_device_rev(lt9611);
@@ -1119,6 +1121,7 @@ static struct i2c_device_id lt9611_id[] = {
 	{ "lt,lt9611", 0},
 	{}
 };
+MODULE_DEVICE_TABLE(i2c, lt9611_id);
 
 static const struct of_device_id lt9611_match_table[] = {
 	{.compatible = "lt,lt9611"},
