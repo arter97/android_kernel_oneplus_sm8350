@@ -5317,6 +5317,7 @@
 		/delete-node/ timing@fhd_oplus_72;
 		/delete-node/ timing@fhd_oplus_90;
 		/delete-node/ timing@fhd_oplus_120;
+		/delete-node/ timing@wqhd_sdc_90;
 		/delete-node/ timing@wqhd_oplus_60;
 		/delete-node/ timing@wqhd_oplus_72;
 		/delete-node/ timing@wqhd_oplus_90;
