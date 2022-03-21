@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -1424,6 +1425,15 @@ static int dsi_panel_parse_pixel_format(struct dsi_host_common_cfg *host,
 		fmt = DSI_PIXEL_FORMAT_RGB666;
 		break;
 	case 30:
+		/*
+		 * The destination pixel format (host->dst_format) depends
+		 * upon the compression, and should be RGB888 if the DSC is
+		 * enable.
+		 * The DSC status information is inside the timing modes, that
+		 * is parsed during first dsi_display_get_modes() call.
+		 * The dst_format will be updated there depending upon the
+		 * DSC status.
+		 */
 		fmt = DSI_PIXEL_FORMAT_RGB101010;
 		break;
 	case 24:
@@ -5710,12 +5720,13 @@ int dsi_panel_post_switch(struct dsi_panel *panel)
 
 bool aod_fod_flag = false;
 bool real_aod_mode = false;
+
 extern bool oneplus_dimlayer_hbm_enable;
 bool backup_dimlayer_hbm = false;
 extern int oneplus_auth_status;
-extern int oneplus_cancel_status;
 extern int oneplus_dim_status;
 int backup_dim_status = 0;
+
 int dsi_panel_enable(struct dsi_panel *panel)
 {
 	int rc = 0;
@@ -5727,8 +5738,6 @@ int dsi_panel_enable(struct dsi_panel *panel)
 		return -EINVAL;
 	}
 	DSI_ERR("start\n");
-
-	oneplus_panel_status = 2; // DISPLAY_POWER_ON
 
 	mutex_lock(&panel->panel_lock);
 
@@ -5792,20 +5801,19 @@ int dsi_panel_enable(struct dsi_panel *panel)
 
 	panel->need_power_on_backlight = true;
 
-	if (oneplus_cancel_status == 1) {
+	oneplus_panel_status = 2; // DISPLAY_POWER_ON
+	if (oneplus_auth_status == 2) {
 		backup_dimlayer_hbm = 0;
 		backup_dim_status = 0;
 	} else if (oneplus_auth_status == 1) {
 		backup_dimlayer_hbm = 1;
 		backup_dim_status = 1;
 	}
-
 	oneplus_dimlayer_hbm_enable = backup_dimlayer_hbm;
 	oneplus_dim_status = backup_dim_status;
-	if (!oneplus_cancel_status)
+	if (oneplus_auth_status != 2)
 		pr_err("Restore dim when panel goes on");
 	oneplus_auth_status = 0;
-	oneplus_cancel_status = 0;
 
 	blank = DRM_PANEL_BLANK_UNBLANK_CHARGE;
 	notifier_data.data = &blank;
