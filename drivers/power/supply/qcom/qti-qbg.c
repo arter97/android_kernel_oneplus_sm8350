@@ -112,6 +112,10 @@
 #define MICRO_TO_10NANO				100
 #define MILLI_TO_MICRO				1000
 
+enum qbg_esr_fcc_reduction {
+	REDUCE_TO_150MA = 0x6,
+};
+
 static int qbg_debug_mask;
 
 static const unsigned int qbg_accum_interval[8] = {
@@ -838,6 +842,19 @@ static int qbg_init_sdam(struct qti_qbg *chip)
 			return rc;
 		}
 	}
+
+	return rc;
+}
+
+static int qbg_init_esr(struct qti_qbg *chip)
+{
+	int rc = 0;
+	u8 val = REDUCE_TO_150MA;
+
+	rc = qbg_sdam_write(chip,
+		QBG_SDAM_BASE(chip, SDAM_CTRL0) + QBG_ESR_PULSE_FCC_REDUCE_OFFSET, &val, 1);
+	if (rc < 0)
+		pr_err("Failed to write QBG ESR pulse FCC reduction offset, rc=%d\n", rc);
 
 	return rc;
 }
@@ -2590,6 +2607,12 @@ static int qti_qbg_probe(struct platform_device *pdev)
 	rc = qbg_init_sdam(chip);
 	if (rc < 0) {
 		dev_err(&pdev->dev, "Failed to initialize QBG sdam, rc=%d\n", rc);
+		return rc;
+	}
+
+	rc = qbg_init_esr(chip);
+	if (rc < 0) {
+		dev_err(&pdev->dev, "Failed to initialize QBG ESR, rc=%d\n", rc);
 		return rc;
 	}
 
