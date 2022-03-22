@@ -168,6 +168,12 @@ char *hab_shmem_attach(struct qvm_channel *dev, const char *name,
 			name,
 			pipe_alloc_pages);
 
+	if (!paddr) {
+		ret = -ENOMEM;
+		pr_err("%s: get_guest_ctrl_paddr failed!\n", name);
+		goto err;
+	}
+
 	dev->guest_ctrl = memremap(paddr,
 		(dev->guest_factory->size + 1) * PAGE_SIZE, MEMREMAP_WB);
 		/* page size should be 4KB */
