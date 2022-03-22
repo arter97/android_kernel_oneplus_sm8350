@@ -654,6 +654,7 @@ IRQCHIP_DECLARE(pdc_sm6150, "qcom,sm6150-pdc", qcom_pdc_init);
 IRQCHIP_DECLARE(pdc_sm8150, "qcom,sm8150-pdc", qcom_pdc_init);
 IRQCHIP_DECLARE(pdc_yupik, "qcom,yupik-pdc", qcom_pdc_init);
 IRQCHIP_DECLARE(pdc_sdxlemur, "qcom,sdxlemur-pdc", qcom_pdc_init);
+IRQCHIP_DECLARE(pdc_sa515m, "qcom,sa515m-pdc", qcom_pdc_init);
 #endif
 
 MODULE_DESCRIPTION("Qualcomm Technologies, Inc. Power Domain Controller");
