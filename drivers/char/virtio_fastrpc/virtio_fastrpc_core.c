@@ -770,6 +770,7 @@ static int get_args(struct fastrpc_invoke_ctx *ctx)
 			handle[hlist].offset = (uint32_t)(uintptr_t)lpra[i].buf.pv;
 			/* copy dma handle sglist to data area */
 			table = maps[i]->table;
+			rpra[i].type = FASTRPC_BUF_TYPE_ION;
 			rpra[i].buf_len = lpra[i].buf.len;
 			rpra[i].payload_len = table->nents *
 				sizeof(struct virt_fastrpc_sgl);
