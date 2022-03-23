@@ -996,27 +996,27 @@ static int ethqos_configure(struct qcom_ethqos *ethqos)
 			     ethqos->por[i].offset);
 	ethqos_set_func_clk_en(ethqos);
 
-	/* Disable CK_OUT_EN */
-	rgmii_updatel(ethqos, SDCC_DLL_CONFIG_CK_OUT_EN,
-		      0,
-		      SDCC_HC_REG_DLL_CONFIG);
-
-	/* Wait for CK_OUT_EN clear */
-	do {
-		val = rgmii_readl(ethqos, SDCC_HC_REG_DLL_CONFIG);
-		val &= SDCC_DLL_CONFIG_CK_OUT_EN;
-		if (!val)
-			break;
-		usleep_range(1000, 1500);
-		retry--;
-	} while (retry > 0);
-	if (!retry)
-		dev_err(&ethqos->pdev->dev, "Clear CK_OUT_EN timedout\n");
-
 	if (ethqos->speed != SPEED_100 && ethqos->speed != SPEED_10) {
-		/* Set DLL_EN */
-		rgmii_updatel(ethqos, SDCC_DLL_CONFIG_DLL_EN,
-			      SDCC_DLL_CONFIG_DLL_EN, SDCC_HC_REG_DLL_CONFIG);
+		/* Disable CK_OUT_EN */
+		rgmii_updatel(ethqos, SDCC_DLL_CONFIG_CK_OUT_EN,
+			      0,
+			      SDCC_HC_REG_DLL_CONFIG);
+
+		/* Wait for CK_OUT_EN clear */
+		do {
+			val = rgmii_readl(ethqos, SDCC_HC_REG_DLL_CONFIG);
+			val &= SDCC_DLL_CONFIG_CK_OUT_EN;
+			if (!val)
+				break;
+			usleep_range(1000, 1500);
+			retry--;
+		} while (retry > 0);
+		if (!retry)
+			dev_err(&ethqos->pdev->dev, "Clear CK_OUT_EN timedout\n");
+
+			/* Set DLL_EN */
+			rgmii_updatel(ethqos, SDCC_DLL_CONFIG_DLL_EN,
+				      SDCC_DLL_CONFIG_DLL_EN, SDCC_HC_REG_DLL_CONFIG);
 	}
 
 	if (ethqos->speed == SPEED_1000) {
@@ -1044,7 +1044,8 @@ static int ethqos_configure(struct qcom_ethqos *ethqos)
 	rgmii_updatel(ethqos, SDCC_DLL_CONFIG_PDN,
 		      SDCC_DLL_CONFIG_PDN, SDCC_HC_REG_DLL_CONFIG);
 
-	usleep_range(1000, 1500);
+	if (ethqos->speed != SPEED_100 && ethqos->speed != SPEED_10)
+		usleep_range(1000, 1500);
 
 	/* Clear DLL_RST */
 	rgmii_updatel(ethqos, SDCC_DLL_CONFIG_DLL_RST, 0,
@@ -1054,39 +1055,41 @@ static int ethqos_configure(struct qcom_ethqos *ethqos)
 	rgmii_updatel(ethqos, SDCC_DLL_CONFIG_PDN, 0,
 		      SDCC_HC_REG_DLL_CONFIG);
 
-	usleep_range(1000, 1500);
+	if (ethqos->speed != SPEED_100 && ethqos->speed != SPEED_10)
+		usleep_range(1000, 1500);
 
-	/* Set CK_OUT_EN */
-	rgmii_updatel(ethqos, SDCC_DLL_CONFIG_CK_OUT_EN,
-		      SDCC_DLL_CONFIG_CK_OUT_EN,
+	if (ethqos->speed != SPEED_100 && ethqos->speed != SPEED_10) {
+		/* Set CK_OUT_EN */
+		rgmii_updatel(ethqos, SDCC_DLL_CONFIG_CK_OUT_EN,
+			      SDCC_DLL_CONFIG_CK_OUT_EN,
 		      SDCC_HC_REG_DLL_CONFIG);
 
-	/* Wait for CK_OUT_EN set */
-	retry = 1000;
-	do {
-		val = rgmii_readl(ethqos, SDCC_HC_REG_DLL_CONFIG);
-		val &= SDCC_DLL_CONFIG_CK_OUT_EN;
-		if (val)
-			break;
-		usleep_range(1000, 1500);
-		retry--;
-	} while (retry > 0);
-	if (!retry)
-		dev_err(&ethqos->pdev->dev, "Set CK_OUT_EN timedout\n");
+		/* Wait for CK_OUT_EN set */
+		retry = 1000;
+		do {
+			val = rgmii_readl(ethqos, SDCC_HC_REG_DLL_CONFIG);
+			val &= SDCC_DLL_CONFIG_CK_OUT_EN;
+			if (val)
+				break;
+			usleep_range(1000, 1500);
+			retry--;
+		} while (retry > 0);
+		if (!retry)
+			dev_err(&ethqos->pdev->dev, "Set CK_OUT_EN timedout\n");
 
-	/* wait for DLL LOCK */
-	retry = 1000;
-	do {
-		usleep_range(1000, 1500);
-		dll_lock = rgmii_readl(ethqos, SDC4_STATUS);
-		if (dll_lock & SDC4_STATUS_DLL_LOCK)
-			break;
-		retry--;
-	} while (retry > 0);
-	if (!retry)
-		dev_err(&ethqos->pdev->dev,
-			"Timeout while waiting for DLL lock\n");
-
+		/* wait for DLL LOCK */
+		retry = 1000;
+		do {
+			usleep_range(1000, 1500);
+			dll_lock = rgmii_readl(ethqos, SDC4_STATUS);
+			if (dll_lock & SDC4_STATUS_DLL_LOCK)
+				break;
+			retry--;
+		} while (retry > 0);
+		if (!retry)
+			dev_err(&ethqos->pdev->dev,
+				"Timeout while waiting for DLL lock\n");
+	}
 	return 0;
 }
 
