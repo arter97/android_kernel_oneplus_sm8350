@@ -1545,15 +1545,14 @@ static int slatecom_pm_runtime_suspend(struct device *dev)
 	if (atomic_read(&state) == SLATECOM_STATE_RUNTIME_SUSPEND)
 		return 0;
 
+	if (!(g_slav_status_reg & BIT(31))) {
+		SLATECOM_ERR("Slate boot is not complete, skip SPI suspend\n");
+		return 0;
+	}
 	mutex_lock(&slate_task_mutex);
 
-	if (mem_sleep_current == PM_SUSPEND_MEM)
-		cmnd_reg |= SLATE_OK_SLP_S2R;
-	else
-		cmnd_reg |= SLATE_OK_SLP_SIF;
-
-	ret = slatecom_reg_write_cmd(&clnt_handle, SLATE_CMND_REG,
-					1, &cmnd_reg);
+	cmnd_reg |= SLATE_OK_SLP_SIF;
+	ret = slatecom_reg_write_cmd(&clnt_handle, SLATE_CMND_REG, 1, &cmnd_reg);
 	sleep_time_start = ktime_get();
 	if (ret == 0) {
 		atomic_set(&state, SLATECOM_STATE_RUNTIME_SUSPEND);
