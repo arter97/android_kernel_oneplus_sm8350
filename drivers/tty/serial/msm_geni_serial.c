@@ -3919,10 +3919,8 @@ static int msm_geni_serial_get_ver_info(struct uart_port *uport)
 	dev_err(uport->dev, "%s:HW version %d\n", __func__, msm_port->ver_info.hw_ver);
 
 	/* GSI mode changes */
-#ifndef CONFIG_ARCH_SM6150
 	msm_port->gsi_mode = geni_read_reg(uport->membase,
 				GENI_IF_FIFO_DISABLE_RO) & FIFO_IF_DISABLE;
-#endif
 	dev_info(uport->dev, "gsi_mode:%d\n", msm_port->gsi_mode);
 	if (msm_port->gsi_mode) {
 		msm_port->gsi = devm_kzalloc(uport->dev,
