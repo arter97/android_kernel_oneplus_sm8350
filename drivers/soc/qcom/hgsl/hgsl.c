@@ -3258,6 +3258,10 @@ static int qcom_hgsl_register(struct platform_device *pdev,
 		goto exit_destroy_device;
 	}
 
+	ret = dma_coerce_mask_and_coherent(hgsl_dev->dev, DMA_BIT_MASK(64));
+	if (ret)
+		LOGW("Failed to set dma mask to 64 bits, ret = %d", ret);
+
 	return 0;
 
 exit_destroy_device:
