@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2002,2007-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/component.h>
 #include <linux/delay.h>
@@ -1560,6 +1561,8 @@ int adreno_device_probe(struct platform_device *pdev,
 
 	adreno_debugfs_init(adreno_dev);
 	adreno_profile_init(adreno_dev);
+
+	adreno_dev->perfcounter = false;
 
 	adreno_sysfs_init(adreno_dev);
 
@@ -4176,6 +4179,7 @@ static int adreno_hibernation_resume(struct device *dev)
 {
 	struct kgsl_device *device = dev_get_drvdata(dev);
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
+	const struct adreno_a6xx_core *a6xx_core = to_a6xx_core(adreno_dev);
 	const struct adreno_power_ops *ops = ADRENO_POWER_OPS(adreno_dev);
 	int ret = 0;
 
@@ -4185,6 +4189,10 @@ static int adreno_hibernation_resume(struct device *dev)
 	mutex_lock(&device->mutex);
 
 	ret = adreno_secure_pt_restore(adreno_dev);
+	if (ret)
+		goto err;
+
+	ret = adreno_zap_shader_load(adreno_dev, a6xx_core->zap_name);
 	if (ret)
 		goto err;
 

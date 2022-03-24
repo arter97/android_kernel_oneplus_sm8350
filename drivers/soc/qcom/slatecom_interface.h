@@ -113,11 +113,35 @@ enum WMSlateCtrlChnlOpcode {
 	GMI_MGR_DST = 15,			/* payload struct: dst_t*/
 
 	/*
+	 * Notification to slate about WLAN boot init
+	 */
+	GMI_MGR_WLAN_BOOT_INIT = 16,
+
+	/*
+	 * Notification to slate about boot complete
+	 */
+	GMI_MGR_WLAN_BOOT_COMPLETE = 17,
+
+	/*
 	 * DEBUG Opcodes
 	 */
 	GMI_MGR_ENABLE_QCLI = 91,		/* Enable QCLI */
 
 	GMI_MGR_DISABLE_QCLI = 92,		/* Disable QCLI */
 };
+
+/*
+ * Notification to slate about WLAN state
+ */
+#if IS_ENABLED(CONFIG_MSM_SLATECOM_INTERFACE)
+
+int send_wlan_state(enum WMSlateCtrlChnlOpcode type);
+#else
+static inline int send_wlan_state(enum WMSlateCtrlChnlOpcode type)
+{
+	return 0;
+}
+#endif
+
 #endif /* SLATECOM_INTERFACE_H */
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only
 # Makefile for the Himax touchscreen drivers.
 obj-$(CONFIG_TOUCHSCREEN_HIMAX_ONCELL)     += himax_ic_oncell_core.o
 obj-$(CONFIG_TOUCHSCREEN_HIMAX_IC_HX852xH) += himax_ic_HX852xH.o

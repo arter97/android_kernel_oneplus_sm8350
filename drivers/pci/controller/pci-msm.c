@@ -6089,7 +6089,7 @@ static int msm_pcie_probe(struct platform_device *pdev)
 {
 	int ret = 0;
 	int rc_idx = -1;
-	int size;
+	int size = 0;
 	struct msm_pcie_dev_t *pcie_dev;
 	struct device_node *of_node;
 
@@ -6404,8 +6404,10 @@ static int msm_pcie_probe(struct platform_device *pdev)
 	if (size) {
 		pcie_dev->filtered_bdfs = devm_kzalloc(&pdev->dev, size,
 						       GFP_KERNEL);
-		if (!pcie_dev->filtered_bdfs)
+		if (!pcie_dev->filtered_bdfs) {
+			mutex_unlock(&pcie_drv.drv_lock);
 			return -ENOMEM;
+		}
 
 		pcie_dev->bdf_count = size / sizeof(*pcie_dev->filtered_bdfs);
 

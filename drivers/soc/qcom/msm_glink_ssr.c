@@ -97,6 +97,7 @@ static void glink_ssr_ssr_unreg_work(struct work_struct *work)
 	kref_put(&ssr->refcount, glink_ssr_release);
 }
 
+#if defined(CONFIG_DEEPSLEEP) && defined(CONFIG_RPMSG_QCOM_GLINK_RPM)
 void glink_ssr_notify_rpm(void)
 {
 	struct do_cleanup_msg msg;
@@ -118,6 +119,7 @@ void glink_ssr_notify_rpm(void)
 			ret);
 }
 EXPORT_SYMBOL(glink_ssr_notify_rpm);
+#endif
 
 static int glink_ssr_ssr_cb(struct notifier_block *this,
 			    unsigned long code, void *data)

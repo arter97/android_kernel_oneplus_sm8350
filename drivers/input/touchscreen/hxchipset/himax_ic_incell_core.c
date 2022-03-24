@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * Himax Android Driver Sample Code for IC Core
  *

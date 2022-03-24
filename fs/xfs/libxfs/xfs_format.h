@@ -1164,7 +1164,10 @@ typedef struct	xfs_disk_dquot {
 	__be32		d_btimer;	/* similar to above; for disk blocks */
 	__be16		d_iwarns;	/* warnings issued wrt num inodes */
 	__be16		d_bwarns;	/* warnings issued wrt disk blocks */
-	__be32		d_pad0;		/* 64 bit align */
+	__u8		d_itimer_high;	/* upper bits of d_itimer */
+	__u8		d_btimer_high;	/* upper bits of d_btimer */
+	__u8		d_rtbtimer_high;/* upper bits of d_rtbtimer */
+	__u8		d_pad0;		/* 64 bit align */
 	__be64		d_rtb_hardlimit;/* absolute limit on realtime blks */
 	__be64		d_rtb_softlimit;/* preferred limit on RT disk blks */
 	__be64		d_rtbcount;	/* realtime blocks owned */

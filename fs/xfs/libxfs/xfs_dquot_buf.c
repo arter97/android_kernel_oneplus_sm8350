@@ -75,17 +75,17 @@ xfs_dquot_verify(
 
 	if (ddq->d_blk_softlimit &&
 	    be64_to_cpu(ddq->d_bcount) > be64_to_cpu(ddq->d_blk_softlimit) &&
-	    !ddq->d_btimer)
+	    !ddq->d_btimer && !ddq->d_btimer_high)
 		return __this_address;
 
 	if (ddq->d_ino_softlimit &&
 	    be64_to_cpu(ddq->d_icount) > be64_to_cpu(ddq->d_ino_softlimit) &&
-	    !ddq->d_itimer)
+	    !ddq->d_itimer && !ddq->d_itimer_high)
 		return __this_address;
 
 	if (ddq->d_rtb_softlimit &&
 	    be64_to_cpu(ddq->d_rtbcount) > be64_to_cpu(ddq->d_rtb_softlimit) &&
-	    !ddq->d_rtbtimer)
+	    !ddq->d_rtbtimer && !ddq->d_rtbtimer_high)
 		return __this_address;
 
 	return NULL;

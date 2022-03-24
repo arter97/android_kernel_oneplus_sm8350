@@ -604,15 +604,18 @@ static int qrtr_tx_wait(struct qrtr_node *node, struct sockaddr_qrtr *to,
  * cause the next transmission attempt to be sent with the confirm_rx.
  */
 static void qrtr_tx_flow_failed(struct qrtr_node *node, int dest_node,
-				int dest_port)
+				int dest_port, int confirm_rx)
 {
 	unsigned long key = (u64)dest_node << 32 | dest_port;
 	struct qrtr_tx_flow *flow;
-
 	mutex_lock(&node->qrtr_tx_lock);
 	flow = radix_tree_lookup(&node->qrtr_tx_flow, key);
-	if (flow)
-		WRITE_ONCE(flow->tx_failed, 1);
+	if (flow) {
+		if (confirm_rx)
+			WRITE_ONCE(flow->tx_failed, 1);
+		else
+			atomic_dec(&flow->pending);
+	}
 	mutex_unlock(&node->qrtr_tx_lock);
 }
 
@@ -678,9 +681,12 @@ static int qrtr_node_enqueue(struct qrtr_node *node, struct sk_buff *skb,
 	mutex_unlock(&node->ep_lock);
 
 	/* Need to ensure that a subsequent message carries the otherwise lost
-	 * confirm_rx flag if we dropped this one */
-	if (rc && confirm_rx)
-		qrtr_tx_flow_failed(node, to->sq_node, to->sq_port);
+	 * confirm_rx flag if we dropped this one and decrement flow pending count
+	 * in case confirm flag is not set
+	 */
+	if (rc)
+		qrtr_tx_flow_failed(node, to->sq_node, to->sq_port, confirm_rx);
+
 	if (!rc && type == QRTR_TYPE_HELLO)
 		atomic_inc(&node->hello_sent);
 
@@ -940,13 +946,6 @@ int qrtr_endpoint_post(struct qrtr_endpoint *ep, const void *data, size_t len)
 			return -ENODEV;
 		}
 
-		if (sock_queue_rcv_skb(&ipc->sk, skb))
-			goto err;
-
-		/* Force wakeup for all packets except for sensors */
-		if (node->nid != 9 && node->nid != 5)
-			pm_wakeup_ws_event(node->ws, qrtr_wakeup_ms, true);
-
 		if (node->nid == 5) {
 			svc_id = qrtr_get_service_id(cb->src_node, cb->src_port);
 			if (svc_id > 0) {
@@ -957,9 +956,19 @@ int qrtr_endpoint_post(struct qrtr_endpoint *ep, const void *data, size_t len)
 					}
 				}
 			}
-			if (wake)
-				pm_wakeup_ws_event(node->ws, qrtr_wakeup_ms, true);
 		}
+
+		if (sock_queue_rcv_skb(&ipc->sk, skb))
+			goto err;
+
+		/**
+		 * Force wakeup for all packets except for sensors and blacklisted services
+		 * from adsp side
+		 */
+		if ((node->nid != 9 && node->nid != 5) ||
+		    (node->nid == 5 && wake))
+			pm_wakeup_ws_event(node->ws, qrtr_wakeup_ms, true);
+
 		qrtr_port_put(ipc);
 	}
 

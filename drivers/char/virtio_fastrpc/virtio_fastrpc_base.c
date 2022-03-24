@@ -195,7 +195,7 @@ static long fastrpc_ioctl(struct file *file, unsigned int ioctl_num,
 				 unsigned long ioctl_param)
 {
 	union {
-		struct fastrpc_ioctl_invoke_crc inv;
+		struct fastrpc_ioctl_invoke_perf inv;
 		struct fastrpc_ioctl_mmap mmap;
 		struct fastrpc_ioctl_mmap_64 mmap64;
 		struct fastrpc_ioctl_munmap munmap;
@@ -203,6 +203,7 @@ static long fastrpc_ioctl(struct file *file, unsigned int ioctl_num,
 		struct fastrpc_ioctl_munmap_fd munmap_fd;
 		struct fastrpc_ioctl_init_attrs init;
 		struct fastrpc_ioctl_control cp;
+		struct fastrpc_ioctl_capability cap;
 	} p;
 	union {
 		struct fastrpc_ioctl_mmap mmap;
@@ -217,6 +218,8 @@ static long fastrpc_ioctl(struct file *file, unsigned int ioctl_num,
 	p.inv.fds = NULL;
 	p.inv.attrs = NULL;
 	p.inv.crc = NULL;
+	p.inv.perf_kernel = NULL;
+	p.inv.perf_dsp = NULL;
 
 	spin_lock(&fl->hlock);
 	if (fl->file_close == 1) {
@@ -242,7 +245,10 @@ static long fastrpc_ioctl(struct file *file, unsigned int ioctl_num,
 	case FASTRPC_IOCTL_INVOKE_CRC:
 		if (!size)
 			size = sizeof(struct fastrpc_ioctl_invoke_crc);
-
+		fallthrough;
+	case FASTRPC_IOCTL_INVOKE_PERF:
+		if (!size)
+			size = sizeof(struct fastrpc_ioctl_invoke_perf);
 		K_COPY_FROM_USER(err, 0, &p.inv, param, size);
 		if (err)
 			goto bail;
@@ -354,6 +360,9 @@ static long fastrpc_ioctl(struct file *file, unsigned int ioctl_num,
 			err = -ENOTTY;
 			dev_err(me->dev, "session mode is not supported\n");
 			break;
+		case FASTRPC_MODE_PROFILE:
+			fl->profile = (uint32_t)ioctl_param;
+			break;
 		default:
 			err = -ENOTTY;
 			break;
@@ -407,7 +416,11 @@ static long fastrpc_ioctl(struct file *file, unsigned int ioctl_num,
 		if (err)
 			goto bail;
 		break;
-
+	case  FASTRPC_IOCTL_GET_DSP_INFO:
+		err = fastrpc_ioctl_get_dsp_info(&p.cap, param, fl);
+		if (err)
+			goto bail;
+		break;
 	default:
 		err = -ENOTTY;
 		dev_info(me->dev, "bad ioctl: %d\n", ioctl_num);

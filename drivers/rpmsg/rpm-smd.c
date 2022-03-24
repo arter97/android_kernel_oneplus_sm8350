@@ -32,6 +32,10 @@
 #include <soc/qcom/rpm-notifier.h>
 #include <soc/qcom/rpm-smd.h>
 #include <linux/rpmsg.h>
+#include <linux/suspend.h>
+#include <soc/qcom/msm_glink_ssr.h>
+#include <linux/syscore_ops.h>
+#include "rpmsg_internal.h"
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/trace_rpm_smd.h>
@@ -61,6 +65,8 @@
 #define RPM_RSC_ID_SIZE 12
 #define RPM_DATA_LEN_OFFSET 0
 #define RPM_DATA_LEN_SIZE 16
+#define ACTIVE 0
+#define CLOSED 1
 #define RPM_HDR_SIZE ((rpm_msg_fmt_ver == RPM_MSG_V0_FMT) ?\
 		sizeof(struct rpm_v0_hdr) : sizeof(struct rpm_v1_hdr))
 #define CLEAR_FIELD(offset, size) (~GENMASK(offset + size - 1, offset))
@@ -117,11 +123,12 @@ struct qcom_smd_rpm {
 };
 
 struct qcom_smd_rpm *rpm;
-struct qcom_smd_rpm priv_rpm;
 
 static ATOMIC_NOTIFIER_HEAD(msm_rpm_sleep_notifier);
 static bool standalone;
 static int probe_status = -EPROBE_DEFER;
+static int channel_status = ACTIVE;
+static int quickboot_done;
 static void msm_rpm_process_ack(uint32_t msg_id, int errno);
 
 int msm_rpm_register_notifier(struct notifier_block *nb)
@@ -1504,6 +1511,14 @@ int msm_rpm_enter_sleep(bool print, const struct cpumask *cpumask)
 		if (ret)
 			smd_mask_receive_interrupt(false, NULL);
 	}
+
+#ifdef CONFIG_DEEPSLEEP
+	if (channel_status != ACTIVE) {
+		probe_status = -EPROBE_DEFER;
+		glink_ssr_notify_rpm();
+	}
+#endif
+
 	return ret;
 }
 EXPORT_SYMBOL(msm_rpm_enter_sleep);
@@ -1563,6 +1578,35 @@ static int qcom_smd_rpm_callback(struct rpmsg_device *rpdev, void *ptr,
 	return 0;
 }
 
+static int qcom_smd_rpm_suspend(struct device *dev)
+{
+	channel_status = CLOSED;
+	return 0;
+}
+
+static int qcom_smd_rpm_deep_suspend(void)
+{
+#ifdef CONFIG_DEEPSLEEP
+	if (mem_sleep_current == PM_SUSPEND_MEM)
+		channel_status = CLOSED;
+#endif
+	return 0;
+}
+
+static void qcom_smd_rpm_deep_resume(void)
+{
+	channel_status = ACTIVE;
+}
+
+static const struct dev_pm_ops qcom_smd_rpm_dev_pm_ops = {
+	.poweroff_noirq = qcom_smd_rpm_suspend,
+};
+
+static struct syscore_ops rpm_syscore_ops = {
+	.suspend = qcom_smd_rpm_deep_suspend,
+	.resume = qcom_smd_rpm_deep_resume,
+};
+
 static int qcom_smd_rpm_probe(struct rpmsg_device *rpdev)
 {
 	char *key = NULL;
@@ -1571,6 +1615,9 @@ static int qcom_smd_rpm_probe(struct rpmsg_device *rpdev)
 	int irq;
 	void __iomem *reg_base;
 	uint64_t version = V0_PROTOCOL_VERSION; /* set to default v0 format */
+
+	if (quickboot_done)
+		return 0;
 
 	p = of_find_compatible_node(NULL, NULL, "qcom,rpm-smd");
 	if (!p) {
@@ -1604,7 +1651,7 @@ static int qcom_smd_rpm_probe(struct rpmsg_device *rpdev)
 		goto fail;
 	}
 
-	rpm = devm_kzalloc(&rpdev->dev, sizeof(*rpm), GFP_KERNEL);
+	rpm = kzalloc(sizeof(*rpm), GFP_KERNEL);
 	if (!rpm) {
 		probe_status = -ENOMEM;
 		goto fail;
@@ -1612,8 +1659,6 @@ static int qcom_smd_rpm_probe(struct rpmsg_device *rpdev)
 
 	rpm->dev = &rpdev->dev;
 	rpm->rpm_channel = rpdev->ept;
-	dev_set_drvdata(&rpdev->dev, rpm);
-	priv_rpm = *rpm;
 	rpm->irq = irq;
 
 	mutex_init(&rpm->lock);
@@ -1621,6 +1666,9 @@ static int qcom_smd_rpm_probe(struct rpmsg_device *rpdev)
 
 skip_init:
 	probe_status = of_platform_populate(p, NULL, NULL, &rpdev->dev);
+
+	if (!probe_status)
+		register_syscore_ops(&rpm_syscore_ops);
 
 	if (standalone)
 		pr_info("RPM running in standalone mode\n");
@@ -1639,9 +1687,45 @@ static struct rpmsg_driver qcom_smd_rpm_driver = {
 	.id_table = rpmsg_driver_rpm_id_table,
 	.drv  = {
 		.name  = "qcom_rpm_smd",
+		.pm = &qcom_smd_rpm_dev_pm_ops,
 		.owner = THIS_MODULE,
 	},
 };
+
+
+int qcom_smd_rpm_quickboot(struct rpmsg_device *rpdev, int status)
+{
+	struct rpmsg_channel_info chinfo = {};
+	struct rpmsg_endpoint *ept = NULL;
+	struct rb_node *t;
+
+	strlcpy(chinfo.name, rpdev->id.name, 32);
+	chinfo.src = rpdev->src;
+	chinfo.dst = RPMSG_ADDR_ANY;
+
+	ept = rpmsg_create_ept(rpdev, qcom_smd_rpm_driver.callback, NULL, chinfo);
+	if (!ept) {
+		pr_err("%s: failed to create endpoint\n", __func__);
+		return -ENOMEM;
+	}
+
+	rpdev->ept = ept;
+	rpdev->src = ept->addr;
+	rpm->dev = &rpdev->dev;
+	rpm->rpm_channel = rpdev->ept;
+
+	for (t = rb_first(&tr_root); t; t = rb_next(t)) {
+
+		struct slp_buf *s = rb_entry(t, struct slp_buf, node);
+
+		rb_erase(&s->node, &tr_root);
+	}
+
+	quickboot_done = 1;
+	probe_status = 0;
+	return 0;
+}
+EXPORT_SYMBOL(qcom_smd_rpm_quickboot);
 
 int __init msm_rpm_driver_init(void)
 {

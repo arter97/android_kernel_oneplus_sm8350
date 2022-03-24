@@ -49,6 +49,7 @@
 #include "debug.h"
 #include "power.h"
 #include "genl.h"
+#include "../slatecom_interface.h"
 
 #define MAX_PROP_SIZE			32
 #define NUM_LOG_PAGES			10
@@ -399,6 +400,17 @@ bool icnss_is_fw_down(void)
 }
 EXPORT_SYMBOL(icnss_is_fw_down);
 
+unsigned long icnss_get_device_config(void)
+{
+	struct icnss_priv *priv = icnss_get_plat_priv();
+
+	if (!priv)
+		return 0;
+
+	return priv->device_config;
+}
+EXPORT_SYMBOL(icnss_get_device_config);
+
 bool icnss_is_rejuvenate(void)
 {
 	if (!penv)
@@ -621,11 +633,16 @@ static int icnss_driver_event_server_arrive(struct icnss_priv *priv,
 
 	set_bit(ICNSS_WLFW_CONNECTED, &priv->state);
 
-	if (priv->is_slate_rfa && !test_bit(ICNSS_SLATE_UP, &priv->state)) {
-		reinit_completion(&priv->slate_boot_complete);
-		icnss_pr_dbg("Waiting for slate boot up notification, 0x%lx\n",
-			     priv->state);
-		wait_for_completion(&priv->slate_boot_complete);
+	if (priv->is_slate_rfa) {
+		if (!test_bit(ICNSS_SLATE_UP, &priv->state)) {
+			reinit_completion(&priv->slate_boot_complete);
+			icnss_pr_dbg("Waiting for slate boot up notification, 0x%lx\n",
+				     priv->state);
+			wait_for_completion(&priv->slate_boot_complete);
+		}
+
+		send_wlan_state(GMI_MGR_WLAN_BOOT_INIT);
+		icnss_pr_info("sent wlan boot init command\n");
 	}
 
 	ret = wlfw_ind_register_send_sync_msg(priv);
@@ -899,6 +916,11 @@ static int icnss_driver_event_fw_ready_ind(struct icnss_priv *priv, void *data)
 		icnss_pr_err("Device is not ready\n");
 		ret = -ENODEV;
 		goto out;
+	}
+
+	if (priv->is_slate_rfa && test_bit(ICNSS_SLATE_UP, &priv->state)) {
+		send_wlan_state(GMI_MGR_WLAN_BOOT_COMPLETE);
+		icnss_pr_info("sent wlan boot complete command\n");
 	}
 
 	if (test_bit(ICNSS_PD_RESTART, &priv->state)) {
@@ -4034,6 +4056,14 @@ static void icnss_init_control_params(struct icnss_priv *priv)
 	}
 }
 
+static void icnss_read_device_configs(struct icnss_priv *priv)
+{
+	if (of_property_read_bool(priv->pdev->dev.of_node,
+				  "wlan-ipa-disabled")) {
+		set_bit(ICNSS_IPA_DISABLED, &priv->device_config);
+	}
+}
+
 static inline void  icnss_get_smp2p_info(struct icnss_priv *priv)
 {
 
@@ -4135,6 +4165,8 @@ static int icnss_probe(struct platform_device *pdev)
 	icnss_allow_recursive_recovery(dev);
 
 	icnss_init_control_params(priv);
+
+	icnss_read_device_configs(priv);
 
 	ret = icnss_resource_parse(priv);
 	if (ret)

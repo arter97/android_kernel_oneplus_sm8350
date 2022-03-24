@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright(c) 2020, Analogix Semiconductor. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  */
 #include <linux/gcd.h>
@@ -984,7 +985,7 @@ static int anx7625_attach_dsi(struct anx7625_data *ctx)
 	struct mipi_dsi_host *host;
 	const struct mipi_dsi_device_info info = {
 		.type = "anx7625",
-		.channel = 0,
+		.channel = ctx->channel,
 		.node = NULL,
 	};
 
@@ -1361,6 +1362,7 @@ static int anx7625_i2c_probe(struct i2c_client *client,
 	struct anx7625_platform_data *pdata;
 	int ret = 0;
 	struct device *dev = &client->dev;
+	struct device_node *parent_node = of_get_parent(dev->of_node);
 
 	if (!i2c_check_functionality(client->adapter,
 				     I2C_FUNC_SMBUS_I2C_BLOCK)) {
@@ -1387,6 +1389,8 @@ static int anx7625_i2c_probe(struct i2c_client *client,
 	i2c_set_clientdata(client, platform);
 
 	anx7625_init_gpio(platform);
+
+	of_property_read_u32_index(parent_node, "reg", 0, &platform->channel);
 
 	atomic_set(&platform->power_status, 0);
 

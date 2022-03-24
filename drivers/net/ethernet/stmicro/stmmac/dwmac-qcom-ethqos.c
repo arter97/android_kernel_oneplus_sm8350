@@ -103,8 +103,6 @@
 #define EMAC_I0_EMAC_CORE_HW_VERSION_RGOFFADDR 0x00000070
 #define EMAC_HW_v2_3_2_RG 0x20030002
 
-#define EMAC_HW_v3_0_0_RG 0x30000000
-
 #define MII_BUSY 0x00000001
 #define MII_WRITE 0x00000002
 
@@ -2267,12 +2265,15 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
 	place_marker("M - Ethernet probe start");
 #endif
 
+#if IS_ENABLED(CONFIG_IPC_LOGGING)
 	ipc_emac_log_ctxt = ipc_log_context_create(IPCLOG_STATE_PAGES,
 						   "emac", 0);
 	if (!ipc_emac_log_ctxt)
 		ETHQOSERR("Error creating logging context for emac\n");
 	else
 		ETHQOSINFO("IPC logging has been enabled for emac\n");
+#endif
+
 	ret = stmmac_get_platform_resources(pdev, &stmmac_res);
 	if (ret)
 		return ret;

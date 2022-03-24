@@ -1504,6 +1504,7 @@ static const struct adreno_a6xx_core adreno_gpu_core_a610 = {
 		.perfcounters = &adreno_a6xx_legacy_perfcounters,
 		.gmem_size = (SZ_128K + SZ_4K),
 		.bus_width = 32,
+		.snapshot_size = SZ_1M,
 	},
 	.prim_fifo_threshold = 0x00080000,
 	.sqefw_name = "a630_sqe.fw",
