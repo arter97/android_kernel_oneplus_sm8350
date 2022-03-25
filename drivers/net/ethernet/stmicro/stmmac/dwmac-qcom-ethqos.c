@@ -25,7 +25,7 @@
 #include <linux/ipv6.h>
 #include <linux/rtnetlink.h>
 #include <asm-generic/io.h>
-
+#include <linux/kthread.h>
 #include "stmmac.h"
 #include "stmmac_platform.h"
 #include "dwmac-qcom-ethqos.h"
@@ -2248,8 +2248,9 @@ static struct notifier_block qcom_ethqos_panic_blk = {
 	.notifier_call  = qcom_ethqos_panic_notifier,
 };
 
-static int qcom_ethqos_probe(struct platform_device *pdev)
+static int _qcom_ethqos_probe(void *arg)
 {
+	struct platform_device *pdev = (struct platform_device *)arg;
 	struct device_node *np = pdev->dev.of_node;
 	struct device_node *rgmii_io_macro_node = NULL;
 	struct plat_stmmacenet_data *plat_dat = NULL;
@@ -2488,6 +2489,20 @@ err_mem:
 	stmmac_remove_config_dt(pdev, plat_dat);
 
 	return ret;
+}
+
+static int qcom_ethqos_probe(struct platform_device *pdev)
+{
+#ifdef CONFIG_PLATFORM_AUTO
+	struct task_struct *ethqos_task = kthread_run(_qcom_ethqos_probe, pdev,
+			"ethqos_probe");
+	if (PTR_ERR_OR_ZERO(ethqos_task))
+		return PTR_ERR(ethqos_task);
+	else
+		return 0;
+#else
+	return _qcom_ethqos_probe(pdev);
+#endif
 }
 
 static int qcom_ethqos_remove(struct platform_device *pdev)
