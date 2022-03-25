@@ -246,6 +246,7 @@ __acquires(&port->port_lock)
 			break;
 
 		req = list_entry(pool->next, struct usb_request, list);
+		list_move_tail(&req->list, &port->queued_write_pool);
 		len = gs_send_packet(port, req->buf, in->maxpacket);
 		if (len == 0) {
 			wake_up_interruptible(&port->drain_wait);
@@ -254,7 +255,6 @@ __acquires(&port->port_lock)
 		do_tty_wake = true;
 
 		req->length = len;
-		list_move_tail(&req->list, &port->queued_write_pool);
 		req->zero = kfifo_is_empty(&port->port_write_buf);
 
 		pr_vdebug("ttyGS%d: tx len=%d, 0x%02x 0x%02x 0x%02x ...\n",
