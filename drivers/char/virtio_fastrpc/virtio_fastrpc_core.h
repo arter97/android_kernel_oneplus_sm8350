@@ -1,26 +1,23 @@
 /* SPDX-License-Identifier: GPL-2.0-only
  *
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef __VIRTIO_FASTRPC_CORE_H__
 #define __VIRTIO_FASTRPC_CORE_H__
 
-#include <linux/cdev.h>
-#include <linux/mutex.h>
-#include <linux/err.h>
-#include <linux/kernel.h>
-#include <linux/virtio.h>
 #include <linux/slab.h>
 #include <linux/scatterlist.h>
 #include <linux/completion.h>
 #include "../adsprpc_compat.h"
 #include "../adsprpc_shared.h"
+#include "virtio_fastrpc_base.h"
 
 #define ADSP_MMAP_HEAP_ADDR		4
 #define ADSP_MMAP_REMOTE_HEAP_ADDR	8
 #define ADSP_MMAP_ADD_PAGES		0x1000
 
-#define FASTRPC_MSG_MAX			256
+
 
 #define K_COPY_FROM_USER(err, kernel, dst, src, size) \
 	do {\
@@ -63,12 +60,6 @@ struct fastrpc_perf {
 	uint64_t tid;
 };
 
-struct virt_fastrpc_vq {
-	/* protects vq */
-	spinlock_t vq_lock;
-	struct virtqueue *vq;
-};
-
 struct fastrpc_ctx_lst {
 	struct hlist_head pending;
 	struct hlist_head interrupted;
@@ -79,32 +70,6 @@ struct virt_fastrpc_msg {
 	u16 msgid;
 	void *txbuf;
 	void *rxbuf;
-};
-
-struct fastrpc_apps {
-	struct virtio_device *vdev;
-	struct virt_fastrpc_vq rvq;
-	struct virt_fastrpc_vq svq;
-	void *rbufs;
-	void *sbufs;
-	unsigned int order;
-	unsigned int num_bufs;
-	unsigned int buf_size;
-	unsigned int num_channels;
-	int last_sbuf;
-
-	bool has_invoke_attr;
-	bool has_invoke_crc;
-	bool has_mmap;
-	bool has_control;
-
-	struct device *dev;
-	struct cdev cdev;
-	struct class *class;
-	dev_t dev_no;
-
-	spinlock_t msglock;
-	struct virt_fastrpc_msg *msgtable[FASTRPC_MSG_MAX];
 };
 
 struct fastrpc_file {
@@ -118,6 +83,8 @@ struct fastrpc_file {
 	int cid;
 	int domain;
 	int pd;
+	int tgid_open;	/* Process ID during device open */
+	bool untrusted_process;
 	int file_close;
 	int dsp_proc_init;
 	struct fastrpc_apps *apps;
@@ -127,6 +94,8 @@ struct fastrpc_file {
 	int dev_minor;
 	char *debug_buf;
 	uint32_t profile;
+	/* Flag to indicate attempt has been made to allocate memory for debug_buf*/
+	int debug_buf_alloced_attempted;
 };
 
 struct fastrpc_invoke_ctx {
