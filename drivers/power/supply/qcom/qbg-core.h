@@ -113,6 +113,8 @@ enum QBG_ACCUM_INTERVAL_TYPE {
  * @essential_param_revid:	QBG essential parameters revision ID
  * @sample_time_us:	Array of accumulator sample time in each QBG HW state
  * @debug_mask:		Debug mask to enable/disable debug prints
+ * @adc_cmn_wb_base:	Base address of ADC_CMN_WB module
+ * @adc_cmn_base:	Base address of ADC_CMN module
  * @pon_ocv:		Power-on OCV of QBG device
  * @pon_ibat:		Power-on current of QBG device
  * @pon_soc:		Power-on SOC of QBG device
@@ -198,6 +200,8 @@ struct qti_qbg {
 	u32			essential_param_revid;
 	u32			sample_time_us[QBG_STATE_MAX];
 	u32			*debug_mask;
+	u32			adc_cmn_wb_base;
+	u32			adc_cmn_base;
 	int			pon_ocv;
 	int			pon_ibat;
 	int			pon_tbat;
