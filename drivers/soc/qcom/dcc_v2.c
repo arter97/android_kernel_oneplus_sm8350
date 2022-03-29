@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -172,7 +173,7 @@ struct dcc_drvdata {
 	uint8_t			*cti_trig;
 	uint8_t			loopoff;
 	uint32_t		per_ll_reg_cnt;
-	uint32_t		ll_state_cnt;
+	int32_t			ll_state_cnt;
 	struct reg_state	*ll_state;
 	void			*sram_state;
 };
