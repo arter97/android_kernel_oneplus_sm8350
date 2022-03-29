@@ -216,24 +216,21 @@ static int init_aead(void)
 
 static int init_ta_and_set_key(void)
 {
-	static int ta_init_done;
 	const uint32_t shared_buffer_len = 4096;
 	int ret;
 
-	if (!ta_init_done) {
-		ret = qseecom_start_app(&app_handle, "secs2d", shared_buffer_len);
-		if (ret) {
-			pr_err("qseecom_start_app failed: %d\n", ret);
-			return ret;
-		}
-
-		ret = get_key_from_ta();
-		if (ret) {
-			pr_err("set_key returned %d\n", ret);
-			goto err;
-		}
-		ta_init_done = 1;
+	ret = qseecom_start_app(&app_handle, "secs2d", shared_buffer_len);
+	if (ret) {
+		pr_err("qseecom_start_app failed: %d\n", ret);
+		return ret;
 	}
+
+	ret = get_key_from_ta();
+	if (ret) {
+		pr_err("set_key returned %d\n", ret);
+		goto err;
+	}
+
 	return 0;
 err:
 	qseecom_shutdown_app(&app_handle);
@@ -256,32 +253,80 @@ static int alloc_auth_memory(void)
 
 void deinit_aes_encrypt(void)
 {
-	free_pages((unsigned long)temp_out_buf, 1);
+	if (temp_out_buf) {
+		free_pages((unsigned long)temp_out_buf, 1);
+		temp_out_buf = NULL;
+	}
+
+	if (tfm) {
+		crypto_free_aead(tfm);
+		tfm = NULL;
+	}
+
+	memset(key, 0, AES256_KEY_SIZE);
+	memset(params->key_blob, 0, WRAPPED_KEY_SIZE);
+	kfree(params);
+}
+
+static int hibernate_pm_notifier(struct notifier_block *nb,
+				unsigned long event, void *unused)
+{
+	int ret = NOTIFY_DONE;
+
+	switch (event) {
+
+	case (PM_HIBERNATION_PREPARE):
+		params = kmalloc(sizeof(struct qcom_crypto_params), GFP_KERNEL);
+		if (!params)
+			return NOTIFY_BAD;
+
+		ret = init_aead();
+		if (ret) {
+			pr_err("%s: Failed init_aead(): %d\n", __func__, ret);
+			goto err_aead;
+		}
+
+		ret = init_ta_and_set_key();
+		if (ret) {
+			pr_err("%s: Failed to init TA: %d\n", __func__, ret);
+			goto err_setkey;
+		}
+
+		temp_out_buf = (void *)__get_free_pages(GFP_KERNEL, 1);
+		if (!temp_out_buf) {
+			pr_err("%s: Failed alloc_auth_memory %d\n", __func__, ret);
+			ret = -1;
+			goto err_setkey;
+		}
+		break;
+
+	case (PM_POST_HIBERNATION):
+		deinit_aes_encrypt();
+		break;
+
+	default:
+		WARN_ONCE(1, "Invalid PM Notifier\n");
+		break;
+	}
+
+	return NOTIFY_DONE;
+
+err_setkey:
 	memset(params->key_blob, 0, WRAPPED_KEY_SIZE);
 	memset(key, 0, AES256_KEY_SIZE);
 	crypto_free_aead(tfm);
+err_aead:
 	kfree(params);
+	return NOTIFY_BAD;
 }
+
+static struct notifier_block pm_nb = {
+	.notifier_call = hibernate_pm_notifier,
+};
 
 int init_aes_encrypt(void)
 {
 	int ret;
-
-	params = kmalloc(sizeof(struct qcom_crypto_params), GFP_KERNEL);
-	if (!params)
-		return -ENOMEM;
-
-	ret = init_aead();
-	if (ret) {
-		pr_err("%s: Failed init_aead(): %d\n", __func__, ret);
-		goto err_aead;
-	}
-
-	ret = init_ta_and_set_key();
-	if (ret) {
-		pr_err("%s: Failed to init TA: %d\n", __func__, ret);
-		goto err_setkey;
-	}
 
 	/*
 	 * Encryption results in two things:
@@ -298,12 +343,6 @@ int init_aes_encrypt(void)
 
 	first_encrypt = 1;
 	pos = 0;
-	temp_out_buf = (void *)__get_free_pages(GFP_KERNEL, 1);
-	if (!temp_out_buf) {
-		pr_err("%s: Failed alloc_auth_memory %d\n", __func__, ret);
-		ret = -1;
-		goto err_auth;
-	}
 	memcpy(params->aad, "SECURE_S2D!!", sizeof(params->aad));
 	params->authsize = AUTH_SIZE;
 	return 0;
@@ -311,12 +350,24 @@ err_auth:
 	qseecom_shutdown_app(&app_handle);
 	memset(params->key_blob, 0, WRAPPED_KEY_SIZE);
 	memset(key, 0, AES256_KEY_SIZE);
-err_setkey:
 	crypto_free_aead(tfm);
-err_aead:
 	kfree(params);
 	return ret;
 }
+
+static int __init qcom_secure_hibernattion_init(void)
+{
+	int ret;
+
+	ret = register_pm_notifier(&pm_nb);
+	if (ret) {
+		pr_err("%s: Failed to register nb: %d\n", __func__, ret);
+		return ret;
+	}
+	return 0;
+}
+
+module_init(qcom_secure_hibernattion_init);
 
 MODULE_DESCRIPTION("Framework to encrypt a page using a trusted application");
 MODULE_LICENSE("GPL v2");
