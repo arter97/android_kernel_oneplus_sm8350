@@ -30,6 +30,7 @@ obj-$(CONFIG_PINCTRL_LAHAINA) += pinctrl-lahaina.o
 obj-$(CONFIG_PINCTRL_SHIMA) += pinctrl-shima.o
 obj-$(CONFIG_PINCTRL_HOLI) += pinctrl-holi.o
 obj-$(CONFIG_PINCTRL_YUPIK) += pinctrl-yupik.o
+obj-$(CONFIG_PINCTRL_KONA) += pinctrl-kona.o
 obj-$(CONFIG_PINCTRL_BENGAL) += pinctrl-bengal.o
 obj-$(CONFIG_PINCTRL_SCUBA) += pinctrl-scuba.o
 obj-$(CONFIG_PINCTRL_SA410M) += pinctrl-sa410m.o
