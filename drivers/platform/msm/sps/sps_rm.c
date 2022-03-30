@@ -103,7 +103,7 @@ static int sps_rm_map_match(const struct sps_connect *cfg,
 			return false;
 
 		if (cfg->desc.phys_base != (SPSRM_CLEAR|SPSRM_ADDR_CLR) &&
-		    cfg->desc.base != (void *)(SPSRM_CLEAR|SPSRM_ADDR_CLR) &&
+		    cfg->desc.base != (void __iomem *)(SPSRM_CLEAR|SPSRM_ADDR_CLR) &&
 		    (cfg->desc.phys_base != map->desc.phys_base ||
 		     cfg->desc.base != map->desc.base)) {
 			return false;
@@ -115,7 +115,7 @@ static int sps_rm_map_match(const struct sps_connect *cfg,
 			return false;
 
 		if (cfg->data.phys_base != (SPSRM_CLEAR|SPSRM_ADDR_CLR) &&
-		    cfg->data.base != (void *)(SPSRM_CLEAR|SPSRM_ADDR_CLR) &&
+		    cfg->data.base != (void __iomem *)(SPSRM_CLEAR|SPSRM_ADDR_CLR) &&
 		    (cfg->data.phys_base != map->data.phys_base ||
 		     cfg->data.base != map->data.base))
 			return false;
@@ -329,13 +329,13 @@ static void sps_rm_init_map(struct sps_connection *map,
 	/* Did client specify descriptor FIFO? */
 	if (map->desc.size != SPSRM_CLEAR &&
 	    cfg->desc.phys_base != (SPSRM_CLEAR|SPSRM_ADDR_CLR) &&
-	    cfg->desc.base != (void *)(SPSRM_CLEAR|SPSRM_ADDR_CLR))
+	    cfg->desc.base != (void __iomem *)(SPSRM_CLEAR|SPSRM_ADDR_CLR))
 		map->desc = cfg->desc;
 
 	/* Did client specify data FIFO? */
 	if (map->data.size != SPSRM_CLEAR &&
 	    cfg->data.phys_base != (SPSRM_CLEAR|SPSRM_ADDR_CLR) &&
-	    cfg->data.base != (void *)(SPSRM_CLEAR|SPSRM_ADDR_CLR))
+	    cfg->data.base != (void __iomem *)(SPSRM_CLEAR|SPSRM_ADDR_CLR))
 		map->data = cfg->data;
 
 	/* Did client specify source pipe? */
@@ -524,7 +524,7 @@ static struct sps_connection *sps_rm_create(struct sps_pipe *pipe)
 			goto exit_err;
 		}
 		map->desc.phys_base = map->alloc_desc_base;
-		map->desc.base = spsi_get_mem_ptr(map->desc.phys_base);
+		map->desc.base = (void __iomem *)spsi_get_mem_ptr(map->desc.phys_base);
 		if (map->desc.base == NULL) {
 			SPS_ERR(sps,
 				"sps:Cannot get virt addr for I/O buffer:%pa\n",
@@ -542,7 +542,7 @@ static struct sps_connection *sps_rm_create(struct sps_pipe *pipe)
 			goto exit_err;
 		}
 		map->data.phys_base = map->alloc_data_base;
-		map->data.base = spsi_get_mem_ptr(map->data.phys_base);
+		map->data.base = (void __iomem *)spsi_get_mem_ptr(map->data.phys_base);
 		if (map->data.base == NULL) {
 			SPS_ERR(sps,
 				"sps:Cannot get virt addr for I/O buffer:%pa\n",
