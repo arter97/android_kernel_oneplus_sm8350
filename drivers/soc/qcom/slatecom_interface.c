@@ -638,6 +638,19 @@ static ssize_t slatecom_char_write(struct file *f, const char __user *buf,
 		if (ret < 0)
 			pr_err("subsystem stop notify cmd failed\n");
 		break;
+	case '4':
+		opcode = GMI_WEAR_MGR_PMIC_RTC_ENABLE;
+		ret = slatecom_tx_msg(dev, &opcode, sizeof(opcode));
+		if (ret < 0)
+			pr_err("MSM RTC Enable cmd failed\n");
+		break;
+	case '5':
+		opcode = GMI_WEAR_MGR_PMIC_RTC_DISABLE;
+		ret = slatecom_tx_msg(dev, &opcode, sizeof(opcode));
+		if (ret < 0)
+			pr_err("MSM RTC Disable cmd failed\n");
+		break;
+
 	default:
 		pr_err("MSM QCLI Invalid Option\n");
 		break;
