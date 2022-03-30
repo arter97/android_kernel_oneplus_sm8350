@@ -6,6 +6,7 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/msm_show_resume_irq.h>
 
 int msm_show_resume_irq_mask;
 
