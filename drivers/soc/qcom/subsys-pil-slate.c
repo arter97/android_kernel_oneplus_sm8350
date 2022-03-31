@@ -250,6 +250,53 @@ static int wait_for_err_ready(struct pil_slate_data *slate_data)
 }
 
 /**
+ * slate_powerup_notify() - Called by SSR framework on userspace invocation.
+ * does load tz app and call peripheral loader.
+ * @subsys: struct containing private SLATE data.
+ *
+ * Return: 0 indicating success. Error code on failure.
+ */
+static int slate_powerup_notify(const struct subsys_desc *subsys)
+{
+	bool value;
+	struct pil_slate_data *slate_data = subsys_to_data(subsys);
+	int ret;
+
+	init_completion(&slate_data->err_ready);
+	if (!slate_data->qseecom_handle) {
+		ret = pil_load_slate_tzapp(slate_data);
+		if (ret) {
+			dev_err(slate_data->desc.dev,
+				"%s: SLATE TZ app load failure\n",
+				__func__);
+			return ret;
+		}
+	}
+	pr_debug("slateapp loaded\n");
+	slate_data->desc.fw_name = subsys->fw_name;
+	value = gpio_get_value(slate_data->gpios[0]);
+	if (!value) {
+		/* Enable status and err fatal irqs */
+		enable_irq(slate_data->status_irq);
+		ret = pil_boot(&slate_data->desc);
+		if (ret) {
+			dev_err(slate_data->desc.dev,
+				"%s: SLATE PIL Boot failed\n",
+				 __func__);
+			return ret;
+		}
+		ret = wait_for_err_ready(slate_data);
+		if (ret) {
+			dev_err(slate_data->desc.dev,
+				"[%s:%d]: Timed out waiting for error ready: %s!\n",
+				current->comm, current->pid, slate_data->desc.name);
+			return ret;
+		}
+	}
+	return ret;
+}
+
+/**
  * slate_powerup() - Called by SSR framework on userspace invocation.
  * does load tz app and call peripheral loader.
  * @subsys: struct containing private SLATE data.
@@ -756,6 +803,7 @@ static int pil_slate_driver_probe(struct platform_device *pdev)
 	slate_data->subsys_desc.owner = THIS_MODULE;
 	slate_data->subsys_desc.dev = &pdev->dev;
 	slate_data->subsys_desc.shutdown = slate_shutdown;
+	slate_data->subsys_desc.powerup_notify = slate_powerup_notify;
 	slate_data->subsys_desc.powerup = slate_powerup;
 	slate_data->subsys_desc.ramdump = slate_ramdump;
 	slate_data->subsys_desc.free_memory = NULL;

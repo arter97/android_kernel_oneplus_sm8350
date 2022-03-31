@@ -628,7 +628,16 @@ static ssize_t slatecom_char_write(struct file *f, const char __user *buf,
 		if (ret < 0)
 			pr_err("MSM QCLI Enable cmd failed\n");
 		break;
-
+	case '2':
+		ret = subsystem_start_notify(ssr_domains[0]);
+		if (ret < 0)
+			pr_err("subsystem start notify cmd failed\n");
+		break;
+	case '3':
+		ret = subsystem_stop_notify(ssr_domains[0]);
+		if (ret < 0)
+			pr_err("subsystem stop notify cmd failed\n");
+		break;
 	default:
 		pr_err("MSM QCLI Invalid Option\n");
 		break;
