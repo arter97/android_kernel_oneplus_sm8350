@@ -367,7 +367,7 @@ static ssize_t __sbi_store(struct f2fs_attr *a,
 		if (!strlen(name) || strlen(name) >= F2FS_EXTENSION_LEN)
 			return -EINVAL;
 
-		f2fs_down_write(&sbi->sb_lock);
+		down_write(&sbi->sb_lock);
 
 		ret = f2fs_update_extension_list(sbi, name, hot, set);
 		if (ret)
@@ -377,7 +377,7 @@ static ssize_t __sbi_store(struct f2fs_attr *a,
 		if (ret)
 			f2fs_update_extension_list(sbi, name, hot, !set);
 out:
-		f2fs_up_write(&sbi->sb_lock);
+		up_write(&sbi->sb_lock);
 		return ret ? ret : count;
 	}
 
