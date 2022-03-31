@@ -134,7 +134,9 @@ typedef u32 nid_t;
 
 struct f2fs_rwsem {
         struct rw_semaphore internal_rwsem;
+#ifdef CONFIG_F2FS_UNFAIR_RWSEM
         wait_queue_head_t read_waiters;
+#endif
 };
 
 struct f2fs_mount_info {
@@ -403,6 +405,10 @@ struct discard_cmd_control {
 	struct mutex cmd_lock;
 	unsigned int nr_discards;		/* # of discards in the list */
 	unsigned int max_discards;		/* max. discards to be issued */
+	unsigned int max_discard_request;	/* max. discard request per round */
+	unsigned int min_discard_issue_time;	/* min. interval between discard issue */
+	unsigned int mid_discard_issue_time;	/* mid. interval between discard issue */
+	unsigned int max_discard_issue_time;	/* max. interval between discard issue */
 	unsigned int discard_granularity;	/* discard granularity */
 	unsigned int undiscard_blks;		/* # of undiscard blocks */
 	unsigned int next_pos;			/* next discard position */
@@ -594,6 +600,9 @@ enum {
 /* number of extent info in extent cache we try to shrink */
 #define EXTENT_CACHE_SHRINK_NUMBER	128
 
+#define RECOVERY_MAX_RA_BLOCKS		BIO_MAX_PAGES
+#define RECOVERY_MIN_RA_BLOCKS		1
+
 struct rb_entry {
 	struct rb_node rb_node;		/* rb node located in rb-tree */
 	union {
@@ -741,7 +750,8 @@ enum {
 	FI_DROP_CACHE,		/* drop dirty page cache */
 	FI_DATA_EXIST,		/* indicate data exists */
 	FI_INLINE_DOTS,		/* indicate inline dot dentries */
-	FI_DO_DEFRAG,		/* indicate defragment is running */
+	FI_SKIP_WRITES,		/* should skip data page writeback */
+	FI_OPU_WRITE,		/* used for opu per file */
 	FI_DIRTY_FILE,		/* indicate regular/symlink has dirty pages */
 	FI_PREALLOCATED_ALL,	/* all blocks for write were preallocated */
 	FI_HOT_DATA,		/* indicate file is hot */
@@ -801,8 +811,8 @@ struct f2fs_inode_info {
 	struct extent_tree *extent_tree;	/* cached extent_tree entry */
 
 	/* avoid racing between foreground op and gc */
-	struct rw_semaphore i_mmap_sem;
 	struct f2fs_rwsem i_gc_rwsem[2];
+	struct f2fs_rwsem i_mmap_sem;
 	struct f2fs_rwsem i_xattr_sem; /* avoid racing between reading and changing EAs */
 
 	int i_extra_isize;		/* size of extra space located in i_addr */
@@ -922,6 +932,7 @@ struct f2fs_nm_info {
 	nid_t max_nid;			/* maximum possible node ids */
 	nid_t available_nids;		/* # of available node ids */
 	nid_t next_scan_nid;		/* the next nid to be scanned */
+	nid_t max_rf_node_blocks;	/* max # of nodes for recovery */
 	unsigned int ram_thresh;	/* control the memory footprint */
 	unsigned int ra_nid_pages;	/* # of nid pages to be readaheaded */
 	unsigned int dirty_nats_ratio;	/* control dirty nats ratio threshold */
@@ -1312,6 +1323,7 @@ enum {
 	GC_IDLE_AT,
 	GC_URGENT_HIGH,
 	GC_URGENT_LOW,
+	GC_URGENT_MID,
 	MAX_GC_MODE,
 };
 
@@ -1696,6 +1708,8 @@ struct f2fs_sb_info {
 	atomic_t nr_pages[NR_COUNT_TYPE];
 	/* # of allocated blocks */
 	struct percpu_counter alloc_valid_block_count;
+	/* # of node block writes as roll forward recovery */
+	struct percpu_counter rf_node_block_count;
 
 	/* writeback control */
 	atomic_t wb_sync_req[META];	/* count # of WB_SYNC threads */
@@ -2138,7 +2152,9 @@ static inline void __init_f2fs_rwsem(struct f2fs_rwsem *sem,
 		const char *sem_name, struct lock_class_key *key)
 {
 	__init_rwsem(&sem->internal_rwsem, sem_name, key);
+#ifdef CONFIG_F2FS_UNFAIR_RWSEM
 	init_waitqueue_head(&sem->read_waiters);
+#endif
 }
 
 static inline int f2fs_rwsem_is_locked(struct f2fs_rwsem *sem)
@@ -2153,7 +2169,11 @@ static inline int f2fs_rwsem_is_contended(struct f2fs_rwsem *sem)
 
 static inline void f2fs_down_read(struct f2fs_rwsem *sem)
 {
+#ifdef CONFIG_F2FS_UNFAIR_RWSEM
 	wait_event(sem->read_waiters, down_read_trylock(&sem->internal_rwsem));
+#else
+	down_read(&sem->internal_rwsem);
+#endif
 }
 
 static inline int f2fs_down_read_trylock(struct f2fs_rwsem *sem)
@@ -2188,7 +2208,9 @@ static inline int f2fs_down_write_trylock(struct f2fs_rwsem *sem)
 static inline void f2fs_up_write(struct f2fs_rwsem *sem)
 {
 	up_write(&sem->internal_rwsem);
+#ifdef CONFIG_F2FS_UNFAIR_RWSEM
 	wake_up_all(&sem->read_waiters);
+#endif
 }
 
 static inline void f2fs_lock_op(struct f2fs_sb_info *sbi)
@@ -2779,6 +2801,9 @@ static inline bool is_idle(struct f2fs_sb_info *sbi, int type)
 
 	if (is_inflight_io(sbi, type))
 		return false;
+
+	if (sbi->gc_mode == GC_URGENT_MID)
+		return true;
 
 	if (sbi->gc_mode == GC_URGENT_LOW &&
 			(type == DISCARD_TIME || type == GC_TIME))
@@ -3711,7 +3736,8 @@ bool f2fs_is_valid_blkaddr(struct f2fs_sb_info *sbi,
 					block_t blkaddr, int type);
 int f2fs_ra_meta_pages(struct f2fs_sb_info *sbi, block_t start, int nrpages,
 			int type, bool sync);
-void f2fs_ra_meta_pages_cond(struct f2fs_sb_info *sbi, pgoff_t index);
+void f2fs_ra_meta_pages_cond(struct f2fs_sb_info *sbi, pgoff_t index,
+							unsigned int ra_blocks);
 long f2fs_sync_meta_pages(struct f2fs_sb_info *sbi, enum page_type type,
 			long nr_to_write, enum iostat_type io_type);
 void f2fs_add_ino_entry(struct f2fs_sb_info *sbi, nid_t ino, int type);
