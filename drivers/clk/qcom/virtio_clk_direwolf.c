@@ -183,6 +183,10 @@ static const struct virtio_clk_init_data direwolf_gcc_virtio_clocks[] = {
 	[GCC_UFS_CARD_TX_SYMBOL_0_CLK] = {.name = "gcc_ufs_card_tx_symbol_0_clk",},
 	[GCC_UFS_CARD_RX_SYMBOL_0_CLK] = {.name = "gcc_ufs_card_rx_symbol_0_clk",},
 	[GCC_UFS_CARD_RX_SYMBOL_1_CLK] = {.name = "gcc_ufs_card_rx_symbol_1_clk",},
+	[GCC_EMAC1_AXI_CLK] = {.name = "gcc_emac1_axi_clk",},
+	[GCC_EMAC1_SLV_AHB_CLK] = {.name = "gcc_emac1_slv_ahb_clk",},
+	[GCC_EMAC1_PTP_CLK] = {.name = "gcc_emac1_ptp_clk",},
+	[GCC_EMAC1_RGMII_CLK] = {.name = "gcc_emac1_rgmii_clk",},
 };
 
 static const char * const direwolf_gcc_virtio_resets[] = {
