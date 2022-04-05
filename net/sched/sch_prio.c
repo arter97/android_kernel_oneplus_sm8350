@@ -219,7 +219,7 @@ static int prio_tune(struct Qdisc *sch, struct nlattr *opt,
 
 	prio_offload(sch, qopt);
 	sch_tree_lock(sch);
-	if (nla_len(opt) == sizeof(struct tc_prio_qopt_kerneldef)) {
+	if (nla_len(opt) == RTA_ALIGN(RTA_LENGTH(sizeof(struct tc_prio_qopt_kerneldef)))) {
 		struct tc_prio_qopt_kerneldef *qopt_s;
 
 		qopt_s = (struct tc_prio_qopt_kerneldef *)qopt;
