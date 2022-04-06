@@ -1205,6 +1205,7 @@ static const struct of_device_id pmic_gpio_of_match[] = {
 	{ .compatible = "qcom,pm6125-gpio", .data = (void *) 9 },
 	{ .compatible = "qcom,pm5100-gpio", .data = (void *) 16 },
 	{ .compatible = "qcom,pm8008-gpio", .data = (void *) 2 },
+	{ .compatible = "qcom,pmx55-gpio", .data = (void *) 11 },
 	{ },
 };
 
