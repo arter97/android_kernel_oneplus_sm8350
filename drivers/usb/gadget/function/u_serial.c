@@ -246,7 +246,6 @@ __acquires(&port->port_lock)
 			break;
 
 		req = list_entry(pool->next, struct usb_request, list);
-		list_move_tail(&req->list, &port->queued_write_pool);
 		len = gs_send_packet(port, req->buf, in->maxpacket);
 		if (len == 0) {
 			wake_up_interruptible(&port->drain_wait);
@@ -281,6 +280,7 @@ __acquires(&port->port_lock)
 			break;
 		}
 
+		list_move_tail(&req->list, &port->queued_write_pool);
 		port->write_started++;
 
 		/* abort immediately after disconnect */
@@ -319,7 +319,6 @@ __acquires(&port->port_lock)
 			break;
 
 		req = list_entry(pool->next, struct usb_request, list);
-		list_move_tail(&req->list, &port->queued_read_pool);
 		req->length = out->maxpacket;
 
 		/* drop lock while we call out; the controller driver
@@ -335,6 +334,7 @@ __acquires(&port->port_lock)
 			list_add(&req->list, pool);
 			break;
 		}
+		list_move_tail(&req->list, &port->queued_read_pool);
 		port->read_started++;
 
 		/* abort immediately after disconnect */
@@ -453,7 +453,7 @@ static void gs_read_complete(struct usb_ep *ep, struct usb_request *req)
 
 	/* Queue all received data until the tty layer is ready for it. */
 	spin_lock(&port->port_lock);
-	list_add_tail(&req->list, &port->read_queue);
+	list_move_tail(&req->list, &port->read_queue);
 	schedule_delayed_work(&port->push, 0);
 	spin_unlock(&port->port_lock);
 }
@@ -463,7 +463,7 @@ static void gs_write_complete(struct usb_ep *ep, struct usb_request *req)
 	struct gs_port	*port = ep->driver_data;
 
 	spin_lock(&port->port_lock);
-	list_add(&req->list, &port->write_pool);
+	list_move_tail(&req->list, &port->write_pool);
 	port->write_started--;
 
 	switch (req->status) {
