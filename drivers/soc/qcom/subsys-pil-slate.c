@@ -20,6 +20,7 @@
 #include <soc/qcom/subsystem_notif.h>
 #include <linux/highmem.h>
 #include <linux/qtee_shmbridge.h>
+#include <linux/suspend.h>
 
 #include "peripheral-loader.h"
 #include "../../misc/qseecom_kernel.h"
@@ -549,6 +550,16 @@ static int slate_ramdump(int enable, const struct subsys_desc *subsys)
 	desc.attrs = 0;
 	desc.attrs |= DMA_ATTR_SKIP_ZEROING;
 	slate_tz_req.tzapp_slate_cmd = SLATEPIL_DUMPINFO;
+	if (!slate_data->qseecom_handle) {
+		ret = pil_load_slate_tzapp(slate_data);
+		if (ret) {
+			dev_err(slate_data->desc.dev,
+			"%s: SLATE TZ app load failure\n",
+			 __func__);
+		return ret;
+		}
+	}
+
 	ret = slatepil_tzapp_comm(slate_data, &slate_tz_req);
 	dump_info = slate_data->cmd_status;
 	if (slate_data->cmd_status == SLATE_RAMDUMP)
@@ -772,6 +783,24 @@ static int slate_dt_parse_gpio(struct platform_device *pdev,
 	return 0;
 }
 
+#ifdef CONFIG_DEEPSLEEP
+static int pil_slate_driver_suspend(struct device *dev)
+{
+	if (mem_sleep_current == PM_SUSPEND_MEM) {
+		struct pil_slate_data *slate_data = dev_get_drvdata(dev);
+
+		qseecom_shutdown_app(&slate_data->qseecom_handle);
+		slate_data->qseecom_handle = NULL;
+	}
+	return 0;
+}
+
+static int pil_slate_driver_resume(struct device *dev)
+{
+	return 0;
+}
+#endif
+
 static int pil_slate_driver_probe(struct platform_device *pdev)
 {
 	struct pil_slate_data *slate_data;
@@ -859,6 +888,13 @@ static int pil_slate_driver_exit(struct platform_device *pdev)
 	return 0;
 }
 
+static const struct dev_pm_ops pil_slate_pm_ops = {
+#ifdef CONFIG_DEEPSLEEP
+	.suspend = pil_slate_driver_suspend,
+	.resume = pil_slate_driver_resume,
+#endif
+};
+
 const struct of_device_id pil_slate_match_table[] = {
 	{.compatible = "qcom,pil-slate"},
 	{}
@@ -870,6 +906,7 @@ static struct platform_driver pil_slate_driver = {
 	.driver = {
 		.name = "subsys-pil-slate",
 		.of_match_table = pil_slate_match_table,
+		.pm = &pil_slate_pm_ops,
 	},
 };
 
