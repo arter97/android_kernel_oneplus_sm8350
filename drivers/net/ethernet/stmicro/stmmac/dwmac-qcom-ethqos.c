@@ -2289,6 +2289,18 @@ static int _qcom_ethqos_probe(void *arg)
 
 	ethqos->pdev = pdev;
 
+	ethqos->phyad_change = false;
+	if (of_property_read_bool(np, "qcom,phyad_change")) {
+		ethqos->phyad_change = true;
+		ETHQOSDBG("qcom,phyad_change present\n");
+	}
+
+	ethqos->is_gpio_phy_reset = false;
+	if (of_property_read_bool(np, "snps,reset-gpios")) {
+		ethqos->is_gpio_phy_reset = true;
+		ETHQOSDBG("qcom,phy-reset present\n");
+	}
+
 	ethqos_init_regulators(ethqos);
 	ethqos_init_gpio(ethqos);
 
@@ -2353,6 +2365,8 @@ static int _qcom_ethqos_probe(void *arg)
 	plat_dat->phy_intr_enable = ethqos_phy_intr_enable;
 	plat_dat->phy_irq_enable = ethqos_phy_irq_enable;
 	plat_dat->phy_irq_disable = ethqos_phy_irq_disable;
+	plat_dat->phyad_change = ethqos->phyad_change;
+	plat_dat->is_gpio_phy_reset = ethqos->is_gpio_phy_reset;
 
 	/* Get rgmii interface speed for mac2c from device tree */
 	if (of_property_read_u32(np, "mac2mac-rgmii-speed",

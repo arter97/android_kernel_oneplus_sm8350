@@ -328,6 +328,14 @@ int stmmac_mdio_register(struct net_device *ndev)
 	if (!mdio_bus_data)
 		return 0;
 
+	if (priv->plat->phyad_change) {
+		priv->speed = SPEED_100;
+		if (priv->plat->fix_mac_speed)
+			priv->plat->fix_mac_speed(priv->plat->bsp_priv, priv->speed);
+		if (priv->mii && priv->plat->is_gpio_phy_reset)
+			stmmac_mdio_reset(priv->mii);
+	}
+
 	new_bus = mdiobus_alloc();
 	if (!new_bus)
 		return -ENOMEM;

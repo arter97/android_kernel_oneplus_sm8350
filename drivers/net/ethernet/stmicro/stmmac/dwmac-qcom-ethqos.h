@@ -249,6 +249,8 @@ struct qcom_ethqos {
 	struct dentry *debugfs_dir;
 
 	struct ethqos_io_macro io_macro;
+	bool phyad_change;
+	bool is_gpio_phy_reset;
 };
 
 struct pps_cfg {
