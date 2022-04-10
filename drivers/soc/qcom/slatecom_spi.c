@@ -1295,19 +1295,6 @@ EXPORT_SYMBOL(slatecom_reg_read);
 
 int slatecom_resume(void *handle)
 {
-	int ret =  0;
-
-	mutex_lock(&slate_task_mutex);
-
-	if (!atomic_read(&slate_is_spi_active)) {
-		SLATECOM_INFO("Doing force resume\n");
-		atomic_set(&slate_is_spi_active, 1);
-
-		ret = slatecom_resume_l(handle);
-	}
-
-	SLATECOM_INFO("Done force resume\n");
-	mutex_unlock(&slate_task_mutex);
 	return 0;
 }
 EXPORT_SYMBOL(slatecom_resume);
