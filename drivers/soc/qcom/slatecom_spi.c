@@ -1598,14 +1598,16 @@ static int slatecom_pm_prepare(struct device *dev)
 	(!atomic_read(&slate_is_spi_active)) ? pm_runtime_get_sync(&s_dev->dev)
 			: SLATECOM_INFO("spi is already active, skip get_sync...\n");
 
+	atomic_set(&ok_to_sleep, 1);
 	ret = slatecom_reg_write_cmd(&clnt_handle, SLATE_CMND_REG, 1, &cmnd_reg);
+	if (ret < 0)
+		atomic_set(&ok_to_sleep, 0);
 
 	(!atomic_read(&slate_is_spi_active)) ? pm_runtime_put_sync(&s_dev->dev)
 			: SLATECOM_INFO("spi is already active, skip put_sync...\n");
 
 	sleep_time_start = ktime_get();
 	atomic_set(&slate_is_spi_active, 0);
-	atomic_set(&ok_to_sleep, 1);
 	atomic_set(&state, SLATECOM_STATE_SUSPEND);
 	atomic_set(&slate_is_runtime_suspend, 0);
 
@@ -1700,19 +1702,19 @@ static int slatecom_pm_runtime_suspend(struct device *dev)
 		SLATECOM_ERR("Slate boot is not complete, skip SPI suspend\n");
 		return 0;
 	}
-	mutex_lock(&slate_task_mutex);
 
 	cmnd_reg |= SLATE_OK_SLP_SIF;
+	atomic_set(&ok_to_sleep, 1);
 	ret = slatecom_reg_write_cmd(&clnt_handle, SLATE_CMND_REG, 1, &cmnd_reg);
 	sleep_time_start = ktime_get();
 	if (ret == 0) {
 		atomic_set(&state, SLATECOM_STATE_RUNTIME_SUSPEND);
 		atomic_set(&slate_is_spi_active, 0);
 		atomic_set(&slate_is_runtime_suspend, 1);
-		atomic_set(&ok_to_sleep, 1);
-	}
+	} else
+		atomic_set(&ok_to_sleep, 0);
+
 	SLATECOM_INFO("Runtime suspended with : %d\n", ret);
-	mutex_unlock(&slate_task_mutex);
 	return ret;
 }
 
