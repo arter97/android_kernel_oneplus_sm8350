@@ -22,6 +22,10 @@
 #include <linux/of.h>
 #include <linux/reset.h>
 #include <linux/pinctrl/consumer.h>
+#ifdef CONFIG_HIBERNATION
+#include <linux/suspend.h>
+#include <linux/mmc/slot-gpio.h>
+#endif
 
 #include "sdhci-pltfm.h"
 #include "cqhci.h"
@@ -469,6 +473,9 @@ struct sdhci_msm_host {
 	int sdiowakeup_irq;
 	bool is_sdiowakeup_enabled;
 	bool sdio_pending_processing;
+#ifdef CONFIG_HIBERNATION
+	struct notifier_block sdhci_msm_pm_notifier;
+#endif
 };
 
 static struct sdhci_msm_host *sdhci_slot[2];
@@ -4262,6 +4269,46 @@ static void sdhci_msm_set_caps(struct sdhci_msm_host *msm_host)
 	msm_host->mmc->caps |= MMC_CAP_WAIT_WHILE_BUSY | MMC_CAP_NEED_RSP_BUSY;
 }
 
+#ifdef CONFIG_HIBERNATION
+static void sdhci_msm_prepare_hibernation(struct sdhci_msm_host *msm_host)
+{
+	struct mmc_host *host = msm_host->mmc;
+
+	if (host->bus_ops && host->bus_ops->pre_hibernate)
+		host->bus_ops->pre_hibernate(host);
+	/* Free cd-gpio IRQ before going into Hibernation */
+	mmc_gpiod_free_cd_irq(host);
+}
+
+static void sdhci_msm_post_hibernation(struct sdhci_msm_host *msm_host)
+{
+	struct mmc_host *host = msm_host->mmc;
+
+	if (host->bus_ops && host->bus_ops->post_hibernate)
+		host->bus_ops->post_hibernate(host);
+	/* Register cd-gpio IRQ Post Hibernation*/
+	mmc_gpiod_restore_cd_irq(host);
+}
+
+static int sdhci_msm_hibernation_notifier(struct notifier_block *notify_block,
+			unsigned long mode, void *unused)
+{
+	struct sdhci_msm_host *msm_host = container_of(
+		notify_block, struct sdhci_msm_host, sdhci_msm_pm_notifier);
+
+	switch (mode) {
+	case PM_HIBERNATION_PREPARE:
+		sdhci_msm_prepare_hibernation(msm_host);
+		break;
+	case PM_POST_HIBERNATION:
+		sdhci_msm_post_hibernation(msm_host);
+		break;
+	}
+
+	return 0;
+}
+#endif /* End of CONFIG_HIBERNATION */
+
 static int sdhci_msm_setup_clks(struct platform_device *pdev,
 		struct sdhci_msm_host *msm_host)
 {
@@ -4604,6 +4651,16 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	pm_runtime_mark_last_busy(&pdev->dev);
 	pm_runtime_put_autosuspend(&pdev->dev);
 
+#ifdef CONFIG_HIBERNATION
+	msm_host->sdhci_msm_pm_notifier.notifier_call
+		= sdhci_msm_hibernation_notifier;
+	ret = register_pm_notifier(&msm_host->sdhci_msm_pm_notifier);
+	if (ret) {
+		dev_err(&pdev->dev, "%s: register pm notifier failed: %d\n",
+		__func__, ret);
+		return ret;
+	}
+#endif
 	return 0;
 
 pm_runtime_disable:
@@ -4639,6 +4696,9 @@ static int sdhci_msm_remove(struct platform_device *pdev)
 	int dead = (readl_relaxed(host->ioaddr + SDHCI_INT_STATUS) ==
 		    0xffffffff);
 
+#ifdef CONFIG_HIBERNATION
+	unregister_pm_notifier(&msm_host->sdhci_msm_pm_notifier);
+#endif
 	sdhci_remove_host(host, dead);
 
 	sdhci_msm_vreg_init(&pdev->dev, msm_host, false);
