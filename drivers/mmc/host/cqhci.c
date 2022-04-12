@@ -332,6 +332,11 @@ static void __cqhci_disable(struct cqhci_host *cq_host)
 	cq_host->mmc->cqe_on = false;
 
 	cq_host->activated = false;
+
+	if (cq_host->mmc->deepsleep && cqhci_host_is_crypto_supported(cq_host)) {
+		if (cq_host->crypto_vops && cq_host->crypto_vops->disable)
+			cq_host->crypto_vops->disable(cq_host);
+	}
 	mmc_log_string(cq_host->mmc, "CQ disabled\n");
 }
 

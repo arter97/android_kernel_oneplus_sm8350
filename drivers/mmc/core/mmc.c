@@ -2451,6 +2451,9 @@ static int _mmc_resume(struct mmc_host *host)
 				mmc_hostname(host), __func__, err);
 	}
 
+	if (host->deepsleep)
+		host->ops->hw_reset(host);
+
 	if (err || host->deepsleep)
 		err = mmc_init_card(host, host->card->ocr, host->card);
 

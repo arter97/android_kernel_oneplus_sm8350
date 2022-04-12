@@ -3493,7 +3493,7 @@ static void sdhci_msm_hw_reset(struct sdhci_host *host)
 
 	msm_host->reg_store = true;
 	sdhci_msm_registers_save(host);
-	if (host->mmc->caps2 & MMC_CAP2_CQE) {
+	if ((host->mmc->caps2 & MMC_CAP2_CQE) && !host->mmc->deepsleep) {
 		host->mmc->cqe_ops->cqe_disable(host->mmc);
 		host->mmc->cqe_enabled = false;
 	}
@@ -3522,7 +3522,7 @@ static void sdhci_msm_hw_reset(struct sdhci_host *host)
 	msm_host->reg_store = false;
 
 #if defined(CONFIG_SDC_QTI)
-	if (host->mmc->card)
+	if (host->mmc->card && !host->mmc->deepsleep)
 		mmc_power_cycle(host->mmc, host->mmc->card->ocr);
 #endif
 out:
