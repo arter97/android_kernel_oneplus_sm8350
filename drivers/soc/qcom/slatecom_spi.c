@@ -173,6 +173,7 @@ static int slatecom_reg_write_cmd(void *handle, uint8_t reg_start_addr,
 
 static int slatecom_reg_read_internal(void *handle, uint8_t reg_start_addr,
 	uint32_t num_regs, void *read_buf);
+static int slatecom_force_resume(void *handle);
 
 static struct spi_device *get_spi_device(void)
 {
@@ -216,6 +217,9 @@ int slatecom_set_spi_state(enum slatecom_spi_state state)
 	const struct device spi_dev = slate_spi->spi->master->dev;
 	ktime_t time_start, delta;
 	s64 time_elapsed;
+	struct slate_context clnt_handle;
+
+	clnt_handle.slate_spi = slate_spi;
 
 	if (state < 0 || state > 1) {
 		SLATECOM_ERR("Invalid spi state. Returning %d\n", -EINVAL);
@@ -241,6 +245,12 @@ int slatecom_set_spi_state(enum slatecom_spi_state state)
 	spi_state = state;
 	SLATECOM_INFO("state = %d\n", state);
 	mutex_unlock(&slate_spi->xfer_mutex);
+
+	if (state == SLATECOM_SPI_FREE) {
+		SLATECOM_ERR("Need force resume\n");
+		slatecom_force_resume(&clnt_handle);
+	}
+
 	return 0;
 }
 EXPORT_SYMBOL(slatecom_set_spi_state);
@@ -375,7 +385,6 @@ void slatecom_slatedown_handler(void)
 	send_event(SLATECOM_EVENT_RESET_OCCURRED, NULL);
 	g_slav_status_reg = 0;
 	atomic_set(&ok_to_sleep, 0);
-	atomic_set(&slate_is_spi_active, 1);
 }
 EXPORT_SYMBOL(slatecom_slatedown_handler);
 
@@ -773,6 +782,22 @@ complete:
 
 unlock:
 	mutex_unlock(&slate_resume_mutex);
+	return 0;
+}
+
+static int slatecom_force_resume(void *handle)
+{
+	int ret =  0;
+
+	mutex_lock(&slate_task_mutex);
+
+	if (!atomic_read(&slate_is_spi_active)) {
+		SLATECOM_INFO("Doing force resume\n");
+		atomic_set(&slate_is_spi_active, 1);
+
+		ret = slatecom_resume_l(handle);
+	}
+	mutex_unlock(&slate_task_mutex);
 	return 0;
 }
 
