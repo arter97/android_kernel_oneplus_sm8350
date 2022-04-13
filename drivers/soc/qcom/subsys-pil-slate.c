@@ -545,6 +545,8 @@ static int slate_ramdump(int enable, const struct subsys_desc *subsys)
 	struct device dev;
 	unsigned long size = SLATE_RAMDUMP_SZ;
 	uint32_t dump_info;
+
+	dev.dma_ops = NULL;
 	arch_setup_dma_ops(&dev, 0, 0, NULL, 0);
 
 	desc.attrs = 0;
