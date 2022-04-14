@@ -74,22 +74,15 @@ if ! mount | grep -q "$BIND" && [ ! -e /sbin/recovery ] && [ ! -e /dev/ep/.post_
     fi
     echo "post_boot: using $BDEV for zram backing_dev"
     realpath $BDEV > /sys/block/zram0/backing_dev
-    # 4GB
-    echo 4294967296 > /sys/block/zram0/disksize
 
-    # Set swappiness reflecting the device's RAM size
     RamStr=$(cat /proc/meminfo | grep MemTotal)
     RamMB=$((${RamStr:16:8} / 1024))
-    if [ $RamMB -le 6144 ]; then
-      echo 160 > /proc/sys/vm/rswappiness
-      echo 240 > /sys/module/zram/parameters/wb_start_mins
-    elif [ $RamMB -le 8192 ]; then
-      echo 120 > /proc/sys/vm/rswappiness
-      echo 360 > /sys/module/zram/parameters/wb_start_mins
-    else
-      echo 90 > /proc/sys/vm/rswappiness
-      echo 480 > /sys/module/zram/parameters/wb_start_mins
-    fi
+
+    # Set swap size to 30% of MemTotal
+    # mksh overflows when it exceeds 2GB, workaround it via bc
+    echo $(echo "$RamMB * 30 / 100 * 1024 * 1024" | bc) > /sys/block/zram0/disksize
+    echo 160 > /proc/sys/vm/rswappiness
+    echo 200 > /sys/module/zram/parameters/wb_start_mins
 
     mkswap /dev/block/zram0
     swapon /dev/block/zram0
