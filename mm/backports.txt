@@ -1,3 +1,11 @@
+d8c47cc7bf60 mm: page_io: fix psi memory pressure error on cold swapins
+cad8320b4b39 mm/swap: don't SetPageWorkingset unconditionally during swapin
+96bd3e79efee mm: vmscan: fix documentation for page_check_references()
+6f4dd8de4835 mm: remove superfluous __ClearPageActive()
+cc2828b21c76 mm: remove activate_page() from unuse_pte()
+6e0110c247c8 mm/memcg: Remove 'page' parameter to mem_cgroup_charge_statistics()
+b0ba3bff3e7b mm: memcontrol: fix NR_ANON_THPS accounting in charge moving
+
 2799e77529c2 swap: fix do_swap_page() race with swapoff
 5115db10a8e0 mm: use SWP_SYNCHRONOUS_IO more intelligently
 a8b456d01cd6 bdi: remove BDI_CAP_SYNCHRONOUS_IO
