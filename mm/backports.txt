@@ -1,0 +1,122 @@
+2799e77529c2 swap: fix do_swap_page() race with swapoff
+5115db10a8e0 mm: use SWP_SYNCHRONOUS_IO more intelligently
+a8b456d01cd6 bdi: remove BDI_CAP_SYNCHRONOUS_IO
+4002570c5c58 mm/vmscan: restore active/inactive ratio for anonymous LRU
+aae466b0052e mm/swap: implement workingset detection for anonymous LRU
+3852f6768ede mm/swapcache: support to handle the shadow entries
+170b04b7ae49 mm/workingset: prepare the workingset detection infrastructure for anon LRU
+b518154e59aa mm/vmscan: protect the workingset on anonymous LRU
+ccc5dc67340c mm/vmscan: make active/inactive ratio as 1:1 for anon lru
+37bc3cb9bbef mm: memcontrol: set the correct memcg swappiness restriction
+62fdb1632bcb ksm: reinstate memcg charge on copied pages
+545b1b077ca6 mm: do_swap_page(): fix up the error code
+cae3af62b33a mm: memcontrol: fix swap undercounting in cgroup2
+82ff165cd351 mm/memcontrol: fix OOPS inside mem_cgroup_get_nr_swap_pages()
+7de2e9f195b9 mm: memcontrol: correct the NR_ANON_THPS counter of hierarchical memcg
+da74240eb3fc mm/filemap: add missing mem_cgroup_uncharge() to __add_to_page_cache_locked()
+1f318a9b0dc3 mm/vmscan: count layzfree pages and fix nr_isolated_* mismatch
+764c04a9cbe6 include/trace/events/vmscan.h: remove mm_vmscan_inactive_list_is_low
+2091339d59e7 mm/vmscan.c: make lruvec_lru_size() static
+e072bff60a29 mm/vmscan.c: clean code by removing unnecessary assignment
+0076f029cb29 mm/memory: fix IO cost for anonymous page
+cb6868832ede mm/swap: fix for "mm: workingset: age nonresident information alongside anonymous pages"
+31d8fcac00fc mm: workingset: age nonresident information alongside anonymous pages
+d483a5dd009a mm: vmscan: limit the range of LRU type balancing
+96f8bf4fb1dd mm: vmscan: reclaim writepage is IO cost
+7cf111bc39f6 mm: vmscan: determine anon/file pressure balance at the reclaim root
+314b57fb0460 mm: balance LRU lists based on relative thrashing
+264e90cc07f1 mm: only count actual rotations as LRU reclaim cost
+fbbb602e40c2 mm: deactivations shouldn't bias the LRU balance
+1431d4d11abb mm: base LRU balancing on an explicit cost model
+a4fe1631f313 mm: vmscan: drop unnecessary div0 avoidance rounding in get_scan_count()
+968246874739 mm: remove use-once cache bias from LRU balancing
+34e58cac6d8f mm: workingset: let cache workingset challenge anon
+6058eaec816f mm: fold and remove lru_cache_add_anon() and lru_cache_add_file()
+c843966c556d mm: allow swappiness that prefers reclaiming anon over the file workingset
+497a6c1b0990 mm: keep separate anon and file statistics on page reclaim activity
+5df741963d52 mm: fix LRU balancing effect of new transparent huge pages
+a0b5b4147fb3 mm: memcontrol: update page->mem_cgroup stability rules
+d9eb1ea2bf87 mm: memcontrol: delete unused lrucare handling
+0a27cae1389f mm: memcontrol: document the new swap control behavior
+4c6355b25e8b mm: memcontrol: charge swapin pages on instantiation
+2d1c498072de mm: memcontrol: make swap tracking an integral part of memory control
+eccb52e78809 mm: memcontrol: prepare swap controller setup for integration
+f0e45fb4da29 mm: memcontrol: drop unused try/commit/cancel charge API
+9d82c69438d0 mm: memcontrol: convert anon and file-thp to new mem_cgroup_charge() API
+468c398233da mm: memcontrol: switch to native NR_ANON_THPS counter
+be5d0a74c62d mm: memcontrol: switch to native NR_ANON_MAPPED counter
+0d1c20722ab3 mm: memcontrol: switch to native NR_FILE_PAGES and NR_SHMEM counters
+9da7b5216869 mm: memcontrol: prepare cgroup vmstat infrastructure for native anon counters
+49e50d277ba2 mm: memcontrol: prepare move_account for removal of private page type counters
+9f762dbe19b9 mm: memcontrol: prepare uncharging for removal of private page type counters
+3fea5a499d57 mm: memcontrol: convert page cache to a new mem_cgroup_charge() API
+6caa6a0703e0 mm: memcontrol: move out cgroup swaprate throttling
+14235ab36019 mm: shmem: remove rare optimization when swapin races with hole punching
+3fba69a56e16 mm: memcontrol: drop @compound parameter from memcg charging API
+f4129ea3591a mm: fix NUMA node file count error in replace_page_cache()
+9de4f22a60f7 mm: code cleanup for MADV_FREE
+178821b8979c mm/vmscan.c: fix typo in comment
+b91ac374346b mm: vmscan: enforce inactive:active ratio at the reclaim root
+b910718a948a mm: vmscan: detect file thrashing at the reclaim root
+53138cea7f39 mm: vmscan: move file exhaustion detection to the node level
+1b05117df78e mm: vmscan: harmonize writeback congestion tracking for nodes & memcgs
+0f6a5cff43d3 mm: vmscan: split shrink_node() into node part and memcgs part
+afaf07a65ddb mm: vmscan: turn shrink_node_memcg() into shrink_lruvec()
+d2af339706be mm: vmscan: replace shrink_node() loop with a retry jump
+b5ead35e7e1d mm: vmscan: naming fixes: global_reclaim() and sane_reclaim()
+a108629149cc mm: vmscan: move inactive_list_is_low() swap check to the caller
+867e5e1de14b mm: clean up and clarify lruvec lookup procedure
+de3b01506ea4 mm: vmscan: simplify lruvec_lru_size()
+cb16556d913f mm/vmscan.c: remove unused scan_control parameter from pageout()
+f87bccde6a7d mm/vmscan: remove unused lru_pages argument
+c270cf3041a5 mm/slub.c: branch optimization in free slowpath
+a30a29091b5a mm/mremap: fix BUILD_BUG_ON() error in get_extent
+2896900e22f8 ovl: fix reference counting in ovl_mmap error path
+5e22928abe67 mm/mremap: fix memory account on do_munmap() failure
+97113eb39fa7 mm/mremap: hold the rmap lock in write mode when moving page table entries.
+e05986ee7a58 mm/mremap.c: fix extent calculation
+45544eee9606 arm64: mremap speedup - Enable HAVE_MOVE_PMD
+c49dd3401802 mm: speedup mremap on 1GB or larger regions
+295992fb815e mm: introduce vma_set_file function v5
+1527f926fd04 mm: mmap: fix fput in error path v2
+2c16d291236b Revert "mm: mmap: fix fput in error path v2"
+0227da01f255 mm: mmap: fix fput in error path v2
+6446a5131e24 mm/swap: Do not abuse the seqcount_t latching API
+73d5e0629919 mremap: check if it's possible to split original vma
+dd3b614f858d vm_ops: rename .split() callback to .may_split()
+ad8ee77ea9db mm/mremap: for MREMAP_DONTUNMAP check security_vm_enough_memory_mm()
+51df7bcb6151 mm/mremap: account memory on do_munmap() failure
+309d08d9b3a3 mm/mmap.c: fix mmap return value when vma is merged after call_mmap()
+fb8090b699c3 mm/mmap: add inline munmap_vma_range() for code readability
+3903b55a6117 mm/mmap: add inline vma_next() for readability of mmap code
+7c61f917b161 mm/mmap: rename __vma_unlink_common() to __vma_unlink()
+bc4fe4cdd602 mm: mmap: Fix general protection fault in unlink_file_vma()
+c462ac288f2c mm: Introduce arch_validate_flags()
+349d9fbb0b0a mm/mremap: start addresses are properly aligned
+9ad9718bfa41 mm/mremap: calculate extent in one place
+b8aa9d9d95b3 mm/mremap: it is sure to have enough space when extent meets requirement
+45e55300f114 mm: remove unnecessary wrapper function do_mmap_pgoff()
+d70cec898324 mm: mmap: merge vma after call_mmap() if possible
+7bba8f0ea428 mm/mmap: optimize a branch judgment in ksys_mmap_pgoff()
+fa1f68cc88f1 mm: use false for bool variable
+b4f315b40d43 mm: mmap: fix a typo in comment "compatbility"->"compatibility"
+d15649260661 userfaultfd: fix remap event with MREMAP_DONTUNMAP
+dadbd85f2afc mm: Fix MREMAP_DONTUNMAP accounting on VMA merge
+5093c5872be3 mm/vma: append unlikely() while testing VMA access permissions
+3122e80efc0f mm/vma: make vma_is_accessible() available for general use
+222100eed264 mm/vma: make is_vma_temporary_stack() available for general use
+7969f2264f92 mm/vma: make vma_is_foreign() available for general use
+b44437723cbc mm/vma: move VM_NO_KHUGEPAGED into generic header
+e346b3813067 mm/mremap: add MREMAP_DONTUNMAP to mremap()
+df529cabb7a2 mm: mmap: add trace point of vm_unmapped_area
+baceaf1c8b99 mmap: remove inline of vm_unmapped_area
+a67c8caae98f mm/mmap.c: get rid of odd jump labels in find_mergeable_anon_vma()
+5d42ab293f51 mm/mmap.c: make vma_merge() comment more easy to understand
+ff68dac6d65c mm/mmap.c: use IS_ERR_VALUE to check return value of get_unmapped_area
+47b390d23bf8 mm/rmap.c: don't reuse anon_vma if we just want a copy
+aba6dfb75fe1 mm/mmap.c: rb_parent is not necessary in __vma_link_list()
+1b9fc5b24fa2 mm/mmap.c: extract __vma_unlink_list() as counterpart for __vma_link_list()
+9d81fbe09a56 mm/mmap.c: __vma_unlink_prev() is not necessary now
+93b343ab2d2f mm/mmap.c: prev could be retrieved from vma->vm_prev
+eef1a429f234 mm/swap.c: piggyback lru_add_drain_all() calls
+408a60eddd20 mm/mmap.c: remove a never-triggered warning in __vma_adjust()
