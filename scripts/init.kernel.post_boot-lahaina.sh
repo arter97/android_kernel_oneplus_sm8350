@@ -75,12 +75,19 @@ if ! mount | grep -q "$BIND" && [ ! -e /sbin/recovery ] && [ ! -e /dev/ep/.post_
     echo "post_boot: using $BDEV for zram backing_dev"
     realpath $BDEV > /sys/block/zram0/backing_dev
 
-    RamStr=$(cat /proc/meminfo | grep MemTotal)
-    RamMB=$((${RamStr:16:8} / 1024))
+    MemStr=$(cat /proc/meminfo | grep MemTotal)
+    MemKb=$((${MemStr:16:8}))
+
+    # set watermark_scale_factor = 36MB * 1024 * 1024 * 10 / MemTotal
+    factor=`expr 377487360 / $MemKb`
+    echo $factor > /proc/sys/vm/watermark_scale_factor
+
+    # set min_free_kbytes = 32MB
+    echo 32768 > /proc/sys/vm/min_free_kbytes
 
     # Set swap size to 30% of MemTotal
     # mksh overflows when it exceeds 2GB, workaround it via bc
-    echo $(echo "$RamMB * 30 / 100 * 1024 * 1024" | bc) > /sys/block/zram0/disksize
+    echo $(echo "$MemKb * 30 / 100 * 1024" | bc) > /sys/block/zram0/disksize
     echo 160 > /proc/sys/vm/rswappiness
     echo 200 > /sys/module/zram/parameters/wb_start_mins
 
