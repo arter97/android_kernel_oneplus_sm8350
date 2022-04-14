@@ -2356,13 +2356,6 @@ static int _mmc_suspend(struct mmc_host *host, bool is_suspend)
 			mmc_power_off(host);
 		mmc_card_set_suspended(host->card);
 	}
-	if (host->deepsleep) {
-		if (host->cqe_enabled) {
-			host->cqe_ops->cqe_disable(host);
-			host->cqe_enabled = false;
-		}
-		host->ios.power_mode = MMC_POWER_OFF;
-	}
 out:
 	mmc_log_string(host, "Exit err: %d\n", err);
 	mmc_release_host(host);
@@ -2370,7 +2363,6 @@ out:
 	if (err)
 		mmc_resume_clk_scaling(host);
 #endif
-
 	return err;
 }
 
@@ -2463,8 +2455,8 @@ static int _mmc_resume(struct mmc_host *host)
 #endif
 
 	mmc_log_string(host, "Enter\n");
-
-	mmc_power_up(host, host->card->ocr);
+	if (!host->deepsleep)
+		mmc_power_up(host, host->card->ocr);
 
 	if (mmc_can_sleep(host->card) && !host->deepsleep) {
 		err = mmc_sleepawake(host, false);
@@ -2475,7 +2467,7 @@ static int _mmc_resume(struct mmc_host *host)
 				mmc_hostname(host), __func__, err);
 	}
 
-	if (err)
+	if (err && !host->deepsleep)
 		err = mmc_init_card(host, host->card->ocr, host->card);
 
 	mmc_card_clr_suspended(host->card);
