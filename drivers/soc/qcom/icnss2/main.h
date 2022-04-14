@@ -473,6 +473,7 @@ struct icnss_priv {
 	struct completion slate_boot_complete;
 	u8 low_power_support;
 	u32 wlan_en_delay_ms;
+	unsigned long device_config;
 };
 
 struct icnss_reg_info {

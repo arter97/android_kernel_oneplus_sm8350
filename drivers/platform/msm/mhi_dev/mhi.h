@@ -673,6 +673,7 @@ enum mhi_msg_level {
 extern uint32_t bhi_imgtxdb;
 extern enum mhi_msg_level mhi_msg_lvl;
 extern enum mhi_msg_level mhi_ipc_msg_lvl;
+extern enum mhi_msg_level mhi_ipc_err_msg_lvl;
 
 #define mhi_log(_msg_lvl, _msg, ...) do { \
 	if (_msg_lvl >= mhi_msg_lvl) { \
@@ -681,7 +682,11 @@ extern enum mhi_msg_level mhi_ipc_msg_lvl;
 	} \
 	if (mhi_ipc_log && (_msg_lvl >= mhi_ipc_msg_lvl)) { \
 		ipc_log_string(mhi_ipc_log,                     \
-		"[0x%x %s] " _msg, bhi_imgtxdb, __func__, ##__VA_ARGS__);     \
+		"[0x%x %s] " _msg, bhi_imgtxdb, __func__, ##__VA_ARGS__); \
+	} \
+	if (mhi_ipc_err_log && (_msg_lvl >= mhi_ipc_err_msg_lvl)) { \
+		ipc_log_string(mhi_ipc_err_log,                     \
+		"[0x%x %s] " _msg, bhi_imgtxdb, __func__, ##__VA_ARGS__); \
 	} \
 } while (0)
 
