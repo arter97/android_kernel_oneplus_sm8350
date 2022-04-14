@@ -475,6 +475,7 @@ struct sdhci_msm_host {
 	bool sdio_pending_processing;
 #ifdef CONFIG_HIBERNATION
 	struct notifier_block sdhci_msm_pm_notifier;
+	struct work_struct post_hibernation_work;
 #endif
 };
 
@@ -4290,6 +4291,14 @@ static void sdhci_msm_post_hibernation(struct sdhci_msm_host *msm_host)
 	mmc_gpiod_restore_cd_irq(host);
 }
 
+static void sdhci_post_hibernation_work(struct work_struct *work)
+{
+	struct sdhci_msm_host *msm_host = container_of(
+		work, struct sdhci_msm_host, post_hibernation_work);
+
+	sdhci_msm_post_hibernation(msm_host);
+}
+
 static int sdhci_msm_hibernation_notifier(struct notifier_block *notify_block,
 			unsigned long mode, void *unused)
 {
@@ -4301,7 +4310,7 @@ static int sdhci_msm_hibernation_notifier(struct notifier_block *notify_block,
 		sdhci_msm_prepare_hibernation(msm_host);
 		break;
 	case PM_POST_HIBERNATION:
-		sdhci_msm_post_hibernation(msm_host);
+		queue_work(system_wq, &msm_host->post_hibernation_work);
 		break;
 	}
 
@@ -4660,6 +4669,7 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 		__func__, ret);
 		return ret;
 	}
+	INIT_WORK(&msm_host->post_hibernation_work, sdhci_post_hibernation_work);
 #endif
 	return 0;
 
