@@ -79,8 +79,9 @@ uint32_t hab_pipe_write(struct hab_pipe_endpoint *ep,
 	uint32_t space = 0U;
 	uint32_t count1, count2;
 
-	if (ep_tx_wr_count < sh_buf_rd_count || buf_size < (ep_tx_wr_count - sh_buf_rd_count)) {
-		pr_err("rd/wr counter or buf_size error, underflow detected\n");
+	if (buf_size < (ep_tx_wr_count - sh_buf_rd_count)) {
+		pr_err("rd/wr counter error wr:%u rd:%u\n",
+			ep_tx_wr_count, sh_buf_rd_count);
 		return 0;
 	}
 	space = buf_size - (ep_tx_wr_count - sh_buf_rd_count);
