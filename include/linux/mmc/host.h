@@ -609,8 +609,6 @@ struct mmc_host {
 	bool			crash_on_err;
 	bool                    hiber_notifier;
 #endif
-	bool			deepsleep;
-
 	unsigned long		private[0] ____cacheline_aligned;
 };
 

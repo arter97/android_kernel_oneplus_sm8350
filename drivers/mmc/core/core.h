@@ -112,7 +112,6 @@ extern void mmc_cqe_clk_scaling_start_busy(struct mmc_queue *mq,
 	struct mmc_host *host, bool lock_needed);
 extern void mmc_cqe_clk_scaling_stop_busy(struct mmc_host *host,
 			bool lock_needed, bool is_cqe_dcmd);
-extern void mmc_is_deepsleep(struct mmc_host *host);
 #endif
 int mmc_execute_tuning(struct mmc_card *card);
 int mmc_hs200_to_hs400(struct mmc_card *card);

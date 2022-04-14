@@ -909,18 +909,6 @@ int mmc_exit_clk_scaling(struct mmc_host *host)
 	return 0;
 }
 EXPORT_SYMBOL(mmc_exit_clk_scaling);
-
-#if defined(CONFIG_DEEPSLEEP)
-void mmc_is_deepsleep(struct mmc_host *host)
-{
-	if (mem_sleep_current == PM_SUSPEND_MEM)
-		host->deepsleep = true;
-	else
-		host->deepsleep = false;
-}
-EXPORT_SYMBOL(mmc_is_deepsleep);
-#endif
-
 #endif
 
 static inline void mmc_complete_cmd(struct mmc_request *mrq)
