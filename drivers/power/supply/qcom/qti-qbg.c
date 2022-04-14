@@ -1279,6 +1279,9 @@ static int parse_step_chg_jeita_params(struct qti_qbg *chip, struct device_node 
 	return 0;
 }
 
+#define QBG_DEFAULT_RECHARGE_ITERM_MA                   150
+#define QBG_DEFAULT_RECHARGE_SOC_DELTA                  5
+#define QBG_DEFAULT_RECHARGE_VFLT_DELTA                 100
 static int qbg_load_battery_profile(struct qti_qbg *chip)
 {
 	struct device_node *node = chip->dev->of_node;
@@ -1351,6 +1354,24 @@ static int qbg_load_battery_profile(struct qti_qbg *chip)
 		goto out;
 	}
 	chip->nominal_capacity = temp[0];
+
+	chip->recharge_iterm_ma = QBG_DEFAULT_RECHARGE_ITERM_MA;
+	rc = of_property_read_u32(profile_node, "qcom,recharge-iterm-ma", &temp[0]);
+	if (!rc)
+		chip->recharge_iterm_ma = temp[0];
+
+	chip->recharge_soc = 100 - QBG_DEFAULT_RECHARGE_SOC_DELTA;
+	rc = of_property_read_u32(profile_node, "qcom,recharge-soc-delta", &temp[0]);
+	if (!rc)
+		chip->recharge_soc = 100 - temp[0];
+
+	chip->recharge_vflt_delta_mv = QBG_DEFAULT_RECHARGE_VFLT_DELTA;
+	rc = of_property_read_u32(profile_node, "qcom,recharge-vflt-delta", &temp[0]);
+	if (!rc)
+		chip->recharge_vflt_delta_mv = temp[0];
+
+	qbg_dbg(chip, QBG_DEBUG_SDAM, "Recharge SOC=% Recharge-Vflt=%duV Recharge-Ibat=%dmA\n",
+		chip->recharge_soc, chip->recharge_vflt_delta_mv, chip->recharge_iterm_ma);
 
 	rc = parse_step_chg_jeita_params(chip, profile_node);
 out:
@@ -2488,9 +2509,6 @@ static int qbg_parse_sdam_dt(struct qti_qbg *chip, struct device_node *node)
 #define QBG_DEFAULT_VPH_MIN_MV				2700
 #define QBG_DEFAULT_ITERM_MA				100
 #define QBG_DEFAULT_RCONN_MOHM				0
-#define QBG_DEFAULT_RECHARGE_ITERM_MA			150
-#define QBG_DEFAULT_RECHARGE_SOC_DELTA			5
-#define QBG_DEFAULT_RECHARGE_VFLT_DELTA			100
 static int qbg_parse_dt(struct qti_qbg *chip)
 {
 	struct device_node *node = chip->dev->of_node;
@@ -2539,21 +2557,6 @@ static int qbg_parse_dt(struct qti_qbg *chip)
 	rc = of_property_read_u32(node, "qcom,rconn-mohm", &val);
 	if (!rc)
 		chip->rconn_mohm = val;
-
-	chip->recharge_iterm_ma = QBG_DEFAULT_RECHARGE_ITERM_MA;
-	rc = of_property_read_u32(node, "qcom,recharge-iterm-ma", &val);
-	if (!rc)
-		chip->recharge_iterm_ma = -1 * val;
-
-	chip->recharge_soc = 100 - QBG_DEFAULT_RECHARGE_SOC_DELTA;
-	rc = of_property_read_u32(node, "qcom,recharge-soc-delta", &val);
-	if (!rc)
-		chip->recharge_soc = 100 - val;
-
-	chip->recharge_vflt_delta_mv = QBG_DEFAULT_RECHARGE_VFLT_DELTA;
-	rc = of_property_read_u32(node, "qcom,recharge-vflt-delta", &val);
-	if (!rc)
-		chip->recharge_vflt_delta_mv = val;
 
 	if (of_find_property(node, "nvmem-cells", NULL)) {
 		chip->debug_mask_nvmem_low = devm_nvmem_cell_get(chip->dev, "qbg_debug_mask_low");
