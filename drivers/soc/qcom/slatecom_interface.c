@@ -114,7 +114,7 @@ struct slatedaemon_priv {
 	struct mutex slatecom_state_mutex;
 	enum slatecom_state slatecom_current_state;
 	struct workqueue_struct *slatecom_wq;
-	struct wakeup_source *slatecom_ws;
+	struct wakeup_source slatecom_ws;
 };
 
 static void *slatecom_intf_drv;
@@ -232,6 +232,7 @@ static int slatecom_tx_msg(struct slatedaemon_priv *dev, void  *msg, size_t len)
 	uint8_t resp = 0;
 
 	mutex_lock(&dev->glink_mutex);
+	__pm_stay_awake(&dev->slatecom_ws);
 	if (!dev->slatecom_rpmsg) {
 		pr_err("slatecom-rpmsg is not probed yet, waiting for it to be probed\n");
 		goto err_ret;
@@ -265,6 +266,7 @@ static int slatecom_tx_msg(struct slatedaemon_priv *dev, void  *msg, size_t len)
 	rc = 0;
 
 err_ret:
+	__pm_relax(&dev->slatecom_ws);
 	mutex_unlock(&dev->glink_mutex);
 	return rc;
 }
@@ -746,7 +748,7 @@ static int slate_daemon_probe(struct platform_device *pdev)
 	if (!dev)
 		return -ENOMEM;
 	/* Add wake lock for PM suspend */
-	dev->slatecom_ws = wakeup_source_register(&pdev->dev, "Slatcom_wake_lock");
+	wakeup_source_add(&dev->slatecom_ws);
 	dev->slatecom_current_state = SLATECOM_STATE_UNKNOWN;
 	rc = slatecom_rpmsg_init(dev);
 	if (rc)
