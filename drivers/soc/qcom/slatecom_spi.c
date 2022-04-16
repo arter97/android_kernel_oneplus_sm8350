@@ -94,10 +94,11 @@ enum slatecom_state {
 	/*SLATECOM Staus ready*/
 	SLATECOM_PROB_SUCCESS = 0,
 	SLATECOM_PROB_WAIT = 1,
-	SLATECOM_STATE_SUSPEND = 2,
-	SLATECOM_STATE_ACTIVE = 3,
-	SLATECOM_STATE_RUNTIME_SUSPEND = 4,
-	SLATECOM_STATE_HIBERNATE = 5,
+	SLATECOM_STATE_SUSPEND_PREPARE = 2,
+	SLATECOM_STATE_SUSPEND = 3,
+	SLATECOM_STATE_ACTIVE = 4,
+	SLATECOM_STATE_RUNTIME_SUSPEND = 5,
+	SLATECOM_STATE_HIBERNATE = 6,
 };
 
 enum slatecom_req_type {
@@ -1608,16 +1609,11 @@ static int slatecom_pm_prepare(struct device *dev)
 
 	sleep_time_start = ktime_get();
 	atomic_set(&slate_is_spi_active, 0);
-	atomic_set(&state, SLATECOM_STATE_SUSPEND);
+	atomic_set(&state, SLATECOM_STATE_SUSPEND_PREPARE);
 	atomic_set(&slate_is_runtime_suspend, 0);
 
 	SLATECOM_INFO("reg write status: %d\n", ret);
 	return ret;
-}
-
-static void slatecom_pm_complete(struct device *dev)
-{
-	/* nothing to do */
 }
 
 static int slatecom_pm_suspend(struct device *dev)
@@ -1681,6 +1677,15 @@ static int slatecom_pm_resume(struct device *dev)
 		mutex_unlock(&slate_task_mutex);
 
 		return ret;
+	}
+}
+
+static void slatecom_pm_complete(struct device *dev)
+{
+	/* resume if state is still SLATECOM_STATE_SUSPEND_PREPARE*/
+	SLATECOM_ERR("entry\n");
+	if (atomic_read(&state) == SLATECOM_STATE_SUSPEND_PREPARE) {
+		slatecom_pm_resume(dev);
 	}
 }
 
