@@ -22,6 +22,7 @@
 #define SLATECOM_SLATE_UNLOAD 12
 #define SLATECOM_DEVICE_STATE_TRANSITION 13
 #define SLATE_SEND_TIME_DATA 14
+#define SLATECOM_SEND_DEBUG_CONFIG 15
 #define EXCHANGE_CODE  'V'
 
 struct slate_ui_data {
@@ -56,6 +57,13 @@ enum device_state_transition {
 	STATE_DS_EXIT,
 	STATE_S2D_ENTER,
 	STATE_S2D_EXIT,
+};
+
+enum debug_config {
+	ENABLE_PMIC_RTC,
+	DISABLE_PMIC_RTC,
+	ENABLE_QCLI,
+	DISABLE_QCLI,
 };
 
 #define REG_READ \
@@ -102,6 +110,9 @@ enum device_state_transition {
 	struct slate_ui_data)
 #define SEND_TIME_DATA \
 	_IOWR(EXCHANGE_CODE, SLATE_SEND_TIME_DATA, \
+	struct slate_ui_data)
+#define SEND_DEBUG_CONFIG \
+	_IOWR(EXCHANGE_CODE, SLATECOM_SEND_DEBUG_CONFIG, \
 	struct slate_ui_data)
 #endif /* LINUX_SLATECOM_INTERFACE_H */
 

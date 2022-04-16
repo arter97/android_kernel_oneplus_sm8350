@@ -129,9 +129,9 @@ enum WMSlateCtrlChnlOpcode {
 
 	GMI_MGR_DISABLE_QCLI = 92,		/* Disable QCLI */
 
-	GMI_WEAR_MGR_PMIC_RTC_ENABLE = 93,		/* Enable RTC alarm */
+	GMI_MGR_ENABLE_PMIC_RTC = 93,		/* Enable PMIC RTC */
 
-	GMI_WEAR_MGR_PMIC_RTC_DISABLE = 94,		/* Disable RTC alarm */
+	GMI_MGR_DISABLE_PMIC_RTC = 94,		/* Disable PMIC RTC */
 };
 
 /*
