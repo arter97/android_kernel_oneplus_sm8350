@@ -1242,7 +1242,7 @@ static void anx7625_bridge_disable(struct drm_bridge *bridge)
 
 	anx7625_dp_stop(ctx);
 
-	pm_runtime_put(dev);
+	pm_runtime_put_sync(dev);
 }
 
 static const struct drm_bridge_funcs anx7625_bridge_funcs = {
