@@ -2553,12 +2553,16 @@ static int mmc_runtime_resume(struct mmc_host *host)
 
 static int mmc_can_reset(struct mmc_card *card)
 {
+#if defined(CONFIG_SDC_QTI) && defined(CONFIG_DEEPSLEEP)
+	return 1;
+#else
 	u8 rst_n_function;
 
 	rst_n_function = card->ext_csd.rst_n_function;
 	if ((rst_n_function & EXT_CSD_RST_N_EN_MASK) != EXT_CSD_RST_N_ENABLED)
 		return 0;
 	return 1;
+#endif
 }
 
 static int _mmc_hw_reset(struct mmc_host *host)
