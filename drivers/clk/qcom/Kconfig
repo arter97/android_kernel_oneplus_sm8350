@@ -513,6 +513,15 @@ config SM_GPUCC_KONA
 	  Say Y if you want to support graphics controller devices and
 	  functionality such as 3D graphics.
 
+config SM_DISPCC_KONA
+	tristate "KONA Display Clock Controller"
+	depends on SM_GCC_KONA
+	help
+	  Support for the display clock controller on Qualcomm Technologies, Inc.
+	  Kona devices.
+	  Say Y if you want to support display devices and functionality such as
+	  splash screen.
+
 config SM_GCC_HOLI
 	tristate "HOLI Global Clock Controller"
 	depends on COMMON_CLK_QCOM
