@@ -2,11 +2,11 @@
 # Automatically generated file; DO NOT EDIT.
 # Linux/arm64 5.4 Kernel Configuration
 #
-CONFIG_CC_VERSION_TEXT="Android (8347023, based on r450784) clang version 14.0.3 (https://android.googlesource.com/toolchain/llvm-project 4c603efb0cca074e9238af8b4106c30add4418f6)"
+CONFIG_CC_VERSION_TEXT="Android (8460943, based on r450784c) clang version 14.0.5 (https://android.googlesource.com/toolchain/llvm-project 4c603efb0cca074e9238af8b4106c30add4418f6)"
 CONFIG_GCC_VERSION=0
 CONFIG_CC_IS_CLANG=y
 CONFIG_LD_IS_LLD=y
-CONFIG_CLANG_VERSION=140003
+CONFIG_CLANG_VERSION=140005
 CONFIG_CC_CAN_LINK=y
 CONFIG_CC_HAS_ASM_GOTO=y
 CONFIG_TOOLS_SUPPORT_RELR=y
@@ -437,6 +437,8 @@ CONFIG_ARM64_VHE=y
 #
 # ARMv8.2 architectural features
 #
+CONFIG_AS_HAS_ARMV8_2=y
+CONFIG_AS_HAS_SHA3=y
 CONFIG_ARM64_UAO=y
 # CONFIG_ARM64_PMEM is not set
 CONFIG_ARM64_RAS_EXTN=y
