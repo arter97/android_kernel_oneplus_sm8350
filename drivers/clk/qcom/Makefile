@@ -92,6 +92,7 @@ obj-$(CONFIG_SM_CAMCC_6150) += camcc-sm6150.o
 obj-$(CONFIG_SM_CAMCC_8150) += camcc-sm8150.o
 obj-$(CONFIG_SM_CAMCC_SHIMA) += camcc-shima.o
 obj-$(CONFIG_SM_CAMCC_YUPIK) += camcc-yupik.o
+obj-$(CONFIG_SM_CAMCC_KONA) += camcc-kona.o
 obj-$(CONFIG_SM_DEBUGCC_6150) += debugcc-sm6150.o
 obj-$(CONFIG_SM_DEBUGCC_8150) += debugcc-sm8150.o
 obj-$(CONFIG_SM_DEBUGCC_BENGAL) += debugcc-bengal.o

@@ -486,6 +486,15 @@ config SM_GCC_KONA
 	  Say Y if you want to use peripheral devices such as UART, SPI, I2C,
 	  USB, UFS, SD/eMMC, PCIe, etc.
 
+config SM_CAMCC_KONA
+	tristate "kona Camera Clock Controller"
+	depends on SM_GCC_KONA
+	help
+	  Support for the camera clock controller on Qualcomm Technologies, Inc.
+	  KONA devices.
+	  Say Y if you want to support camera devices and functionality such as
+	  capturing pictures.
+
 config SM_GCC_HOLI
 	tristate "HOLI Global Clock Controller"
 	depends on COMMON_CLK_QCOM
