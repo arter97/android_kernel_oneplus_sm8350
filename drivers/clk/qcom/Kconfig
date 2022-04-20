@@ -495,6 +495,15 @@ config SM_CAMCC_KONA
 	  Say Y if you want to support camera devices and functionality such as
 	  capturing pictures.
 
+config SM_VIDEOCC_KONA
+	tristate "Kona Video Clock Controller"
+	depends on SM_GCC_KONA
+	help
+	  Support for the video clock controller on Qualcomm Technologies, Inc.
+	  KONA devices.
+	  Say Y if you want to support video devices and functionality such as
+	  video encode/decode.
+
 config SM_GCC_HOLI
 	tristate "HOLI Global Clock Controller"
 	depends on COMMON_CLK_QCOM
