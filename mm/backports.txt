@@ -1,3 +1,61 @@
+ed0173733dd4 mm: use self-explanatory macros rather than "2"
+013339df116c mm/rmap: always do TTU_IGNORE_ACCESS
+1494e0c38ee9 x86: mm: ptdump: calculate effective permissions correctly
+bba42affa732 x86/mm: Fix dump_pagetables with Xen PV
+05fc1df95e5d mm/hmm: do not call hmm_vma_walk_hole() while holding a spinlock
+e47690d756a7 x86: mm: avoid allocating struct mm_struct on the stack
+f8f0d0b6fa20 mm: ptdump: reduce level numbers by 1 in note_page()
+9c7869c7f172 arm64: mm: display non-present entries in ptdump
+102f45fdbe42 arm64: mm: convert mm/dump.c to use walk_page_range()
+2ae27137b2db x86: mm: convert dump_pagetables to use walk_page_range
+30d621f6723b mm: add generic ptdump
+c5cfae12fdd5 x86: mm: convert ptdump_walk_pgd_level_debugfs() to take an mm_struct
+e455248d5ee9 x86: mm+efi: convert ptdump_walk_pgd_level() to take a mm_struct
+74d2aaa16f15 x86: mm: point to struct seq_file from struct pg_state
+b7a16c7ad790 mm: pagewalk: add 'depth' parameter to pte_hole
+c02a98753e0a mm: pagewalk: fix termination condition in walk_pte_range()
+fbf56346b855 mm: pagewalk: don't lock PTEs for walk_page_range_novma()
+488ae6a2b933 mm: pagewalk: allow walking without vma
+3afc423632a1 mm: pagewalk: add p4d_entry() and pgd_entry()
+757b2a4ab560 x86: mm: add p?d_leaf() definitions
+8094249358d6 sparc: mm: add p?d_leaf() definitions
+8d2109f29982 s390: mm: add p?d_leaf() definitions
+af6513ead046 riscv: mm: add p?d_leaf() definitions
+070434b13b6e powerpc: mm: add p?d_leaf() definitions
+501b81046701 mips: mm: add p?d_leaf() definitions
+8aa82df3c123 arm64: mm: add p?d_leaf() definitions
+8a0af66b35f8 arm: mm: add p?d_leaf() definitions
+4f6b2c083c86 arc: mm: add p?d_leaf() definitions
+93fab1b22ef7 mm: add generic p?d_leaf() macros
+ace88f1018b8 mm: pagewalk: Take the pagetable lock in walk_pte_range()
+05395718b2fe mm/memcontrol.c: fix kerneldoc comment for mem_cgroup_calculate_protection
+45c7f7e1ef17 mm, memcg: decouple e{low,min} state mutations from protection checks
+03960e33187a mm/memcontrol.c: prevent missed memory.low load tears
+48fe267c503e mm: memcg: make memory.oom.group tolerable to task migration
+b3a7822e5e75 mm, memcg: prevent mem_cgroup_protected store tearing
+32d087cdd9a1 mm, memcg: prevent memory.swap.max load tearing
+c3d532008661 mm, memcg: prevent memory.min load/store tearing
+f86b810c2610 mm, memcg: prevent memory.low load/store tearing
+15b42562d46d mm, memcg: prevent memory.max load tearing
+f6f989c5cebc mm, memcg: prevent memory.high load/store tearing
+cd324edce598 mm: memcontrol: handle div0 crash race condition in memory.low
+8a931f801340 mm: memcontrol: recursive memory.low protection
+bc50bcc6e00b mm: memcontrol: clean up and document effective low/min calculations
+503970e42325 mm: memcontrol: fix memory.low proportional distribution
+f2c4e5970cec x86/mm: implement arch_faults_on_old_pte() stub on x86
+6af31226d039 arm64: mm: implement arch_faults_on_old_pte() on arm64
+47d7b15b88f9 arm64: cpufeature: introduce helper cpu_has_hw_af()
+1587db62d8c0 include/linux/page-flags-layout.h: cleanups
+f73c6c8805ed include/linux/page-flags-layout.h: correctly determine LAST_CPUPID_WIDTH
+c1770e34f3e7 include/linux/mm_inline.h: fold page_lru_base_type() into its sole caller
+bc7112719e1e mm: VM_BUG_ON lru page flags
+875601796267 mm: add __clear_page_lru_flags() to replace page_off_lru()
+46ae6b2cc2a4 mm/swap.c: don't pass "enum lru_list" to del_page_from_lru_list()
+861404536a3a mm/swap.c: don't pass "enum lru_list" to trace_mm_lru_insertion()
+3a9c9788a314 mm: don't pass "enum lru_list" to lru list addition functions
+f90d8191ac86 include/linux/mm_inline.h: shuffle lru list addition and deletion functions
+42895ea73bcd mm/vmscan.c: use add_page_to_lru_list()
+
 d8c47cc7bf60 mm: page_io: fix psi memory pressure error on cold swapins
 cad8320b4b39 mm/swap: don't SetPageWorkingset unconditionally during swapin
 96bd3e79efee mm: vmscan: fix documentation for page_check_references()
