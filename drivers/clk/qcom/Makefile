@@ -129,6 +129,7 @@ obj-$(CONFIG_SM_GPUCC_SHIMA) += gpucc-shima.o
 obj-$(CONFIG_SM_GPUCC_YUPIK) += gpucc-yupik.o
 obj-$(CONFIG_SM_GPUCC_KONA) += gpucc-kona.o
 obj-$(CONFIG_SM_NPUCC_8150) += npucc-sm8150.o
+obj-$(CONFIG_SM_NPUCC_KONA) += npucc-kona.o
 obj-$(CONFIG_SM_SCC_6150) += scc-sm6150.o
 obj-$(CONFIG_SM_SCC_8150) += scc-sm8150.o
 obj-$(CONFIG_SM_VIDEOCC_6150) += videocc-sm6150.o
