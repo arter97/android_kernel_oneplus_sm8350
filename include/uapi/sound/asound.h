@@ -26,7 +26,9 @@
 
 #if defined(__KERNEL__) || defined(__linux__)
 #include <linux/types.h>
+#include <asm/byteorder.h>
 #else
+#include <endian.h>
 #include <sys/ioctl.h>
 #endif
 
@@ -34,8 +36,6 @@
 #include <stdlib.h>
 #include <time.h>
 #endif
-
-#include <asm/byteorder.h>
 
 /*
  *  protocol version
@@ -161,7 +161,7 @@ struct snd_hwdep_dsp_image {
  *                                                                           *
  *****************************************************************************/
 
-#define SNDRV_PCM_VERSION		SNDRV_PROTOCOL_VERSION(2, 0, 14)
+#define SNDRV_PCM_VERSION		SNDRV_PROTOCOL_VERSION(2, 0, 15)
 
 typedef unsigned long snd_pcm_uframes_t;
 typedef signed long snd_pcm_sframes_t;
@@ -476,7 +476,7 @@ enum {
 
 #ifndef __KERNEL__
 /* explicit padding avoids incompatibility between i386 and x86-64 */
-typedef struct { unsigned char pad[sizeof(time_t) - sizeof(int)] __time_pad;
+typedef struct { unsigned char pad[sizeof(time_t) - sizeof(int)]; } __time_pad;
 
 struct snd_pcm_status {
 	snd_pcm_state_t state;		/* stream state */
@@ -715,7 +715,7 @@ enum {
  *  Raw MIDI section - /dev/snd/midi??
  */
 
-#define SNDRV_RAWMIDI_VERSION		SNDRV_PROTOCOL_VERSION(2, 0, 0)
+#define SNDRV_RAWMIDI_VERSION		SNDRV_PROTOCOL_VERSION(2, 0, 1)
 
 enum {
 	SNDRV_RAWMIDI_STREAM_OUTPUT = 0,
@@ -771,7 +771,7 @@ struct snd_rawmidi_status {
  *  Timer section - /dev/snd/timer
  */
 
-#define SNDRV_TIMER_VERSION		SNDRV_PROTOCOL_VERSION(2, 0, 6)
+#define SNDRV_TIMER_VERSION		SNDRV_PROTOCOL_VERSION(2, 0, 7)
 
 enum {
 	SNDRV_TIMER_CLASS_NONE = -1,
