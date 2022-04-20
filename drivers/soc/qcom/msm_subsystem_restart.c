@@ -739,6 +739,27 @@ struct subsys_device *find_subsys_device(const char *str)
 }
 EXPORT_SYMBOL(find_subsys_device);
 
+static int subsys_start_notify(struct subsys_device *subsys)
+{
+	struct subsys_tracking *track;
+	int ret;
+
+	track = subsys_get_track(subsys);
+	notify_each_subsys_device(&subsys, 1, SUBSYS_BEFORE_POWERUP,
+								NULL);
+
+	ret = subsys->desc->powerup_notify(subsys->desc);
+	if (ret) {
+		notify_each_subsys_device(&subsys, 1, SUBSYS_POWERUP_FAILURE,
+									NULL);
+		return ret;
+	}
+	subsys_set_state(subsys, SUBSYS_ONLINE);
+	notify_each_subsys_device(&subsys, 1, SUBSYS_AFTER_POWERUP,
+								NULL);
+	return ret;
+}
+
 static int subsys_start(struct subsys_device *subsys)
 {
 	struct subsys_tracking *track;
@@ -1119,6 +1140,76 @@ err_out:
 	mutex_unlock(&track->lock);
 }
 EXPORT_SYMBOL(subsystem_put);
+
+/**
+ * subsytem_start_notify() - Notify about powerup of the subsystem.
+ * @name: pointer to a string containing the name of the subsystem
+ *
+ * This function returns a pointer if it succeeds. If an error occurs an
+ * ERR_PTR is returned.
+ *
+ */
+int subsystem_start_notify(const char *name)
+{
+	struct subsys_device *subsys;
+	int ret;
+	struct subsys_tracking *track;
+
+	if (!name)
+		return -EINVAL;
+
+	subsys = find_subsys_device(name);
+	if (!subsys)
+		return -ENODEV;
+	if (!try_module_get(subsys->owner)) {
+		ret = -ENODEV;
+		goto err_module;
+	}
+	track = subsys_get_track(subsys);
+	mutex_lock(&track->lock);
+	ret = subsys_start_notify(subsys);
+	if (ret) {
+		ret = -EAGAIN;
+		goto err_start;
+	}
+	mutex_unlock(&track->lock);
+	return ret;
+err_start:
+	mutex_unlock(&track->lock);
+	module_put(subsys->owner);
+err_module:
+	put_device(&subsys->dev);
+	return ret;
+}
+EXPORT_SYMBOL(subsystem_start_notify);
+
+/**
+ * subsytem_stop_notify() - Notify about shutdown of the subsystem.
+ * @subsystem: pointer to a string containing the name of the subsystem
+ *
+ */
+int subsystem_stop_notify(const char *subsystem)
+{
+	struct subsys_device *subsys;
+	struct subsys_tracking *track;
+	bool ret = true;
+
+	subsys = find_subsys_device(subsystem);
+	if (IS_ERR_OR_NULL(subsys))
+		return -EINVAL;
+
+	track = subsys_get_track(subsys);
+	mutex_lock(&track->lock);
+	if (subsys->count) {
+		subsys_stop(subsys);
+		subsystem_free_memory(subsys, NULL);
+	}
+	mutex_unlock(&track->lock);
+	module_put(subsys->owner);
+	put_device(&subsys->dev);
+	return ret;
+}
+EXPORT_SYMBOL(subsystem_stop_notify);
 
 /**
  * subsystem_ds_entry() - Take subsystem into deep sleep

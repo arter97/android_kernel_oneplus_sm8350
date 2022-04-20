@@ -3,6 +3,7 @@
  * drivers/mmc/host/sdhci-msm.c - Qualcomm SDHCI Platform driver
  *
  * Copyright (c) 2013-2014,2020. The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -21,6 +22,10 @@
 #include <linux/of.h>
 #include <linux/reset.h>
 #include <linux/pinctrl/consumer.h>
+#ifdef CONFIG_HIBERNATION
+#include <linux/suspend.h>
+#include <linux/mmc/slot-gpio.h>
+#endif
 
 #include "sdhci-pltfm.h"
 #include "cqhci.h"
@@ -468,6 +473,10 @@ struct sdhci_msm_host {
 	int sdiowakeup_irq;
 	bool is_sdiowakeup_enabled;
 	bool sdio_pending_processing;
+#ifdef CONFIG_HIBERNATION
+	struct notifier_block sdhci_msm_pm_notifier;
+	struct work_struct post_hibernation_work;
+#endif
 };
 
 static struct sdhci_msm_host *sdhci_slot[2];
@@ -3484,7 +3493,7 @@ static void sdhci_msm_hw_reset(struct sdhci_host *host)
 
 	msm_host->reg_store = true;
 	sdhci_msm_registers_save(host);
-	if (host->mmc->caps2 & MMC_CAP2_CQE) {
+	if ((host->mmc->caps2 & MMC_CAP2_CQE) && !host->mmc->deepsleep) {
 		host->mmc->cqe_ops->cqe_disable(host->mmc);
 		host->mmc->cqe_enabled = false;
 	}
@@ -3513,7 +3522,7 @@ static void sdhci_msm_hw_reset(struct sdhci_host *host)
 	msm_host->reg_store = false;
 
 #if defined(CONFIG_SDC_QTI)
-	if (host->mmc->card)
+	if (host->mmc->card && !host->mmc->deepsleep)
 		mmc_power_cycle(host->mmc, host->mmc->card->ocr);
 #endif
 out:
@@ -4261,13 +4270,109 @@ static void sdhci_msm_set_caps(struct sdhci_msm_host *msm_host)
 	msm_host->mmc->caps |= MMC_CAP_WAIT_WHILE_BUSY | MMC_CAP_NEED_RSP_BUSY;
 }
 
+#ifdef CONFIG_HIBERNATION
+static void sdhci_msm_prepare_hibernation(struct sdhci_msm_host *msm_host)
+{
+	struct mmc_host *host = msm_host->mmc;
+
+	if (host->bus_ops && host->bus_ops->pre_hibernate)
+		host->bus_ops->pre_hibernate(host);
+	/* Free cd-gpio IRQ before going into Hibernation */
+	mmc_gpiod_free_cd_irq(host);
+}
+
+static void sdhci_msm_post_hibernation(struct sdhci_msm_host *msm_host)
+{
+	struct mmc_host *host = msm_host->mmc;
+
+	if (host->bus_ops && host->bus_ops->post_hibernate)
+		host->bus_ops->post_hibernate(host);
+	/* Register cd-gpio IRQ Post Hibernation*/
+	mmc_gpiod_restore_cd_irq(host);
+}
+
+static void sdhci_post_hibernation_work(struct work_struct *work)
+{
+	struct sdhci_msm_host *msm_host = container_of(
+		work, struct sdhci_msm_host, post_hibernation_work);
+
+	sdhci_msm_post_hibernation(msm_host);
+}
+
+static int sdhci_msm_hibernation_notifier(struct notifier_block *notify_block,
+			unsigned long mode, void *unused)
+{
+	struct sdhci_msm_host *msm_host = container_of(
+		notify_block, struct sdhci_msm_host, sdhci_msm_pm_notifier);
+
+	switch (mode) {
+	case PM_HIBERNATION_PREPARE:
+		sdhci_msm_prepare_hibernation(msm_host);
+		break;
+	case PM_POST_HIBERNATION:
+		queue_work(system_wq, &msm_host->post_hibernation_work);
+		break;
+	}
+
+	return 0;
+}
+#endif /* End of CONFIG_HIBERNATION */
+
+static int sdhci_msm_setup_clks(struct platform_device *pdev,
+		struct sdhci_msm_host *msm_host)
+{
+
+	struct clk *clk;
+	int ret = 0;
+	/* Setup main peripheral bus clock */
+	clk = devm_clk_get(&pdev->dev, "iface");
+	if (IS_ERR(clk)) {
+		ret = PTR_ERR(clk);
+		dev_err(&pdev->dev, "Peripheral clk setup failed (%d)\n", ret);
+		return ret;
+	}
+	msm_host->bulk_clks[1].clk = clk;
+
+	/* Setup SDC MMC clock */
+	clk = devm_clk_get(&pdev->dev, "core");
+	if (IS_ERR(clk)) {
+		ret = PTR_ERR(clk);
+		dev_err(&pdev->dev, "SDC MMC clk setup failed (%d)\n", ret);
+		return ret;
+	}
+	msm_host->bulk_clks[0].clk = clk;
+
+	/* Vote for maximum clock rate for maximum performance */
+	ret = clk_set_rate(clk, INT_MAX);
+	if (ret)
+		dev_warn(&pdev->dev, "core clock boost failed\n");
+
+	ret = sdhci_msm_setup_ice_clk(msm_host, pdev);
+	if (ret)
+		return ret;
+
+	clk = devm_clk_get(&pdev->dev, "cal");
+	if (IS_ERR(clk))
+		clk = NULL;
+	msm_host->bulk_clks[3].clk = clk;
+
+	clk = devm_clk_get(&pdev->dev, "sleep");
+	if (IS_ERR(clk))
+		clk = NULL;
+	msm_host->bulk_clks[4].clk = clk;
+
+	ret = clk_bulk_prepare_enable(ARRAY_SIZE(msm_host->bulk_clks),
+				      msm_host->bulk_clks);
+
+	return ret;
+}
+
 static int sdhci_msm_probe(struct platform_device *pdev)
 {
 	struct sdhci_host *host;
 	struct sdhci_pltfm_host *pltfm_host;
 	struct sdhci_msm_host *msm_host;
 	struct resource *core_memres;
-	struct clk *clk;
 	int ret;
 	u16 host_version, core_minor;
 	u32 core_version, config;
@@ -4344,47 +4449,11 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 			goto pltfm_free;
 	}
 
-	/* Setup main peripheral bus clock */
-	clk = devm_clk_get(&pdev->dev, "iface");
-	if (IS_ERR(clk)) {
-		ret = PTR_ERR(clk);
-		dev_err(&pdev->dev, "Peripheral clk setup failed (%d)\n", ret);
+	ret = sdhci_msm_setup_clks(pdev, msm_host);
+	if (ret) {
+		dev_warn(&pdev->dev, "Error while setup clks (%d)\n", ret);
 		goto bus_clk_disable;
 	}
-	msm_host->bulk_clks[1].clk = clk;
-
-	/* Setup SDC MMC clock */
-	clk = devm_clk_get(&pdev->dev, "core");
-	if (IS_ERR(clk)) {
-		ret = PTR_ERR(clk);
-		dev_err(&pdev->dev, "SDC MMC clk setup failed (%d)\n", ret);
-		goto bus_clk_disable;
-	}
-	msm_host->bulk_clks[0].clk = clk;
-
-	/* Vote for maximum clock rate for maximum performance */
-	ret = clk_set_rate(clk, INT_MAX);
-	if (ret)
-		dev_warn(&pdev->dev, "core clock boost failed\n");
-
-	ret = sdhci_msm_setup_ice_clk(msm_host, pdev);
-	if (ret)
-		goto bus_clk_disable;
-
-	clk = devm_clk_get(&pdev->dev, "cal");
-	if (IS_ERR(clk))
-		clk = NULL;
-	msm_host->bulk_clks[3].clk = clk;
-
-	clk = devm_clk_get(&pdev->dev, "sleep");
-	if (IS_ERR(clk))
-		clk = NULL;
-	msm_host->bulk_clks[4].clk = clk;
-
-	ret = clk_bulk_prepare_enable(ARRAY_SIZE(msm_host->bulk_clks),
-				      msm_host->bulk_clks);
-	if (ret)
-		goto bus_clk_disable;
 
 	/*
 	 * xo clock is needed for FLL feature of cm_dll.
@@ -4591,6 +4660,17 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	pm_runtime_mark_last_busy(&pdev->dev);
 	pm_runtime_put_autosuspend(&pdev->dev);
 
+#ifdef CONFIG_HIBERNATION
+	msm_host->sdhci_msm_pm_notifier.notifier_call
+		= sdhci_msm_hibernation_notifier;
+	ret = register_pm_notifier(&msm_host->sdhci_msm_pm_notifier);
+	if (ret) {
+		dev_err(&pdev->dev, "%s: register pm notifier failed: %d\n",
+		__func__, ret);
+		return ret;
+	}
+	INIT_WORK(&msm_host->post_hibernation_work, sdhci_post_hibernation_work);
+#endif
 	return 0;
 
 pm_runtime_disable:
@@ -4626,6 +4706,9 @@ static int sdhci_msm_remove(struct platform_device *pdev)
 	int dead = (readl_relaxed(host->ioaddr + SDHCI_INT_STATUS) ==
 		    0xffffffff);
 
+#ifdef CONFIG_HIBERNATION
+	unregister_pm_notifier(&msm_host->sdhci_msm_pm_notifier);
+#endif
 	sdhci_remove_host(host, dead);
 
 	sdhci_msm_vreg_init(&pdev->dev, msm_host, false);

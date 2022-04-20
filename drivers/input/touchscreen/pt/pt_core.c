@@ -17988,6 +17988,11 @@ int pt_release(struct pt_core_data *cd)
 		cd->cpdata->setup_power(cd->cpdata, PT_MT_POWER_OFF, dev);
 	dev_set_drvdata(dev, NULL);
 	pt_del_core(dev);
+	if (cd->vcc_i2c)
+		regulator_set_load(cd->vcc_i2c, 0);
+
+	if (cd->vdd)
+		regulator_set_load(cd->vdd, 0);
 	pt_enable_regulator(cd, false);
 	pt_get_regulator(cd, false);
 	pt_free_si_ptrs(cd);

@@ -156,13 +156,10 @@ void seb_send_input(struct event *evnt)
 			}
 			break;
 		case 0x3:
-			if (value == 0) {
-				input_report_key(dev->input, KEY_POWER, 1);
-				input_sync(dev->input);
-			} else {
-				input_report_key(dev->input, KEY_POWER, 0);
-				input_sync(dev->input);
-			}
+			input_report_key(dev->input, KEY_POWER, 1);
+			input_sync(dev->input);
+			input_report_key(dev->input, KEY_POWER, 0);
+			input_sync(dev->input);
 			break;
 		default:
 			pr_info("event: type[%d] , data: %d\n",
@@ -639,6 +636,7 @@ static int seb_probe(struct platform_device *pdev)
 	input_set_capability(input, EV_REL, REL_WHEEL);
 	input_set_capability(input, EV_KEY, KEY_VOLUMEUP);
 	input_set_capability(input, EV_KEY, KEY_VOLUMEDOWN);
+	input_set_capability(input, EV_KEY, KEY_POWER);
 	input->name = "slate-spi";
 
 	rc = input_register_device(input);

@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __QBG_SDAM_H__
@@ -12,6 +13,7 @@
 #define QBG_ESSENTIAL_PARAMS_START_OFFSET	0x47
 #define QBG_SDAM_START_OFFSET			0x4b
 #define QBG_ESSENTIAL_PARAMS_BATTID_OFFSET	0x45
+#define QBG_ESR_PULSE_FCC_REDUCE_OFFSET		0x57
 #define QBG_SDAM_BHARGER_OCV_HDRM_OFFSET	0x5b
 #define QBG_ESSENTIAL_PARAMS_REVID_OFFSET	0xbb
 #define QBG_SDAM_INT_TEST1			0xe0

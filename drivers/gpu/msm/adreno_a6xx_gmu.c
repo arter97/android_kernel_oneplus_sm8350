@@ -234,14 +234,14 @@ int a6xx_load_pdc_ucode(struct adreno_device *adreno_dev)
 		seq_offset = 0x280000;
 	}
 
+	/* Get pointers to each of the possible PDC resources */
+	res_pdc = platform_get_resource_byname(gmu->pdev, IORESOURCE_MEM,
+			"kgsl_gmu_pdc_reg");
 	/*
 	 * Map the starting address for pdc_cfg programming. If the pdc_cfg
 	 * resource is not available use an offset from the base PDC resource.
 	 */
 	if (gmu->pdc_cfg_base == NULL) {
-		/* Get pointers to each of the possible PDC resources */
-		res_pdc = platform_get_resource_byname(gmu->pdev, IORESOURCE_MEM,
-				"kgsl_gmu_pdc_reg");
 		res_cfg = platform_get_resource_byname(gmu->pdev, IORESOURCE_MEM,
 				"kgsl_gmu_pdc_cfg");
 

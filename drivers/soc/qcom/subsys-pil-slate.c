@@ -20,6 +20,7 @@
 #include <soc/qcom/subsystem_notif.h>
 #include <linux/highmem.h>
 #include <linux/qtee_shmbridge.h>
+#include <linux/suspend.h>
 
 #include "peripheral-loader.h"
 #include "../../misc/qseecom_kernel.h"
@@ -247,6 +248,53 @@ static int wait_for_err_ready(struct pil_slate_data *slate_data)
 		return -ETIMEDOUT;
 	}
 	return 0;
+}
+
+/**
+ * slate_powerup_notify() - Called by SSR framework on userspace invocation.
+ * does load tz app and call peripheral loader.
+ * @subsys: struct containing private SLATE data.
+ *
+ * Return: 0 indicating success. Error code on failure.
+ */
+static int slate_powerup_notify(const struct subsys_desc *subsys)
+{
+	bool value;
+	struct pil_slate_data *slate_data = subsys_to_data(subsys);
+	int ret;
+
+	init_completion(&slate_data->err_ready);
+	if (!slate_data->qseecom_handle) {
+		ret = pil_load_slate_tzapp(slate_data);
+		if (ret) {
+			dev_err(slate_data->desc.dev,
+				"%s: SLATE TZ app load failure\n",
+				__func__);
+			return ret;
+		}
+	}
+	pr_debug("slateapp loaded\n");
+	slate_data->desc.fw_name = subsys->fw_name;
+	value = gpio_get_value(slate_data->gpios[0]);
+	if (!value) {
+		/* Enable status and err fatal irqs */
+		enable_irq(slate_data->status_irq);
+		ret = pil_boot(&slate_data->desc);
+		if (ret) {
+			dev_err(slate_data->desc.dev,
+				"%s: SLATE PIL Boot failed\n",
+				 __func__);
+			return ret;
+		}
+		ret = wait_for_err_ready(slate_data);
+		if (ret) {
+			dev_err(slate_data->desc.dev,
+				"[%s:%d]: Timed out waiting for error ready: %s!\n",
+				current->comm, current->pid, slate_data->desc.name);
+			return ret;
+		}
+	}
+	return ret;
 }
 
 /**
@@ -497,11 +545,23 @@ static int slate_ramdump(int enable, const struct subsys_desc *subsys)
 	struct device dev;
 	unsigned long size = SLATE_RAMDUMP_SZ;
 	uint32_t dump_info;
+
+	dev.dma_ops = NULL;
 	arch_setup_dma_ops(&dev, 0, 0, NULL, 0);
 
 	desc.attrs = 0;
 	desc.attrs |= DMA_ATTR_SKIP_ZEROING;
 	slate_tz_req.tzapp_slate_cmd = SLATEPIL_DUMPINFO;
+	if (!slate_data->qseecom_handle) {
+		ret = pil_load_slate_tzapp(slate_data);
+		if (ret) {
+			dev_err(slate_data->desc.dev,
+			"%s: SLATE TZ app load failure\n",
+			 __func__);
+		return ret;
+		}
+	}
+
 	ret = slatepil_tzapp_comm(slate_data, &slate_tz_req);
 	dump_info = slate_data->cmd_status;
 	if (slate_data->cmd_status == SLATE_RAMDUMP)
@@ -725,6 +785,24 @@ static int slate_dt_parse_gpio(struct platform_device *pdev,
 	return 0;
 }
 
+#ifdef CONFIG_DEEPSLEEP
+static int pil_slate_driver_suspend(struct device *dev)
+{
+	if (mem_sleep_current == PM_SUSPEND_MEM) {
+		struct pil_slate_data *slate_data = dev_get_drvdata(dev);
+
+		qseecom_shutdown_app(&slate_data->qseecom_handle);
+		slate_data->qseecom_handle = NULL;
+	}
+	return 0;
+}
+
+static int pil_slate_driver_resume(struct device *dev)
+{
+	return 0;
+}
+#endif
+
 static int pil_slate_driver_probe(struct platform_device *pdev)
 {
 	struct pil_slate_data *slate_data;
@@ -756,6 +834,7 @@ static int pil_slate_driver_probe(struct platform_device *pdev)
 	slate_data->subsys_desc.owner = THIS_MODULE;
 	slate_data->subsys_desc.dev = &pdev->dev;
 	slate_data->subsys_desc.shutdown = slate_shutdown;
+	slate_data->subsys_desc.powerup_notify = slate_powerup_notify;
 	slate_data->subsys_desc.powerup = slate_powerup;
 	slate_data->subsys_desc.ramdump = slate_ramdump;
 	slate_data->subsys_desc.free_memory = NULL;
@@ -811,6 +890,13 @@ static int pil_slate_driver_exit(struct platform_device *pdev)
 	return 0;
 }
 
+static const struct dev_pm_ops pil_slate_pm_ops = {
+#ifdef CONFIG_DEEPSLEEP
+	.suspend = pil_slate_driver_suspend,
+	.resume = pil_slate_driver_resume,
+#endif
+};
+
 const struct of_device_id pil_slate_match_table[] = {
 	{.compatible = "qcom,pil-slate"},
 	{}
@@ -822,6 +908,7 @@ static struct platform_driver pil_slate_driver = {
 	.driver = {
 		.name = "subsys-pil-slate",
 		.of_match_table = pil_slate_match_table,
+		.pm = &pil_slate_pm_ops,
 	},
 };
 

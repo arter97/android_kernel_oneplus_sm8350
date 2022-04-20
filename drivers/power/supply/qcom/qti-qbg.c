@@ -15,6 +15,7 @@
 #include <linux/interrupt.h>
 #include <linux/ioctl.h>
 #include <linux/kernel.h>
+#include <linux/math64.h>
 #include <linux/module.h>
 #include <linux/nvmem-consumer.h>
 #include <linux/of.h>
@@ -27,6 +28,7 @@
 #include <linux/regmap.h>
 #include <linux/rtc.h>
 #include <linux/slab.h>
+#include <linux/suspend.h>
 #include <linux/uaccess.h>
 #include <linux/workqueue.h>
 
@@ -34,7 +36,6 @@
 
 #include <uapi/linux/qbg.h>
 #include <uapi/linux/qbg-profile.h>
-
 #include "qbg-iio.h"
 #include "qbg-battery-profile.h"
 #include "qbg-core.h"
@@ -112,7 +113,18 @@
 #define MICRO_TO_10NANO				100
 #define MILLI_TO_MICRO				1000
 
+/* PM5100 ADC_CMN and ADC_CMN_WB register definitions */
+#define BAT_THERM_IBAT_CTL_2			0x62
+#define VADC_ANA_PARAM_4			0x46
+
 static int qbg_debug_mask;
+
+enum qbg_esr_fcc_reduction {
+	ESR_FCC_150MA = 0x6,
+};
+
+#define ESR_PULSE_10NA(x)	(-(x * 25 * MILLI_TO_10NANO))
+#define ESR_IBAT_QUALIFY_OFFSET_10NA	(-5000000)
 
 static const unsigned int qbg_accum_interval[8] = {
 	10000, 20000, 50000, 100000, 150000, 200000, 500000, 1000000};
@@ -634,6 +646,50 @@ close_time:
 	return rc;
 }
 
+#define BAT_THERM_CAL_DENOM		2080
+#define BAT_THERM_CAL_NUM		10000
+#define BAT_THERM_SCALE			100
+static int qbg_set_therm_trace_resistance(struct qti_qbg *chip, int vref_adc,
+			int tbat_adc, int ibat_10na, int ibat_esr_10na, int tbat_esr_adc)
+{
+	int rc = 0;
+	int64_t r_pack_nom = 0;
+	int64_t r_pack = 0;
+	int64_t r_pack_denom = 0;
+	u8 reg_val = 0;
+
+	int tbat_decidegree = div64_s64(((int64_t)tbat_adc * TBAT_LSB * BAT_THERM_SCALE),
+					TBAT_DENOMINATOR);
+	int tbat_esr_decidegree = div64_s64(((int64_t)tbat_esr_adc * TBAT_LSB * BAT_THERM_SCALE),
+					TBAT_DENOMINATOR);
+	int vref_tbat_decidegree = div64_s64(((int64_t)vref_adc * TBAT_LSB * BAT_THERM_SCALE),
+					TBAT_DENOMINATOR);
+
+	r_pack_nom = tbat_decidegree * (vref_tbat_decidegree - tbat_esr_decidegree)
+			- tbat_esr_decidegree * (vref_tbat_decidegree - tbat_decidegree);
+
+	r_pack_denom = DIV_ROUND_CLOSEST(ibat_esr_10na, MILLI_TO_10NANO)
+				* (vref_tbat_decidegree - tbat_decidegree)
+			- DIV_ROUND_CLOSEST(ibat_10na, MILLI_TO_10NANO)
+				* (vref_tbat_decidegree - tbat_esr_decidegree);
+
+	if (r_pack_denom != 0) {
+		r_pack = div64_s64(r_pack_nom * BAT_THERM_CAL_NUM, r_pack_denom);
+		r_pack = div64_s64(r_pack, BAT_THERM_CAL_DENOM);
+		reg_val = (u8)r_pack;
+
+		qbg_dbg(chip, QBG_DEBUG_SDAM, "tbat=%d, tbat_esr=%d vref=%d 10uv, therm trace resistance is %#x\n",
+			tbat_decidegree, tbat_esr_decidegree, vref_tbat_decidegree, reg_val);
+
+		rc = regmap_write(chip->regmap, chip->adc_cmn_wb_base + BAT_THERM_IBAT_CTL_2,
+					reg_val);
+		if (rc < 0)
+			return rc;
+	}
+
+	return 0;
+}
+
 static int qbg_process_fifo(struct qti_qbg *chip, u32 fifo_count)
 {
 	struct fifo_data *fifo;
@@ -672,10 +728,12 @@ static int qbg_process_fifo(struct qti_qbg *chip, u32 fifo_count)
 	if (fifo_count > QBG_SDAM_ESR_PULSE_FIFO_INDEX)
 		data_tag = fifo[QBG_SDAM_ESR_PULSE_FIFO_INDEX].data_tag;
 
-	if (data_tag == QBG_DATA_TAG_FAST_CHAR) {
-		if (fifo_count < QBG_SDAM_ESR_PULSE_FIFO_INDEX) {
+	data_tag = (data_tag & 0xC0) >> 6;
+
+	if (data_tag == QBG_FAST_CHAR) {
+		if (fifo_count <= QBG_SDAM_ESR_PULSE_FIFO_INDEX) {
 			pr_err("Not enough FIFO samples in fast char mode\n");
-			goto ret;
+			goto qbg_cal;
 		}
 
 		rc = qbg_decode_fifo_data(fifo[QBG_SDAM_ESR_PULSE_FIFO_INDEX - 1],
@@ -684,7 +742,7 @@ static int qbg_process_fifo(struct qti_qbg *chip, u32 fifo_count)
 		if (rc < 0) {
 			pr_err("Couldn't decode FIFO before ESR pulse in fast char mode, rc=%d\n",
 				rc);
-			goto ret;
+			goto qbg_cal;
 		}
 
 		rc = qbg_decode_fifo_data(fifo[QBG_SDAM_ESR_PULSE_FIFO_INDEX],
@@ -694,22 +752,32 @@ static int qbg_process_fifo(struct qti_qbg *chip, u32 fifo_count)
 		if (rc < 0) {
 			pr_err("Couldn't decode FIFO before ESR pulse in fast char mode, rc=%d\n",
 				rc);
-			goto ret;
+			goto qbg_cal;
 		}
 
-		if (ibat != ibat_esr && (vbat1 > vbat1_esr)) {
-			esr = (vbat1 - vbat1_esr) / ((ibat_esr - ibat) * 10000);
+		if ((ibat < ibat_esr)
+			&& (ibat < (ESR_PULSE_10NA(ESR_FCC_150MA) + ESR_IBAT_QUALIFY_OFFSET_10NA))
+			&& (vbat1 > vbat1_esr) && (tbat > tbat_esr)) {
+			esr = (vbat1 - vbat1_esr) / ((ibat_esr - ibat) / 10000);
 			esr *= 10000;
 			chip->esr = esr;
 			qbg_dbg(chip, QBG_DEBUG_SDAM, "ESR:%u, ibat=%d ibat_esr=%d vbat1:%u vbat1_esr:%u\n",
 				esr, ibat, ibat_esr, vbat1, vbat1_esr);
+
+			rc = qbg_set_therm_trace_resistance(chip,
+				fifo[QBG_SDAM_ESR_PULSE_FIFO_INDEX - 1].vref,
+				tbat, ibat, ibat_esr, tbat_esr);
+			if (rc < 0) {
+				pr_err("Failed to set therm trace resistance, rc=%d\n", rc);
+				goto qbg_cal;
+			}
 		} else {
 			pr_err("Couldn't calculate ESR, ibat=%d ibat_esr=%d vbat1:%u vbat1_esr:%u\n",
 				ibat, ibat_esr, vbat1, vbat1_esr);
-			goto ret;
 		}
 	}
 
+qbg_cal:
 	for (i = 0; i < fifo_count; i++) {
 		rc = qbg_decode_fifo_data(fifo[i], &vbat1, &vbat2, &ibat, &tbat,
 						&ibat_t);
@@ -842,15 +910,40 @@ static int qbg_init_sdam(struct qti_qbg *chip)
 	return rc;
 }
 
+static int qbg_init_esr(struct qti_qbg *chip)
+{
+	int rc = 0;
+	u8 val = ESR_FCC_150MA;
+
+	rc = qbg_sdam_write(chip,
+		QBG_SDAM_BASE(chip, SDAM_CTRL0) + QBG_ESR_PULSE_FCC_REDUCE_OFFSET, &val, 1);
+	if (rc < 0)
+		pr_err("Failed to write QBG ESR pulse FCC reduction offset, rc=%d\n", rc);
+
+	return rc;
+}
+
 static int qbg_force_fast_char(struct qti_qbg *chip, bool force)
 {
 	int rc = 0;
+	/* The default ground used for BAT_THERM measurement is GND_XOADC*/
+	u8 batt_therm_gnd_sel = 0x80;
 	u8 val = force ? (1 << FORCE_FAST_CHAR_SHIFT) : 0;
 
 	rc = qbg_write(chip, QBG_MAIN_QBG_STATE_FORCE_CMD, &val, 1);
-	if (rc < 0)
+	if (rc < 0) {
 		pr_err("Failed to %s QBG fast char mode, rc=%d\n",
 			force ? "enable" : "disable", rc);
+		return rc;
+	}
+
+	/* Set the ground of BAT_THERM measurement to PACK_SNS_M */
+	if (force)
+		batt_therm_gnd_sel = 0x40;
+
+	rc = regmap_write(chip->regmap, chip->adc_cmn_base + VADC_ANA_PARAM_4, batt_therm_gnd_sel);
+	if (rc < 0)
+		pr_err("Failed to set batt therm gnd sel rc=%d\n", rc);
 
 	return rc;
 }
@@ -1187,6 +1280,9 @@ static int parse_step_chg_jeita_params(struct qti_qbg *chip, struct device_node 
 	return 0;
 }
 
+#define QBG_DEFAULT_RECHARGE_ITERM_MA                   150
+#define QBG_DEFAULT_RECHARGE_SOC_DELTA                  5
+#define QBG_DEFAULT_RECHARGE_VFLT_DELTA                 100
 static int qbg_load_battery_profile(struct qti_qbg *chip)
 {
 	struct device_node *node = chip->dev->of_node;
@@ -1259,6 +1355,24 @@ static int qbg_load_battery_profile(struct qti_qbg *chip)
 		goto out;
 	}
 	chip->nominal_capacity = temp[0];
+
+	chip->recharge_iterm_ma = QBG_DEFAULT_RECHARGE_ITERM_MA;
+	rc = of_property_read_u32(profile_node, "qcom,recharge-iterm-ma", &temp[0]);
+	if (!rc)
+		chip->recharge_iterm_ma = temp[0];
+
+	chip->recharge_soc = 100 - QBG_DEFAULT_RECHARGE_SOC_DELTA;
+	rc = of_property_read_u32(profile_node, "qcom,recharge-soc-delta", &temp[0]);
+	if (!rc)
+		chip->recharge_soc = 100 - temp[0];
+
+	chip->recharge_vflt_delta_mv = QBG_DEFAULT_RECHARGE_VFLT_DELTA;
+	rc = of_property_read_u32(profile_node, "qcom,recharge-vflt-delta", &temp[0]);
+	if (!rc)
+		chip->recharge_vflt_delta_mv = temp[0];
+
+	qbg_dbg(chip, QBG_DEBUG_SDAM, "Recharge SOC=% Recharge-Vflt=%duV Recharge-Ibat=%dmA\n",
+		chip->recharge_soc, chip->recharge_vflt_delta_mv, chip->recharge_iterm_ma);
 
 	rc = parse_step_chg_jeita_params(chip, profile_node);
 out:
@@ -2396,9 +2510,6 @@ static int qbg_parse_sdam_dt(struct qti_qbg *chip, struct device_node *node)
 #define QBG_DEFAULT_VPH_MIN_MV				2700
 #define QBG_DEFAULT_ITERM_MA				100
 #define QBG_DEFAULT_RCONN_MOHM				0
-#define QBG_DEFAULT_RECHARGE_ITERM_MA			150
-#define QBG_DEFAULT_RECHARGE_SOC_DELTA			5
-#define QBG_DEFAULT_RECHARGE_VFLT_DELTA			100
 static int qbg_parse_dt(struct qti_qbg *chip)
 {
 	struct device_node *node = chip->dev->of_node;
@@ -2408,6 +2519,18 @@ static int qbg_parse_dt(struct qti_qbg *chip)
 	rc = qbg_parse_sdam_dt(chip, node);
 	if (rc < 0) {
 		pr_err("Failed to QBG SDAM DT, rc=%d\n", rc);
+		return rc;
+	}
+
+	rc = of_property_read_u32(node, "qcom,adc-cmn-wb-base", &chip->adc_cmn_wb_base);
+	if (rc) {
+		pr_err("Failed to get adc cmn wb addr, rc=%d\n", rc);
+		return rc;
+	}
+
+	rc = of_property_read_u32(node, "qcom,adc-cmn-base", &chip->adc_cmn_base);
+	if (rc) {
+		pr_err("Failed to get adc cmn addr, rc=%d\n", rc);
 		return rc;
 	}
 
@@ -2435,21 +2558,6 @@ static int qbg_parse_dt(struct qti_qbg *chip)
 	rc = of_property_read_u32(node, "qcom,rconn-mohm", &val);
 	if (!rc)
 		chip->rconn_mohm = val;
-
-	chip->recharge_iterm_ma = QBG_DEFAULT_RECHARGE_ITERM_MA;
-	rc = of_property_read_u32(node, "qcom,recharge-iterm-ma", &val);
-	if (!rc)
-		chip->recharge_iterm_ma = -1 * val;
-
-	chip->recharge_soc = 100 - QBG_DEFAULT_RECHARGE_SOC_DELTA;
-	rc = of_property_read_u32(node, "qcom,recharge-soc-delta", &val);
-	if (!rc)
-		chip->recharge_soc = 100 - val;
-
-	chip->recharge_vflt_delta_mv = QBG_DEFAULT_RECHARGE_VFLT_DELTA;
-	rc = of_property_read_u32(node, "qcom,recharge-vflt-delta", &val);
-	if (!rc)
-		chip->recharge_vflt_delta_mv = val;
 
 	if (of_find_property(node, "nvmem-cells", NULL)) {
 		chip->debug_mask_nvmem_low = devm_nvmem_cell_get(chip->dev, "qbg_debug_mask_low");
@@ -2593,6 +2701,12 @@ static int qti_qbg_probe(struct platform_device *pdev)
 		return rc;
 	}
 
+	rc = qbg_init_esr(chip);
+	if (rc < 0) {
+		dev_err(&pdev->dev, "Failed to initialize QBG ESR, rc=%d\n", rc);
+		return rc;
+	}
+
 	rc = qbg_setup_battery(chip);
 	if (rc < 0) {
 		dev_err(&pdev->dev, "Failed to setup battery for QBG, rc=%d\n", rc);
@@ -2653,6 +2767,60 @@ static int qti_qbg_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static int qbg_freeze(struct device *dev)
+{
+	struct qti_qbg *chip = dev_get_drvdata(dev);
+	/*free irq*/
+	if (chip->irq > 0)
+		devm_free_irq(dev, chip->irq, chip);
+
+	return 0;
+}
+
+static int qbg_restore(struct device *dev)
+{
+	int ret = 0;
+	struct qti_qbg *chip = dev_get_drvdata(dev);
+
+	/* Init & clear SDAM to kick-start QBG sampling */
+	ret = qbg_init_sdam(chip);
+	if (ret < 0) {
+		dev_err(dev, "Failed to init qbg sdam rc = %d\n");
+		return ret;
+	}
+
+	ret = qbg_register_interrupts(chip);
+	if (ret < 0)
+		dev_err(dev, "Failed to register qbg interrupt rc = %d\n");
+
+	return ret;
+}
+
+static int qbg_suspend(struct device *dev)
+{
+#ifdef CONFIG_DEEPSLEEP
+	if (mem_sleep_current == PM_SUSPEND_MEM)
+		return qbg_freeze(dev);
+#endif
+	return 0;
+}
+
+static int qbg_resume(struct device *dev)
+{
+#ifdef CONFIG_DEEPSLEEP
+	if (mem_sleep_current == PM_SUSPEND_MEM)
+		return qbg_restore(dev);
+#endif
+	return 0;
+}
+
+static const struct dev_pm_ops qbg_pm_ops = {
+	.freeze = qbg_freeze,
+	.restore = qbg_restore,
+	.suspend = qbg_suspend,
+	.resume = qbg_resume,
+};
+
 static const struct of_device_id qbg_match_table[] = {
 	{ .compatible = "qcom,qbg", },
 	{ },
@@ -2662,6 +2830,7 @@ static struct platform_driver qti_qbg_driver = {
 	.driver = {
 		.name = "qti_qbg",
 		.of_match_table = qbg_match_table,
+		.pm = &qbg_pm_ops,
 	},
 	.probe = qti_qbg_probe,
 	.remove = qti_qbg_remove,

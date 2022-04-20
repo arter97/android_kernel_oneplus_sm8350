@@ -788,6 +788,7 @@ struct mcp25xxfd_trigger_tx_message {
 	char fill_data[64];
 	char trigger_cmd[2];
 	char trigger_data;
+	char trigger_buff[64];
 };
 
 struct mcp25xxfd_read_fifo_info {
@@ -1006,6 +1007,7 @@ unsigned int tx_fifos;
 unsigned int bw_sharing_log2bits;
 bool three_shot;
 struct mcp25xxfd_spi_transfer_buffer spi_transfer_buffer;
+unsigned int message_transmit_interval;
 
 /* replace transfer memory with kzalloc */
 static void area_replace(struct spi_transfer *xfer,
@@ -1780,6 +1782,7 @@ static void mcp25xxfd_mark_tx_pending(void *context)
 	 * serialization happens via spi_pump_message
 	 */
 	priv->fifos.tx_pending_mask |= BIT(txm->fifo);
+	udelay(message_transmit_interval);
 }
 
 static int mcp25xxfd_fill_spi_transmit_fifos(struct mcp25xxfd_priv *priv)
@@ -1853,6 +1856,7 @@ static int mcp25xxfd_transmit_message_common(struct spi_device *spi,
 	/* transfers to FIFO RAM has to be multiple of 4 */
 	txm->fill_xfer.len =
 		2 + sizeof(struct mcp25xxfd_obj_tx) + ALIGN(len, 4);
+	txm->trigger_xfer.len = txm->fill_xfer.len;
 
 	/* and transmit asyncroniously */
 	ret = spi_async(spi, &txm->msg);
@@ -4244,6 +4248,15 @@ static int mcp25xxfd_can_probe(struct spi_device *spi)
 		spi_transfer_buffer.spi_rx_kzalloc[i] =
 			kzalloc(MCP25XXFD_BUFFER_TXRX_SIZE, GFP_KERNEL);
 	}
+
+	/* Because use spi_async to transmit message,
+	 * sometimes too fast message transfer can cause kernel panic.
+	 * Appropriate time intervals can be added
+	 * between message transmissions as required by the platform.
+	 */
+	if (of_property_read_u32(spi->dev.of_node, "message-transmit-interval",
+				 &message_transmit_interval))
+		message_transmit_interval = 0;
 
 	/* as irq_create_fwspec_mapping() can return 0, check for it */
 	if (spi->irq <= 0) {

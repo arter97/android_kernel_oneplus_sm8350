@@ -310,10 +310,12 @@ static void __cqhci_enable(struct cqhci_host *cq_host)
 	cq_host->activated = true;
 
 #if defined(CONFIG_SDC_QTI)
-	if (mmc->hiber_notifier) {
-		if (cqhci_host_is_crypto_supported(cq_host))
+	if (mmc->hiber_notifier || mmc->deepsleep) {
+		if (cqhci_host_is_crypto_supported(cq_host) && cq_host->crypto_vops
+			&& cq_host->crypto_vops->restore_from_hibernation)
 			cq_host->crypto_vops->restore_from_hibernation(cq_host);
 		mmc->hiber_notifier = false;
+		mmc->deepsleep = false;
 	}
 #endif
 	mmc_log_string(mmc, "CQ enabled\n");
@@ -330,6 +332,11 @@ static void __cqhci_disable(struct cqhci_host *cq_host)
 	cq_host->mmc->cqe_on = false;
 
 	cq_host->activated = false;
+
+	if (cq_host->mmc->deepsleep && cqhci_host_is_crypto_supported(cq_host)) {
+		if (cq_host->crypto_vops && cq_host->crypto_vops->disable)
+			cq_host->crypto_vops->disable(cq_host);
+	}
 	mmc_log_string(cq_host->mmc, "CQ disabled\n");
 }
 
