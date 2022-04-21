@@ -42,6 +42,7 @@
 		.intr_cfg_reg = REG_BASE + 0x8 + REG_SIZE * id,		\
 		.intr_status_reg = REG_BASE + 0xc + REG_SIZE * id,	\
 		.intr_target_reg = REG_BASE + 0x8 + REG_SIZE * id,	\
+		.dir_conn_reg = REG_BASE + 0xad000, \
 		.mux_bit = 2,			\
 		.pull_bit = 0,			\
 		.drv_bit = 6,			\
@@ -56,6 +57,7 @@
 		.intr_polarity_bit = 1,		\
 		.intr_detection_bit = 2,	\
 		.intr_detection_width = 2,	\
+		.dir_conn_en_bit = 8,		\
 	}
 
 #define SDC_QDSD_PINGROUP(pg_name, ctl, pull, drv)	\
@@ -1214,6 +1216,16 @@ static const struct msm_pingroup sa515m_groups[] = {
 	[114] = SDC_QDSD_PINGROUP(sdc2_data, 0x109000, 9, 0),
 };
 
+static const struct msm_gpio_wakeirq_map sa515m_pdc_map[] = {
+	{ 53, 20 }, { 57, 21 }, { 64, 22 }, { 77, 23 }, { 90, 24 },
+	{ 103, 25},
+};
+
+static struct msm_dir_conn sa515m_dir_conn[] = {
+	  {-1, 0}, {-1, 0}, {-1, 0}, {-1, 0}, {-1, 0},
+	  {-1, 0}, {-1, 0}, {-1, 0}, {-1, 0}
+};
+
 static const struct msm_pinctrl_soc_data sa515m_pinctrl = {
 	.pins = sa515m_pins,
 	.npins = ARRAY_SIZE(sa515m_pins),
@@ -1222,6 +1234,9 @@ static const struct msm_pinctrl_soc_data sa515m_pinctrl = {
 	.groups = sa515m_groups,
 	.ngroups = ARRAY_SIZE(sa515m_groups),
 	.ngpios = 108,
+	.wakeirq_map = sa515m_pdc_map,
+	.nwakeirq_map = ARRAY_SIZE(sa515m_pdc_map),
+	.dir_conn = sa515m_dir_conn,
 };
 
 static int sa515m_pinctrl_probe(struct platform_device *pdev)
