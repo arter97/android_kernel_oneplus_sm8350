@@ -463,7 +463,7 @@ enum {
 
 #ifndef __KERNEL__
 /* explicit padding avoids incompatibility between i386 and x86-64 */
-typedef struct { unsigned char pad[sizeof(time_t) - sizeof(int)] __time_pad;
+typedef struct { unsigned char pad[sizeof(time_t) - sizeof(int)]; } __time_pad;
 
 struct snd_pcm_status {
 	snd_pcm_state_t state;		/* stream state */
