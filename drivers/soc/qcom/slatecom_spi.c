@@ -792,12 +792,10 @@ static int slatecom_force_resume(void *handle)
 
 	mutex_lock(&slate_task_mutex);
 
-	if (!atomic_read(&slate_is_spi_active)) {
-		SLATECOM_INFO("Doing force resume\n");
-		atomic_set(&slate_is_spi_active, 1);
+	SLATECOM_INFO("Doing force resume\n");
+	atomic_set(&slate_is_spi_active, 1);
 
-		ret = slatecom_resume_l(handle);
-	}
+	ret = slatecom_resume_l(handle);
 	mutex_unlock(&slate_task_mutex);
 	return 0;
 }
