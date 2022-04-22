@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/delay.h>
@@ -52,6 +53,12 @@ struct pdc_pin_region {
 	u32 cnt;
 };
 
+struct pdc_mux_region {
+	u32 pin_base;
+	u32 mux_base;
+	u32 index;
+};
+
 struct spi_cfg_regs {
 	union {
 		u64 start;
@@ -62,14 +69,22 @@ struct spi_cfg_regs {
 
 static DEFINE_RAW_SPINLOCK(pdc_lock);
 static void __iomem *pdc_base;
+static void __iomem *pdc_mux_base;
 static struct pdc_pin_region *pdc_region;
 static int pdc_region_cnt;
+static struct pdc_mux_region *pdc_mux_region;
+static int pdc_mux_region_cnt;
 static struct spi_cfg_regs *spi_cfg;
 static void *pdc_ipc_log;
 
 static void pdc_reg_write(int reg, u32 i, u32 val)
 {
 	writel_relaxed(val, pdc_base + reg + i * sizeof(u32));
+}
+
+static void pdc_mux_reg_write(u32 i, u32 val)
+{
+	writel_relaxed(val, pdc_mux_base + i * 0x14);
 }
 
 static u32 pdc_reg_read(int reg, u32 i)
@@ -376,6 +391,22 @@ static irq_hw_number_t get_parent_hwirq(int pin)
 	return PDC_NO_PARENT_IRQ;
 }
 
+static int get_pin_mux(int pin, int *index)
+{
+	int i;
+	struct pdc_mux_region *region;
+
+	for (i = 0; i < pdc_mux_region_cnt; i++) {
+		region = &pdc_mux_region[i];
+		if (pin == region->pin_base) {
+			*index = region->index;
+			return region->mux_base;
+		}
+	}
+
+	return -EINVAL;
+}
+
 static int qcom_pdc_translate(struct irq_domain *d, struct irq_fwspec *fwspec,
 			      unsigned long *hwirq, unsigned int *type)
 {
@@ -445,6 +476,7 @@ static int qcom_pdc_gpio_alloc(struct irq_domain *domain, unsigned int virq,
 	irq_hw_number_t hwirq, parent_hwirq;
 	unsigned int type;
 	int ret;
+	int pdc_mux, index;
 
 	ret = qcom_pdc_translate(domain, fwspec, &hwirq, &type);
 	if (ret)
@@ -461,6 +493,12 @@ static int qcom_pdc_gpio_alloc(struct irq_domain *domain, unsigned int virq,
 	parent_hwirq = get_parent_hwirq(hwirq);
 	if (parent_hwirq == PDC_NO_PARENT_IRQ)
 		return 0;
+
+	if (pdc_mux_base) {
+		pdc_mux = get_pin_mux(hwirq, &index);
+		if (pdc_mux >= 0)
+			pdc_mux_reg_write(index, pdc_mux);
+	}
 
 	if (type & IRQ_TYPE_EDGE_BOTH)
 		type = IRQ_TYPE_EDGE_RISING;
@@ -529,6 +567,45 @@ static int pdc_setup_pin_mapping(struct device_node *np)
 	return 0;
 }
 
+static int pdc_setup_mux_mapping(struct device_node *np)
+{
+	int ret, n;
+
+	n = of_property_count_elems_of_size(np, "qcom,pdc-mux-ranges", sizeof(u32));
+	if (n <= 0)
+		return 0;
+
+	if (n % 3)
+		return -EINVAL;
+
+	pdc_mux_region_cnt = n / 3;
+	pdc_mux_region = kcalloc(pdc_mux_region_cnt, sizeof(*pdc_mux_region), GFP_KERNEL);
+	if (!pdc_mux_region) {
+		pdc_mux_region_cnt = 0;
+		return -ENOMEM;
+	}
+
+	for (n = 0; n < pdc_mux_region_cnt; n++) {
+		ret = of_property_read_u32_index(np, "qcom,pdc-mux-ranges",
+						 n * 3 + 0,
+						 &pdc_mux_region[n].pin_base);
+		if (ret)
+			return ret;
+		ret = of_property_read_u32_index(np, "qcom,pdc-mux-ranges",
+						 n * 3 + 1,
+						 &pdc_mux_region[n].mux_base);
+		if (ret)
+			return ret;
+		ret = of_property_read_u32_index(np, "qcom,pdc-mux-ranges",
+						 n * 3 + 2,
+						 &pdc_mux_region[n].index);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
 static int __init qcom_pdc_early_init(void)
 {
 	pdc_ipc_log = ipc_log_context_create(PDC_IPC_LOG_SZ, "pdc", 0);
@@ -544,6 +621,7 @@ static int qcom_pdc_init(struct device_node *node, struct device_node *parent)
 	struct irq_domain *parent_domain, *pdc_domain, *pdc_gpio_domain;
 	struct resource res;
 	int ret;
+	int index;
 
 	pdc_base = of_iomap(node, 0);
 	if (!pdc_base) {
@@ -562,6 +640,21 @@ static int qcom_pdc_init(struct device_node *node, struct device_node *parent)
 	if (ret) {
 		pr_err("%pOF: failed to init PDC pin-hwirq mapping\n", node);
 		goto fail;
+	}
+
+	index = of_property_match_string(node, "reg-names", "mux-base");
+	if (index >= 0) {
+		pdc_mux_base = of_iomap(node, index);
+		if (!pdc_mux_base) {
+			pr_err("%pOF: unable to map PDC Mux register\n", node);
+			goto fail;
+		}
+
+		ret = pdc_setup_mux_mapping(node);
+		if (ret) {
+			pr_err("%pOF: failed to setup PDC Mux mapping\n", node);
+			goto fail;
+		}
 	}
 
 	pdc_domain = irq_domain_create_hierarchy(parent_domain, 0, PDC_MAX_IRQS,
