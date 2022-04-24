@@ -383,9 +383,14 @@ void send_event(enum slatecom_event_type event,
 
 void slatecom_slatedown_handler(void)
 {
-	send_event(SLATECOM_EVENT_RESET_OCCURRED, NULL);
+	struct spi_device *spi = get_spi_device();
+
 	g_slav_status_reg = 0;
 	atomic_set(&ok_to_sleep, 0);
+	pm_runtime_get_sync(&spi->dev);
+	send_event(SLATECOM_EVENT_RESET_OCCURRED, NULL);
+	pm_runtime_mark_last_busy(&spi->dev);
+	pm_runtime_put_sync_autosuspend(&spi->dev);
 }
 EXPORT_SYMBOL(slatecom_slatedown_handler);
 
