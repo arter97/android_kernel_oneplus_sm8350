@@ -940,6 +940,9 @@ int habmem_imp_hyp_map(void *imp_ctx, struct hab_import *param,
 
 int habmm_imp_hyp_unmap(void *imp_ctx, struct export_desc *exp, int kernel)
 {
+	/* dma_buf is the only supported format in khab */
+	if (kernel)
+		dma_buf_put((struct dma_buf *)exp->kva);
 	return 0;
 }
 
