@@ -2301,6 +2301,20 @@ static int _qcom_ethqos_probe(void *arg)
 		ETHQOSDBG("qcom,phy-reset present\n");
 	}
 
+	if (of_property_read_u32(np, "qcom,phyvoltage_min",
+				 &ethqos->phyvoltage_min))
+		ethqos->phyvoltage_min = 3075000;
+	else
+		ETHQOSINFO("qcom,phyvoltage_min = %d\n",
+			   ethqos->phyvoltage_min);
+
+	if (of_property_read_u32(np, "qcom,phyvoltage_max",
+				 &ethqos->phyvoltage_max))
+		ethqos->phyvoltage_max = 3200000;
+	else
+		ETHQOSINFO("qcom,phyvoltage_max = %d\n",
+			   ethqos->phyvoltage_max);
+
 	ethqos_init_regulators(ethqos);
 	ethqos_init_gpio(ethqos);
 
