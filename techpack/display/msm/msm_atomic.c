@@ -791,19 +791,12 @@ void msm_atomic_state_clear(struct drm_atomic_state *s)
 	struct msm_kms_state *state = to_kms_state(s);
 
 	drm_atomic_state_default_clear(&state->base);
-#ifdef CONFIG_DRM_MSM_MDP5
-	kfree(state->state);
-	state->state = NULL;
-#endif
 }
 
 void msm_atomic_state_free(struct drm_atomic_state *s)
 {
 	struct msm_kms_state *state = to_kms_state(s);
 
-#ifdef CONFIG_DRM_MSM_MDP5
-	kfree(state->state);
-#endif
 	/*
 	 * Check if this was a kms struct with preallocated arrays by looking at
 	 * the address of `crtcs` and seeing if it points inside the kms struct.

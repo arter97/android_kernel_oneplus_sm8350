@@ -165,9 +165,6 @@ struct msm_commit {
  */
 struct msm_kms_state {
 	struct drm_atomic_state base;
-#ifdef CONFIG_DRM_MSM_MDP5
-	void *state;
-#endif
 	struct msm_commit commit;
 	/*
 	 * Everything below `commit` may not be allocated in the struct. The
