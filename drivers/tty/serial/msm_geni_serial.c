@@ -4026,9 +4026,6 @@ static int msm_geni_serial_get_ver_info(struct uart_port *uport)
 	int hw_ver, ret = 0;
 	struct msm_geni_serial_port *msm_port = GET_DEV_PORT(uport);
 
-	/* clks_on/off only for HSUART, as console remains actve */
-	if (!msm_port->is_console)
-		se_geni_clks_on(&msm_port->serial_rsc);
 	/* Basic HW and FW info */
 	if (unlikely(get_se_proto(uport->membase) != UART)) {
 		dev_err(uport->dev, "%s: Invalid FW %d loaded.\n",
@@ -4061,8 +4058,6 @@ static int msm_geni_serial_get_ver_info(struct uart_port *uport)
 
 	msm_geni_serial_enable_interrupts(uport);
 exit_ver_info:
-	if (!msm_port->is_console)
-		se_geni_clks_off(&msm_port->serial_rsc);
 	return ret;
 }
 
@@ -4410,14 +4405,22 @@ static int msm_geni_serial_probe(struct platform_device *pdev)
 	dev_port->port_setup = false;
 
 	dev_port->uart_error = UART_ERROR_DEFAULT;
+
+	/* clks_on/off only for HSUART, as console remains actve */
+	if (!dev_port->is_console)
+		se_geni_clks_on(&dev_port->serial_rsc);
+
 	ret = msm_geni_serial_get_ver_info(uport);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to Read FW ver: %d\n", ret);
+		se_geni_clks_off(&dev_port->serial_rsc);
 		goto exit_geni_serial_probe;
 	}
 
 	/* Initialize the GSI mode */
 	msm_geni_serial_init_gsi(uport);
+	if (!dev_port->is_console)
+		se_geni_clks_off(&dev_port->serial_rsc);
 
 	/*
 	 * In abrupt kill scenarios, previous state of the uart causing runtime
