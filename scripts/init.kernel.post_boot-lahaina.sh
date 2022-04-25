@@ -85,9 +85,9 @@ if ! mount | grep -q "$BIND" && [ ! -e /sbin/recovery ] && [ ! -e /dev/ep/.post_
     # set min_free_kbytes = 32MB
     echo 32768 > /proc/sys/vm/min_free_kbytes
 
-    # Set swap size to 30% of MemTotal
-    # mksh overflows when it exceeds 2GB, workaround it via bc
-    echo $(echo "$MemKb * 30 / 100 * 1024" | bc) > /sys/block/zram0/disksize
+    # Set swap size to half of MemTotal
+    # Align by 4 MiB
+    expr $MemKb / 2 '*' 1024 / 4194304 '*' 4194304 > /sys/block/zram0/disksize
     echo 160 > /proc/sys/vm/rswappiness
     echo 200 > /sys/module/zram/parameters/wb_start_mins
 
