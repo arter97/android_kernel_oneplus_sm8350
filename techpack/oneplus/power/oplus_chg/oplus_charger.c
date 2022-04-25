@@ -84,6 +84,10 @@
 #include "oplus_chg_cfg.h"
 #endif
 
+#include <linux/moduleparam.h>
+static int forced_current;
+module_param(forced_current, int, 0644);
+
 static struct oplus_chg_chip *g_charger_chip = NULL;
 
 #define MAX_UI_DECIMAL_TIME 24
@@ -4041,6 +4045,17 @@ void oplus_chg_set_input_current_limit(struct oplus_chg_chip *chip)
 			return;
 	}
 
+	if (forced_current && current_limit != 0) {
+		// Sanity check
+		if (forced_current > 4000 || forced_current < 0) {
+			pr_err("invalid forced_current: %d\n", forced_current);
+		} else {
+			pr_info("overriding current_limit from %d to %d\n", current_limit, forced_current);
+			current_limit = forced_current;
+			goto out;
+		}
+	}
+
 	if ((chip->chg_ctrl_by_lcd) && (chip->led_on)) {
 		if (!chip->dual_charger_support || (chip->dual_charger_support && chip->charger_volt > 7500)) {
 			if (chip->led_temp_status == LED_TEMP_STATUS__HIGH) {
@@ -4129,6 +4144,8 @@ void oplus_chg_set_input_current_limit(struct oplus_chg_chip *chip)
 		current_limit,
 		chip->led_temp_status);
 #endif
+out:
+	pr_info("chip->chg_ops->input_current_write(%d)\n", current_limit);
 	chip->chg_ops->input_current_write(current_limit);
 }
 
