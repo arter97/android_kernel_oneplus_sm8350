@@ -1254,6 +1254,14 @@ typedef enum {
     WMITLV_TAG_STRUC_wmi_vdev_pn_mgmt_rx_filter_cmd_fixed_param,
     WMITLV_TAG_STRUC_wmi_set_multiple_pdev_vdev_param_cmd_fixed_param,
     WMITLV_TAG_STRUC_wmi_set_param_info,
+    WMITLV_TAG_STRUC_wmi_pmm_scratch_reg_allocation_cmd_fixed_param,
+    WMITLV_TAG_STRUC_wmi_pmm_scratch_reg_info,
+    WMITLV_TAG_STRUC_wmi_pmm_available_scratch_reg_event_fixed_param,
+    WMITLV_TAG_STRUC_wmi_pmm_available_scratch_reg_info,
+    WMITLV_TAG_STRUC_wmi_pmm_scratch_reg_allocation_complete_event_fixed_param,
+    WMITLV_TAG_STRUC_wmi_bcn_tmpl_ml_info,
+    WMITLV_TAG_STRUC_wmi_peer_tx_filter_cmd_fixed_param,
+    WMITLV_TAG_STRUC_wmi_pdev_telemetry_stats,
 } WMITLV_TAG_ID;
 
 /*
@@ -1745,6 +1753,8 @@ typedef enum {
     OP(WMI_PEER_RX_PN_REQUEST_CMDID) \
     OP(WMI_VDEV_PN_MGMT_RX_FILTER_CMDID) \
     OP(WMI_SET_MULTIPLE_PDEV_VDEV_PARAM_CMDID) \
+    OP(WMI_PMM_SCRATCH_REG_ALLOCATION_CMDID) \
+    OP(WMI_PEER_TX_FILTER_CMDID) \
     /* add new CMD_LIST elements above this line */
 
 
@@ -2028,6 +2038,8 @@ typedef enum {
     OP(WMI_RTT_PASN_PEER_DELETE_EVENTID) \
     OP(WMI_PDEV_RSSI_DBM_CONVERSION_PARAMS_INFO_EVENTID) \
     OP(WMI_PEER_RX_PN_RESPONSE_EVENTID) \
+    OP(WMI_PMM_AVAILABLE_SCRATCH_REG_EVENTID) \
+    OP(WMI_PMM_SCRATCH_REG_ALLOCATION_COMPLETE_EVENTID) \
     /* add new EVT_LIST elements above this line */
 
 
@@ -2469,7 +2481,8 @@ WMITLV_CREATE_PARAM_STRUC(WMI_PRB_TMPL_CMDID);
     WMITLV_ELEM(id,op,buf,len, WMITLV_TAG_STRUC_wmi_bcn_tmpl_cmd_fixed_param, wmi_bcn_tmpl_cmd_fixed_param, fixed_param, WMITLV_SIZE_FIX) \
     WMITLV_ELEM(id,op,buf,len, WMITLV_TAG_STRUC_wmi_bcn_prb_info, wmi_bcn_prb_info, bcn_prb_info, WMITLV_SIZE_FIX) \
     WMITLV_ELEM(id,op,buf,len, WMITLV_TAG_ARRAY_BYTE, A_UINT8, bufp, WMITLV_SIZE_VAR) \
-    WMITLV_ELEM(id,op,buf,len, WMITLV_TAG_ARRAY_STRUC, wmi_bcn_tmpl_ml_params, ml_bcn_param, WMITLV_SIZE_VAR)
+    WMITLV_ELEM(id,op,buf,len, WMITLV_TAG_ARRAY_STRUC, wmi_bcn_tmpl_ml_params, ml_bcn_param, WMITLV_SIZE_VAR) \
+    WMITLV_ELEM(id,op,buf,len, WMITLV_TAG_ARRAY_STRUC, wmi_bcn_tmpl_ml_info, ml_bcn_info, WMITLV_SIZE_VAR)
 
 WMITLV_CREATE_PARAM_STRUC(WMI_BCN_TMPL_CMDID);
 
@@ -4203,6 +4216,11 @@ WMITLV_CREATE_PARAM_STRUC(WMI_VDEV_SET_DSCP_TID_MAP_CMDID);
     WMITLV_ELEM(id,op,buf,len, WMITLV_TAG_STRUC_wmi_vdev_filter_nrp_config_cmd_fixed_param, wmi_vdev_filter_nrp_config_cmd_fixed_param, fixed_param, WMITLV_SIZE_FIX)
 WMITLV_CREATE_PARAM_STRUC(WMI_VDEV_FILTER_NEIGHBOR_RX_PACKETS_CMDID);
 
+/* Configure filter for Mac addr based filtering*/
+#define WMITLV_TABLE_WMI_PEER_TX_FILTER_CMDID(id,op,buf,len) \
+    WMITLV_ELEM(id,op,buf,len, WMITLV_TAG_STRUC_wmi_peer_tx_filter_cmd_fixed_param, wmi_peer_tx_filter_cmd_fixed_param, fixed_param, WMITLV_SIZE_FIX)
+WMITLV_CREATE_PARAM_STRUC(WMI_PEER_TX_FILTER_CMDID);
+
 /* Configure filter for PN Rx Pkt indication which pkts need to be forwarded to host */
 #define WMITLV_TABLE_WMI_VDEV_PN_MGMT_RX_FILTER_CMDID(id,op,buf,len) \
     WMITLV_ELEM(id,op,buf,len, WMITLV_TAG_STRUC_wmi_vdev_pn_mgmt_rx_filter_cmd_fixed_param, wmi_vdev_pn_mgmt_rx_filter_cmd_fixed_param, fixed_param, WMITLV_SIZE_FIX)
@@ -4980,6 +4998,12 @@ WMITLV_CREATE_PARAM_STRUC(WMI_RTT_PASN_AUTH_STATUS_CMD);
     WMITLV_ELEM(id,op,buf,len, WMITLV_TAG_STRUC_wmi_rtt_pasn_deauth_cmd_fixed_param, wmi_rtt_pasn_deauth_cmd_fixed_param, fixed_param, WMITLV_SIZE_FIX)
 WMITLV_CREATE_PARAM_STRUC(WMI_RTT_PASN_DEAUTH_CMD);
 
+/* Allocate PMM scratch registers */
+#define WMITLV_TABLE_WMI_PMM_SCRATCH_REG_ALLOCATION_CMDID(id,op,buf,len) \
+    WMITLV_ELEM(id,op,buf,len, WMITLV_TAG_STRUC_wmi_pmm_scratch_reg_allocation_cmd_fixed_param, wmi_pmm_scratch_reg_allocation_cmd_fixed_param, fixed_param, WMITLV_SIZE_FIX) \
+    WMITLV_ELEM(id,op,buf,len, WMITLV_TAG_ARRAY_STRUC, wmi_pmm_scratch_reg_info, scratch_reg_info, WMITLV_SIZE_VAR)
+WMITLV_CREATE_PARAM_STRUC(WMI_PMM_SCRATCH_REG_ALLOCATION_CMDID);
+
 
 
 /************************** TLV definitions of WMI events *******************************/
@@ -5535,7 +5559,8 @@ WMITLV_CREATE_PARAM_STRUC(WMI_HOST_SWFDA_EVENTID);
     WMITLV_ELEM(id,op,buf,len, WMITLV_TAG_ARRAY_STRUC, wmi_peer_extd2_stats, peer_extd2_stats, WMITLV_SIZE_VAR) \
     WMITLV_ELEM(id,op,buf,len, WMITLV_TAG_ARRAY_STRUC, wmi_pmf_bcn_protect_stats, pmf_bcn_protect_stats, WMITLV_SIZE_VAR) \
     WMITLV_ELEM(id,op,buf,len, WMITLV_TAG_ARRAY_STRUC, wmi_vdev_extd_stats, vdev_extd_stats, WMITLV_SIZE_VAR) \
-    WMITLV_ELEM(id,op,buf,len, WMITLV_TAG_ARRAY_STRUC, wmi_pdev_extd_stats, pdev_extd_stats, WMITLV_SIZE_VAR)
+    WMITLV_ELEM(id,op,buf,len, WMITLV_TAG_ARRAY_STRUC, wmi_pdev_extd_stats, pdev_extd_stats, WMITLV_SIZE_VAR) \
+    WMITLV_ELEM(id,op,buf,len, WMITLV_TAG_ARRAY_STRUC, wmi_pdev_telemetry_stats, pdev_telemetry_stats, WMITLV_SIZE_VAR)
 WMITLV_CREATE_PARAM_STRUC(WMI_UPDATE_STATS_EVENTID);
 
 /* Update PN response Event */
@@ -6736,6 +6761,17 @@ WMITLV_CREATE_PARAM_STRUC(WMI_RTT_PASN_PEER_CREATE_REQ_EVENTID);
         wmi_rtt_pasn_peer_delete_event_fixed_param, fixed_param, WMITLV_SIZE_FIX) \
     WMITLV_ELEM(id,op,buf,len, WMITLV_TAG_ARRAY_STRUC, wmi_rtt_pasn_peer_delete_param, rtt_pasn_peer_param, WMITLV_SIZE_VAR)
 WMITLV_CREATE_PARAM_STRUC(WMI_RTT_PASN_PEER_DELETE_EVENTID);
+
+/* Available PMM scratch registers event */
+#define WMITLV_TABLE_WMI_PMM_AVAILABLE_SCRATCH_REG_EVENTID(id,op,buf,len) \
+    WMITLV_ELEM(id,op,buf,len, WMITLV_TAG_STRUC_wmi_pmm_available_scratch_reg_event_fixed_param, wmi_pmm_available_scratch_reg_event_fixed_param, fixed_param, WMITLV_SIZE_FIX) \
+    WMITLV_ELEM(id,op,buf,len, WMITLV_TAG_ARRAY_STRUC, wmi_pmm_available_scratch_reg_info, pmm_available_scratch_reg_info, WMITLV_SIZE_VAR)
+WMITLV_CREATE_PARAM_STRUC(WMI_PMM_AVAILABLE_SCRATCH_REG_EVENTID);
+
+/* Allocate PMM scratch registers event */
+#define WMITLV_TABLE_WMI_PMM_SCRATCH_REG_ALLOCATION_COMPLETE_EVENTID(id,op,buf,len) \
+    WMITLV_ELEM(id,op,buf,len, WMITLV_TAG_STRUC_wmi_pmm_scratch_reg_allocation_complete_event_fixed_param, wmi_pmm_scratch_reg_allocation_complete_event_fixed_param, fixed_param, WMITLV_SIZE_FIX)
+WMITLV_CREATE_PARAM_STRUC(WMI_PMM_SCRATCH_REG_ALLOCATION_COMPLETE_EVENTID);
 
 
 #ifdef __cplusplus
