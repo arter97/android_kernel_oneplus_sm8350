@@ -113,21 +113,22 @@ static inline bool _msm_seamless_for_conn(struct drm_connector *connector,
 	return false;
 }
 
-/* clear specified crtcs (no longer pending update) */
-static void commit_destroy(struct msm_commit *c)
+/* clear specified crtcs (no longer pending update)
+ */
+static void end_atomic(struct msm_drm_private *priv, uint32_t crtc_mask,
+			uint32_t plane_mask)
 {
-	struct msm_drm_private *priv = c->dev->dev_private;
-	uint32_t crtc_mask = c->crtc_mask;
-	uint32_t plane_mask = c->plane_mask;
-
-	/* End_atomic */
 	spin_lock(&priv->pending_crtcs_event.lock);
 	DBG("end: %08x", crtc_mask);
 	priv->pending_crtcs &= ~crtc_mask;
 	priv->pending_planes &= ~plane_mask;
 	wake_up_all_locked(&priv->pending_crtcs_event);
 	spin_unlock(&priv->pending_crtcs_event.lock);
+}
 
+static void commit_destroy(struct msm_commit *c)
+{
+	end_atomic(c->dev->dev_private, c->crtc_mask, c->plane_mask);
 	if (c->nonblock)
 		kfree(c);
 }
