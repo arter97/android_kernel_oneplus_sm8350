@@ -790,42 +790,31 @@ static int get_usb_temp(struct battery_chg_dev *bcdev)
 	return temp;
 }
 
+static int __oplus_connector_check_vbus(struct battery_chg_dev *bcdev)
+{
+	oplus_chg_vbus_status(bcdev, &bcdev->vbus_present);
+	if (bcdev->vbus_present)
+		return 0;
+
+	return -EBUSY;
+}
+
 #define THIRD_LOOP_ENTER_MINI_THRESHOLD 35
 #define THIRD_LOOP_ENTER_MAX_THRESHOLD 60
 #define THIRD_INTERVAL_MINI_THRESHOLD 8
 #define THIRD_INTERVAL_MAX_THRESHOLD 20
-static void oplus_connector_temp_check_work(struct work_struct *work)
+static int __oplus_connector_check_temp(struct battery_chg_dev *bcdev)
 {
-	struct delayed_work *dwork = to_delayed_work(work);
-	struct battery_chg_dev *bcdev = container_of(dwork,
-				struct battery_chg_dev, connector_check_work);
 	int batt_temp = 0, interval_temp = 0;
-	int i = 0, rc;
-	static int count = 5;
-	static int count_temp125 = 3;
-	static bool check_pass;
-
-	oplus_chg_vbus_status(bcdev, &bcdev->vbus_present);
-	if (!bcdev->vbus_present) {
-		if (!check_pass && count --) {
-			schedule_delayed_work(&bcdev->connector_check_work,
-				msecs_to_jiffies(1500));
-			pr_err("Vbus not ready when protect algorithm runs, retry!! count: %d", count);
-		} else
-			pr_err("Vbus not present, return!!");
-		check_pass = false;
-		return;
-	}
+	int rc;
 
 	bcdev->connector_temp = get_usb_temp(bcdev);
 	rc = oplus_chg_get_batt_temp(bcdev, &batt_temp);
 	if (rc < 0) {
 		pr_err("batt temp read error, return!!");
-		return;
+		return rc;
 	}
 	interval_temp = bcdev->connector_temp - batt_temp/10;
-	count = 5;
-	check_pass = true;
 
 	if (!bcdev->count_run) {/*count run state keep count_total not change*/
 		if (bcdev->connector_temp >= 33) {// 33
@@ -843,19 +832,8 @@ static void oplus_connector_temp_check_work(struct work_struct *work)
 			bcdev->count_run,
 			bcdev->connector_short);
 	/*error:EOC bit not set! cause connector_temp=125*/
-	if (bcdev->connector_temp == 125) {
-		for (i = 0; i <= 9; i++) {
-			msleep(100);
-			pr_debug("EOC error!temp abormal delay count:%d\n", i);
-		}
-		if (count_temp125 --) {
-			pr_err("connector_temp 125, retry!! count: %d", count_temp125);
-			schedule_delayed_work(&bcdev->connector_check_work,
-				msecs_to_jiffies(100));
-			return; /*rerun check again*/
-		}
-	}
-	count_temp125 = 3;
+	if (bcdev->connector_temp == 125)
+		return -EBUSY;
 
 	if (bcdev->connector_temp >= 60) { /* >=60 */
 		pr_info("connector_temp=%d,connector_short=%d\n",
@@ -869,7 +847,7 @@ static void oplus_connector_temp_check_work(struct work_struct *work)
 					interval_temp,
 					bcdev->connector_temp);
 			oplus_disconnect_vbus(true);
-			return;
+			return 0;
 		} else if (((interval_temp >= 8) &&
 			(bcdev->connector_temp >= 20)) ||
 			(bcdev->connector_temp >= 40)) {
@@ -889,7 +867,7 @@ static void oplus_connector_temp_check_work(struct work_struct *work)
 							bcdev->count_run,
 							bcdev->connector_short);
 						oplus_disconnect_vbus(true);
-						return;
+						return 0;
 					}
 				}
 
@@ -914,6 +892,48 @@ static void oplus_connector_temp_check_work(struct work_struct *work)
 		schedule_delayed_work(&bcdev->connector_check_work, msecs_to_jiffies(50));
 	else
 		pr_debug("connector_temp:%d\n", bcdev->connector_temp);
+
+	return 0;
+}
+
+static void oplus_connector_temp_check_work(struct work_struct *work)
+{
+	int i, ret;
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct battery_chg_dev *bcdev = container_of(dwork,
+				struct battery_chg_dev, connector_check_work);
+
+	for (i = 0; i < 5; i++) {
+		ret = __oplus_connector_check_vbus(bcdev);
+		if (ret == -EBUSY) {
+			pr_err("Vbus not ready when protect algorithm runs, retry!! count: %d\n", i);
+			msleep(1500);
+		} else {
+			break;
+		}
+	}
+
+	if (ret == -EBUSY) {
+		pr_err("Vbus not present, timed out on retries!!\n");
+		return;
+	}
+
+	for (i = 0; i < 3; i++) {
+		ret = __oplus_connector_check_temp(bcdev);
+		if (ret == -EBUSY) {
+			pr_err("connector_temp 125, retry!! count: %d\n", i);
+			msleep(1100);
+		} else {
+			break;
+		}
+	}
+
+	if (ret == -EBUSY) {
+		pr_err("connector_temp 125 error, timed out on retries!!\n");
+		return;
+	}
+
+	pr_info("ended normally\n");
 }
 
 #define connector_RECOVERY_CHECK_INTERVAL 3000 //ms
