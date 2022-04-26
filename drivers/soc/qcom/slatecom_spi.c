@@ -314,7 +314,7 @@ static int slatecom_transfer(void *handle, uint8_t *tx_buf,
 	struct slate_spi_priv *slate_spi;
 	struct slate_context *cntx;
 	struct spi_device *spi;
-	int ret;
+	int ret = 0;
 
 	if (!handle || !tx_buf)
 		return -EINVAL;
@@ -451,7 +451,7 @@ static void send_back_notification(uint32_t slav_status_reg,
 	uint16_t master_fifo_used;
 	uint16_t slave_fifo_free;
 	uint32_t *ptr;
-	int ret;
+	int ret = 0;
 	uint32_t oem_provisioning_status;
 	union slatecom_event_data_type event_data = { .fifo_data = {0} };
 
@@ -644,7 +644,7 @@ static int is_slate_resume(void *handle, uint32_t *slav_status_reg,
 		uint32_t *slav_status_auto_clear_reg)
 {
 	uint32_t txn_len;
-	int ret;
+	int ret = 0;
 	uint8_t *tx_buf = NULL;
 	uint8_t *rx_buf = NULL;
 	uint32_t read_buf[5] = {0};
@@ -812,7 +812,7 @@ int slatecom_ahb_read(void *handle, uint32_t ahb_start_addr,
 	uint8_t *tx_buf;
 	uint8_t *rx_buf;
 	uint32_t size;
-	int ret;
+	int ret = 0;
 	uint8_t cmnd = 0;
 	uint32_t ahb_addr = 0;
 	struct spi_device *spi = get_spi_device();
@@ -876,7 +876,7 @@ int slatecom_ahb_write_bytes(void *handle, uint32_t ahb_start_addr,
 {
 	uint32_t txn_len;
 	uint8_t *tx_buf;
-	int ret;
+	int ret = 0;
 	uint8_t cmnd = 0;
 	uint32_t ahb_addr = 0;
 	uint32_t curr_num_bytes;
@@ -945,7 +945,7 @@ int slatecom_ahb_write(void *handle, uint32_t ahb_start_addr,
 {
 	uint32_t txn_len;
 	uint8_t *tx_buf;
-	int ret;
+	int ret = 0;
 	uint8_t cmnd = 0;
 	uint32_t ahb_addr = 0;
 	uint32_t curr_num_words;
@@ -1012,7 +1012,7 @@ int slatecom_fifo_write(void *handle, uint32_t num_words,
 	uint32_t txn_len;
 	uint8_t *tx_buf;
 	uint32_t size;
-	int ret;
+	int ret = 0;
 	uint8_t cmnd = 0;
 	struct spi_device *spi = get_spi_device();
 
@@ -1188,7 +1188,7 @@ static int slatecom_reg_read_internal(void *handle, uint8_t reg_start_addr,
 	uint8_t *tx_buf;
 	uint8_t *rx_buf;
 	uint32_t size;
-	int ret;
+	int ret = 0;
 	uint8_t cmnd = 0;
 
 	if (!handle || !read_buf || num_regs == 0
@@ -1242,7 +1242,7 @@ int slatecom_reg_read(void *handle, uint8_t reg_start_addr,
 	uint8_t *tx_buf;
 	uint8_t *rx_buf;
 	uint32_t size;
-	int ret;
+	int ret = 0;
 	uint8_t cmnd = 0;
 	struct spi_device *spi = get_spi_device();
 
@@ -1483,7 +1483,7 @@ static int slate_spi_probe(struct spi_device *spi)
 	struct slate_spi_priv *slate_spi;
 	struct device_node *node;
 	int irq_gpio = 0;
-	int ret;
+	int ret = 0;
 
 	slate_spi = devm_kzalloc(&spi->dev, sizeof(*slate_spi),
 				   GFP_KERNEL | GFP_ATOMIC);
@@ -1652,7 +1652,7 @@ static int slatecom_pm_suspend(struct device *dev)
 static int slatecom_pm_resume(struct device *dev)
 {
 	struct slate_context clnt_handle;
-	int ret;
+	int ret = 0;
 	struct slate_spi_priv *spi =
 		container_of(slate_com_drv, struct slate_spi_priv, lhandle);
 
@@ -1735,7 +1735,7 @@ static int slatecom_pm_runtime_suspend(struct device *dev)
 static int slatecom_pm_runtime_resume(struct device *dev)
 {
 	struct slate_context clnt_handle;
-	int ret;
+	int ret = 0;
 	struct slate_spi_priv *spi =
 		container_of(slate_com_drv, struct slate_spi_priv, lhandle);
 

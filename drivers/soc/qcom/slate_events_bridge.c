@@ -411,7 +411,7 @@ done:
 void *seb_register_for_slate_event(
 			enum event_group_type event_group, struct notifier_block *nb)
 {
-	int ret;
+	int ret = 0;
 	struct seb_notif_info *seb_notif = _notif_find_group(event_group);
 
 	if (!seb_notif) {
@@ -437,7 +437,7 @@ EXPORT_SYMBOL(seb_register_for_slate_event);
 int seb_unregister_for_slate_event(void *seb_notif_handle,
 				struct notifier_block *nb)
 {
-	int ret;
+	int ret = 0;
 	struct seb_notif_info *seb_notif =
 			(struct seb_notif_info *)seb_notif_handle;
 
@@ -465,6 +465,8 @@ void handle_rx_event(struct seb_priv *dev, void *rx_event_buf, int len)
 		event_header->opcode == GMI_SLATE_EVENT_BUTTON) {
 
 		evnt = kmalloc(sizeof(struct event), GFP_ATOMIC);
+		if (!evnt)
+			return;
 		/* consume the events*/
 		event_payload = (char *)(rx_event_buf + sizeof(struct gmi_header));
 		evnt->sub_id = event_header->opcode;

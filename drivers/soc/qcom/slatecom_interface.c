@@ -313,7 +313,7 @@ static int send_state_change_cmd(struct slate_ui_data *ui_obj_msg)
 
 static int slatecom_char_open(struct inode *inode, struct file *file)
 {
-	int ret;
+	int ret = 0;
 
 	mutex_lock(&slate_char_mutex);
 	if (device_open == 1) {
@@ -337,7 +337,7 @@ static int slatechar_read_cmd(struct slate_ui_data *fui_obj_msg,
 		unsigned int type)
 {
 	void              *read_buf;
-	int               ret;
+	int               ret = 0;
 	void __user       *result   = (void *)
 			(uintptr_t)fui_obj_msg->result;
 
@@ -530,7 +530,7 @@ static int send_debug_config(struct slate_ui_data *tui_obj_msg)
 static long slate_com_ioctl(struct file *filp,
 		unsigned int ui_slatecom_cmd, unsigned long arg)
 {
-	int ret;
+	int ret = 0;
 	struct slate_ui_data ui_obj_msg;
 
 	if (filp == NULL)
@@ -717,7 +717,7 @@ static ssize_t slatecom_char_write(struct file *f, const char __user *buf,
 
 static int slatecom_char_close(struct inode *inode, struct file *file)
 {
-	int ret;
+	int ret = 0;
 
 	mutex_lock(&slate_char_mutex);
 	ret = slatecom_close(&handle);
@@ -891,7 +891,7 @@ static int ssr_modem_cb(struct notifier_block *this,
 {
 	struct slate_event modeme;
 	struct msg_header_t msg_header = {0, 0};
-	int ret;
+	int ret = 0;
 
 	switch (opcode) {
 	case SUBSYS_AFTER_DS_ENTRY:
@@ -932,7 +932,7 @@ static int ssr_adsp_cb(struct notifier_block *this,
 {
 	struct slate_event adspe;
 	struct msg_header_t msg_header = {0, 0};
-	int ret;
+	int ret = 0;
 
 	switch (opcode) {
 	case SUBSYS_AFTER_DS_ENTRY:
@@ -1029,7 +1029,7 @@ EXPORT_SYMBOL(set_slate_bt_state);
 
 void *slatecom_register_notifier(struct notifier_block *nb)
 {
-	int ret;
+	int ret = 0;
 
 	ret = srcu_notifier_chain_register(&slatecom_notifier_chain, nb);
 	if (ret < 0)
@@ -1111,7 +1111,7 @@ static void ssr_register(void)
 
 static int __init init_slate_com_dev(void)
 {
-	int ret, i;
+	int ret, i = 0;
 
 	ret = alloc_chrdev_region(&slate_dev, 0, 1, SLATECOM);
 	if (ret  < 0) {
@@ -1164,7 +1164,7 @@ static int __init init_slate_com_dev(void)
 
 static void __exit exit_slate_com_dev(void)
 {
-	int i;
+	int i = 0;
 	device_destroy(slate_class, slate_dev);
 	class_destroy(slate_class);
 	for (i = 0; i < SLATECOM_INTF_N_FILES; i++)
