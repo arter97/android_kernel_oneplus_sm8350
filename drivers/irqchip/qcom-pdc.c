@@ -633,6 +633,7 @@ static const struct of_device_id qcom_pdc_match_table[] = {
 	{ .compatible = "qcom,sm8150-pdc" },
 	{ .compatible = "qcom,sm6150-pdc" },
 	{ .compatible = "qcom,yupik-pdc" },
+	{ .compatible = "qcom,kona-pdc" },
 	{}
 };
 MODULE_DEVICE_TABLE(of, qcom_pdc_match_table);
@@ -655,6 +656,7 @@ IRQCHIP_DECLARE(pdc_sm8150, "qcom,sm8150-pdc", qcom_pdc_init);
 IRQCHIP_DECLARE(pdc_yupik, "qcom,yupik-pdc", qcom_pdc_init);
 IRQCHIP_DECLARE(pdc_sdxlemur, "qcom,sdxlemur-pdc", qcom_pdc_init);
 IRQCHIP_DECLARE(pdc_sa515m, "qcom,sa515m-pdc", qcom_pdc_init);
+IRQCHIP_DECLARE(pdc_kona, "qcom,kona-pdc", qcom_pdc_init);
 #endif
 
 MODULE_DESCRIPTION("Qualcomm Technologies, Inc. Power Domain Controller");
