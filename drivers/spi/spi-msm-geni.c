@@ -1699,9 +1699,6 @@ dma_unprep:
 				xfer->rx_dma, xfer->len);
 		}
 	}
-	if (spi->slave && !mas->dis_autosuspend)
-		pm_runtime_put_sync_suspend(mas->dev);
-
 }
 
 static int spi_geni_transfer_one(struct spi_master *spi,
