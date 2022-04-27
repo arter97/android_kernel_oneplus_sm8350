@@ -79,6 +79,7 @@ struct pil_slate_data {
 };
 
 static irqreturn_t slate_status_change(int irq, void *dev_id);
+struct mutex cmdsync_lock;
 
 /**
  * slate_app_shutdown_notify() - Toggle AP2SLATE err fatal gpio when
@@ -196,6 +197,7 @@ static long slatepil_tzapp_comm(struct pil_slate_data *pbd,
 	/* Fill command structure */
 	req_len = sizeof(struct tzapp_slate_req);
 	rsp_len = sizeof(struct tzapp_slate_rsp);
+	mutex_lock(&cmdsync_lock);
 	rc = get_cmd_rsp_buffers(pbd->qseecom_handle,
 		(void **)&slate_tz_req, &req_len,
 		(void **)&slate_tz_rsp, &rsp_len);
@@ -207,6 +209,7 @@ static long slatepil_tzapp_comm(struct pil_slate_data *pbd,
 	slate_tz_req->size_fw = req->size_fw;
 	rc = qseecom_send_command(pbd->qseecom_handle,
 		(void *)slate_tz_req, req_len, (void *)slate_tz_rsp, rsp_len);
+	mutex_unlock(&cmdsync_lock);
 	pr_debug("SLATE PIL qseecom returned with value 0x%x and status 0x%x\n",
 		rc, slate_tz_rsp->status);
 	if (rc || slate_tz_rsp->status)
@@ -817,6 +820,7 @@ static int pil_slate_driver_probe(struct platform_device *pdev)
 			"qcom,firmware-name", &slate_data->desc.name);
 	if (rc)
 		return rc;
+	mutex_init(&cmdsync_lock);
 	slate_data->desc.dev = &pdev->dev;
 	slate_data->desc.owner = THIS_MODULE;
 	slate_data->desc.ops = &pil_ops_trusted;
