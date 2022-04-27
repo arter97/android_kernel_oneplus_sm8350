@@ -241,6 +241,31 @@ static int pt_i2c_remove(struct i2c_client *client)
 
 	return 0;
 }
+/*******************************************************************************
+ * FUNCTION: pt_i2c_shutdown
+ *
+ * SUMMARY: Shutdown functon for the I2C module
+ *
+ * PARAMETERS:
+ *      *client - pointer to i2c client structure
+ ******************************************************************************/
+void pt_i2c_shutdown(struct i2c_client *client)
+{
+#ifdef CONFIG_TOUCHSCREEN_PARADE_DEVICETREE_SUPPORT
+	const struct of_device_id *match;
+#endif
+	struct device *dev = &client->dev;
+	struct pt_core_data *cd = i2c_get_clientdata(client);
+
+	pt_release(cd);
+
+#ifdef CONFIG_TOUCHSCREEN_PARADE_DEVICETREE_SUPPORT
+	match = of_match_device(of_match_ptr(pt_i2c_of_match), dev);
+	if (match)
+		pt_devtree_clean_pdata(dev);
+#endif
+
+}
 
 static const struct i2c_device_id pt_i2c_id[] = {
 	{ PT_I2C_NAME, 0, },
@@ -259,6 +284,7 @@ static struct i2c_driver pt_i2c_driver = {
 	},
 	.probe = pt_i2c_probe,
 	.remove = pt_i2c_remove,
+	.shutdown = pt_i2c_shutdown,
 	.id_table = pt_i2c_id,
 };
 
