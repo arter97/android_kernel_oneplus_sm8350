@@ -440,6 +440,12 @@ int send_wlan_state(enum WMSlateCtrlChnlOpcode type)
 	case GMI_MGR_WLAN_BOOT_COMPLETE:
 		msg_header.opcode = GMI_MGR_WLAN_BOOT_COMPLETE;
 		break;
+	case GMI_WLAN_5G_CONNECT:
+		msg_header.opcode = GMI_WLAN_5G_CONNECT;
+		break;
+	case GMI_WLAN_5G_DISCONNECT:
+		msg_header.opcode = GMI_WLAN_5G_DISCONNECT;
+		break;
 	default:
 		pr_err("Invalid WLAN State transtion cmd = %d\n", type);
 		break;
