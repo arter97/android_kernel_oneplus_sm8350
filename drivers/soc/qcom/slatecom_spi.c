@@ -1614,6 +1614,11 @@ static int slatecom_pm_prepare(struct device *dev)
 	return ret;
 }
 
+static irqreturn_t slate_irq_tasklet_hndlr_during_suspend(int irq, void *device)
+{
+	return IRQ_HANDLED;
+}
+
 static int slatecom_pm_suspend(struct device *dev)
 {
 	struct spi_device *s_dev = to_spi_device(dev);
@@ -1627,11 +1632,12 @@ static int slatecom_pm_suspend(struct device *dev)
 		return 0;
 	}
 
+	atomic_set(&slate_is_spi_active, 0);
 	atomic_set(&state, SLATECOM_STATE_SUSPEND);
 	atomic_set(&slate_is_runtime_suspend, 0);
 
 	free_irq(slate_irq, slate_spi);
-	ret = request_threaded_irq(slate_irq, NULL, slate_irq_tasklet_hndlr,
+	ret = request_threaded_irq(slate_irq, NULL, slate_irq_tasklet_hndlr_during_suspend,
 		IRQF_TRIGGER_RISING | IRQF_ONESHOT, "qcom-slate_spi", slate_spi);
 
 	SLATECOM_ERR("suspended\n");
@@ -1762,6 +1768,7 @@ static int slatecom_pm_freeze(struct device *dev)
 		return 0;
 	}
 
+	atomic_set(&slate_is_spi_active, 0);
 	atomic_set(&state, SLATECOM_STATE_HIBERNATE);
 	atomic_set(&slate_is_runtime_suspend, 0);
 
