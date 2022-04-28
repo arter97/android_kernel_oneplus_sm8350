@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/cma.h>
@@ -93,6 +93,7 @@ static DEFINE_SPINLOCK(time_sync_lock);
 #define HSP_HANG_DATA_OFFSET		((2 * 1024 * 1024) - HANG_DATA_LENGTH)
 
 #define MHI_SUSPEND_RETRY_CNT		3
+#define MHI_LOG_NAME_LEN			20
 
 static int cnss_pci_update_fw_name(struct cnss_pci_data *pci_priv);
 
@@ -5650,6 +5651,33 @@ static int cnss_mhi_bw_scale(struct mhi_controller *mhi_ctrl,
 }
 
 #if IS_ENABLED(CONFIG_IPC_LOGGING)
+#ifdef CONFIG_CNSS_SUPPORT_DUAL_DEV
+static int cnss_pci_mhi_ipc_logging_init(struct cnss_pci_data *pci_priv)
+{
+	struct mhi_controller *mhi_ctrl = pci_priv->mhi_ctrl;
+	char log_name[MHI_LOG_NAME_LEN];
+	char cntrl_log_name[MHI_LOG_NAME_LEN];
+	u32 idx;
+
+	idx = pci_priv->plat_priv->plat_idx;
+
+	snprintf(log_name, MHI_LOG_NAME_LEN, "cnss-mhi_%d", idx);
+
+	mhi_ctrl->log_buf = ipc_log_context_create(CNSS_IPC_LOG_PAGES,
+						   log_name, 0);
+	if (!mhi_ctrl->log_buf)
+		cnss_pr_err("Unable to create CNSS MHI IPC log context\n");
+
+	snprintf(cntrl_log_name, MHI_LOG_NAME_LEN, "cnss-mhi-cntrl_%d", idx);
+
+	mhi_ctrl->cntrl_log_buf = ipc_log_context_create(CNSS_IPC_LOG_PAGES,
+							 cntrl_log_name, 0);
+	if (!mhi_ctrl->cntrl_log_buf)
+		cnss_pr_err("Unable to create CNSS MHICNTRL IPC log context\n");
+
+	return 0;
+}
+#else
 static int cnss_pci_mhi_ipc_logging_init(struct cnss_pci_data *pci_priv)
 {
 	struct mhi_controller *mhi_ctrl = pci_priv->mhi_ctrl;
@@ -5666,7 +5694,7 @@ static int cnss_pci_mhi_ipc_logging_init(struct cnss_pci_data *pci_priv)
 
 	return 0;
 }
-
+#endif
 static void cnss_pci_mhi_ipc_logging_deinit(struct cnss_pci_data *pci_priv)
 {
 	struct mhi_controller *mhi_ctrl = pci_priv->mhi_ctrl;
@@ -6392,5 +6420,8 @@ out:
 
 void cnss_pci_deinit(struct cnss_plat_data *plat_priv)
 {
-	pci_unregister_driver(&cnss_pci_driver);
+	if (cnss_driver_registered) {
+		pci_unregister_driver(&cnss_pci_driver);
+		cnss_driver_registered = false;
+	}
 }
