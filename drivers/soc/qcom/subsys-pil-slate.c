@@ -261,7 +261,7 @@ static int slate_powerup_notify(const struct subsys_desc *subsys)
 {
 	bool value;
 	struct pil_slate_data *slate_data = subsys_to_data(subsys);
-	int ret;
+	int ret = 0;
 
 	init_completion(&slate_data->err_ready);
 	if (!slate_data->qseecom_handle) {
