@@ -123,7 +123,8 @@ int ethqos_init_regulators(struct qcom_ethqos *ethqos)
 			}
 
 			/* Voting specific voltage for vreg_emac_phy-supply in this case*/
-			ret = regulator_set_voltage(ethqos->reg_emac_phy, 3075000, 3200000);
+			ret = regulator_set_voltage(ethqos->reg_emac_phy, ethqos->phyvoltage_min,
+						    ethqos->phyvoltage_max);
 			if (ret) {
 				ETHQOSERR("Unable to set voltage for vreg_emac_phy:%d\n", ret);
 				goto reg_error;
