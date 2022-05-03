@@ -600,6 +600,9 @@ static int clk_debug_scuba_probe(struct platform_device *pdev)
 	}
 
 	for (i = 0; i < ARRAY_SIZE(mux_list); i++) {
+		if (!mux_list[i].mux->regmap)
+			continue;
+
 		clk = devm_clk_register(&pdev->dev, &mux_list[i].mux->hw);
 		if (IS_ERR(clk)) {
 			dev_err(&pdev->dev, "Unable to register %s, err:(%d)\n",
