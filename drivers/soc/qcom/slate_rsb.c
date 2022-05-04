@@ -381,7 +381,7 @@ unlock:
 static int slatersb_handle_cmd_in_ssr(struct slatersb_priv *dev, char *str)
 {
 	long val;
-	int ret;
+	int ret = 0;
 	char *tmp;
 
 	tmp = strsep(&str, ":");
@@ -403,7 +403,7 @@ static int slatersb_handle_cmd_in_ssr(struct slatersb_priv *dev, char *str)
 static int split_slate_work(struct slatersb_priv *dev, char *str)
 {
 	long val;
-	int ret;
+	int ret = 0;
 	char *tmp;
 
 	tmp = strsep(&str, ":");
