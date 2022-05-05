@@ -667,7 +667,7 @@ static int qcom_pdc_init(struct device_node *node, struct device_node *parent)
 	}
 
 	ret = of_address_to_resource(node, 1, &res);
-	if (!ret) {
+	if (!ret && !pdc_mux_base) {
 		spi_cfg = kcalloc(1, sizeof(*spi_cfg), GFP_KERNEL);
 		if (!spi_cfg) {
 			ret = -ENOMEM;
