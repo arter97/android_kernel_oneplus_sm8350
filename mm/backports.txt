@@ -1,3 +1,14 @@
+8beeae86b8e1 mm/page_alloc: fix documentation error
+565dc842313f mm: vmpressure: don't need call kfree if kstrndup fails
+fe925c0cb05b mm/page_alloc: simplify page_is_buddy() for better code readability
+97ce86f93cf3 mm/page_alloc.c: micro-optimisation Remove unnecessary branch
+76089d0082e6 mm/page_alloc.c: use free_area_empty() instead of open-coding
+736838e964c3 mm, pagealloc: micro-optimisation: save two branches on hot page allocation path
+ee8eb9a5fe86 mm/page_alloc: increase default min_free_kbytes bound
+06dac2f467fe mm: compaction: update the COMPACT[STALL|FAIL] events properly
+1d91df85f399 mm/page_alloc: handle a missing case for memalloc_nocma_{save/restore} APIs
+deba04872be4 mm, page_alloc: use unlikely() in task_capc()
+
 ed0173733dd4 mm: use self-explanatory macros rather than "2"
 013339df116c mm/rmap: always do TTU_IGNORE_ACCESS
 1494e0c38ee9 x86: mm: ptdump: calculate effective permissions correctly
