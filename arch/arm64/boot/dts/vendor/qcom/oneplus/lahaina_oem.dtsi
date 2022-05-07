@@ -33,12 +33,6 @@
 		rsv05info-size=  <0x08000>; //32k
 		ecc-size=	   <0x0>;
 	};
-
-    /*0xE9700000+0x01000000=0xEB700000*/
-	param_mem: param_mem@0xEA700000 {
-		reg = <0 0xEA700000 0 0x800000>; //8M same as partition.xml
-		label = "param_mem";
-	};
 };
 
 &soc {
