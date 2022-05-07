@@ -3876,6 +3876,9 @@ static void warn_alloc_show_mem(gfp_t gfp_mask, nodemask_t *nodemask)
 	show_mem_call_notifiers();
 }
 
+static int alloc_failures;
+module_param(alloc_failures, int, 0444);
+
 void warn_alloc(gfp_t gfp_mask, nodemask_t *nodemask, const char *fmt, ...)
 {
 	struct va_format vaf;
@@ -3886,6 +3889,8 @@ void warn_alloc(gfp_t gfp_mask, nodemask_t *nodemask, const char *fmt, ...)
 	     !__ratelimit(&nopage_rs) ||
 	     ((gfp_mask & __GFP_DMA) && !has_managed_dma()))
 		return;
+
+	alloc_failures++;
 
 	va_start(args, fmt);
 	vaf.fmt = fmt;
