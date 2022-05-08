@@ -1413,12 +1413,9 @@ int group_send_sig_info(int sig, struct kernel_siginfo *info,
 	rcu_read_unlock();
 
 	if (!ret && sig) {
-		check_panic_on_foreground_kill(p);
 		ret = do_send_sig_info(sig, info, p, type);
 		if (sig == SIGKILL)
-			if (!strcmp(current->comm, ULMK_MAGIC) ||
-				!strcmp(current->comm, PRE_KILL))
-				add_to_oom_reaper(p);
+			add_to_oom_reaper(p);
 	}
 
 	return ret;

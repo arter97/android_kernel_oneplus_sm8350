@@ -49,9 +49,6 @@ struct oom_control {
 	unsigned long totalpages;
 	struct task_struct *chosen;
 	long chosen_points;
-#ifdef CONFIG_PRIORITIZE_OOM_TASKS
-	short min_kill_adj;
-#endif
 
 	/* Used to print the constraint info. */
 	enum oom_constraint constraint;
@@ -77,7 +74,11 @@ static inline bool oom_task_origin(const struct task_struct *p)
 
 static inline bool tsk_is_oom_victim(struct task_struct * tsk)
 {
+#ifdef CONFIG_ANDROID_SIMPLE_LMK
+	return test_ti_thread_flag(task_thread_info(tsk), TIF_MEMDIE);
+#else
 	return tsk->signal->oom_mm;
+#endif
 }
 
 /*
@@ -134,7 +135,4 @@ extern int sysctl_reap_mem_on_sigkill;
 
 /* calls for LMK reaper */
 extern void add_to_oom_reaper(struct task_struct *p);
-extern void check_panic_on_foreground_kill(struct task_struct *p);
-#define ULMK_MAGIC "lmkd"
-#define PRE_KILL "PreKillActionT"
 #endif /* _INCLUDE_LINUX_OOM_H */

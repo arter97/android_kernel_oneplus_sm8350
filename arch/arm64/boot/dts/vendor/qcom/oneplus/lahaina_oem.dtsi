@@ -13,31 +13,19 @@
 	};
 
 	/*
-	we need reserve after splash_memory reg = <0x0 0xe1000000 0x0 0x02300000>;
-	and we need add a reserver for avoid change memory map need reconfig,maybe 100M
-	*/
-	/*0xe1000000 +0x02300000+ 0X6400000 (100M) =0XE9700000*/
-	ramoops: ramoops@0xE9700000 {
-		compatible = "ramoops";
-		reg = <0 0xE9700000 0 0x05B8000>; //5M + 736k
-		record-size =  <0x40000>; //256k
-		console-size = <0x40000>; //256k
-		ftrace-size =  <0x200000>; //1M
-		pmsg-size=	   <0x200000>; //1M
-		devinfo-size=  <0x08000>;  //32k
-		dumpinfo-size=  <0x08000>; //32k
-		rsv01info-size=  <0x08000>; //32k
-		rsv02info-size=  <0x08000>; //32k
-		rsv03info-size=  <0x08000>; //32k
-		rsv04info-size=  <0x08000>; //32k
-		rsv05info-size=  <0x08000>; //32k
-		ecc-size=	   <0x0>;
-	};
-
-    /*0xE9700000+0x01000000=0xEB700000*/
-	param_mem: param_mem@0xEA700000 {
-		reg = <0 0xEA700000 0 0x800000>; //8M same as partition.xml
-		label = "param_mem";
+	 * Lahaina have empty memory available at 0xb0000000 to 0xd0000000.
+	 * Carve ramoops out of that area.
+	 */
+	ramoops@b0000000 {
+		compatible   = "ramoops";
+		reg          = <0x00 0xb0000000 0x00 0x100000>;
+		ecc-size     = <16>;
+		record-size  = <0x100000>;
+		console-size = <0>;
+		ftrace-size  = <0>;
+		pmsg-size    = <0>;
+		max-reason   = <4>;
+		status       = "ok";
 	};
 };
 
