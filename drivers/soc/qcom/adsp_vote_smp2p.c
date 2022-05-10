@@ -43,10 +43,10 @@ static int adsp_manual_vote_op(void *data, u64 vote)
 {
 	if (vote == 0) {
 		pr_info("ADSP unvoting initiated\n");
-		qcom_smem_state_update_bits(state, AWAKE_BIT, 0);
+		qcom_smem_state_update_bits(state, AWAKE_BITS, ADSP_UNVOTE);
 	} else if (vote == 1) {
 		pr_info("ADSP voting initiated\n");
-		qcom_smem_state_update_bits(state, AWAKE_BIT, AWAKE_BIT);
+		qcom_smem_state_update_bits(state, AWAKE_BITS, ADSP_VOTE);
 	} else
 		pr_err("%s: Invalid vote type\n", __func__);
 
