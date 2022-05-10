@@ -1108,7 +1108,6 @@ static int stmmac_init_phy(struct net_device *dev)
 			netdev_err(priv->dev, "no phy at addr %d\n", addr);
 			return -ENODEV;
 		}
-		ret = phylink_connect_phy(priv->phylink, priv->phydev);
 
 		if (!priv->plat->mac2mac_en) {
 			if (((priv->phydev->phy_id &
@@ -1125,6 +1124,11 @@ static int stmmac_init_phy(struct net_device *dev)
 		if (priv->plat->phy_intr_en_extn_stm && priv->plat->phy_intr_en) {
 			priv->phydev->irq = PHY_IGNORE_INTERRUPT;
 			priv->phydev->interrupts =  PHY_INTERRUPT_ENABLED;
+		}
+
+		ret = phylink_connect_phy(priv->phylink, priv->phydev);
+
+		if (priv->plat->phy_intr_en_extn_stm && priv->plat->phy_intr_en) {
 			if (priv->phydev->drv->ack_interrupt &&
 			    !priv->phydev->drv->ack_interrupt(priv->phydev)) {
 				pr_info(" qcom-ethqos: %s ack_interrupt successful aftre connect\n",
