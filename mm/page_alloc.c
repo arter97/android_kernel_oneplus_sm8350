@@ -4717,7 +4717,14 @@ retry:
 				 did_some_progress > 0, &no_progress_loops))
 		goto retry;
 
-	if (should_compact_retry(ac, order, alloc_flags,
+	/*
+	 * It doesn't make any sense to retry for the compaction if the order-0
+	 * reclaim is not able to make any progress because the current
+	 * implementation of the compaction depends on the sufficient amount
+	 * of free memory (see __compaction_suitable)
+	 */
+	if (did_some_progress > 0 &&
+			should_compact_retry(ac, order, alloc_flags,
 				compact_result, &compact_priority,
 				&compaction_retries))
 		goto retry;
