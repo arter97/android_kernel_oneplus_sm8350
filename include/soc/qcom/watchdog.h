@@ -120,7 +120,8 @@ struct msm_watchdog_data {
 	bool wakeup_irq_enable;
 	bool irq_ppi;
 	unsigned long long last_pet;
-	cpumask_t alive_mask;
+	atomic_t alive_mask;
+	atomic_t pinged_mask;
 	struct mutex disable_lock;
 	struct msm_watchdog_data * __percpu *wdog_cpu_dd;
 	struct notifier_block panic_blk;
@@ -139,8 +140,6 @@ struct msm_watchdog_data {
 	bool user_pet_complete;
 	unsigned long long timer_fired;
 	unsigned long long thread_start;
-	unsigned long long ping_start[NR_CPUS];
-	unsigned long long ping_end[NR_CPUS];
 	int cpu_idle_pc_state[NR_CPUS];
 	bool freeze_in_progress;
 	spinlock_t freeze_lock;

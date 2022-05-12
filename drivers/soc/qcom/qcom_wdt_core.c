@@ -50,7 +50,7 @@ static void qcom_wdt_dump_cpu_alive_mask(struct msm_watchdog_data *wdog_dd)
 {
 	static char alive_mask_buf[MASK_SIZE];
 
-	scnprintf(alive_mask_buf, MASK_SIZE, "%*pb1", cpumask_pr_args(
+	scnprintf(alive_mask_buf, MASK_SIZE, "%x", atomic_read(
 				&wdog_dd->alive_mask));
 	dev_info(wdog_dd->dev, "cpu alive mask from last pet %s\n",
 				alive_mask_buf);
@@ -644,14 +644,18 @@ static DEVICE_ATTR(pet_time, 0400, qcom_wdt_pet_time_get, NULL);
 
 static void qcom_wdt_keep_alive_response(void *info)
 {
-	struct msm_watchdog_data *wdog_dd = info;
-	int cpu = smp_processor_id();
+	struct msm_watchdog_data *wdog_dd = wdog_data;
+	unsigned int this_cpu_bit = (unsigned long)info >> 32;
+	unsigned int final_alive_mask = (unsigned int)(long)info;
+	unsigned int old;
 
-	cpumask_set_cpu(cpu, &wdog_dd->alive_mask);
-	wdog_dd->ping_end[cpu] = sched_clock();
-	/* Make sure alive mask is cleared and set in order */
-	smp_mb();
+	/* Wake up the watchdog task if we're the final pinged CPU */
+	old = atomic_fetch_or_relaxed(this_cpu_bit, &wdog_data->alive_mask);
+	if (old == (final_alive_mask & ~this_cpu_bit))
+		wake_up_process(wdog_dd->watchdog_task);
 }
+
+static DEFINE_PER_CPU_SHARED_ALIGNED(call_single_data_t, csd_data);
 
 /*
  * If this function does not return, it implies one of the
@@ -659,19 +663,40 @@ static void qcom_wdt_keep_alive_response(void *info)
  */
 static void qcom_wdt_ping_other_cpus(struct msm_watchdog_data *wdog_dd)
 {
-	int cpu;
+	unsigned long online_mask, ping_mask = 0;
+	unsigned int final_alive_mask;
+	int cpu, this_cpu;
 
-	cpumask_clear(&wdog_dd->alive_mask);
-	/* Make sure alive mask is cleared and set in order */
-	smp_mb();
-	for_each_cpu(cpu, cpu_online_mask) {
-		if (!wdog_dd->cpu_idle_pc_state[cpu]) {
-			wdog_dd->ping_start[cpu] = sched_clock();
-			smp_call_function_single(cpu,
-						 qcom_wdt_keep_alive_response,
-						 wdog_dd, 1);
-		}
+	/*
+	 * Ping all CPUs other than the current one asynchronously so that we
+	 * don't spend a lot of time spinning on the current CPU with IRQs
+	 * disabled (which is what smp_call_function_single() does in
+	 * synchronous mode).
+	 */
+	migrate_disable();
+	this_cpu = raw_smp_processor_id();
+	atomic_set(&wdog_dd->alive_mask, BIT(this_cpu));
+	online_mask = *cpumask_bits(cpu_online_mask) & ~BIT(this_cpu);
+	for_each_cpu(cpu, to_cpumask(&online_mask)) {
+		if (!wdog_dd->cpu_idle_pc_state[cpu] && !cpu_isolated(cpu))
+			ping_mask |= BIT(cpu);
 	}
+	final_alive_mask = ping_mask | BIT(this_cpu);
+	for_each_cpu(cpu, to_cpumask(&ping_mask)) {
+		generic_exec_single(cpu, per_cpu_ptr(&csd_data, cpu),
+				    qcom_wdt_keep_alive_response,
+				    (void *)(BIT(cpu + 32) | final_alive_mask));
+	}
+	migrate_enable();
+
+	atomic_set(&wdog_dd->pinged_mask, final_alive_mask);
+	while (1) {
+		set_current_state(TASK_UNINTERRUPTIBLE);
+		if (atomic_read(&wdog_dd->alive_mask) == final_alive_mask)
+			break;
+		schedule();
+	}
+	__set_current_state(TASK_RUNNING);
 }
 
 static void qcom_wdt_pet_task_wakeup(struct timer_list *t)
@@ -697,7 +722,7 @@ static __ref int qcom_wdt_kthread(void *arg)
 	struct msm_watchdog_data *wdog_dd = arg;
 	unsigned long delay_time = 0;
 	struct sched_param param = {.sched_priority = MAX_RT_PRIO-1};
-	int ret, cpu;
+	int ret;
 
 	sched_setscheduler(current, SCHED_FIFO, &param);
 	while (!kthread_should_stop()) {
@@ -707,8 +732,6 @@ static __ref int qcom_wdt_kthread(void *arg)
 		} while (ret != 0);
 
 		wdog_dd->thread_start = sched_clock();
-		for_each_cpu(cpu, cpu_present_mask)
-			wdog_dd->ping_start[cpu] = wdog_dd->ping_end[cpu] = 0;
 
 		if (wdog_dd->do_ipi_ping)
 			qcom_wdt_ping_other_cpus(wdog_dd);
@@ -1027,7 +1050,6 @@ int qcom_wdt_register(struct platform_device *pdev,
 	wdog_data = wdog_dd;
 	wdog_dd->dev = &pdev->dev;
 	platform_set_drvdata(pdev, wdog_dd);
-	cpumask_clear(&wdog_dd->alive_mask);
 	wdog_dd->watchdog_task = kthread_create(qcom_wdt_kthread, wdog_dd,
 						wdog_dd_name);
 	if (IS_ERR(wdog_dd->watchdog_task)) {
