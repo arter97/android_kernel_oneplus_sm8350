@@ -23,12 +23,14 @@
 
 #define FSCRYPT_MIN_KEY_SIZE		16
 #define FSCRYPT_MAX_HW_WRAPPED_KEY_SIZE	128
+#define FSCRYPT_MODE_PRIVATE		127
+#define FS_ENCRYPTION_MODE_PRIVATE	FSCRYPT_MODE_PRIVATE
 
 #define FSCRYPT_CONTEXT_V1	1
 #define FSCRYPT_CONTEXT_V2	2
 
 /* Keep this in sync with include/uapi/linux/fscrypt.h */
-#define FSCRYPT_MODE_MAX	FSCRYPT_MODE_ADIANTUM
+#define FSCRYPT_MODE_MAX	127
 
 struct fscrypt_context_v1 {
 	u8 version; /* FSCRYPT_CONTEXT_V1 */
