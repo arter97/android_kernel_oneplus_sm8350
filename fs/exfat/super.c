@@ -141,7 +141,7 @@ static int exfat_set_vol_flags(struct super_block *sb, unsigned short new_flags)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 8, 0)
 	__sync_dirty_buffer(sbi->boot_bh, REQ_SYNC | REQ_FUA | REQ_PREFLUSH);
 #else
-	__sync_dirty_buffer(sbi->boot_bh, REQ_SYNC | REQ_FUA | REQ_FLUSH);
+	__sync_dirty_buffer(sbi->boot_bh, WRITE_FLUSH_FUA);
 #endif
 
 	return 0;
@@ -202,7 +202,11 @@ static struct inode *exfat_alloc_inode(struct super_block *sb)
 {
 	struct exfat_inode_info *ei;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0)
+	ei = alloc_inode_sb(sb, exfat_inode_cachep, GFP_NOFS);
+#else
 	ei = kmem_cache_alloc(exfat_inode_cachep, GFP_NOFS);
+#endif
 	if (!ei)
 		return NULL;
 
