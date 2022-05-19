@@ -1375,9 +1375,7 @@ static struct device_node *glink_slatecom_match_channel(struct device_node *node
 static void glink_slatecom_rpdev_release(struct device *dev)
 {
 	struct rpmsg_device *rpdev = to_rpmsg_device(dev);
-	struct glink_slatecom_channel *channel = to_glink_channel(rpdev->ept);
 
-	channel->rpdev = NULL;
 	kfree(rpdev);
 
 }

@@ -981,6 +981,7 @@ static int qbg_handle_fast_char(struct qti_qbg *chip)
 	}
 
 	if (chip->in_fast_char) {
+		qbg_dbg(chip, QBG_DEBUG_STATUS, "QBG ESR pulse disabled\n");
 		rc = qbg_force_fast_char(chip, false);
 		if (rc < 0) {
 			pr_err("Failed to get out of fast char mode, rc=%d\n",
@@ -992,7 +993,7 @@ static int qbg_handle_fast_char(struct qti_qbg *chip)
 		now = ktime_get();
 		if ((ktime_ms_delta(now, chip->last_fast_char_time) >
 			QBG_FAST_CHAR_DELTA_MS) && !chip->in_fast_char) {
-
+			qbg_dbg(chip, QBG_DEBUG_STATUS, "QBG ESR pulse enabled\n");
 			rc = qbg_force_fast_char(chip, true);
 			if (rc < 0) {
 				pr_err("Failed to put QBG to fast char mode, rc=%d\n",

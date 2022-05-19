@@ -122,6 +122,10 @@ enum WMSlateCtrlChnlOpcode {
 	 */
 	GMI_MGR_WLAN_BOOT_COMPLETE = 17,
 
+	GMI_WLAN_5G_CONNECT = 18,
+
+	GMI_WLAN_5G_DISCONNECT  = 19,
+
 	/*
 	 * DEBUG Opcodes
 	 */

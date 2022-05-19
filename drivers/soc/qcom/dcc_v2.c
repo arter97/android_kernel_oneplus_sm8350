@@ -2032,7 +2032,7 @@ static int dcc_state_restore(struct device *dev)
 	int n, i, j, dcc_ll_index;
 	int *sram_state;
 	struct dcc_drvdata *drvdata = dev_get_drvdata(dev);
-	uint32_t ram_cpy_wlen = drvdata->ram_cpy_len / 4;
+	uint32_t ram_cpy_wlen;
 
 	if (!drvdata || !drvdata->ll_state || !drvdata->sram_state) {
 		dev_err(dev, "Err: %s Invalid argument\n", __func__);
@@ -2044,6 +2044,7 @@ static int dcc_state_restore(struct device *dev)
 		return 0;
 	}
 
+	ram_cpy_wlen = drvdata->ram_cpy_len / 4;
 	sram_state = drvdata->sram_state;
 	n = drvdata->ll_state_cnt;
 

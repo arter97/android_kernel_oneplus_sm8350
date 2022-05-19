@@ -20,10 +20,8 @@ static ssize_t xbl_log_show(struct file *fp,
 		struct kobject *kobj, struct bin_attribute *bin_attr,
 		char *buf, loff_t offset, size_t count)
 {
-	if (offset < xbl_log_size)
-		return scnprintf(buf, count, "%s", xbl_log_buf + offset);
-
-	return 0;
+	memcpy(buf, xbl_log_buf + offset, count);
+	return count;
 }
 
 static struct bin_attribute attribute =
@@ -57,12 +55,6 @@ static int xbl_log_kthread(void *arg)
 		goto kobj_fail;
 	}
 
-	err = sysfs_create_bin_file(&mkobj->kobj, &attribute);
-	if (err) {
-		pr_err("xbl_log: sysfs entry creation failed\n");
-		goto kobj_fail;
-	}
-
 	parent = of_find_node_by_path("/reserved-memory");
 	if (!parent) {
 		pr_err("xbl_log: reserved-memory node missing\n");
@@ -81,6 +73,13 @@ static int xbl_log_kthread(void *arg)
 	xbl_log_paddr = res_log.start;
 	xbl_log_size = resource_size(&res_log) - 1;
 	pr_debug("xbl_log_addr = %x, size=%d\n", xbl_log_paddr, xbl_log_size);
+
+	attribute.size = xbl_log_size;
+	err = sysfs_create_bin_file(&mkobj->kobj, &attribute);
+	if (err) {
+		pr_err("xbl_log: sysfs entry creation failed\n");
+		goto kobj_fail;
+	}
 
 	addr = memremap(xbl_log_paddr, xbl_log_size, MEMREMAP_WB);
 	if (!addr) {

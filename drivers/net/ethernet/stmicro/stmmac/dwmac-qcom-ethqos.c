@@ -1317,9 +1317,9 @@ static void ethqos_handle_phy_interrupt(struct qcom_ethqos *ethqos)
 
 		if (!priv->plat->mac2mac_en) {
 			if (phy_intr_status & LINK_UP_STATE)
-				phylink_mac_change(priv->phylink, LINK_UP);
+				phy_mac_interrupt(priv->phydev);
 			else if (phy_intr_status & LINK_DOWN_STATE)
-				phylink_mac_change(priv->phylink, LINK_DOWN);
+				phy_mac_interrupt(priv->phydev);
 		}
 	}
 }
@@ -1485,15 +1485,16 @@ static void qcom_ethqos_phy_suspend_clks(struct qcom_ethqos *ethqos)
 
 	ethqos_update_rgmii_clk_and_bus_cfg(ethqos, 0);
 
-	if (priv->plat->stmmac_clk)
-		clk_disable_unprepare(priv->plat->stmmac_clk);
+	if (ethqos->phy_wol_supported) {
+		if (priv->plat->stmmac_clk)
+			clk_disable_unprepare(priv->plat->stmmac_clk);
 
-	if (priv->plat->pclk)
-		clk_disable_unprepare(priv->plat->pclk);
+		if (priv->plat->pclk)
+			clk_disable_unprepare(priv->plat->pclk);
 
-	if (priv->plat->clk_ptp_ref)
-		clk_disable_unprepare(priv->plat->clk_ptp_ref);
-
+		if (priv->plat->clk_ptp_ref)
+			clk_disable_unprepare(priv->plat->clk_ptp_ref);
+	}
 	if (ethqos->rgmii_clk)
 		clk_disable_unprepare(ethqos->rgmii_clk);
 
@@ -1531,14 +1532,16 @@ static void qcom_ethqos_phy_resume_clks(struct qcom_ethqos *ethqos)
 
 	ETHQOSINFO("Enter\n");
 
-	if (priv->plat->stmmac_clk)
-		clk_prepare_enable(priv->plat->stmmac_clk);
+	if (ethqos->phy_wol_supported) {
+		if (priv->plat->stmmac_clk)
+			clk_prepare_enable(priv->plat->stmmac_clk);
 
-	if (priv->plat->pclk)
-		clk_prepare_enable(priv->plat->pclk);
+		if (priv->plat->pclk)
+			clk_prepare_enable(priv->plat->pclk);
 
-	if (priv->plat->clk_ptp_ref)
-		clk_prepare_enable(priv->plat->clk_ptp_ref);
+		if (priv->plat->clk_ptp_ref)
+			clk_prepare_enable(priv->plat->clk_ptp_ref);
+	}
 
 	if (ethqos->rgmii_clk)
 		clk_prepare_enable(ethqos->rgmii_clk);
@@ -2301,6 +2304,20 @@ static int _qcom_ethqos_probe(void *arg)
 		ETHQOSDBG("qcom,phy-reset present\n");
 	}
 
+	if (of_property_read_u32(np, "qcom,phyvoltage_min",
+				 &ethqos->phyvoltage_min))
+		ethqos->phyvoltage_min = 3075000;
+	else
+		ETHQOSINFO("qcom,phyvoltage_min = %d\n",
+			   ethqos->phyvoltage_min);
+
+	if (of_property_read_u32(np, "qcom,phyvoltage_max",
+				 &ethqos->phyvoltage_max))
+		ethqos->phyvoltage_max = 3200000;
+	else
+		ETHQOSINFO("qcom,phyvoltage_max = %d\n",
+			   ethqos->phyvoltage_max);
+
 	ethqos_init_regulators(ethqos);
 	ethqos_init_gpio(ethqos);
 
@@ -2356,7 +2373,6 @@ static int _qcom_ethqos_probe(void *arg)
 	plat_dat->tx_select_queue = dwmac_qcom_select_queue;
 	plat_dat->get_plat_tx_coal_frames =  dwmac_qcom_get_plat_tx_coal_frames;
 	plat_dat->has_gmac4 = 1;
-	plat_dat->pmt = 1;
 	plat_dat->tso_en = of_property_read_bool(np, "snps,tso");
 	plat_dat->early_eth = ethqos->early_eth_enabled;
 	plat_dat->handle_prv_ioctl = ethqos_handle_prv_ioctl;

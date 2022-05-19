@@ -334,23 +334,15 @@ enum audio_wd_len {
 
 #define MAX_DPCD_BUFFER_SIZE	16
 
-#define ONE_BLOCK_SIZE      128
-#define FOUR_BLOCK_SIZE     (128 * 4)
-
-#define MAX_EDID_BLOCK	3
-#define EDID_TRY_CNT	3
 #define SUPPORT_PIXEL_CLOCK	300000
 
-struct s_edid_data {
-	int edid_block_num;
-	u8 edid_raw_data[FOUR_BLOCK_SIZE];
-};
 
 /***************** Display End *****************/
 
 struct anx7625_platform_data {
 	struct gpio_desc *gpio_p_on;
 	struct gpio_desc *gpio_reset;
+	struct regulator_bulk_data supplies[3];
 	struct drm_bridge *panel_bridge;
 	int intp_irq;
 	u32 low_power_mode;
@@ -369,7 +361,6 @@ struct anx7625_i2c_client {
 
 struct anx7625_data {
 	struct anx7625_platform_data pdata;
-	atomic_t power_status;
 	int hpd_status;
 	int hpd_high_cnt;
 	/* Lock for work queue */
@@ -377,14 +368,11 @@ struct anx7625_data {
 	struct i2c_client *client;
 	struct anx7625_i2c_client i2c;
 	struct i2c_client *last_client;
-	struct s_edid_data slimport_edid_p;
 	struct work_struct work;
 	struct workqueue_struct *workqueue;
-	char edid_block;
 	struct display_timing dt;
 	u8 display_timing_valid;
 	struct drm_bridge bridge;
-	u8 bridge_attached;
 	struct mipi_dsi_device *dsi;
 	u32 channel;
 };

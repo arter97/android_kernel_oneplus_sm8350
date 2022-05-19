@@ -51,6 +51,8 @@
 #define CAN_FD_PACKET_SIZE		46
 #define CAN_STANDARD_PACKET_SIZE	22
 
+static int static_pos_checksum_en;
+static int dynamic_pos_checksum_en;
 static int checksum_enable;
 
 struct qti_can {
@@ -539,13 +541,31 @@ static int qti_can_process_response(struct qti_can *priv_data,
 		}
 	} else if (resp->cmd  == CMD_GET_FW_VERSION) {
 		struct can_fw_resp *fw_resp = (struct can_fw_resp *)resp->data;
-		if (fw_resp->maj > 4 || (fw_resp->maj == 4 && fw_resp->min) ||
-		    (fw_resp->maj == 4 && fw_resp->sub_min > 4)) {
-			dev_info(&priv_data->spidev->dev, "checksum enabled\n");
+
+		if (fw_resp->maj == 4) {
+			if (fw_resp->min == 0) {
+				if (fw_resp->sub_min == 5 || fw_resp->sub_min == 6) {
+					dev_info(&priv_data->spidev->dev, "static position checksum enabled\n");
+					static_pos_checksum_en = 1;
+					checksum_enable = 1;
+				}
+			} else if (fw_resp->min == 1) {
+				dev_info(&priv_data->spidev->dev, "static position checksum enabled\n");
+				static_pos_checksum_en = 1;
+				checksum_enable = 1;
+				dev_info(&priv_data->spidev->dev, "can-fd support can0 enabled\n");
+			} else if (fw_resp->min > 1) {
+				dev_info(&priv_data->spidev->dev, "dynamic position checksum enabled\n");
+				dynamic_pos_checksum_en = 1;
+				checksum_enable = 1;
+				dev_info(&priv_data->spidev->dev, "can-fd support can0 enabled\n");
+			}
+		} else if (fw_resp->maj > 4) {
+			dev_info(&priv_data->spidev->dev, "dynamic position checksum enabled\n");
+			dynamic_pos_checksum_en = 1;
 			checksum_enable = 1;
-		}
-		if (fw_resp->maj > 4 || (fw_resp->maj == 4 && fw_resp->min >= 1))
 			dev_info(&priv_data->spidev->dev, "can-fd support can0 enabled\n");
+		}
 
 		dev_info(&priv_data->spidev->dev, "fw %d.%d.%d\n",
 			 fw_resp->maj, fw_resp->min, fw_resp->sub_min);
@@ -617,38 +637,87 @@ exit:
 	return ret;
 }
 
-static int qti_can_process_rx(struct qti_can *priv_data, char *rx_buf)
+static int qti_can_fd_process_rx(struct qti_can *priv_data, char *rx_buf)
 {
 	struct spi_miso *resp;
-	struct device *dev;
-	int length_processed = 0, actual_length = priv_data->xfer_length;
 	int ret = 0;
+	/* u64 rx_buf_idx, idx = 0; */
+	int i = 0;
+	u8 rx_checksum = 0;
+	int checksum_rx_len = 0;
+
 	struct can_receive_frame *frame;
 	void *data;
 	struct spi_miso *resp_fd;
-	dev = &priv_data->spidev->dev;
 
-	if (rx_buf[0] == CMD_CAN_RECEIVE_FRAME) {
-		if (rx_buf[1] > CAN_FD_PACKET_SIZE) {
-			resp = (struct spi_miso *)rx_buf;
-			LOGDI("spi -> cmd %X len %d seq %d\n", resp->cmd, resp->len, resp->seq);
-			if (resp->seq == 0) {
-				//store canfd frame in buffer;
-				memset(priv_data->fd_buffer, 0, RX_FD_BUFFER_SIZE);
-				memcpy(priv_data->fd_buffer, resp, CAN_FD_PACKET_SIZE + 4);
+	resp = (struct spi_miso *)rx_buf;
+	LOGDI("spi -> cmd %X len %d seq %d\n", resp->cmd, resp->len, resp->seq);
+	if (static_pos_checksum_en)
+		checksum_rx_len = XFER_BUFFER_SIZE - 2;
+	if (resp->seq == 0) {
+		if (dynamic_pos_checksum_en)
+			checksum_rx_len = CAN_FD_PACKET_SIZE + 4;
+
+		for (i = 0; i < checksum_rx_len; i++)
+			rx_checksum ^= rx_buf[i];
+
+		if (!checksum_enable)
+			rx_checksum = rx_buf[checksum_rx_len];
+
+		if (rx_checksum == rx_buf[checksum_rx_len]) {
+			//store canfd frame in buffer;
+			memset(priv_data->fd_buffer, 0, RX_FD_BUFFER_SIZE);
+			memcpy(priv_data->fd_buffer, resp, CAN_FD_PACKET_SIZE + 4);
+		} else {
+			LOGDE("checksum validation failed\n");
+			LOGDE("cmd_id: %x chksum_rx_calc: %x chksum_rx: %x\n chksum_rx_len: %d\n",
+			      resp->cmd, rx_checksum, rx_buf[checksum_rx_len], checksum_rx_len);
+			ret = -EINVAL;
 			}
-			if (resp->seq == 1) {
-				// add data of second spi packet frame to resp_fd
-				frame = (struct can_receive_frame *)resp->data;
-				memcpy((priv_data->fd_buffer) + CAN_FD_PACKET_SIZE + 4,
-				       frame->data, frame->dlc - CAN_FD_PACKET_DATA);
-				data = priv_data->fd_buffer;
-				resp_fd = (struct spi_miso *)data;
-				ret = qti_can_process_response(priv_data, resp_fd, 0);
-			}
-			return ret;
+	} else if (resp->seq == 1) {
+		if (dynamic_pos_checksum_en)
+			checksum_rx_len = resp->len - CAN_FD_PACKET_DATA + 4;
+
+		for (i = 0; i < checksum_rx_len; i++)
+			rx_checksum ^= rx_buf[i];
+
+		if (!checksum_enable)
+			rx_checksum = rx_buf[checksum_rx_len];
+
+		if (rx_checksum == rx_buf[checksum_rx_len]) {
+			// add data of second spi packet frame to resp_fd
+			frame = (struct can_receive_frame *)resp->data;
+			memcpy((priv_data->fd_buffer) + CAN_FD_PACKET_SIZE + 4,
+			       frame->data, frame->dlc - CAN_FD_PACKET_DATA);
+			data = priv_data->fd_buffer;
+			resp_fd = (struct spi_miso *)data;
+			ret = qti_can_process_response(priv_data, resp_fd, 0);
+		} else {
+			LOGDE("checksum validation failed\n");
+			LOGDE("cmd_id: %x chksum_rx_calc: %x chksum_rx: %x\n chksum_rx_len: %d\n",
+			      resp->cmd, rx_checksum, rx_buf[checksum_rx_len], checksum_rx_len);
+			ret = -EINVAL;
 		}
 	}
+	return ret;
+}
+
+static int qti_can_process_rx(struct qti_can *priv_data, char *rx_buf)
+{
+	struct spi_miso *resp;
+	int length_processed = 0, actual_length = priv_data->xfer_length;
+	int ret = 0;
+	/* u64 rx_buf_idx, idx = 0; */
+	int i = 0;
+	u8 rx_checksum = 0;
+	u8 rx_checksum_rcvd = 0;
+	int checksum_rx_len = 0;
+
+	if (rx_buf[0] == CMD_CAN_RECEIVE_FRAME && rx_buf[1] > CAN_FD_PACKET_SIZE) {
+		ret = qti_can_fd_process_rx(priv_data, rx_buf);
+		return ret;
+	}
+
 	while (length_processed < actual_length) {
 		int length_left = actual_length - length_processed;
 		int length = 0; /* length of consumed chunk */
@@ -691,15 +760,58 @@ static int qti_can_process_rx(struct qti_can *priv_data, char *rx_buf)
 		    resp->len + sizeof(*resp) <= length_left) {
 			struct spi_miso *resp =
 					(struct spi_miso *)data;
-			ret = qti_can_process_response(priv_data, resp,
-						       length_left);
+
+			char *temp_data = (char *)data;
+
+			if (resp->cmd == CMD_CAN_RECEIVE_FRAME && static_pos_checksum_en)
+				/* Two CAN frames can be received in single spi packet*/
+				/* 63rd byte is checksum */
+				checksum_rx_len = XFER_BUFFER_SIZE - 2;
+			else if (dynamic_pos_checksum_en &&
+				 resp->len > CAN_STANDARD_PACKET_SIZE)
+				/* This is a fix for dynamic checksum change */
+				/* specific to CAN-FD frames with data length */
+				/* 12/16/20/24 bytes as v4.2.0 CAN FW is packing */
+				/* checksum in 50th byte (4 + 14 + 32) for the */
+				/* CAN frames with 12/16/20/24 data length */
+				checksum_rx_len = CAN_FD_PACKET_SIZE + 4;
+			else
+				checksum_rx_len = (resp->len) + 4;
+
+			if (static_pos_checksum_en) {
+				rx_checksum_rcvd = temp_data[XFER_BUFFER_SIZE - 2];
+				temp_data[XFER_BUFFER_SIZE - 2] = 0;
+			} else if (dynamic_pos_checksum_en) {
+				rx_checksum_rcvd = temp_data[checksum_rx_len];
+				temp_data[checksum_rx_len] = 0;
+			}
+			rx_checksum = 0;
+			if (checksum_enable) {
+				for (i = 0; i < checksum_rx_len; i++)
+					rx_checksum ^= temp_data[i];
+
+				if (rx_checksum == rx_checksum_rcvd) {
+					ret = qti_can_process_response(priv_data, resp,
+								       length_left);
+				} else {
+					LOGDE("checksum validation failed\n");
+					LOGDE("cmd_id: %x cs_rx_calc: %x cs_rx: %x\n cs_len: %d\n",
+					      resp->cmd, rx_checksum,
+					      rx_checksum_rcvd, checksum_rx_len);
+					ret = -EINVAL;
+				}
+			} else {
+				ret = qti_can_process_response(priv_data, resp,
+							       length_left);
+			}
+
 		} else if (length_left > 0) {
 			/* Not full message. Store however much we have for */
 			/* later assembly */
 			LOGDI("callback: Storing %d bytes of response\n",
 			      length_left);
 			memcpy(priv_data->assembly_buffer, data, length_left);
-			priv_data->assembly_buffer_size = length_left;
+			       priv_data->assembly_buffer_size = length_left;
 			break;
 		}
 	}
@@ -715,10 +827,9 @@ static int qti_can_do_spi_transaction(struct qti_can *priv_data)
 	int ret;
 	int i = 0;
 	u8 tx_checksum = 0;
-	u8 rx_checksum = 0;
-	int checksum_rx_len = 0;
 	int checksum_tx_len = 0;
 	struct spi_mosi *req;
+	u64 rx_buf_idx, idx = 0;
 
 	spi = priv_data->spidev;
 	dev = &spi->dev;
@@ -729,16 +840,33 @@ static int qti_can_do_spi_transaction(struct qti_can *priv_data)
 	LOGDI(">%x %2d [%d]\n", priv_data->tx_buf[0],
 	      priv_data->tx_buf[1], priv_data->tx_buf[2]);
 
-	if (checksum_enable) {
+	if (static_pos_checksum_en || dynamic_pos_checksum_en) {
 		req = (struct spi_mosi *)(priv_data->tx_buf);
-		if (req->cmd == CMD_CAN_SEND_FRAME)
+		if (req->cmd == CMD_CAN_SEND_FRAME && static_pos_checksum_en)
 			checksum_tx_len = XFER_BUFFER_SIZE - 2;
+		else if (req->cmd == CMD_CAN_SEND_FRAME &&
+			 req->len > CAN_FD_PACKET_SIZE && req->seq == 0)
+			checksum_tx_len = CAN_FD_PACKET_SIZE + 4;
+		else if (req->cmd == CMD_CAN_SEND_FRAME &&
+			 req->len > CAN_FD_PACKET_SIZE && req->seq == 1)
+			checksum_tx_len = (req->len) - CAN_FD_PACKET_DATA + 4;
 		else
 			checksum_tx_len = (req->len) + 4;
 		for (i = 0; i < checksum_tx_len; i++)
 			tx_checksum ^= priv_data->tx_buf[i];
 
-		priv_data->tx_buf[XFER_BUFFER_SIZE - 2] = tx_checksum;
+		if (static_pos_checksum_en) {
+			priv_data->tx_buf[(XFER_BUFFER_SIZE - 2)] = tx_checksum;
+		} else if (dynamic_pos_checksum_en) {
+			if (req->cmd == CMD_CAN_SEND_FRAME &&
+			    req->len > CAN_FD_PACKET_SIZE && req->seq == 0)
+				priv_data->tx_buf[CAN_FD_PACKET_SIZE + 4] = tx_checksum;
+			else if (req->cmd == CMD_CAN_SEND_FRAME &&
+				 req->len > CAN_FD_PACKET_SIZE && req->seq == 1)
+				priv_data->tx_buf[req->len - CAN_FD_PACKET_DATA + 4] = tx_checksum;
+			else
+				priv_data->tx_buf[req->len + 4] = tx_checksum;
+		}
 	}
 
 	spi_message_init(msg);
@@ -748,37 +876,23 @@ static int qti_can_do_spi_transaction(struct qti_can *priv_data)
 	xfer->len = priv_data->xfer_length;
 	xfer->bits_per_word = priv_data->bits_per_word;
 	ret = spi_sync(spi, msg);
-	LOGDI("spi_sync ret %d data %x %x %x %x %x %x %x %x\n", ret,
-	      priv_data->rx_buf[0], priv_data->rx_buf[1],
-	      priv_data->rx_buf[2], priv_data->rx_buf[3],
-	      priv_data->rx_buf[4], priv_data->rx_buf[5],
-	      priv_data->rx_buf[6], priv_data->rx_buf[7]);
-
-	if (priv_data->rx_buf[0] == CMD_CAN_RECEIVE_FRAME) {
-		/* Two CAN frames can be received in single spi packet*/
-		/* 63rd byte is checksum */
-		checksum_rx_len = XFER_BUFFER_SIZE - 2;
-	} else {
-		checksum_rx_len = (priv_data->rx_buf[1]) + 4;
+	LOGDI("spi_sync ret %d\n", ret);
+	for (rx_buf_idx = 0; rx_buf_idx < 6; rx_buf_idx++) {
+		idx = 10 * rx_buf_idx;
+		LOGDI("%X %X %X %X %X %X %X %X %X %X\n",
+		      priv_data->rx_buf[idx + 0], priv_data->rx_buf[idx + 1],
+		      priv_data->rx_buf[idx + 2], priv_data->rx_buf[idx + 3],
+		      priv_data->rx_buf[idx + 4], priv_data->rx_buf[idx + 5],
+		      priv_data->rx_buf[idx + 6], priv_data->rx_buf[idx + 7],
+		      priv_data->rx_buf[idx + 8], priv_data->rx_buf[idx + 9]);
 	}
+	LOGDI("%X %X %X %X\n",
+	      priv_data->rx_buf[60], priv_data->rx_buf[61],
+	      priv_data->rx_buf[62], priv_data->rx_buf[63]);
 
-	if (ret == 0 && checksum_enable) {
-		for (i = 0; i < checksum_rx_len; i++)
-			rx_checksum ^= priv_data->rx_buf[i];
-
-		if (rx_checksum == priv_data->rx_buf[XFER_BUFFER_SIZE - 2]) {
-			priv_data->rx_buf[XFER_BUFFER_SIZE - 2] = 0;
-			qti_can_process_rx(priv_data, priv_data->rx_buf);
-		} else {
-			LOGDE("checksum validation failed\n");
-			LOGDE("cmd_id: %x chksum_rx_calc: %x chksum_rx: %x\n",
-			      priv_data->rx_buf[0], rx_checksum,
-			      priv_data->rx_buf[XFER_BUFFER_SIZE - 2]);
-			ret = -EINVAL;
-		}
-	} else if (ret == 0) {
+	if (ret == 0)
 		qti_can_process_rx(priv_data, priv_data->rx_buf);
-	}
+
 	kfree(msg);
 	kfree(xfer);
 	return ret;
@@ -822,6 +936,7 @@ static int qti_can_query_firmware_version(struct qti_can *priv_data)
 	req->seq = atomic_inc_return(&priv_data->msg_seq);
 	req->data[0] = 0xAA; // checksum enable flag
 	req->data[1] = 0xAA; // can-fd enable flag
+	req->data[2] = 0xAA; // dynamic position checksum enable flag
 
 	priv_data->wait_cmd = CMD_GET_FW_VERSION;
 	priv_data->cmd_result = -1;

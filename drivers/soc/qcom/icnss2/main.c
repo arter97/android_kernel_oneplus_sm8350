@@ -3652,6 +3652,39 @@ static void icnss_remove_sysfs_link(struct icnss_priv *priv)
 	sysfs_remove_link(kernel_kobj, "icnss");
 }
 
+static ssize_t
+icnss_bt_profile_sysfs_show(struct kobject *kobj,
+			    struct kobj_attribute *attr,
+			    char *buf)
+{
+	return 0;
+}
+
+static struct kobj_attribute icnss_bt_profile_sysfs_attr =
+__ATTR(bt_profile, 0660, icnss_bt_profile_sysfs_show, NULL);
+
+static int icnss_create_bt_profile_sysfs(struct icnss_priv *priv)
+{
+	int ret = 0;
+
+	ret = sysfs_create_file(&priv->pdev->dev.kobj,
+				&icnss_bt_profile_sysfs_attr.attr);
+	if (ret) {
+		icnss_pr_err("Unable to create bt_profile sysfs file err:%d",
+			     ret);
+		return ret;
+	}
+	return ret;
+}
+
+static void icnss_destroy_bt_profile_sysfs(struct icnss_priv *priv)
+{
+	if (priv && priv->pdev) {
+		sysfs_remove_file(&priv->pdev->dev.kobj,
+				  &icnss_bt_profile_sysfs_attr.attr);
+	}
+}
+
 static int icnss_sysfs_create(struct icnss_priv *priv)
 {
 	int ret = 0;
@@ -3670,6 +3703,9 @@ static int icnss_sysfs_create(struct icnss_priv *priv)
 	if (ret)
 		goto remove_icnss_group;
 
+	if (priv->is_rf_subtype_valid && priv->rf_subtype == 1)
+		icnss_create_bt_profile_sysfs(priv);
+
 	return 0;
 remove_icnss_group:
 	devm_device_remove_group(&priv->pdev->dev, &icnss_attr_group);
@@ -3679,6 +3715,9 @@ out:
 
 static void icnss_sysfs_destroy(struct icnss_priv *priv)
 {
+	if (priv->is_rf_subtype_valid && priv->rf_subtype == 1)
+		icnss_destroy_bt_profile_sysfs(priv);
+
 	icnss_destroy_shutdown_sysfs(priv);
 	icnss_remove_sysfs_link(priv);
 	devm_device_remove_group(&priv->pdev->dev, &icnss_attr_group);

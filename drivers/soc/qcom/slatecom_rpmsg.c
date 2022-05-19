@@ -14,8 +14,10 @@ int slatecom_rpmsg_tx_msg(void  *msg, size_t len)
 {
 	int ret = 0;
 
-	if (pdev == NULL || !pdev->chnl_state)
-		pr_err("rpmsg_device is null, channel is closed\n");
+	if (pdev == NULL || !pdev->chnl_state) {
+		pr_err("pmsg_device is null, channel is closed\n");
+		return -ENETRESET;
+	}
 
 	pdev->message = msg;
 	pdev->message_length = len;
