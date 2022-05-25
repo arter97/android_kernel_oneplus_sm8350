@@ -4482,6 +4482,10 @@ static void msm_geni_serial_allow_rx(struct msm_geni_serial_port *port)
 {
 	u32 uart_manual_rfr;
 
+	/* Avoid Manual RFR for HW version < 2.7 */
+	if (port->ver_info.hw_ver < QUP_SE_VERSION_2_7)
+		return;
+
 	uart_manual_rfr = (UART_MANUAL_RFR_EN | UART_RFR_READY);
 	geni_write_reg_nolog(uart_manual_rfr, port->uport.membase,
 						SE_UART_MANUAL_RFR);
