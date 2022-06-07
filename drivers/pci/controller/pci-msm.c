@@ -5547,6 +5547,7 @@ static int32_t msm_pcie_irq_init(struct msm_pcie_dev_t *dev)
 
 	/* register handler for PCIE_WAKE_N interrupt line */
 	if (dev->wake_n) {
+		INIT_WORK(&dev->handle_wake_work, handle_wake_func);
 		rc = devm_request_irq(pdev,
 				dev->wake_n, handle_wake_irq,
 				IRQF_TRIGGER_FALLING, "msm_pcie_wake", dev);
@@ -5556,8 +5557,6 @@ static int32_t msm_pcie_irq_init(struct msm_pcie_dev_t *dev)
 				dev->rc_idx);
 			return rc;
 		}
-
-		INIT_WORK(&dev->handle_wake_work, handle_wake_func);
 
 		rc = enable_irq_wake(dev->wake_n);
 		if (rc) {
@@ -6118,7 +6117,7 @@ static int msm_pcie_probe(struct platform_device *pdev)
 {
 	int ret = 0;
 	int rc_idx = -1;
-	int size;
+	int size = 0;
 	struct msm_pcie_dev_t *pcie_dev;
 	struct device_node *of_node;
 
@@ -6436,8 +6435,10 @@ static int msm_pcie_probe(struct platform_device *pdev)
 	if (size) {
 		pcie_dev->filtered_bdfs = devm_kzalloc(&pdev->dev, size,
 						       GFP_KERNEL);
-		if (!pcie_dev->filtered_bdfs)
+		if (!pcie_dev->filtered_bdfs) {
+			mutex_unlock(&pcie_drv.drv_lock);
 			return -ENOMEM;
+		}
 
 		pcie_dev->bdf_count = size / sizeof(*pcie_dev->filtered_bdfs);
 

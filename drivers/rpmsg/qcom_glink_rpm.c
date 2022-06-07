@@ -19,6 +19,8 @@
 #include <linux/mailbox_client.h>
 #include <linux/notifier.h>
 #include <soc/qcom/subsystem_notif.h>
+#include <linux/suspend.h>
+#include <linux/pm.h>
 
 #include "rpmsg_internal.h"
 #include "qcom_glink_native.h"
@@ -32,19 +34,6 @@
 #define RPM_RX_FIFO_ID		0x72326170 /* r2ap */
 
 #define to_rpm_pipe(p) container_of(p, struct glink_rpm_pipe, native)
-
-#ifdef CONFIG_DEEPSLEEP
-#define GLINK_SSR_PRIORITY	1
-
-struct rpm_edge_info {
-	const char *ssr_label;
-	struct notifier_block nb;
-	void *notifier_handle;
-	struct platform_device *pdev;
-};
-
-struct rpm_edge_info *einfo;
-#endif
 
 struct rpm_toc_entry {
 	__le32 id;
@@ -269,7 +258,13 @@ err_inval:
 	return -EINVAL;
 }
 
-static int glink_rpm_probe(struct platform_device *pdev)
+static void glink_rpm_release(struct device *dev)
+{
+	kfree(dev);
+}
+
+struct qcom_glink *glink_rpm_register(struct device *parent,
+				struct device_node *node)
 {
 	struct qcom_glink *glink;
 	struct glink_rpm_pipe *rx_pipe;
@@ -277,34 +272,51 @@ static int glink_rpm_probe(struct platform_device *pdev)
 	struct device_node *np;
 	void __iomem *msg_ram;
 	size_t msg_ram_size;
-	struct device *dev = &pdev->dev;
+	struct device *dev;
 	struct resource r;
 	int ret;
 
-#ifdef CONFIG_DEEPSLEEP
-	einfo->pdev = pdev;
-#endif
+	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
+	if (!dev)
+		return ERR_PTR(-ENOMEM);
 
-	rx_pipe = devm_kzalloc(&pdev->dev, sizeof(*rx_pipe), GFP_KERNEL);
-	tx_pipe = devm_kzalloc(&pdev->dev, sizeof(*tx_pipe), GFP_KERNEL);
-	if (!rx_pipe || !tx_pipe)
-		return -ENOMEM;
+	dev->parent = parent;
+	dev->of_node = node;
+	dev->release = glink_rpm_release;
+	dev_set_name(dev, "%s:%pOFn", dev_name(parent->parent), node);
+
+	ret = device_register(dev);
+	if (ret) {
+		pr_err("failed to register glink edge\n");
+		put_device(dev);
+		return ERR_PTR(ret);
+	}
+
+	rx_pipe = devm_kzalloc(dev, sizeof(*rx_pipe), GFP_KERNEL);
+	tx_pipe = devm_kzalloc(dev, sizeof(*tx_pipe), GFP_KERNEL);
+	if (!rx_pipe || !tx_pipe) {
+		ret = -ENOMEM;
+		goto err_put_dev;
+	}
 
 	np = of_parse_phandle(dev->of_node, "qcom,rpm-msg-ram", 0);
 	ret = of_address_to_resource(np, 0, &r);
 	of_node_put(np);
 	if (ret)
-		return ret;
+		goto err_put_dev;
 
 	msg_ram = devm_ioremap(dev, r.start, resource_size(&r));
 	msg_ram_size = resource_size(&r);
-	if (!msg_ram)
-		return -ENOMEM;
+	if (!msg_ram) {
+		ret = -ENOMEM;
+		goto err_put_dev;
+	}
 
+	pr_err("%s: msg_ram: %x, msg_ram_size: %d\n", &msg_ram, msg_ram_size);
 	ret = glink_rpm_parse_toc(dev, msg_ram, msg_ram_size,
 				  rx_pipe, tx_pipe);
 	if (ret)
-		return ret;
+		goto err_put_dev;
 
 	/* Pipe specific accessors */
 	rx_pipe->native.avail = glink_rpm_rx_avail;
@@ -316,48 +328,68 @@ static int glink_rpm_probe(struct platform_device *pdev)
 	writel(0, tx_pipe->head);
 	writel(0, rx_pipe->tail);
 
-	glink = qcom_glink_native_probe(&pdev->dev,
+	glink = qcom_glink_native_probe(dev,
 					0,
 					&rx_pipe->native,
 					&tx_pipe->native,
 					true);
-	if (IS_ERR(glink))
-		return PTR_ERR(glink);
+	if (IS_ERR(glink)) {
+		ret = PTR_ERR(glink);
+		goto err_put_dev;
+	}
 
+	return glink;
+
+err_put_dev:
+	device_unregister(dev);
+
+	return ERR_PTR(ret);
+}
+
+static int glink_rpm_probe(struct platform_device *pdev)
+{
+	struct qcom_glink *glink;
+
+	glink = glink_rpm_register(&pdev->dev, pdev->dev.of_node);
 	platform_set_drvdata(pdev, glink);
+
+	return 0;
+}
+
+static int glink_rpm_unregister(struct device *dev)
+{
+	struct qcom_glink *glink = dev_get_drvdata(dev);
+
+	qcom_glink_native_remove(glink);
+	qcom_glink_native_unregister(glink);
 
 	return 0;
 }
 
 static int glink_rpm_remove(struct platform_device *pdev)
 {
-	struct qcom_glink *glink = platform_get_drvdata(pdev);
+	glink_rpm_unregister(&pdev->dev);
 
-	qcom_glink_native_remove(glink);
-#ifdef CONFIG_DEEPSLEEP
-	qcom_glink_native_unregister(glink);
-#endif
 	return 0;
 }
 
-#ifdef CONFIG_DEEPSLEEP
-static int glink_rpm_ssr_cb(struct notifier_block *this,
-			unsigned long code, void *data)
+#if defined(CONFIG_DEEPSLEEP)
+int glink_rpm_resume_noirq(struct device *dev)
 {
-	pr_info("received %ld for %s\n", code, einfo->ssr_label);
+	struct qcom_glink *glink;
 
-	switch (code) {
-	case SUBSYS_AFTER_DS_EXIT:
-	case SUBSYS_DS_ENTRY_FAIL:
-		glink_rpm_remove(einfo->pdev);
-		glink_rpm_probe(einfo->pdev);
-		break;
-	default:
-		break;
-	}
+	if (!of_device_is_compatible(dev->of_node, "qcom,glink-rpm"))
+		return 0;
 
-	return NOTIFY_DONE;
+	dev_info(dev, "Deep sleep exit path\n");
+
+	glink_rpm_unregister(dev);
+	glink = glink_rpm_register(dev, dev->of_node);
+	dev_set_drvdata(dev, glink);
+
+	return 0;
 }
+EXPORT_SYMBOL(glink_rpm_resume_noirq);
 #endif
 
 static const struct of_device_id glink_rpm_of_match[] = {
@@ -378,33 +410,12 @@ static struct platform_driver glink_rpm_driver = {
 
 static int __init glink_rpm_init(void)
 {
-#ifdef CONFIG_DEEPSLEEP
-	void *handle;
-
-	einfo = kzalloc(sizeof(*einfo), GFP_KERNEL);
-	if (!einfo)
-		return -ENOMEM;
-
-	einfo->ssr_label = "apss";
-	einfo->nb.notifier_call = glink_rpm_ssr_cb;
-	einfo->nb.priority = GLINK_SSR_PRIORITY;
-
-	handle = subsys_notif_register_notifier(einfo->ssr_label, &einfo->nb);
-	if (IS_ERR_OR_NULL(handle)) {
-		pr_err("could not register for SSR notifier for %s\n",
-			  einfo->ssr_label);
-	}
-	einfo->notifier_handle = handle;
-#endif
 	return platform_driver_register(&glink_rpm_driver);
 }
 subsys_initcall(glink_rpm_init);
 
 static void __exit glink_rpm_exit(void)
 {
-#ifdef CONFIG_DEEPSLEEP
-	kfree(einfo);
-#endif
 	platform_driver_unregister(&glink_rpm_driver);
 }
 module_exit(glink_rpm_exit);

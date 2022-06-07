@@ -34,6 +34,7 @@
 #include "xfs_ag.h"
 #include "xfs_health.h"
 
+#include <linux/compat.h>
 #include <linux/mount.h>
 #include <linux/namei.h>
 
@@ -768,6 +769,23 @@ xfs_fsinumbers_fmt(
 	return xfs_ibulk_advance(breq, sizeof(struct xfs_inogrp));
 }
 
+/* disallow y2038-unsafe ioctls with CONFIG_COMPAT_32BIT_TIME=n */
+static bool xfs_have_compat_bstat_time32(unsigned int cmd)
+{
+	if (IS_ENABLED(CONFIG_COMPAT_32BIT_TIME))
+		return true;
+
+	if (IS_ENABLED(CONFIG_64BIT) && !in_compat_syscall())
+		return true;
+
+	if (cmd == XFS_IOC_FSBULKSTAT_SINGLE ||
+	    cmd == XFS_IOC_FSBULKSTAT ||
+	    cmd == XFS_IOC_SWAPEXT)
+		return false;
+
+	return true;
+}
+
 STATIC int
 xfs_ioc_fsbulkstat(
 	xfs_mount_t		*mp,
@@ -787,6 +805,9 @@ xfs_ioc_fsbulkstat(
 
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
+
+	if (!xfs_have_compat_bstat_time32(cmd))
+		return -EINVAL;
 
 	if (XFS_FORCED_SHUTDOWN(mp))
 		return -EIO;
@@ -2018,6 +2039,11 @@ xfs_ioc_swapext(
 	xfs_inode_t     *ip, *tip;
 	struct fd	f, tmp;
 	int		error = 0;
+
+	if (xfs_have_compat_bstat_time32(XFS_IOC_SWAPEXT)) {
+		error = -EINVAL;
+		goto out;
+	}
 
 	/* Pull information for the target fd */
 	f = fdget((int)sxp->sx_fdtarget);

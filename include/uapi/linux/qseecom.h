@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only WITH Linux-syscall-note */
 /*
  * Copyright (c) 2017, 2019, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _QSEECOM_H_
@@ -409,5 +410,8 @@ struct file;
 
 #define QSEECOM_IOCTL_FBE_CLEAR_KEY \
 	_IOWR(QSEECOM_IOC_MAGIC, 44, struct qseecom_ice_key_data_t)
+
+#define QSEECOM_IOCTL_DEEP_SLEEP_STATE \
+	_IOWR(QSEECOM_IOC_MAGIC, 45, int)
 
 #endif /* _QSEECOM_H_ */

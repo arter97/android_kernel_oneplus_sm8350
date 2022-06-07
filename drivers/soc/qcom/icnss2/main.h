@@ -30,6 +30,8 @@
 #define ICNSS_PCI_EP_WAKE_OFFSET 4
 #define ICNSS_DISABLE_M3_SSR 0
 #define ICNSS_ENABLE_M3_SSR 1
+#define WLAN_RF_SLATE 0
+#define WLAN_RF_APACHE 1
 
 extern uint64_t dynamic_feature_mask;
 
@@ -37,7 +39,6 @@ enum icnss_bdf_type {
 	ICNSS_BDF_BIN,
 	ICNSS_BDF_ELF,
 	ICNSS_BDF_REGDB = 4,
-	ICNSS_BDF_DUMMY = 255,
 };
 
 struct icnss_control_params {
@@ -142,6 +143,7 @@ struct icnss_vreg_cfg {
 	u32 need_unvote;
 	bool required;
 	bool is_supported;
+	u32 no_vote_on_wifi_active;
 };
 
 struct icnss_vreg_info {
@@ -472,6 +474,10 @@ struct icnss_priv {
 	u8 is_slate_rfa;
 	struct completion slate_boot_complete;
 	u8 low_power_support;
+	unsigned long device_config;
+	bool is_rf_subtype_valid;
+	u32 rf_subtype;
+
 	u32 wlan_en_delay_ms;
 	unsigned long device_config;
 };

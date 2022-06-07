@@ -2,6 +2,7 @@
 
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "%s: " fmt, KBUILD_MODNAME
@@ -36,6 +37,7 @@ enum master_smem_id {
 	DISPLAY,
 	SLPI_ISLAND = 613,
 	APSS = 631,
+	RPM = 635,
 };
 
 enum master_pid {
@@ -44,6 +46,7 @@ enum master_pid {
 	PID_ADSP = 2,
 	PID_SLPI = 3,
 	PID_CDSP = 5,
+	PID_RPM = 6,
 	PID_WPSS = 13,
 	PID_GPU = PID_APSS,
 	PID_DISPLAY = PID_APSS,
@@ -74,6 +77,7 @@ static const struct msm_rpmh_master_data rpmh_masters[] = {
 	{"SLPI_ISLAND", SLPI_ISLAND, PID_SLPI},
 	{"GPU", GPU, PID_GPU},
 	{"DISPLAY", DISPLAY, PID_DISPLAY},
+	{"DEEP", RPM, PID_RPM},
 };
 
 struct msm_rpmh_profile_unit {

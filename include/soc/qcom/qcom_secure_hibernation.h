@@ -36,6 +36,7 @@ extern unsigned int get_authpage_count(void);
 extern void populate_secure_params(struct qcom_crypto_params *params);
 extern void get_auth_params(void **auth, int *num);
 extern int init_aes_encrypt(void);
+extern void deinit_aes_encrypt(void);
 static inline int qcom_secure_hibernation_enabled(void) { return 1; }
 #else
 static inline int encrypt_page(void *page) { return 0; }
@@ -43,6 +44,7 @@ static inline unsigned int get_authpage_count(void) { return 0; }
 static inline void populate_secure_params(struct qcom_crypto_params *params) {  }
 static inline void get_auth_params(void **auth, int *num) { }
 static inline int init_aes_encrypt(void){ return 0; }
+static inline void deinit_aes_encrypt(void) { };
 static inline int qcom_secure_hibernation_enabled(void) { return 0; }
 #endif /* CONFIG_QCOM_SECURE_HIBERNATION */
 

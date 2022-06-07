@@ -49,6 +49,9 @@
 /* Indicate backport support for configuring PMKSA timer params*/
 #define CFG80211_CONFIG_PMKSA_TIMER_PARAMS_SUPPORT 1
 
+/* Indicate backport support for 6GHz band */
+#define CFG80211_6GHZ_BAND_SUPPORTED 1
+
 /**
  * DOC: Device registration
  *

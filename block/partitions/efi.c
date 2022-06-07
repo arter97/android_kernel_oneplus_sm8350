@@ -462,15 +462,10 @@ static int is_gpt_valid(struct parsed_partitions *state, u64 lba,
 static inline int
 is_pte_valid(const gpt_entry *pte, const u64 lastlba)
 {
-	if (le64_to_cpu(pte->starting_lba) > lastlba         ||
+	if ((!efi_guidcmp(pte->partition_type_guid, NULL_GUID)) ||
+	    le64_to_cpu(pte->starting_lba) > lastlba         ||
 	    le64_to_cpu(pte->ending_lba)   > lastlba)
 		return 0;
-
-	// Hack to expose 2 GiB+ last_parti, this assumes 4096 LBA
-	if (!efi_guidcmp(pte->partition_type_guid, NULL_GUID) &&
-	    (le64_to_cpu(pte->ending_lba) - le64_to_cpu(pte->starting_lba)) < 524288)
-		return 0;
-
 	return 1;
 }
 

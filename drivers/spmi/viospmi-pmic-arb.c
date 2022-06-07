@@ -878,7 +878,7 @@ static void __exit virtio_spmi_exit(void)
 	unregister_virtio_driver(&virtio_spmi_driver);
 }
 
-arch_initcall(virtio_spmi_init);
+subsys_initcall(virtio_spmi_init);
 module_exit(virtio_spmi_exit);
 
 MODULE_DEVICE_TABLE(virtio, id_table);

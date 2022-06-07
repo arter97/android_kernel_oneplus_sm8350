@@ -1031,6 +1031,8 @@ struct ufs_hba {
 	struct device		bsg_dev;
 	struct request_queue	*bsg_queue;
 
+	bool delay_ssu;
+
 #if defined(CONFIG_SCSI_SKHPB)
 	u32 skhpb_feat;
 	int skhpb_state;
@@ -1069,6 +1071,7 @@ struct ufs_hba {
 #ifdef CONFIG_SCSI_UFSHCD_QTI
 	/* distinguish between resume and restore */
 	bool restore;
+	bool abort_triggered_wlun;
 #endif
 
 #if defined(CONFIG_UFSFEATURE)
@@ -1204,6 +1207,9 @@ int ufshcd_wait_for_register(struct ufs_hba *hba, u32 reg, u32 mask,
 void ufshcd_parse_dev_ref_clk_freq(struct ufs_hba *hba, struct clk *refclk);
 void ufshcd_update_reg_hist(struct ufs_err_reg_hist *reg_hist,
 			    u32 reg);
+#if defined(CONFIG_SCSI_UFSHCD_QTI)
+void ufshcd_hba_stop(struct ufs_hba *hba, bool can_sleep);
+#endif
 
 static inline void check_upiu_size(void)
 {
@@ -1519,6 +1525,14 @@ static inline void ufshcd_vops_dbg_register_dump(struct ufs_hba *hba)
 static inline void ufshcd_vops_device_reset(struct ufs_hba *hba)
 {
 	if (hba->vops && hba->vops->device_reset) {
+#if defined(CONFIG_SCSI_UFSHCD_QTI)
+		/*
+		 * If Host Tx keeps bursting during and after H/W reset,
+		 * some UFS devices may fail the next following link startup,
+		 * hence disable hba before reset the device.
+		 */
+		ufshcd_hba_stop(hba, true);
+#endif
 		hba->vops->device_reset(hba);
 		ufshcd_set_ufs_dev_active(hba);
 		if (ufshcd_is_wb_allowed(hba)) {

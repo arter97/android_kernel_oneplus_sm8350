@@ -126,11 +126,7 @@ int virtio_gpu_init(struct drm_device *dev)
 	struct virtio_hab *vh = NULL;
 	int vendorq = 0;
 
-	DRM_INFO("virtio-dev original features %llX\n", dev_to_virtio(dev->dev)->features);
-#ifdef CONFIG_MSM_VIRTIO_HAB
-	/* hardcode to add vendor feature bit, until coqos can pass this feature from PVM */
-	__virtio_set_bit(dev_to_virtio(dev->dev), VIRTIO_GPU_F_VENDOR);
-#endif
+	DRM_INFO("virtio-dev features %llX\n", dev_to_virtio(dev->dev)->features);
 
 	if (!virtio_has_feature(dev_to_virtio(dev->dev), VIRTIO_F_VERSION_1))
 		return -ENODEV;
@@ -171,10 +167,12 @@ int virtio_gpu_init(struct drm_device *dev)
 		DRM_INFO("EDID support available.\n");
 	}
 
-	DRM_INFO("virtio-dev features %llX\n", vgdev->vdev->features);
-	if (virtio_has_feature(vgdev->vdev, VIRTIO_GPU_F_VENDOR)) {
+#ifdef CONFIG_MSM_VIRTIO_HAB
+	if (virtio_has_feature(vgdev->vdev, VIRTIO_GPU_F_VENDOR))
 		vendorq = 1;
+#endif
 
+	if (vendorq) {
 		DRM_INFO("obtain 4 vqs\n");
 		ret = virthab_alloc(vgdev->vdev, &vh, MM_GFX, 1);
 		if (!ret)

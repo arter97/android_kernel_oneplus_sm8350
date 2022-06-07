@@ -2318,21 +2318,6 @@ static int _mmc_suspend(struct mmc_host *host, bool is_suspend)
 	if (mmc_card_suspended(host->card))
 		goto out;
 
-#if defined(CONFIG_SDC_QTI)
-	/* Enter DeepSleep : align with PBL HS50 mode */
-	if (host->deepsleep) {
-		host->clk_scaling.state = MMC_LOAD_LOW;
-		err = mmc_clk_update_freq(host, host->clk_scaling.freq_table[0],
-				host->clk_scaling.state);
-		if (err)
-			pr_err("%s: %s: clock scale to 50MHz failed with error %d\n",
-			__func__, mmc_hostname(host), err);
-		else
-			pr_debug("%s: %s: clock change to 50MHz finished successfully\n",
-			__func__, mmc_hostname(host));
-	}
-#endif
-
 	err = mmc_flush_cache(host->card);
 	if (err)
 		goto out;
@@ -2340,19 +2325,19 @@ static int _mmc_suspend(struct mmc_host *host, bool is_suspend)
 	if (mmc_can_poweroff_notify(host->card) &&
 		((host->caps2 & MMC_CAP2_FULL_PWR_CYCLE) || !is_suspend))
 		err = mmc_poweroff_notify(host->card, notify_type);
-	if (mmc_can_sleep(host->card)) {
+	if (mmc_can_sleep(host->card) && !host->deepsleep) {
 #if defined(CONFIG_SDC_QTI)
 		memcpy(&host->cached_ios, &host->ios, sizeof(host->cached_ios));
 #endif
 		mmc_cache_card_ext_csd(host);
 	}
-	if (mmc_can_sleep(host->card) && !host->deepsleep)
+	if (mmc_can_sleep(host->card))
 		err = mmc_sleepawake(host, true);
 	else if (!mmc_host_is_spi(host))
 		err = mmc_deselect_cards(host);
 
 	if (!err) {
-		if (is_suspend && !host->deepsleep)
+		if (is_suspend)
 			mmc_power_off(host);
 		mmc_card_set_suspended(host->card);
 	}
@@ -2420,7 +2405,7 @@ static int mmc_suspend(struct mmc_host *host)
 	int err;
 
 	host->deepsleep = false;
-#if defined(CONFIG_DEEPSLEEP)
+#if defined(CONFIG_SDC_QTI) && defined(CONFIG_DEEPSLEEP)
 	mmc_is_deepsleep(host);
 #endif
 	err = _mmc_suspend(host, true);
@@ -2455,8 +2440,7 @@ static int _mmc_resume(struct mmc_host *host)
 #endif
 
 	mmc_log_string(host, "Enter\n");
-	if (!host->deepsleep)
-		mmc_power_up(host, host->card->ocr);
+	mmc_power_up(host, host->card->ocr);
 
 	if (mmc_can_sleep(host->card) && !host->deepsleep) {
 		err = mmc_sleepawake(host, false);
@@ -2467,7 +2451,10 @@ static int _mmc_resume(struct mmc_host *host)
 				mmc_hostname(host), __func__, err);
 	}
 
-	if (err && !host->deepsleep)
+	if (host->deepsleep)
+		host->ops->hw_reset(host);
+
+	if (err || host->deepsleep)
 		err = mmc_init_card(host, host->card->ocr, host->card);
 
 	mmc_card_clr_suspended(host->card);
@@ -2484,7 +2471,6 @@ out:
 			mmc_hostname(host), __func__, err);
 out:
 #endif
-	host->deepsleep = false;
 	mmc_log_string(host, "Exit err %d\n", err);
 	return err;
 }
@@ -2567,12 +2553,16 @@ static int mmc_runtime_resume(struct mmc_host *host)
 
 static int mmc_can_reset(struct mmc_card *card)
 {
+#if defined(CONFIG_SDC_QTI) && defined(CONFIG_DEEPSLEEP)
+	return 1;
+#else
 	u8 rst_n_function;
 
 	rst_n_function = card->ext_csd.rst_n_function;
 	if ((rst_n_function & EXT_CSD_RST_N_EN_MASK) != EXT_CSD_RST_N_ENABLED)
 		return 0;
 	return 1;
+#endif
 }
 
 static int _mmc_hw_reset(struct mmc_host *host)

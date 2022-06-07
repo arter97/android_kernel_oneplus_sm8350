@@ -66,6 +66,7 @@ struct subsys_notif_timeout {
  * @dev: parent device
  * @owner: module the descriptor belongs to
  * @shutdown: Stop a subsystem
+ * @powerup_notify: Notify about start of a subsystem
  * @powerup: Start a subsystem
  * @crash_shutdown: Shutdown a subsystem when the system crashes (can't sleep)
  * @ramdump: Collect a ramdump of the subsystem
@@ -91,6 +92,7 @@ struct subsys_desc {
 
 	int (*shutdown)(const struct subsys_desc *desc, bool force_stop);
 	int (*enter_ds)(const struct subsys_desc *desc);
+	int (*powerup_notify)(const struct subsys_desc *desc);
 	int (*powerup)(const struct subsys_desc *desc);
 	void (*crash_shutdown)(const struct subsys_desc *desc);
 	int (*ramdump)(int need_dumps, const struct subsys_desc *desc);
@@ -142,6 +144,8 @@ extern int subsystem_restart_dev(struct subsys_device *dev);
 extern void subsys_store_crash_reason(struct subsys_device *dev, char *reason);
 extern int subsystem_restart(const char *name);
 extern int subsystem_crashed(const char *name);
+extern int subsystem_start_notify(const char *name);
+extern int subsystem_stop_notify(const char *subsystem);
 extern int subsystem_ds_entry(const char *subsystem);
 extern int subsystem_ds_exit(const char *name);
 extern int subsystem_s2d_entry(const char *subsystem);
@@ -191,6 +195,16 @@ static inline int subsystem_restart(const char *name)
 }
 
 static inline int subsystem_crashed(const char *name)
+{
+	return 0;
+}
+
+extern int subsystem_start_notify(const char *name)
+{
+	return 0;
+}
+
+extern int subsystem_stop_notify(const char *subsystem)
 {
 	return 0;
 }

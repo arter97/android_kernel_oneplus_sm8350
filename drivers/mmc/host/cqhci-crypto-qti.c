@@ -33,6 +33,7 @@ static struct cqhci_host_crypto_variant_ops __maybe_unused cqhci_crypto_qti_vari
 	.resume = cqhci_crypto_qti_resume,
 	.debug = cqhci_crypto_qti_debug,
 	.recovery_finish = cqhci_crypto_qti_recovery_finish,
+	.restore_from_hibernation = cqhci_crypto_qti_restore_from_hibernation,
 #if IS_ENABLED(CONFIG_QTI_CRYPTO_FDE)
 	.prepare_crypto_desc = cqhci_crypto_qti_prep_desc,
 #endif
@@ -220,11 +221,23 @@ int cqhci_host_init_crypto_qti_spec(struct cqhci_host *host,
 	num_slots = cqhci_num_keyslots(host);
 
 #if IS_ENABLED(CONFIG_QTI_CRYPTO_FDE)
-	if (num_slots > 0)
-		--num_slots;
+	if (num_slots > crypto_qti_ice_get_num_fde_slots()) {
+		//Reduce the total number of slots available to FBE
+		//(by the number reserved for the FDE)
+		//Check at least one slot for backward compatibility,
+		//otherwise return failure
+		if (num_slots - crypto_qti_ice_get_num_fde_slots() < 1) {
+			pr_err("%s: Too much slots allocated to fde\n", __func__);
+			err = -ENOMEM;
+			goto out;
+		} else {
+			num_slots = num_slots - crypto_qti_ice_get_num_fde_slots();
+		}
+	}
 #endif
 	host->mmc->ksm = keyslot_manager_create(host->mmc->parent,
 						num_slots, ksm_ops,
+						BLK_CRYPTO_FEATURE_STANDARD_KEYS |
 						BLK_CRYPTO_FEATURE_WRAPPED_KEYS,
 						crypto_modes_supported,
 						host);
@@ -391,6 +404,13 @@ int cqhci_crypto_qti_resume(struct cqhci_host *host)
 int cqhci_crypto_qti_recovery_finish(struct cqhci_host *host)
 {
 	keyslot_manager_reprogram_all_keys(host->mmc->ksm);
+	return 0;
+}
+
+int cqhci_crypto_qti_restore_from_hibernation(struct cqhci_host *host)
+{
+	cqhci_crypto_enable(host);
+	cqhci_crypto_recovery_finish(host);
 	return 0;
 }
 

@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __QBG_CORE_H__
@@ -83,6 +84,7 @@ enum QBG_ACCUM_INTERVAL_TYPE {
  * @indio_dev:		Pointer to QBG IIO device
  * @iio_chan:		Pointer to QBG IIO channels
  * @sdam:		Pointer to multiple QBG SDAMs
+ * @skip_esr_state:	Pointer to nvmem_cell
  * @fifo:		QBG FIFO data
  * @essential_params:	QBG essential params
  * @status_change_work:	Power supply status change work
@@ -111,6 +113,8 @@ enum QBG_ACCUM_INTERVAL_TYPE {
  * @essential_param_revid:	QBG essential parameters revision ID
  * @sample_time_us:	Array of accumulator sample time in each QBG HW state
  * @debug_mask:		Debug mask to enable/disable debug prints
+ * @adc_cmn_wb_base:	Base address of ADC_CMN_WB module
+ * @adc_cmn_base:	Base address of ADC_CMN module
  * @pon_ocv:		Power-on OCV of QBG device
  * @pon_ibat:		Power-on current of QBG device
  * @pon_soc:		Power-on SOC of QBG device
@@ -163,6 +167,7 @@ struct qti_qbg {
 	struct nvmem_device	**sdam;
 	struct nvmem_cell       *debug_mask_nvmem_low;
 	struct nvmem_cell       *debug_mask_nvmem_high;
+	struct nvmem_cell	*skip_esr_state;
 	struct fifo_data	fifo[MAX_FIFO_COUNT];
 	struct qbg_essential_params	essential_params;
 	struct work_struct	status_change_work;
@@ -195,6 +200,8 @@ struct qti_qbg {
 	u32			essential_param_revid;
 	u32			sample_time_us[QBG_STATE_MAX];
 	u32			*debug_mask;
+	u32			adc_cmn_wb_base;
+	u32			adc_cmn_base;
 	int			pon_ocv;
 	int			pon_ibat;
 	int			pon_tbat;

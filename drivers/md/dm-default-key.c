@@ -135,6 +135,45 @@ static int default_key_ctr_optional(struct dm_target *ti,
 	return 0;
 }
 
+static void default_key_adjust_sector_size_and_iv(char **argv,
+						  struct dm_target *ti,
+						  struct default_key_c **dkc,
+						  u8 *raw, u32 size,
+						  bool is_legacy)
+{
+	struct dm_dev *dev;
+	int i;
+	union {
+		u8 bytes[BLK_CRYPTO_MAX_WRAPPED_KEY_SIZE];
+		u32 words[BLK_CRYPTO_MAX_WRAPPED_KEY_SIZE / sizeof(u32)];
+	} key_new;
+
+	dev = (*dkc)->dev;
+
+	if (is_legacy) {
+		memcpy(key_new.bytes, raw, size);
+
+		for (i = 0; i < ARRAY_SIZE(key_new.words); i++)
+			__cpu_to_be32s(&key_new.words[i]);
+
+		memcpy(raw, key_new.bytes, size);
+
+		if (ti->len & (((*dkc)->sector_size >> SECTOR_SHIFT) - 1))
+			(*dkc)->sector_size = SECTOR_SIZE;
+
+		if (dev->bdev->bd_part)
+			(*dkc)->iv_offset += dev->bdev->bd_part->start_sect;
+	}
+
+	if (!strcmp(argv[0], "AES-256-XTS")) {
+		if (ti->len & (((*dkc)->sector_size >> SECTOR_SHIFT) - 1))
+			(*dkc)->sector_size = SECTOR_SIZE;
+
+		if (dev->bdev->bd_part)
+			(*dkc)->iv_offset += dev->bdev->bd_part->start_sect;
+	}
+}
+
 /*
  * Construct a default-key mapping:
  * <cipher> <key> <iv_offset> <dev_path> <start>
@@ -153,6 +192,24 @@ static int default_key_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	unsigned long long tmpll;
 	char dummy;
 	int err;
+	char *_argv[10];
+	bool is_legacy = false;
+
+	if (argc >= 4 && !strcmp(argv[0], "AES-256-XTS")) {
+		argc = 0;
+		_argv[argc++] = "aes-xts-plain64";
+		_argv[argc++] = argv[1];
+		_argv[argc++] = "0";
+		_argv[argc++] = argv[2];
+		_argv[argc++] = argv[3];
+		_argv[argc++] = "3";
+		_argv[argc++] = "allow_discards";
+		_argv[argc++] = "sector_size:4096";
+		_argv[argc++] = "iv_large_sectors";
+		_argv[argc] = NULL;
+		argv = _argv;
+		is_legacy = true;
+	}
 
 	if (argc < 5) {
 		ti->error = "Not enough arguments";
@@ -226,6 +283,10 @@ static int default_key_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 		if (err)
 			goto bad;
 	}
+
+	default_key_adjust_sector_size_and_iv(argv, ti, &dkc, raw_key,
+					      raw_key_size, is_legacy);
+
 	dkc->sector_bits = ilog2(dkc->sector_size);
 	if (ti->len & ((dkc->sector_size >> SECTOR_SHIFT) - 1)) {
 		ti->error = "Device size is not a multiple of sector_size";

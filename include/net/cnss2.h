@@ -127,6 +127,7 @@ struct cnss_wlan_driver {
 			     struct cnss_uevent_data *uevent);
 	struct cnss_wlan_runtime_ops *runtime_ops;
 	const struct pci_device_id *id_table;
+	enum cnss_driver_mode (*get_driver_mode)(void);
 };
 
 struct cnss_ce_tgt_pipe_cfg {
