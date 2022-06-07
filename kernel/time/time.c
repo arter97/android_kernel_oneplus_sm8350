@@ -377,11 +377,11 @@ int get_timespec64(struct timespec64 *ts,
 
 	ts->tv_sec = kts.tv_sec;
 
-	/* Zero out the padding for 32 bit systems or in compat mode */
-	if (IS_ENABLED(CONFIG_64BIT_TIME) && (!IS_ENABLED(CONFIG_64BIT) ||
-					      in_compat_syscall()))
+	/* Zero out the padding in compat mode */
+	if (in_compat_syscall())
 		kts.tv_nsec &= 0xFFFFFFFFUL;
 
+	/* In 32-bit mode, this drops the padding */
 	ts->tv_nsec = kts.tv_nsec;
 
 	return 0;
