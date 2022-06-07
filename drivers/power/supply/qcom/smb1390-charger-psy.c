@@ -2347,7 +2347,7 @@ static int smb1390_probe(struct platform_device *pdev)
 	}
 
 	platform_set_drvdata(pdev, chip);
-	chip->cp_role = (int)of_device_get_match_data(chip->dev);
+	chip->cp_role = (int)(unsigned long)of_device_get_match_data(chip->dev);
 	switch (chip->cp_role) {
 	case CP_MASTER:
 		chip->nchannels = ARRAY_SIZE(cp_master_chans);

@@ -115,6 +115,7 @@ struct arm_smmu_cb {
 #define TCU_TESTBUS_SEL_ALL 0x3
 #define TBU_TESTBUS_SEL_ALL 0xf
 
+
 int tbu_testbus_sel = TBU_TESTBUS_SEL_ALL;
 int tcu_testbus_sel = TCU_TESTBUS_SEL_ALL;
 
@@ -5036,6 +5037,11 @@ static int arm_smmu_device_dt_probe(struct platform_device *pdev)
 		dev_err(dev, "found %d interrupts but expected at least %d\n",
 			num_irqs, smmu->num_global_irqs + 1);
 		return -ENODEV;
+	}
+
+	if (of_property_read_u32(dev->of_node, "#tcu-testbus-version",
+				 &smmu->tcu_testbus_version)) {
+		dev_err(dev, "missing tcu_testbus_version property\n");
 	}
 
 	smmu->irqs = devm_kcalloc(dev, num_irqs, sizeof(*smmu->irqs),

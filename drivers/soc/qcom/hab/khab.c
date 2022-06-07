@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include "hab.h"
 #include <linux/module.h>
@@ -39,14 +40,30 @@ int32_t habmm_socket_recv(int32_t handle, void *dst_buff, uint32_t *size_bytes,
 {
 	int ret = 0;
 	struct hab_message *msg = NULL;
+	void **scatter_buf = NULL;
+	int i = 0;
 
 	if (!size_bytes || !dst_buff)
 		return -EINVAL;
 
 	ret = hab_vchan_recv(hab_driver.kctx, &msg, handle, size_bytes, flags);
 
-	if (ret == 0 && msg)
-		memcpy(dst_buff, msg->data, msg->sizebytes);
+	if (ret == 0 && msg) {
+		if (unlikely(msg->scatter)) {
+			scatter_buf = (void **)msg->data;
+
+			/* The maximum size of msg is limited in hab_msg_alloc*/
+			for (i = 0; i < msg->sizebytes / PAGE_SIZE; i++)
+				memcpy((char *)((uint64_t)dst_buff
+					+ (uint64_t)(i * PAGE_SIZE)), scatter_buf[i], PAGE_SIZE);
+
+			if (msg->sizebytes % PAGE_SIZE)
+				memcpy((char *)((uint64_t)dst_buff
+					+ (uint64_t)(i * PAGE_SIZE)), scatter_buf[i],
+					msg->sizebytes % PAGE_SIZE);
+		} else
+			memcpy(dst_buff, msg->data, msg->sizebytes);
+	}
 	else if (ret && msg)
 		pr_warn("vcid %X recv failed %d but msg is still received %zd bytes\n",
 				handle, ret, msg->sizebytes);

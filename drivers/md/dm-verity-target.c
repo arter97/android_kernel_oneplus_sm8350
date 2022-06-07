@@ -936,19 +936,16 @@ static int verity_parse_opt_args(struct dm_arg_set *as, struct dm_verity *v,
 				return r;
 			}
 			continue;
-
 		} else if (!strcasecmp(arg_name, DM_VERITY_OPT_AT_MOST_ONCE)) {
 			r = verity_alloc_most_once(v);
 			if (r)
 				return r;
 			continue;
-
 		} else if (verity_is_fec_opt_arg(arg_name)) {
 			r = verity_fec_parse_opt_args(as, v, &argc, arg_name);
 			if (r)
 				return r;
 			continue;
-
 		} else if (verity_verify_is_sig_opt_arg(arg_name)) {
 			r = verity_verify_sig_parse_opt_args(as, v,
 							     verify_args,
@@ -1026,7 +1023,6 @@ static int verity_ctr(struct dm_target *ti, unsigned argc, char **argv)
 	v->version = num;
 
 retry_dev1:
-
 	r = dm_get_device(ti, argv[1], FMODE_READ, &v->data_dev);
 	if (r) {
 		if (r == -ENODEV && dm_device_wait) {

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/of_device.h>
 #include "hab.h"
@@ -75,6 +76,52 @@ static int hab_release(struct inode *inodep, struct file *filep)
 	return 0;
 }
 
+static long hab_copy_data(struct hab_message *msg, struct hab_recv *recv_param)
+{
+	long ret = 0;
+	int i = 0;
+	void **scatter_buf = (void **)msg->data;
+	uint64_t dest = 0U;
+
+	if (unlikely(msg->scatter)) {
+		/* The maximum size of msg is limited in hab_msg_alloc */
+		for (i = 0; i < msg->sizebytes / PAGE_SIZE; i++) {
+			dest = (uint64_t)(recv_param->data) + (uint64_t)(i * PAGE_SIZE);
+			if (copy_to_user((void __user *)dest,
+					scatter_buf[i],
+					PAGE_SIZE)) {
+				pr_err("copy_to_user failed: vc=%x size=%d\n",
+				recv_param->vcid, (int)msg->sizebytes);
+				recv_param->sizebytes = 0;
+				ret = -EFAULT;
+				break;
+			}
+		}
+		if ((ret != -EFAULT) && (msg->sizebytes % PAGE_SIZE)) {
+			dest = (uint64_t)(recv_param->data) + (uint64_t)(i * PAGE_SIZE);
+			if (copy_to_user((void __user *)dest,
+					scatter_buf[i],
+					msg->sizebytes % PAGE_SIZE)) {
+				pr_err("copy_to_user failed: vc=%x size=%d\n",
+				recv_param->vcid, (int)msg->sizebytes);
+				recv_param->sizebytes = 0;
+				ret = -EFAULT;
+			}
+		}
+	} else {
+		if (copy_to_user((void __user *)recv_param->data,
+				msg->data,
+				msg->sizebytes)) {
+			pr_err("copy_to_user failed: vc=%x size=%d\n",
+			recv_param->vcid, (int)msg->sizebytes);
+			recv_param->sizebytes = 0;
+			ret = -EFAULT;
+		}
+	}
+
+	return ret;
+}
+
 static long hab_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 {
 	struct uhab_context *ctx = (struct uhab_context *)filep->private_data;
@@ -146,22 +193,16 @@ static long hab_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 		ret = hab_vchan_recv(ctx, &msg, recv_param->vcid,
 				&recv_param->sizebytes, recv_param->flags);
 
-		if (ret == 0 && msg) {
-			if (copy_to_user((void __user *)recv_param->data,
-					msg->data,
-					msg->sizebytes)) {
-				pr_err("copy_to_user failed: vc=%x size=%d\n",
-				   recv_param->vcid, (int)msg->sizebytes);
-				recv_param->sizebytes = 0;
-				ret = -EFAULT;
-			}
-		} else if (ret && msg) {
-			pr_warn("vcid %X recv failed %d and msg is still of %zd bytes\n",
-				recv_param->vcid, (int)ret, msg->sizebytes);
+		if (msg) {
+			if (ret == 0)
+				ret = hab_copy_data(msg, recv_param);
+			else
+				pr_warn("vcid %X recv failed %d and msg is still of %zd bytes\n",
+					recv_param->vcid, (int)ret, msg->sizebytes);
+
+			hab_msg_free(msg);
 		}
 
-		if (msg)
-			hab_msg_free(msg);
 		break;
 	case IOCTL_HAB_VC_EXPORT:
 		ret = hab_mem_export(ctx, (struct hab_export *)data, 0);

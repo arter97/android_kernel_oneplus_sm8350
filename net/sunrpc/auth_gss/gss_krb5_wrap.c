@@ -163,7 +163,7 @@ gss_wrap_kerberos_v1(struct krb5_ctx *kctx, int offset,
 					    .data = cksumdata};
 	int			blocksize = 0, plainlen;
 	unsigned char		*ptr, *msg_start;
-	s32			now;
+	time64_t		now;
 	int			headlen;
 	struct page		**tmp_pages;
 	u32			seq_send;
@@ -172,7 +172,7 @@ gss_wrap_kerberos_v1(struct krb5_ctx *kctx, int offset,
 
 	dprintk("RPC:       %s\n", __func__);
 
-	now = get_seconds();
+	now = ktime_get_real_seconds();
 
 	blocksize = crypto_sync_skcipher_blocksize(kctx->enc);
 	gss_krb5_add_padding(buf, offset, blocksize);
@@ -270,7 +270,7 @@ gss_unwrap_kerberos_v1(struct krb5_ctx *kctx, int offset, int len,
 	char			cksumdata[GSS_KRB5_MAX_CKSUM_LEN];
 	struct xdr_netobj	md5cksum = {.len = sizeof(cksumdata),
 					    .data = cksumdata};
-	s32			now;
+	time64_t		now;
 	int			direction;
 	s32			seqnum;
 	unsigned char		*ptr;
@@ -363,7 +363,7 @@ gss_unwrap_kerberos_v1(struct krb5_ctx *kctx, int offset, int len,
 
 	/* it got through unscathed.  Make sure the context is unexpired */
 
-	now = get_seconds();
+	now = ktime_get_real_seconds();
 
 	if (now > kctx->endtime)
 		return GSS_S_CONTEXT_EXPIRED;
@@ -447,7 +447,7 @@ gss_wrap_kerberos_v2(struct krb5_ctx *kctx, u32 offset,
 		     struct xdr_buf *buf, struct page **pages)
 {
 	u8		*ptr, *plainhdr;
-	s32		now;
+	time64_t	now;
 	u8		flags = 0x00;
 	__be16		*be16ptr;
 	__be64		*be64ptr;
@@ -489,7 +489,7 @@ gss_wrap_kerberos_v2(struct krb5_ctx *kctx, u32 offset,
 	if (err)
 		return err;
 
-	now = get_seconds();
+	now = ktime_get_real_seconds();
 	return (kctx->endtime < now) ? GSS_S_CONTEXT_EXPIRED : GSS_S_COMPLETE;
 }
 
@@ -498,7 +498,7 @@ gss_unwrap_kerberos_v2(struct krb5_ctx *kctx, int offset, int len,
 		       struct xdr_buf *buf, unsigned int *slack,
 		       unsigned int *align)
 {
-	s32		now;
+	time64_t	now;
 	u8		*ptr;
 	u8		flags = 0x00;
 	u16		ec, rrc;
@@ -567,7 +567,7 @@ gss_unwrap_kerberos_v2(struct krb5_ctx *kctx, int offset, int len,
 	/* do sequencing checks */
 
 	/* it got through unscathed.  Make sure the context is unexpired */
-	now = get_seconds();
+	now = ktime_get_real_seconds();
 	if (now > kctx->endtime)
 		return GSS_S_CONTEXT_EXPIRED;
 

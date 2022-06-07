@@ -77,6 +77,7 @@
 #define QMI_MODEM_INST_ID	0x0
 #define QMI_ADSP_INST_ID	0x1
 #define QMI_CDSP_INST_ID	0x43
+#define QMI_CDSP1_INST_ID	0x44
 #define QMI_SLPI_INST_ID	0x53
 #define QMI_MODEM_NR_INST_ID	0x64
 

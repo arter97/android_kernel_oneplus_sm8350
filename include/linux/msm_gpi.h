@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef __MSM_GPI_H_
@@ -186,10 +187,12 @@ enum msm_gpi_tre_type {
 
 /* cmds to perform by using dmaengine_slave_config() */
 enum msm_gpi_ctrl_cmd {
+	MSM_GPI_DEFAULT,
 	MSM_GPI_INIT,
 	MSM_GPI_CMD_UART_SW_STALE,
 	MSM_GPI_CMD_UART_RFR_READY,
 	MSM_GPI_CMD_UART_RFR_NOT_READY,
+	MSM_GPI_DEEP_SLEEP_INIT,
 };
 
 enum msm_gpi_cb_event {

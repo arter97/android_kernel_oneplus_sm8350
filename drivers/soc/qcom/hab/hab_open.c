@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include "hab.h"
 
@@ -204,6 +205,7 @@ int hab_open_receive_cancel(struct physical_channel *pchan,
 			(request->xdata.open_id == data.open_id) &&
 			(request->xdata.vchan_id == data.vchan_id)) {
 			list_del(&node->node);
+			kfree(node);
 			dev->openq_cnt--;
 			pr_info("open cancelled on pchan %s vcid %x subid %d openid %d\n",
 					pchan->name, data.vchan_id,

@@ -15,7 +15,7 @@
 #include <linux/pm_qos.h>
 #include <linux/platform_device.h>
 #include <net/cnss2.h>
-#if IS_ENABLED(CONFIG_QCOM_MEMORY_DUMP_V2)
+#if IS_ENABLED(CONFIG_QCOM_MEMORY_DUMP_V2) || IS_ENABLED(CONFIG_QCOM_MINIDUMP)
 #include <soc/qcom/memory_dump.h>
 #endif
 #if IS_ENABLED(CONFIG_MSM_SUBSYSTEM_RESTART) || \
@@ -419,6 +419,7 @@ enum cnss_timeout_type {
 
 struct cnss_plat_data {
 	struct platform_device *plat_dev;
+	enum cnss_driver_mode driver_mode;
 	void *bus_priv;
 	enum cnss_dev_bus_type bus_type;
 	struct list_head vreg_list;

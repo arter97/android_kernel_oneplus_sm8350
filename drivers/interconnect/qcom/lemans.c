@@ -2375,155 +2375,6 @@ static struct qcom_icc_desc lemans_system_noc = {
 	.num_voters = ARRAY_SIZE(system_noc_voters),
 };
 
-static struct regmap *
-qcom_icc_map(struct platform_device *pdev, const struct qcom_icc_desc *desc)
-{
-	void __iomem *base;
-	struct resource *res;
-	struct device *dev = &pdev->dev;
-
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!res)
-		return NULL;
-
-	base = devm_ioremap_resource(dev, res);
-	if (IS_ERR(base))
-		return ERR_CAST(base);
-
-	return devm_regmap_init_mmio(dev, base, &icc_regmap_config);
-}
-
-static void qcom_icc_stub_pre_aggregate(struct icc_node *node)
-{
-}
-
-static int qcom_icc_stub_aggregate(struct icc_node *node, u32 tag, u32 avg_bw,
-		u32 peak_bw, u32 *agg_avg, u32 *agg_peak)
-{
-	return 0;
-}
-
-static int qcom_icc_stub_set(struct icc_node *src, struct icc_node *dst)
-{
-	return 0;
-}
-
-static int qnoc_probe(struct platform_device *pdev)
-{
-	const struct qcom_icc_desc *desc;
-	struct icc_onecell_data *data;
-	struct icc_provider *provider;
-	struct qcom_icc_node **qnodes;
-	struct qcom_icc_provider *qp;
-	struct icc_node *node;
-	size_t num_nodes, i;
-	int ret;
-
-	desc = of_device_get_match_data(&pdev->dev);
-	if (!desc)
-		return -EINVAL;
-
-	qnodes = desc->nodes;
-	num_nodes = desc->num_nodes;
-
-	qp = devm_kzalloc(&pdev->dev, sizeof(*qp), GFP_KERNEL);
-	if (!qp)
-		return -ENOMEM;
-
-	data = devm_kcalloc(&pdev->dev, num_nodes, sizeof(*node), GFP_KERNEL);
-	if (!data)
-		return -ENOMEM;
-
-	provider = &qp->provider;
-	provider->dev = &pdev->dev;
-	provider->set = qcom_icc_stub_set;
-	provider->pre_aggregate = qcom_icc_stub_pre_aggregate;
-	provider->aggregate = qcom_icc_stub_aggregate;
-	provider->xlate = of_icc_xlate_onecell;
-	INIT_LIST_HEAD(&provider->nodes);
-	provider->data = data;
-
-	qp->dev = &pdev->dev;
-	qp->bcms = desc->bcms;
-	qp->num_bcms = desc->num_bcms;
-
-	qp->num_voters = desc->num_voters;
-	qp->voters = devm_kcalloc(&pdev->dev, qp->num_voters,
-				  sizeof(*qp->voters), GFP_KERNEL);
-	if (!qp->voters)
-		return -ENOMEM;
-
-	qp->regmap = qcom_icc_map(pdev, desc);
-	if (IS_ERR(qp->regmap))
-		return PTR_ERR(qp->regmap);
-
-	ret = icc_provider_add(provider);
-	if (ret) {
-		dev_err(&pdev->dev, "error adding interconnect provider\n");
-		return ret;
-	}
-
-	for (i = 0; i < qp->num_bcms; i++)
-		qcom_icc_bcm_init(qp->bcms[i], &pdev->dev);
-
-	for (i = 0; i < num_nodes; i++) {
-		size_t j;
-
-		if (!qnodes[i])
-			continue;
-
-		qnodes[i]->regmap = dev_get_regmap(qp->dev, NULL);
-
-		node = icc_node_create(qnodes[i]->id);
-		if (IS_ERR(node)) {
-			ret = PTR_ERR(node);
-			goto err;
-		}
-
-		node->name = qnodes[i]->name;
-		node->data = qnodes[i];
-		icc_node_add(node, provider);
-
-		dev_dbg(&pdev->dev, "registered node %pK %s %d\n", node,
-			qnodes[i]->name, node->id);
-
-		for (j = 0; j < qnodes[i]->num_links; j++)
-			icc_link_create(node, qnodes[i]->links[j]);
-
-		data->nodes[i] = node;
-	}
-	data->num_nodes = num_nodes;
-
-	platform_set_drvdata(pdev, qp);
-
-	dev_dbg(&pdev->dev, "Registered lemans ICC\n");
-
-	return ret;
-err:
-	list_for_each_entry(node, &provider->nodes, node_list) {
-		icc_node_del(node);
-		icc_node_destroy(node->id);
-	}
-
-	icc_provider_del(provider);
-	return ret;
-}
-
-static int qnoc_remove(struct platform_device *pdev)
-{
-	struct qcom_icc_provider *qp = platform_get_drvdata(pdev);
-	struct icc_provider *provider = &qp->provider;
-	struct icc_node *n;
-
-	list_for_each_entry(n, &provider->nodes, node_list) {
-		icc_node_del(n);
-		icc_node_destroy(n->id);
-	}
-
-
-	return icc_provider_del(provider);
-}
-
 static const struct of_device_id qnoc_of_match[] = {
 	{ .compatible = "qcom,lemans-aggre1_noc",
 	  .data = &lemans_aggre1_noc},
@@ -2556,11 +2407,12 @@ static const struct of_device_id qnoc_of_match[] = {
 MODULE_DEVICE_TABLE(of, qnoc_of_match);
 
 static struct platform_driver qnoc_driver = {
-	.probe = qnoc_probe,
-	.remove = qnoc_remove,
+	.probe = qcom_icc_rpmh_probe,
+	.remove = qcom_icc_rpmh_remove,
 	.driver = {
 		.name = "qnoc-lemans",
 		.of_match_table = qnoc_of_match,
+		.sync_state = qcom_icc_rpmh_sync_state,
 	},
 };
 

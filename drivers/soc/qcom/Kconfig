@@ -176,6 +176,15 @@ config QCOM_LAHAINA_LLCC
 	  can start using the LLCC slices.
 	  If unsure, say n.
 
+config QCOM_KONA_LLCC
+	tristate "Qualcomm Technologies, Inc. KONA LLCC driver"
+	depends on QCOM_LLCC
+	help
+	  Say y or m here to enable the LLCC driver for Lahaina platform.
+	  This provides data required to configure LLCC so that clients
+	  can start using the LLCC slices.
+	  If unsure, say n.
+
 config QCOM_SDXLEMUR_LLCC
 	tristate "Qualcomm Technologies, Inc. SDXLEMUR LLCC driver"
 	depends on QCOM_LLCC
@@ -478,7 +487,7 @@ config QCOM_RPMHPD
 	  for the voltage rail.
 
 config QCOM_RUN_QUEUE_STATS
-       bool "Enable collection and exporting of QTI Run Queue stats to userspace"
+       tristate "Enable collection and exporting of QTI Run Queue stats to userspace"
        help
         This option enables the driver to periodically collecting the statistics
         of kernel run queue information and calculate the load of the system.
@@ -1206,7 +1215,7 @@ config QCOM_WATCHDOG_BARK_TIME
 	depends on QCOM_WDT_CORE
 	int "Qualcomm Technologies, Inc. Watchdog bark time in ms"
 	default 11000
-	range 11000 11000
+	range 11000 12000
 	help
 	  The amount of time, in milliseconds, that should elapse after
 	  a watchdog timer reset before a bark interrupt is sent from the
@@ -1317,13 +1326,22 @@ config QTI_CRYPTO_TZ
 
 config QTI_CRYPTO_FDE
 	tristate "Enable common crypto functionality used for FDE"
-	depends on QTI_CRYPTO_COMMON
+	depends on QTI_CRYPTO_COMMON && QSEECOM
 	help
 	 Say 'Y' to enable hardware Full Disk Encryption implementation to be used by
 	 different storage layers such as UFS or eMMC. Enabling the FDE will reserve
 	 one slot of KSM(Key Slot Manager) for the FDE. Making one less slot available
 	 for FBE(File based encryption) in case both encryption mechanism are enabled
 	 on device.
+
+config QTI_CRYPTO_LEGACY_KEY_FDE
+	tristate "Enable legacy single key for functionality to be used for FDE"
+	depends on QTI_CRYPTO_FDE
+	help
+	 Say 'Y' to enable hardware Full Disk Encryption implementation to use the
+	 legacy key generation.Keep using only single slot of KSM with
+	 the legacy key id for all the partitions.
+	 The Legacy support will be deprecated in the future versions.
 
 config QTI_CRYPTO_VIRTUALIZATION
 	tristate "Enable hypervysor to be used for FBE"
@@ -1353,14 +1371,12 @@ config QCOM_RTIC
 	  will trigger RTIC kernel MP.s (measurement parameters) generation
 	  during the kernel build.
 
-config RENAME_BLOCK_DEVICE
-	tristate "Rename block device node in /dev"
+config RENAME_DEVICES
+	tristate "Rename device names"
 	default n
 	help
-	  Say 'Y' to to rename the block device node assigned by generic
-	  driver to a name that is needed. This is used for rename block
-	  device names created by default as sda1, sda2 etc. to the
-	  names system is needed.this is applicable for block devices only.
+	  This driver provides the support to rename the devices.
+	  Say 'Y' to rename the device names to the names system is needed.
 
 config QCOM_ADSP_MANUAL_VOTE
 	bool "Send commands to ADSP to unvote/vote during Suspend/resume"
@@ -1505,6 +1521,17 @@ config QCOM_SECURE_HIBERNATION
 	  This uses GCM-AES crypto algorithm to encrypt the
 	  pages at the kernel.
 	  If not sure, say N.
+
+config PLATFORM_AUTO
+	bool "Support automotive platform features"
+	default n
+	help
+	  Automotive market has aggressive requirement on booting
+	  KPI. So we need to remove anything that blocks us from
+	  booting linux in parallel. With this config, the big
+	  lock for platform driver probe will be removed.
+
+	  If you are unsure about this, Say N here.
 
 source "drivers/soc/qcom/icnss2/Kconfig"
 

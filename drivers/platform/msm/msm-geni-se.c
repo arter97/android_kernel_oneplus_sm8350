@@ -1176,6 +1176,12 @@ int geni_se_resources_init(struct se_geni_rsc *rsc,
 	if (unlikely(!geni_se_dev))
 		return -EPROBE_DEFER;
 
+	if (geni_se_dev->ssr.subsys_name && rsc->rsc_ssr.ssr_enable) {
+		INIT_LIST_HEAD(&rsc->rsc_ssr.active_list);
+		list_add(&rsc->rsc_ssr.active_list,
+			&geni_se_dev->ssr.active_list_head);
+	}
+
 	/* Driver shouldn't crash, if ICC support is not present */
 	if (geni_se_dev->vectors == NULL)
 		return 0;
@@ -1225,12 +1231,6 @@ int geni_se_resources_init(struct se_geni_rsc *rsc,
 
 	INIT_LIST_HEAD(&rsc->ab_list);
 	INIT_LIST_HEAD(&rsc->ib_list);
-
-	if (geni_se_dev->ssr.subsys_name && rsc->rsc_ssr.ssr_enable) {
-		INIT_LIST_HEAD(&rsc->rsc_ssr.active_list);
-		list_add(&rsc->rsc_ssr.active_list,
-				&geni_se_dev->ssr.active_list_head);
-	}
 
 	return 0;
 }
@@ -1922,10 +1922,15 @@ static int geni_se_probe(struct platform_device *pdev)
 		INIT_LIST_HEAD(&geni_se_dev->ib_list_head_noc);
 	}
 	mutex_init(&geni_se_dev->geni_dev_lock);
+
+#if IS_ENABLED(CONFIG_IPC_LOGGING)
 	geni_se_dev->log_ctx = ipc_log_context_create(NUM_LOG_PAGES,
 						dev_name(geni_se_dev->dev), 0);
 	if (!geni_se_dev->log_ctx)
 		dev_err(dev, "%s Failed to allocate log context\n", __func__);
+#else
+	dev_err(dev, "%s: IPC logging is not avilable\n", __func__);
+#endif
 
 	dev_set_drvdata(dev, geni_se_dev);
 
@@ -1957,7 +1962,8 @@ static int geni_se_probe(struct platform_device *pdev)
 	ret = of_platform_populate(dev->of_node, geni_se_dt_match, NULL, dev);
 	if (ret) {
 		dev_err(dev, "%s: Error populating children\n", __func__);
-		ipc_log_context_destroy(geni_se_dev->log_ctx);
+		if (!geni_se_dev->log_ctx)
+			ipc_log_context_destroy(geni_se_dev->log_ctx);
 		return ret;
 	}
 
@@ -2010,7 +2016,8 @@ static int geni_se_remove(struct platform_device *pdev)
 		sysfs_remove_file(&geni_se_dev->dev->kobj,
 			&dev_attr_ssc_qup_state.attr);
 	}
-	ipc_log_context_destroy(geni_se_dev->log_ctx);
+	if (!geni_se_dev->log_ctx)
+		ipc_log_context_destroy(geni_se_dev->log_ctx);
 	return 0;
 }
 

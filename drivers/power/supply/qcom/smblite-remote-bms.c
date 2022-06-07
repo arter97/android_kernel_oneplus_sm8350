@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"REMOTE-FG: %s: " fmt, __func__
@@ -126,11 +127,12 @@ int remote_bms_get_prop(int channel, int *val, int src)
 		rc = bms_get_buffered_data(channel, val, src);
 		break;
 	case SMB5_QG_CAPACITY:
-		if (is_debug_batt_id(the_bms))
+		if (is_debug_batt_id(the_bms)) {
 			*val = REMOTE_FG_DEBUG_BATT_SOC;
-		else if (!the_bms->is_seb_up)
+		} else if (!the_bms->is_seb_up) {
+			pr_debug("Wait for remote GLINK to be up\n");
 			return -EAGAIN;
-		else
+		} else
 			rc = bms_get_buffered_data(channel, val, src);
 		break;
 	case SMB5_QG_VOLTAGE_NOW:
@@ -151,7 +153,7 @@ int remote_bms_get_prop(int channel, int *val, int src)
 		break;
 	}
 
-	if (rc < 0)
+	if ((rc < 0) && (rc != -EAGAIN))
 		pr_err("Failed to read remote bms property %d, rc=%d\n", channel, rc);
 	else
 		pr_debug("Read Remote bms param:%u value:%d\n", channel, *val);

@@ -156,13 +156,10 @@ void seb_send_input(struct event *evnt)
 			}
 			break;
 		case 0x3:
-			if (value == 0) {
-				input_report_key(dev->input, KEY_POWER, 1);
-				input_sync(dev->input);
-			} else {
-				input_report_key(dev->input, KEY_POWER, 0);
-				input_sync(dev->input);
-			}
+			input_report_key(dev->input, KEY_POWER, 1);
+			input_sync(dev->input);
+			input_report_key(dev->input, KEY_POWER, 0);
+			input_sync(dev->input);
 			break;
 		default:
 			pr_info("event: type[%d] , data: %d\n",
@@ -414,7 +411,7 @@ done:
 void *seb_register_for_slate_event(
 			enum event_group_type event_group, struct notifier_block *nb)
 {
-	int ret;
+	int ret = 0;
 	struct seb_notif_info *seb_notif = _notif_find_group(event_group);
 
 	if (!seb_notif) {
@@ -440,7 +437,7 @@ EXPORT_SYMBOL(seb_register_for_slate_event);
 int seb_unregister_for_slate_event(void *seb_notif_handle,
 				struct notifier_block *nb)
 {
-	int ret;
+	int ret = 0;
 	struct seb_notif_info *seb_notif =
 			(struct seb_notif_info *)seb_notif_handle;
 
@@ -468,6 +465,8 @@ void handle_rx_event(struct seb_priv *dev, void *rx_event_buf, int len)
 		event_header->opcode == GMI_SLATE_EVENT_BUTTON) {
 
 		evnt = kmalloc(sizeof(struct event), GFP_ATOMIC);
+		if (!evnt)
+			return;
 		/* consume the events*/
 		event_payload = (char *)(rx_event_buf + sizeof(struct gmi_header));
 		evnt->sub_id = event_header->opcode;
@@ -639,6 +638,7 @@ static int seb_probe(struct platform_device *pdev)
 	input_set_capability(input, EV_REL, REL_WHEEL);
 	input_set_capability(input, EV_KEY, KEY_VOLUMEUP);
 	input_set_capability(input, EV_KEY, KEY_VOLUMEDOWN);
+	input_set_capability(input, EV_KEY, KEY_POWER);
 	input->name = "slate-spi";
 
 	rc = input_register_device(input);

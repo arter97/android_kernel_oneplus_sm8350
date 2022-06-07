@@ -1572,6 +1572,7 @@ static int adc5_get_dt_data(struct adc5_chip *adc, struct device_node *node)
 	const struct of_device_id *id;
 	const struct adc5_data *data;
 	int ret;
+	int r_comp = 0;
 
 	adc->nchannels = of_get_available_child_count(node);
 	if (!adc->nchannels)
@@ -1621,6 +1622,10 @@ static int adc5_get_dt_data(struct adc5_chip *adc, struct device_node *node)
 		chan_props++;
 		index++;
 	}
+
+	ret = of_property_read_s32(node, "qcom,r-comp-ohms", &r_comp);
+	if (!ret)
+		qcom_vadc_gen3_set_r_comp(r_comp);
 
 	return 0;
 }

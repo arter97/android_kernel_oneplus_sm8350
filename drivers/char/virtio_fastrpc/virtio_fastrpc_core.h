@@ -1,26 +1,23 @@
 /* SPDX-License-Identifier: GPL-2.0-only
  *
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #ifndef __VIRTIO_FASTRPC_CORE_H__
 #define __VIRTIO_FASTRPC_CORE_H__
 
-#include <linux/cdev.h>
-#include <linux/mutex.h>
-#include <linux/err.h>
-#include <linux/kernel.h>
-#include <linux/virtio.h>
 #include <linux/slab.h>
 #include <linux/scatterlist.h>
 #include <linux/completion.h>
 #include "../adsprpc_compat.h"
 #include "../adsprpc_shared.h"
+#include "virtio_fastrpc_base.h"
 
 #define ADSP_MMAP_HEAP_ADDR		4
 #define ADSP_MMAP_REMOTE_HEAP_ADDR	8
 #define ADSP_MMAP_ADD_PAGES		0x1000
 
-#define FASTRPC_MSG_MAX			256
+
 
 #define K_COPY_FROM_USER(err, kernel, dst, src, size) \
 	do {\
@@ -41,11 +38,26 @@
 			memmove((dst), (src), (size));\
 	} while (0)
 
+#define K_COPY_TO_USER_WITHOUT_ERR(kernel, dst, src, size) \
+	do {\
+		if (!(kernel))\
+			(void)copy_to_user((void __user *)(dst),\
+			(src), (size));\
+		else\
+			memmove((dst), (src), (size));\
+	} while (0)
 
-struct virt_fastrpc_vq {
-	/* protects vq */
-	spinlock_t vq_lock;
-	struct virtqueue *vq;
+struct fastrpc_perf {
+	uint64_t count;
+	uint64_t flush;
+	uint64_t map;
+	uint64_t copy;
+	uint64_t link;
+	uint64_t getargs;
+	uint64_t putargs;
+	uint64_t invargs;
+	uint64_t invoke;
+	uint64_t tid;
 };
 
 struct fastrpc_ctx_lst {
@@ -60,32 +72,6 @@ struct virt_fastrpc_msg {
 	void *rxbuf;
 };
 
-struct fastrpc_apps {
-	struct virtio_device *vdev;
-	struct virt_fastrpc_vq rvq;
-	struct virt_fastrpc_vq svq;
-	void *rbufs;
-	void *sbufs;
-	unsigned int order;
-	unsigned int num_bufs;
-	unsigned int buf_size;
-	unsigned int num_channels;
-	int last_sbuf;
-
-	bool has_invoke_attr;
-	bool has_invoke_crc;
-	bool has_mmap;
-	bool has_control;
-
-	struct device *dev;
-	struct cdev cdev;
-	struct class *class;
-	dev_t dev_no;
-
-	spinlock_t msglock;
-	struct virt_fastrpc_msg *msgtable[FASTRPC_MSG_MAX];
-};
-
 struct fastrpc_file {
 	spinlock_t hlock;
 	struct hlist_head maps;
@@ -97,6 +83,8 @@ struct fastrpc_file {
 	int cid;
 	int domain;
 	int pd;
+	int tgid_open;	/* Process ID during device open */
+	bool untrusted_process;
 	int file_close;
 	int dsp_proc_init;
 	struct fastrpc_apps *apps;
@@ -105,6 +93,9 @@ struct fastrpc_file {
 	/* Identifies the device (MINOR_NUM_DEV / MINOR_NUM_SECURE_DEV) */
 	int dev_minor;
 	char *debug_buf;
+	uint32_t profile;
+	/* Flag to indicate attempt has been made to allocate memory for debug_buf*/
+	int debug_buf_alloced_attempted;
 };
 
 struct fastrpc_invoke_ctx {
@@ -122,6 +113,9 @@ struct fastrpc_invoke_ctx {
 	int tgid;
 	uint32_t sc;
 	uint32_t handle;
+	struct fastrpc_perf *perf;
+	uint64_t *perf_kernel;
+	uint64_t *perf_dsp;
 };
 
 struct virt_msg_hdr {
@@ -149,5 +143,9 @@ int fastrpc_internal_munmap(struct fastrpc_file *fl,
 int fastrpc_internal_munmap_fd(struct fastrpc_file *fl,
 				struct fastrpc_ioctl_munmap_fd *ud);
 int fastrpc_internal_invoke(struct fastrpc_file *fl,
-		uint32_t mode, struct fastrpc_ioctl_invoke_crc *inv);
+		uint32_t mode, struct fastrpc_ioctl_invoke_perf *inv);
+
+int fastrpc_ioctl_get_dsp_info(struct fastrpc_ioctl_capability *cap,
+		void *param, struct fastrpc_file *fl);
+
 #endif /*__VIRTIO_FASTRPC_CORE_H__*/

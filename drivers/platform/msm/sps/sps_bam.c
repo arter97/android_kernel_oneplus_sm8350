@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2011-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/types.h>	/* u32 */
 #include <linux/kernel.h>	/* pr_info() */
@@ -567,7 +568,7 @@ int sps_bam_device_init(struct sps_bam *dev)
 		SPS_ERR(dev, "sps: NULL BAM virtual address\n");
 		return SPS_ERROR;
 	}
-	dev->base = (void *) dev->props.virt_addr;
+	dev->base = (void  __iomem *) dev->props.virt_addr;
 
 	if (dev->props.num_pipes == 0) {
 		/* Assume max number of pipes until BAM registers can be read */
@@ -803,7 +804,7 @@ int sps_bam_pipe_connect(struct sps_pipe *bam_pipe,
 	const struct sps_connection *map = bam_pipe->map;
 	const struct sps_conn_end_pt *map_pipe;
 	const struct sps_conn_end_pt *other_pipe;
-	void *desc_buf = NULL;
+	void __iomem *desc_buf = NULL;
 	u32 pipe_index;
 	int result;
 
@@ -934,7 +935,7 @@ int sps_bam_pipe_connect(struct sps_pipe *bam_pipe,
 	} else {
 		/* System mode */
 		hw_params.mode = BAM_PIPE_MODE_SYSTEM;
-		bam_pipe->sys.desc_buf = map->desc.base;
+		bam_pipe->sys.desc_buf = (unsigned char *)map->desc.base;
 		bam_pipe->sys.desc_offset = 0;
 		bam_pipe->sys.acked_offset = 0;
 	}
@@ -951,7 +952,7 @@ int sps_bam_pipe_connect(struct sps_pipe *bam_pipe,
 				BAM_ID(dev), pipe_index, map->desc.size);
 			return SPS_ERROR;
 		}
-		desc_buf = map->desc.base;
+		desc_buf = (void __iomem *) map->desc.base;
 
 		/*
 		 * Note that descriptor base and size will be left zero from
