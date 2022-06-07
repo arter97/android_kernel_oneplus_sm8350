@@ -73,14 +73,6 @@ if ! mount | grep -q "$BIND" && [ ! -e /sbin/recovery ] && [ ! -e /dev/ep/.post_
     sleep 1
   done
   if ! grep -q zram /proc/swaps; then
-    # Setup backing device
-    BDEV="/dev/block/by-name/last_parti"
-    if [ ! -e "$BDEV" ]; then
-      echo "post_boot: failed to find the backing device"
-    fi
-    echo "post_boot: using $BDEV for zram backing_dev"
-    realpath $BDEV > /sys/block/zram0/backing_dev
-
     MemStr=$(cat /proc/meminfo | grep MemTotal)
     MemKb=$((${MemStr:16:8}))
 
@@ -95,7 +87,6 @@ if ! mount | grep -q "$BIND" && [ ! -e /sbin/recovery ] && [ ! -e /dev/ep/.post_
     # Align by 4 MiB
     expr $MemKb / 2 '*' 1024 / 4194304 '*' 4194304 > /sys/block/zram0/disksize
     echo 160 > /proc/sys/vm/rswappiness
-    echo 200 > /sys/module/zram/parameters/wb_start_mins
 
     mkswap /dev/block/zram0
     swapon /dev/block/zram0
