@@ -36,6 +36,11 @@ exec > /dev/kmsg 2>&1
 
 echo "execprog: sh execution"
 
+if getprop | grep -q 'ro\.aospa\.'; then
+  echo "execprog: AOSPA detected, skipping execution"
+  exit 0
+fi
+
 BIND=/vendor/bin/init.kernel.post_boot-lahaina.sh
 
 rev=`cat /sys/devices/soc0/revision`
