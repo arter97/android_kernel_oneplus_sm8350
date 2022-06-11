@@ -394,6 +394,7 @@ struct dsi_panel {
 	atomic_t esd_recovery_pending;
 
 	bool is_twm_en;
+	bool skip_panel_off;
 	bool panel_initialized;
 	bool te_using_watchdog_timer;
 	u32 qsync_min_fps;

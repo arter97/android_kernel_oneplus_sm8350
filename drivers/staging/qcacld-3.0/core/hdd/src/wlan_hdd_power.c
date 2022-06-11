@@ -601,7 +601,7 @@ void hdd_enable_ns_offload(struct hdd_adapter *adapter,
 	/* cache ns request */
 	status = ucfg_pmo_cache_ns_offload_req(ns_req);
 	if (QDF_IS_STATUS_ERROR(status)) {
-		hdd_err("Failed to cache ns request; status:%d", status);
+		hdd_debug("Failed to cache ns request; status:%d", status);
 		goto free_req;
 	}
 
@@ -613,7 +613,7 @@ void hdd_enable_ns_offload(struct hdd_adapter *adapter,
 	/* enable ns request */
 	status = ucfg_pmo_enable_ns_offload_in_fwr(vdev, trigger);
 	if (QDF_IS_STATUS_ERROR(status)) {
-		hdd_err("Failed to enable ns offload; status:%d", status);
+		hdd_debug("Failed to enable ns offload; status:%d", status);
 		goto put_vdev;
 	}
 
@@ -2964,8 +2964,8 @@ static int __wlan_hdd_cfg80211_get_txpower(struct wiphy *wiphy,
 	HDD_IS_RATE_LIMIT_REQ(is_rate_limited,
 			      hdd_ctx->config->nb_commands_interval);
 	if (hdd_ctx->driver_status != DRIVER_MODULES_ENABLED ||
-	    is_rate_limited || hdd_is_roaming_in_progress(hdd_ctx)) {
-		hdd_debug("Modules not enabled/rate limited/roaming, use cached stats");
+	    is_rate_limited) {
+		hdd_debug("Modules not enabled/rate limited, use cached stats");
 		/* Send cached data to upperlayer*/
 		*dbm = adapter->hdd_stats.class_a_stat.max_pwr;
 		return 0;
