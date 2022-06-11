@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2016-2020 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -19,6 +20,22 @@
 #define _HAL_GENERIC_API_H_
 
 #include <hal_rx.h>
+
+#ifdef WLAN_FEATURE_TSF_UPLINK_DELAY
+static inline void
+hal_tx_comp_get_buffer_timestamp(void *desc,
+				 struct hal_tx_completion_status *ts)
+{
+	ts->buffer_timestamp = HAL_TX_DESC_GET(desc, WBM_RELEASE_RING_4,
+					       BUFFER_TIMESTAMP);
+}
+#else /* !WLAN_FEATURE_TSF_UPLINK_DELAY */
+static inline void
+hal_tx_comp_get_buffer_timestamp(void *desc,
+				 struct hal_tx_completion_status *ts)
+{
+}
+#endif /* WLAN_FEATURE_TSF_UPLINK_DELAY */
 
 /**
  * hal_tx_comp_get_status() - TQM Release reason
@@ -87,6 +104,8 @@ void hal_tx_comp_get_status_generic(void *desc,
 
 	ts->tsf = HAL_TX_DESC_GET(desc, UNIFIED_WBM_RELEASE_RING_6,
 			TX_RATE_STATS_INFO_TX_RATE_STATS);
+
+	hal_tx_comp_get_buffer_timestamp(desc, ts);
 }
 
 /**
@@ -1700,6 +1719,17 @@ static void hal_reo_setup_generic(struct hal_soc *soc,
 	 * 7: NOT_USED.
 	*/
 	if (reo_params->rx_hash_enabled) {
+		if (reo_params->remap0)
+			HAL_REG_WRITE(soc,
+				      HWIO_REO_R0_DESTINATION_RING_CTRL_IX_0_ADDR(
+				      SEQ_WCSS_UMAC_REO_REG_OFFSET),
+				      reo_params->remap0);
+
+		hal_debug("HWIO_REO_R0_DESTINATION_RING_CTRL_IX_0_ADDR 0x%x",
+			HAL_REG_READ(soc,
+				     HWIO_REO_R0_DESTINATION_RING_CTRL_IX_0_ADDR(
+				     SEQ_WCSS_UMAC_REO_REG_OFFSET)));
+
 		HAL_REG_WRITE(soc,
 			HWIO_REO_R0_DESTINATION_RING_CTRL_IX_2_ADDR(
 			SEQ_WCSS_UMAC_REO_REG_OFFSET),

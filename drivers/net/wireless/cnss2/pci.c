@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/cma.h>
@@ -51,6 +51,7 @@
 #define DEFAULT_PHY_UCODE_FILE_NAME	"phy_ucode.bin"
 #define DEFAULT_FW_FILE_NAME		"amss.bin"
 #define FW_V2_FILE_NAME			"amss20.bin"
+#define DEFAULT_GENOA_FW_FTM_NAME	"genoaftm.bin"
 #define DEVICE_MAJOR_VERSION_MASK	0xF
 
 #define WAKE_MSI_NAME			"WAKE"
@@ -94,6 +95,9 @@ static DEFINE_SPINLOCK(time_sync_lock);
 #define HSP_HANG_DATA_OFFSET		((2 * 1024 * 1024) - HANG_DATA_LENGTH)
 
 #define MHI_SUSPEND_RETRY_CNT		3
+#define MHI_LOG_NAME_LEN			20
+
+static int cnss_pci_update_fw_name(struct cnss_pci_data *pci_priv);
 
 static struct cnss_pci_reg ce_src[] = {
 	{ "SRC_RING_BASE_LSB", CE_SRC_RING_BASE_LSB_OFFSET },
@@ -619,6 +623,12 @@ static int _cnss_pci_get_reg_dump(struct cnss_pci_data *pci_priv,
 				  u8 *buf, u32 len)
 {
 	return msm_pcie_reg_dump(pci_priv->pci_dev, buf, len);
+}
+
+int cnss_pci_dsp_link_control(struct cnss_pci_data *pci_priv,
+			      bool link_enable)
+{
+	return msm_pcie_dsp_link_control(pci_priv->pci_dev, link_enable);
 }
 #else
 static int _cnss_pci_enumerate(struct cnss_plat_data *plat_priv, u32 rc_num)
@@ -1487,6 +1497,7 @@ static void cnss_pci_dump_bl_sram_mem(struct cnss_pci_data *pci_priv)
 		pbl_log_sram_start = QCA6390_DEBUG_PBL_LOG_SRAM_START;
 		pbl_log_max_size = QCA6390_DEBUG_PBL_LOG_SRAM_MAX_SIZE;
 		sbl_log_max_size = QCA6390_DEBUG_SBL_LOG_SRAM_MAX_SIZE;
+		break;
 	case QCA6490_DEVICE_ID:
 		pbl_log_sram_start = QCA6490_DEBUG_PBL_LOG_SRAM_START;
 		pbl_log_max_size = QCA6490_DEBUG_PBL_LOG_SRAM_MAX_SIZE;
@@ -3014,6 +3025,11 @@ int cnss_wlan_register_driver(struct cnss_wlan_driver *driver_ops)
 		cnss_pr_err("PCIe device id is %x, not supported by platform\n",
 			    pci_priv->device_id);
 		return -ENODEV;
+	}
+
+	if (driver_ops->get_driver_mode) {
+		plat_priv->driver_mode = driver_ops->get_driver_mode();
+		cnss_pci_update_fw_name(pci_priv);
 	}
 
 	if (!plat_priv->cbc_enabled ||
@@ -5414,6 +5430,23 @@ static int cnss_pci_update_fw_name(struct cnss_pci_data *pci_priv)
 			break;
 		}
 		break;
+	case QCN7605_DEVICE_ID:
+		if (plat_priv->driver_mode == CNSS_FTM) {
+			cnss_pci_add_fw_prefix_name(pci_priv,
+						    plat_priv->firmware_name,
+						    DEFAULT_GENOA_FW_FTM_NAME);
+			snprintf(plat_priv->fw_fallback_name,
+				 MAX_FIRMWARE_NAME_LEN,
+				 DEFAULT_GENOA_FW_FTM_NAME);
+		} else {
+			cnss_pci_add_fw_prefix_name(pci_priv,
+						    plat_priv->firmware_name,
+						    DEFAULT_FW_FILE_NAME);
+			snprintf(plat_priv->fw_fallback_name,
+				 MAX_FIRMWARE_NAME_LEN,
+				 DEFAULT_FW_FILE_NAME);
+		}
+		break;
 	default:
 		cnss_pci_add_fw_prefix_name(pci_priv, plat_priv->firmware_name,
 					    DEFAULT_FW_FILE_NAME);
@@ -5633,6 +5666,33 @@ static int cnss_mhi_bw_scale(struct mhi_controller *mhi_ctrl,
 }
 
 #if IS_ENABLED(CONFIG_IPC_LOGGING)
+#ifdef CONFIG_CNSS_SUPPORT_DUAL_DEV
+static int cnss_pci_mhi_ipc_logging_init(struct cnss_pci_data *pci_priv)
+{
+	struct mhi_controller *mhi_ctrl = pci_priv->mhi_ctrl;
+	char log_name[MHI_LOG_NAME_LEN];
+	char cntrl_log_name[MHI_LOG_NAME_LEN];
+	u32 idx;
+
+	idx = pci_priv->plat_priv->plat_idx;
+
+	snprintf(log_name, MHI_LOG_NAME_LEN, "cnss-mhi_%d", idx);
+
+	mhi_ctrl->log_buf = ipc_log_context_create(CNSS_IPC_LOG_PAGES,
+						   log_name, 0);
+	if (!mhi_ctrl->log_buf)
+		cnss_pr_err("Unable to create CNSS MHI IPC log context\n");
+
+	snprintf(cntrl_log_name, MHI_LOG_NAME_LEN, "cnss-mhi-cntrl_%d", idx);
+
+	mhi_ctrl->cntrl_log_buf = ipc_log_context_create(CNSS_IPC_LOG_PAGES,
+							 cntrl_log_name, 0);
+	if (!mhi_ctrl->cntrl_log_buf)
+		cnss_pr_err("Unable to create CNSS MHICNTRL IPC log context\n");
+
+	return 0;
+}
+#else
 static int cnss_pci_mhi_ipc_logging_init(struct cnss_pci_data *pci_priv)
 {
 	struct mhi_controller *mhi_ctrl = pci_priv->mhi_ctrl;
@@ -5649,7 +5709,7 @@ static int cnss_pci_mhi_ipc_logging_init(struct cnss_pci_data *pci_priv)
 
 	return 0;
 }
-
+#endif
 static void cnss_pci_mhi_ipc_logging_deinit(struct cnss_pci_data *pci_priv)
 {
 	struct mhi_controller *mhi_ctrl = pci_priv->mhi_ctrl;
@@ -6389,5 +6449,8 @@ out:
 
 void cnss_pci_deinit(struct cnss_plat_data *plat_priv)
 {
-	pci_unregister_driver(&cnss_pci_driver);
+	if (cnss_driver_registered) {
+		pci_unregister_driver(&cnss_pci_driver);
+		cnss_driver_registered = false;
+	}
 }

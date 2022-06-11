@@ -30,6 +30,7 @@
 #include <linux/i2c.h>
 #include <linux/gpio.h>
 #include <linux/kthread.h>
+#include <linux/suspend.h>
 #include "pt_regs.h"
 
 #define PINCTRL_STATE_ACTIVE    "pmx_ts_active"
@@ -56,11 +57,7 @@ static struct drm_panel *active_panel;
 
 MODULE_FIRMWARE(PT_FW_FILE_NAME);
 
-#define ENABLE_VDD_REG_ONLY
 #define ENABLE_I2C_REG_ONLY
-#ifdef ENABLE_VDD_REG_ONLY
-static int pt_enable_vdd_regulator(struct pt_core_data *cd, bool en);
-#endif
 
 #ifdef ENABLE_I2C_REG_ONLY
 static int pt_enable_i2c_regulator(struct pt_core_data *cd, bool en);
@@ -10536,91 +10533,39 @@ regulator_put:
 #ifdef ENABLE_I2C_REG_ONLY
 static int pt_enable_i2c_regulator(struct pt_core_data *cd, bool en)
 {
-	int rc;
+	int rc = 0;
 
+	pt_debug(cd->dev, DL_INFO, "%s: Enter flag = %d\n", __func__, en);
 	if (!en) {
 		rc = 0;
 		goto disable_vcc_i2c_reg_only;
 	}
 
 	if (cd->vcc_i2c) {
-		if (regulator_count_voltages(cd->vcc_i2c) > 0) {
-			rc = regulator_set_voltage(cd->vcc_i2c, FT_I2C_VTG_MIN_UV,
-							FT_I2C_VTG_MAX_UV);
-			if (rc) {
-				dev_err(cd->dev,
-					"Regulator set_vtg failed vcc_i2c rc=%d\n", rc);
-				goto disable_vcc_i2c_reg_only;
-			}
-		}
+		rc = regulator_set_load(cd->vcc_i2c, I2C_ACTIVE_LOAD_MA);
+		if (rc < 0)
+			pt_debug(cd->dev, DL_INFO,
+				"%s: I2c unable to set active current rc = %d\n", __func__, rc);
 
-		rc = regulator_enable(cd->vcc_i2c);
-		if (rc) {
-			dev_err(cd->dev,
-				"Regulator vcc_i2c enable failed rc=%d\n", rc);
-			goto disable_vcc_i2c_reg_only;
-		}
+		pt_debug(cd->dev, DL_INFO, "%s: i2c set I2C_ACTIVE_LOAD_MA rc = %d\n",
+			__func__, rc);
 	}
-
 
 	return 0;
 
 disable_vcc_i2c_reg_only:
 	if (cd->vcc_i2c) {
-		if (regulator_count_voltages(cd->vcc_i2c) > 0)
-			regulator_set_voltage(cd->vcc_i2c, FT_I2C_VTG_MIN_UV,
-						FT_I2C_VTG_MAX_UV);
+		rc = regulator_set_load(cd->vcc_i2c, I2C_SUSPEND_LOAD_UA);
+		if (rc < 0)
+			pt_debug(cd->dev, DL_INFO, "%s: i2c unable to set 0 uAm rc = %d\n",
+				__func__, rc);
 
-		regulator_disable(cd->vcc_i2c);
 	}
+	pt_debug(cd->dev, DL_INFO, "%s: Exit rc = %d I2C_SUSPEND_LOAD_UA\n", __func__, rc);
 
 	return rc;
 }
 
-#endif
-
-#ifdef ENABLE_VDD_REG_ONLY
-static int pt_enable_vdd_regulator(struct pt_core_data *cd, bool en)
-{
-	int rc;
-
-	if (!en) {
-		rc = 0;
-		goto disable_vdd_reg_only;
-	}
-
-	if (cd->vdd) {
-		if (regulator_count_voltages(cd->vdd) > 0) {
-			rc = regulator_set_voltage(cd->vdd, FT_VTG_MIN_UV,
-						FT_VTG_MAX_UV);
-			if (rc) {
-				dev_err(cd->dev,
-					"Regulator set_vtg failed vdd rc=%d\n", rc);
-				goto disable_vdd_reg_only;
-			}
-		}
-
-		rc = regulator_enable(cd->vdd);
-		if (rc) {
-			dev_err(cd->dev,
-				"Regulator vdd enable failed rc=%d\n", rc);
-			goto disable_vdd_reg_only;
-		}
-	}
-
-	return 0;
-
-disable_vdd_reg_only:
-	if (cd->vdd) {
-		if (regulator_count_voltages(cd->vdd) > 0)
-			regulator_set_voltage(cd->vdd, FT_VTG_MIN_UV,
-						FT_VTG_MAX_UV);
-
-		regulator_disable(cd->vdd);
-	}
-
-	return rc;
-}
 #endif
 
 static int pt_enable_regulator(struct pt_core_data *cd, bool en)
@@ -10649,6 +10594,7 @@ static int pt_enable_regulator(struct pt_core_data *cd, bool en)
 				"Regulator vdd enable failed rc=%d\n", rc);
 			goto exit;
 		}
+		dev_info(cd->dev, "%s: VDD regulator enabled:\n", __func__);
 	}
 
 	if (cd->vcc_i2c) {
@@ -10668,6 +10614,7 @@ static int pt_enable_regulator(struct pt_core_data *cd, bool en)
 				"Regulator vcc_i2c enable failed rc=%d\n", rc);
 			goto disable_vdd_reg;
 		}
+		dev_info(cd->dev, "%s: VCC I2C regulator enabled:\n", __func__);
 	}
 
 	return 0;
@@ -10679,6 +10626,8 @@ disable_vcc_i2c_reg:
 						FT_I2C_VTG_MAX_UV);
 
 		regulator_disable(cd->vcc_i2c);
+		dev_info(cd->dev, "%s: VCC I2C regulator disabled:\n", __func__);
+
 	}
 
 disable_vdd_reg:
@@ -10688,6 +10637,7 @@ disable_vdd_reg:
 						FT_VTG_MAX_UV);
 
 		regulator_disable(cd->vdd);
+		dev_info(cd->dev, "%s: VDD regulator disabled:\n", __func__);
 	}
 
 exit:
@@ -10766,29 +10716,15 @@ static int pt_core_suspend_(struct device *dev)
 	int rc;
 	struct pt_core_data *cd = dev_get_drvdata(dev);
 
-	pt_debug(dev, DL_INFO, "%s: Entering into suspend mode:\n",
-		__func__);
+	pt_debug(dev, DL_INFO, "%s: Enter\n", __func__);
 	rc = pt_core_sleep(cd);
 	if (rc) {
-		pt_debug(dev, DL_ERROR, "%s: Error on sleep\n", __func__);
+		pt_debug(dev, DL_ERROR, "%s: Error on sleep rc =%d\n",
+			__func__, rc);
 		return -EAGAIN;
 	}
 
-#ifdef ENABLE_VDD_REG_ONLY
-	rc = pt_enable_vdd_regulator(cd, false);
-	if (rc) {
-		dev_err(dev, "%s: Failed to disable vdd regulators: rc=%d\n",
-			__func__, rc);
-	}
-#endif
-#ifdef ENABLE_I2C_REG_ONLY
-		rc = pt_enable_i2c_regulator(cd, false);
-		if (rc) {
-			dev_err(dev, "%s: Failed to disable vdd regulators: rc=%d\n",
-				__func__, rc);
-		}
-#endif
-
+	rc = pt_enable_regulator(cd, false);
 	if (!IS_EASY_WAKE_CONFIGURED(cd->easy_wakeup_gesture))
 		return 0;
 
@@ -10806,6 +10742,7 @@ static int pt_core_suspend_(struct device *dev)
 			__func__);
 	}
 
+	pt_debug(dev, DL_INFO, "%s: Exit :\n", __func__);
 	return rc;
 }
 
@@ -10825,16 +10762,28 @@ static int pt_core_suspend_(struct device *dev)
  ******************************************************************************/
 static int pt_core_suspend(struct device *dev)
 {
-		struct pt_core_data *cd = dev_get_drvdata(dev);
-		int rc = 0;
+	struct pt_core_data *cd = dev_get_drvdata(dev);
+	int rc = 0, status = 0;
 
-		if (cd->cpdata->flags & PT_CORE_FLAG_SKIP_SYS_SLEEP)
-			return 0;
+	if (cd->drv_debug_suspend || (cd->cpdata->flags & PT_CORE_FLAG_SKIP_SYS_SLEEP))
+		return 0;
 
-		queue_work(cd->pt_workqueue, &cd->suspend_offload_work);
-		pt_debug(cd->dev, DL_ERROR, "%s End\n", __func__);
+	pt_debug(cd->dev, DL_INFO, "%s start\n", __func__);
+	cancel_work_sync(&cd->resume_work);
+	cancel_work_sync(&cd->suspend_work);
 
-		return rc;
+	if (mem_sleep_current == PM_SUSPEND_MEM) {
+		rc = pt_core_suspend_(cd->dev);
+		cd->quick_boot = true;
+	} else {
+		rc = pt_core_easywake_on(cd);
+		if (rc < 0)
+			pt_debug(cd->dev, DL_ERROR, "%s: Error on sleep\n", __func__);
+		cd->fb_state = FB_OFF;
+		status = pt_enable_i2c_regulator(cd, false);
+		pt_debug(cd->dev, DL_INFO, "%s Exit - rc = %d\n", __func__, status);
+	}
+	return rc;
 }
 
 /*******************************************************************************
@@ -10857,22 +10806,7 @@ static int pt_core_resume_(struct device *dev)
 
 	dev_info(dev, "%s: Entering into resume mode:\n",
 		__func__);
-
-#ifdef ENABLE_VDD_REG_ONLY
-	rc = pt_enable_vdd_regulator(cd, true);
-	if (rc < 0) {
-		dev_err(dev, "%s: Failed to enable vdd regulators: rc=%d\n",
-			__func__, rc);
-	}
-#endif
-#ifdef ENABLE_I2C_REG_ONLY
-	rc = pt_enable_i2c_regulator(cd, true);
-	if (rc < 0) {
-		dev_err(dev, "%s: Failed to enable vdd regulators: rc=%d\n",
-			__func__, rc);
-	}
-#endif
-
+	rc = pt_enable_regulator(cd, true);
 	dev_info(dev, "%s: Voltage regulator enabled: rc=%d\n",
 		__func__, rc);
 
@@ -10910,6 +10844,30 @@ exit:
 
 	return rc;
 }
+/*******************************************************************************
+ * FUNCTION: pt_core_restore
+ *
+ * SUMMARY: Wrapper function with device suspend/resume stratergy to call
+ *  pt_core_wake. This function may enable IRQ before wake up.
+ *
+ * RETURN:
+ *	 0 = success
+ *	!0 = failure
+ *
+ * PARAMETERS:
+ *      *dev  - pointer to core device
+ ******************************************************************************/
+static int pt_core_restore(struct device *dev)
+{
+	int rc = 0;
+	struct pt_core_data *cd = dev_get_drvdata(dev);
+
+	dev_info(dev, "%s: Entering into resume mode:\n",
+		__func__);
+
+	queue_work(cd->pt_workqueue, &cd->resume_offload_work);
+	return rc;
+}
 
 /*******************************************************************************
  * FUNCTION: suspend_offload_work
@@ -10932,6 +10890,7 @@ static void pt_suspend_offload_work(struct work_struct *work)
 	struct pt_core_data *cd = container_of(work, struct pt_core_data,
 				suspend_offload_work);
 
+	pt_debug(cd->dev, DL_INFO, "%s start\n", __func__);
 	if (cd->cpdata->flags & PT_CORE_FLAG_SKIP_SYS_SLEEP)
 		return;
 
@@ -10961,6 +10920,7 @@ static void pt_resume_offload_work(struct work_struct *work)
 	struct pt_core_data *pt_data = container_of(work, struct pt_core_data,
 					resume_offload_work);
 
+	pt_debug(pt_data->dev, DL_INFO, "%s start\n", __func__);
 	do {
 		retry_count--;
 	rc = pt_core_resume_(pt_data->dev);
@@ -10980,6 +10940,8 @@ static void pt_resume_offload_work(struct work_struct *work)
 	pt_data->fb_state = FB_OFF;
 	pt_debug(pt_data->dev, DL_INFO, "%s End\n", __func__);
 #endif
+	pt_data->quick_boot = false;
+	pt_debug(pt_data->dev, DL_INFO, "%s Exit\n", __func__);
 }
 
 
@@ -11001,12 +10963,21 @@ static int pt_core_resume(struct device *dev)
 {
 	struct pt_core_data *cd = dev_get_drvdata(dev);
 	int rc = 0;
-	if (cd->cpdata->flags & PT_CORE_FLAG_SKIP_SYS_SLEEP)
+
+	if (cd->drv_debug_suspend || (cd->cpdata->flags & PT_CORE_FLAG_SKIP_SYS_SLEEP))
 		return 0;
 
-	queue_work(cd->pt_workqueue, &cd->resume_offload_work);
-	pt_debug(cd->dev, DL_ERROR, "%s End\n", __func__);
+	if (mem_sleep_current == PM_SUSPEND_MEM) {
+		rc = pt_core_restore(cd->dev);
+	} else {
+		pt_debug(cd->dev, DL_INFO, "%s start\n", __func__);
+		rc = pt_enable_i2c_regulator(cd, true);
+		pt_debug(cd->dev, DL_INFO, "%s i2c regulator rc %d\n", __func__, rc);
 
+		pt_debug(cd->dev, DL_INFO, "%s End\n", __func__);
+	}
+
+	pt_debug(cd->dev, DL_INFO, "%s End rc = %d\n", __func__, rc);
 	return rc;
 }
 #endif
@@ -11052,6 +11023,8 @@ static int pt_pm_notifier(struct notifier_block *nb,
 
 const struct dev_pm_ops pt_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(pt_core_suspend, pt_core_resume)
+	.freeze  = pt_core_suspend,
+	.restore = pt_core_restore,
 	SET_RUNTIME_PM_OPS(pt_core_rt_suspend, pt_core_rt_resume,
 			NULL)
 };
@@ -12765,6 +12738,7 @@ static void pt_resume_work(struct work_struct *work)
 					resume_work);
 	int rc = 0;
 
+	pt_debug(pt_data->dev, DL_INFO, "%s start ", __func__);
 	if (pt_data->cpdata->flags & PT_CORE_FLAG_SKIP_RUNTIME)
 		return;
 
@@ -12773,6 +12747,7 @@ static void pt_resume_work(struct work_struct *work)
 		pt_debug(pt_data->dev, DL_ERROR,
 			"%s: Error on wake\n", __func__);
 	}
+	pt_debug(pt_data->dev, DL_INFO, "%s touch to wake disabled ", __func__);
 	return;
 }
 
@@ -12782,7 +12757,7 @@ static void pt_suspend_work(struct work_struct *work)
 					suspend_work);
 	int rc = 0;
 
-	pt_debug(pt_data->dev, DL_INFO, "%s Start\n", __func__);
+	pt_debug(pt_data->dev, DL_INFO, "%s start\n", __func__);
 
 	if (pt_data->cpdata->flags & PT_CORE_FLAG_SKIP_RUNTIME)
 		return;
@@ -12792,7 +12767,7 @@ static void pt_suspend_work(struct work_struct *work)
 		pt_debug(pt_data->dev, DL_ERROR, "%s: Error on sleep\n", __func__);
 		return;
 	}
-	pt_debug(pt_data->dev, DL_INFO, "%s Exit\n", __func__);
+	pt_debug(pt_data->dev, DL_INFO, "%s Exit touch to wake enabled\n", __func__);
 	return;
 }
 
@@ -12830,6 +12805,9 @@ static int drm_notifier_callback(struct notifier_block *self,
 		goto exit;
 	}
 
+	if (cd->quick_boot || cd->drv_debug_suspend)
+		goto exit;
+
 	blank = evdata->data;
 	pt_debug(cd->dev, DL_INFO, "%s: DRM event:%lu,blank:%d fb_state %d sleep state %d ",
 		__func__, event, *blank, cd->fb_state, cd->sleep_state);
@@ -12845,6 +12823,11 @@ static int drm_notifier_callback(struct notifier_block *self,
 			if (cd->fb_state != FB_ON) {
 				pt_debug(cd->dev, DL_INFO, "%s: Resume notifier called!\n",
 					__func__);
+				cancel_work_sync(&cd->resume_offload_work);
+				cancel_work_sync(&cd->suspend_offload_work);
+				cancel_work_sync(&cd->resume_work);
+				cancel_work_sync(&cd->suspend_work);
+
 				queue_work(cd->pt_workqueue, &cd->resume_work);
 #if defined(CONFIG_PM_SLEEP)
 				pt_debug(cd->dev, DL_INFO, "%s: Resume notifier called!\n",
@@ -12866,7 +12849,11 @@ static int drm_notifier_callback(struct notifier_block *self,
 				if (cd->cpdata->flags & PT_CORE_FLAG_SKIP_RUNTIME)
 					pt_core_suspend_(cd->dev);
 #endif
+				cancel_work_sync(&cd->resume_offload_work);
+				cancel_work_sync(&cd->suspend_offload_work);
 				cancel_work_sync(&cd->resume_work);
+				cancel_work_sync(&cd->suspend_work);
+
 				queue_work(cd->pt_workqueue, &cd->suspend_work);
 				cd->fb_state = FB_OFF;
 				pt_debug(cd->dev, DL_INFO, "%s: Suspend notified!\n", __func__);
@@ -14081,24 +14068,30 @@ static ssize_t pt_drv_debug_store(struct device *dev,
 	case PT_DRV_DBG_SUSPEND:			/* 4 */
 		pt_debug(dev, DL_INFO, "%s: TTDL: Core Sleep\n", __func__);
 		wd_disabled = 1;
-		rc = pt_core_sleep(cd);
+		rc = pt_core_suspend_(cd->dev);
 		if (rc)
 			pt_debug(dev, DL_ERROR, "%s: Suspend failed rc=%d\n",
 				__func__, rc);
-		else
+		else {
 			pt_debug(dev, DL_INFO, "%s: Suspend succeeded\n",
 				__func__);
+			cd->drv_debug_suspend = true;
+			pt_debug(dev, DL_INFO, "%s: Debugfs flag set:\n", __func__);
+		}
 		break;
 
 	case PT_DRV_DBG_RESUME:				/* 5 */
 		pt_debug(dev, DL_INFO, "%s: TTDL: Wake\n", __func__);
-		rc = pt_core_wake(cd);
+		rc = pt_core_resume_(cd->dev);
 		if (rc)
 			pt_debug(dev, DL_ERROR, "%s: Resume failed rc=%d\n",
 				__func__, rc);
-		else
+		else {
 			pt_debug(dev, DL_INFO, "%s: Resume succeeded\n",
 				__func__);
+			cd->drv_debug_suspend = false;
+			pt_debug(dev, DL_INFO, "%s: Debugfs flag reset:\n", __func__);
+		}
 		break;
 	case PIP1_BL_CMD_ID_VERIFY_APP_INTEGRITY:	/* BL - 49 */
 		pt_debug(dev, DL_INFO, "%s: Cmd: verify app integ\n", __func__);
@@ -17484,7 +17477,9 @@ int pt_probe(const struct pt_bus_ops *ops, struct device *dev,
 	cd->cal_cache_in_host          = PT_FEATURE_DISABLE;
 	cd->multi_chip                 = PT_FEATURE_DISABLE;
 	cd->tthe_hid_usb_format        = PT_FEATURE_DISABLE;
-	cd->sleep_state					= SS_SLEEP_NONE;
+	cd->sleep_state			= SS_SLEEP_NONE;
+	cd->quick_boot			= false;
+	cd->drv_debug_suspend          = false;
 
 	if (cd->cpdata->config_dut_generation == CONFIG_DUT_PIP2_CAPABLE) {
 		cd->set_dut_generation = true;
@@ -17726,6 +17721,10 @@ int pt_probe(const struct pt_bus_ops *ops, struct device *dev,
 		pt_debug(dev, DL_ERROR, "%s: Error, device_init_wakeup rc:%d\n",
 			__func__, rc);
 
+	if (!enable_irq_wake(cd->irq)) {
+		cd->irq_wake = 1;
+		pt_debug(cd->dev, DL_WARN, "%s Device MAY wakeup\n", __func__);
+	}
 	pm_runtime_get_noresume(dev);
 	pm_runtime_set_active(dev);
 	pm_runtime_enable(dev);
@@ -17791,6 +17790,7 @@ int pt_probe(const struct pt_bus_ops *ops, struct device *dev,
 		pt_debug(cd->dev, DL_ERROR,
 			"%s: Enumeration Failed r=%d\n", __func__, rc);
 		/* For PtSBC don't error out, allow TTDL to stay up */
+		rc = -EPROBE_DEFER;
 		goto error_after_startup;
 	}
 	/* Suspend scanning until probe is complete to avoid asyc touches */
@@ -17936,6 +17936,12 @@ int pt_release(struct pt_core_data *cd)
 	call_atten_cb(cd, PT_ATTEN_CANCEL_LOADER, 0);
 	cancel_work_sync(&cd->ttdl_restart_work);
 	cancel_work_sync(&cd->enum_work);
+	cancel_work_sync(&cd->resume_offload_work);
+	cancel_work_sync(&cd->suspend_offload_work);
+	cancel_work_sync(&cd->resume_work);
+	cancel_work_sync(&cd->suspend_work);
+	destroy_workqueue(cd->pt_workqueue);
+
 	pt_stop_wd_timer(cd);
 
 	pt_release_modules(cd);
@@ -17982,6 +17988,11 @@ int pt_release(struct pt_core_data *cd)
 		cd->cpdata->setup_power(cd->cpdata, PT_MT_POWER_OFF, dev);
 	dev_set_drvdata(dev, NULL);
 	pt_del_core(dev);
+	if (cd->vcc_i2c)
+		regulator_set_load(cd->vcc_i2c, 0);
+
+	if (cd->vdd)
+		regulator_set_load(cd->vdd, 0);
 	pt_enable_regulator(cd, false);
 	pt_get_regulator(cd, false);
 	pt_free_si_ptrs(cd);

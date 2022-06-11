@@ -173,6 +173,7 @@
 #define REFCLK_STABILIZATION_DELAY_US_MAX (1005)
 #define LINK_UP_TIMEOUT_US_MIN (5000)
 #define LINK_UP_TIMEOUT_US_MAX (5100)
+#define LINK_CHECK_COUNT_MAX   (20)
 #define LINK_UP_CHECK_MAX_COUNT (20)
 #define EP_UP_TIMEOUT_US_MIN (1000)
 #define EP_UP_TIMEOUT_US_MAX (1005)
@@ -677,6 +678,7 @@ struct pcie_i2c_ctrl {
 	u32 reg_update_count;
 	u32 version_reg;
 	bool force_i2c_setting;
+	bool ep_reset_postlinkup;
 	struct pcie_i2c_reg_update *switch_reg_update;
 	u32 switch_reg_update_count;
 	/* client specific callbacks */
@@ -4732,7 +4734,8 @@ static int msm_pcie_enable(struct msm_pcie_dev_t *dev)
 		msleep(20);
 	}
 	/* bring eps out of reset */
-	if (dev->i2c_ctrl.client && dev->i2c_ctrl.client_i2c_reset) {
+	if (dev->i2c_ctrl.client && dev->i2c_ctrl.client_i2c_reset
+			 && !dev->i2c_ctrl.ep_reset_postlinkup) {
 		dev->i2c_ctrl.client_i2c_reset(&dev->i2c_ctrl, false);
 		msleep(100);
 	}
@@ -4785,6 +4788,12 @@ static int msm_pcie_enable(struct msm_pcie_dev_t *dev)
 			msm_msi_config(dev_get_msi_domain(&dev->dev->dev));
 	}
 
+	/* Bring pine EP out of reset*/
+	if (dev->i2c_ctrl.client && dev->i2c_ctrl.client_i2c_reset
+			 && dev->i2c_ctrl.ep_reset_postlinkup) {
+		dev->i2c_ctrl.client_i2c_reset(&dev->i2c_ctrl, false);
+		msleep(100);
+	}
 	goto out;
 
 link_fail:
@@ -5538,6 +5547,7 @@ static int32_t msm_pcie_irq_init(struct msm_pcie_dev_t *dev)
 
 	/* register handler for PCIE_WAKE_N interrupt line */
 	if (dev->wake_n) {
+		INIT_WORK(&dev->handle_wake_work, handle_wake_func);
 		rc = devm_request_irq(pdev,
 				dev->wake_n, handle_wake_irq,
 				IRQF_TRIGGER_FALLING, "msm_pcie_wake", dev);
@@ -5547,8 +5557,6 @@ static int32_t msm_pcie_irq_init(struct msm_pcie_dev_t *dev)
 				dev->rc_idx);
 			return rc;
 		}
-
-		INIT_WORK(&dev->handle_wake_work, handle_wake_func);
 
 		rc = enable_irq_wake(dev->wake_n);
 		if (rc) {
@@ -6052,6 +6060,8 @@ static int msm_pcie_i2c_ctrl_init(struct msm_pcie_dev_t *pcie_dev)
 				 &i2c_ctrl->version_reg);
 	i2c_ctrl->force_i2c_setting = of_property_read_bool(i2c_client_node,
 				 "force-i2c-setting");
+	i2c_ctrl->ep_reset_postlinkup = of_property_read_bool(i2c_client_node,
+				 "ep_reset_postlinkup");
 	of_get_property(i2c_client_node, "dump-regs", &size);
 
 	if (size) {
@@ -6107,7 +6117,7 @@ static int msm_pcie_probe(struct platform_device *pdev)
 {
 	int ret = 0;
 	int rc_idx = -1;
-	int size;
+	int size = 0;
 	struct msm_pcie_dev_t *pcie_dev;
 	struct device_node *of_node;
 
@@ -6425,8 +6435,10 @@ static int msm_pcie_probe(struct platform_device *pdev)
 	if (size) {
 		pcie_dev->filtered_bdfs = devm_kzalloc(&pdev->dev, size,
 						       GFP_KERNEL);
-		if (!pcie_dev->filtered_bdfs)
+		if (!pcie_dev->filtered_bdfs) {
+			mutex_unlock(&pcie_drv.drv_lock);
 			return -ENOMEM;
+		}
 
 		pcie_dev->bdf_count = size / sizeof(*pcie_dev->filtered_bdfs);
 
@@ -6606,6 +6618,88 @@ static int msm_pcie_set_link_width(struct msm_pcie_dev_t *pcie_dev,
 
 	return 0;
 }
+
+int msm_pcie_dsp_link_control(struct pci_dev *pci_dev,
+			      bool link_enable)
+{
+	int ret = 0;
+	struct pci_dev *dsp_dev = NULL;
+	u16 link_control = 0;
+	u16 link_status = 0;
+	u32 link_capability = 0;
+	int link_check_count = 0;
+	bool link_trained = false;
+	struct msm_pcie_dev_t *pcie_dev = PCIE_BUS_PRIV_DATA(pci_dev->bus);
+
+	if (!pcie_dev->power_on)
+		return 0;
+
+	dsp_dev = pci_dev->bus->self;
+	if (pci_pcie_type(dsp_dev) != PCI_EXP_TYPE_DOWNSTREAM) {
+		PCIE_DBG(pcie_dev,
+			"PCIe: RC%d: no DSP<->EP link under this RC\n",
+			pcie_dev->rc_idx);
+		return 0;
+	}
+
+	pci_read_config_dword(dsp_dev, dsp_dev->pcie_cap + PCI_EXP_LNKCAP,
+			      &link_capability);
+	pci_read_config_word(dsp_dev, dsp_dev->pcie_cap + PCI_EXP_LNKCTL,
+			     &link_control);
+
+	if (link_enable) {
+		link_control &= ~PCI_EXP_LNKCTL_LD;
+		pci_write_config_word(dsp_dev,
+				      dsp_dev->pcie_cap + PCI_EXP_LNKCTL,
+				      link_control);
+		PCIE_DBG(pcie_dev,
+			"PCIe: RC%d: DSP<->EP Link is enabled\n",
+			pcie_dev->rc_idx);
+
+		/* Wait for up to 100ms for the link to come up */
+		do {
+			usleep_range(LINK_UP_TIMEOUT_US_MIN,
+				     LINK_UP_TIMEOUT_US_MAX);
+			pci_read_config_word(dsp_dev,
+					     dsp_dev->pcie_cap + PCI_EXP_LNKSTA,
+					     &link_status);
+			if (link_capability & PCI_EXP_LNKCAP_DLLLARC)
+				link_trained = (!(link_status &
+						  PCI_EXP_LNKSTA_LT)) &&
+						(link_status &
+						 PCI_EXP_LNKSTA_DLLLA);
+			else
+				link_trained = !(link_status &
+						 PCI_EXP_LNKSTA_LT);
+
+			if (link_trained)
+				break;
+		} while (link_check_count++ < LINK_CHECK_COUNT_MAX);
+
+		if (link_trained) {
+			PCIE_DBG(pcie_dev,
+				"PCIe: RC%d: DSP<->EP link status: 0x%04x\n",
+				pcie_dev->rc_idx, link_status);
+			PCIE_DBG(pcie_dev,
+				"PCIe: RC%d: DSP<->EP Link is up after %d checkings\n",
+				pcie_dev->rc_idx, link_check_count);
+		} else {
+			PCIE_DBG(pcie_dev, "DSP<->EP link initialization failed\n");
+			ret = MSM_PCIE_ERROR;
+		}
+	} else {
+		link_control |= PCI_EXP_LNKCTL_LD;
+		pci_write_config_word(dsp_dev,
+				      dsp_dev->pcie_cap + PCI_EXP_LNKCTL,
+				      link_control);
+		PCIE_DBG(pcie_dev,
+			"PCIe: RC%d: DSP<->EP Link is disabled\n",
+			pcie_dev->rc_idx);
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL(msm_pcie_dsp_link_control);
 
 void msm_pcie_allow_l1(struct pci_dev *pci_dev)
 {

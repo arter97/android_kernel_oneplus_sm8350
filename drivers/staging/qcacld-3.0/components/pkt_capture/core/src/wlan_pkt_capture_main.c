@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2020-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -227,7 +227,7 @@ pkt_capture_process_ppdu_stats(void *log_data)
 	smu = (htt_ppdu_stats_for_smu_tlv *)log_data;
 	vdev_priv->tx_nss = smu->nss;
 
-	qdf_spin_lock(&vdev_priv->lock_q);
+	qdf_spin_lock_bh(&vdev_priv->lock_q);
 	if (qdf_list_size(&vdev_priv->ppdu_stats_q) <
 					PPDU_STATS_Q_MAX_SIZE) {
 		/*
@@ -235,7 +235,7 @@ pkt_capture_process_ppdu_stats(void *log_data)
 		 * we support only 256 bit ba bitmap.
 		 */
 		if (smu->win_size > 8) {
-			qdf_spin_unlock(&vdev_priv->lock_q);
+			qdf_spin_unlock_bh(&vdev_priv->lock_q);
 			pkt_capture_vdev_put_ref(vdev);
 			pkt_capture_err("win size %d > 8 not supported\n",
 					smu->win_size);
@@ -247,7 +247,7 @@ pkt_capture_process_ppdu_stats(void *log_data)
 
 		q_node = qdf_mem_malloc(sizeof(*q_node) + stats_len);
 		if (q_node == NULL) {
-			qdf_spin_unlock(&vdev_priv->lock_q);
+			qdf_spin_unlock_bh(&vdev_priv->lock_q);
 			pkt_capture_vdev_put_ref(vdev);
 			pkt_capture_err("stats node and buf allocation fail\n");
 			return;
@@ -258,7 +258,7 @@ pkt_capture_process_ppdu_stats(void *log_data)
 		qdf_list_insert_back(&vdev_priv->ppdu_stats_q,
 				     &q_node->node);
 	}
-	qdf_spin_unlock(&vdev_priv->lock_q);
+	qdf_spin_unlock_bh(&vdev_priv->lock_q);
 	pkt_capture_vdev_put_ref(vdev);
 }
 
@@ -1313,7 +1313,12 @@ QDF_STATUS pkt_capture_set_filter(struct pkt_capture_frame_filter frame_filter,
 	if (vdev_priv->frame_filter.mgmt_rx_frame_filter &
 	    PKT_CAPTURE_MGMT_FRAME_TYPE_ALL) {
 		mode |= PACKET_CAPTURE_MODE_MGMT_ONLY;
-		config |= PACKET_CAPTURE_CONFIG_BEACON_ENABLE;
+		vdev_priv->frame_filter.mgmt_rx_frame_filter |=
+					PKT_CAPTURE_MGMT_CONNECT_BEACON;
+		vdev_priv->frame_filter.mgmt_rx_frame_filter |=
+					PKT_CAPTURE_MGMT_CONNECT_SCAN_BEACON;
+		if (!send_bcn)
+			config |= PACKET_CAPTURE_CONFIG_BEACON_ENABLE;
 		config |= PACKET_CAPTURE_CONFIG_OFF_CHANNEL_BEACON_ENABLE;
 	} else {
 		if (vdev_priv->frame_filter.mgmt_rx_frame_filter &
@@ -1328,7 +1333,8 @@ QDF_STATUS pkt_capture_set_filter(struct pkt_capture_frame_filter frame_filter,
 	if (check_enable_beacon) {
 		if (vdev_priv->frame_filter.mgmt_rx_frame_filter &
 		    PKT_CAPTURE_MGMT_CONNECT_BEACON)
-			config |= PACKET_CAPTURE_CONFIG_BEACON_ENABLE;
+			if (!send_bcn)
+				config |= PACKET_CAPTURE_CONFIG_BEACON_ENABLE;
 
 		if (vdev_priv->frame_filter.mgmt_rx_frame_filter &
 		    PKT_CAPTURE_MGMT_CONNECT_SCAN_BEACON)

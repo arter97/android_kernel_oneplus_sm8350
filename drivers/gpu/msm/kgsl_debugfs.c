@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2002,2008-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/debugfs.h>
@@ -11,7 +12,8 @@
 #include "kgsl_pool.h"
 #include "kgsl_sharedmem.h"
 
-struct dentry *kgsl_debugfs_dir, *mempools_debugfs;
+struct dentry *kgsl_debugfs_dir;
+static struct dentry *mempools_debugfs;
 static struct dentry *proc_d_debugfs;
 
 static int _strict_set(void *data, u64 val)

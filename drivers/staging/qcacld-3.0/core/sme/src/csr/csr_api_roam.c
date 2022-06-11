@@ -7665,6 +7665,7 @@ QDF_STATUS csr_roam_copy_profile(struct mac_context *mac,
 	pDstProfile->chan_switch_hostapd_rate_enabled  =
 		pSrcProfile->chan_switch_hostapd_rate_enabled;
 	pDstProfile->force_rsne_override = pSrcProfile->force_rsne_override;
+	pDstProfile->is_hs_20_ap = pSrcProfile->is_hs_20_ap;
 end:
 	if (!QDF_IS_STATUS_SUCCESS(status)) {
 		csr_release_profile(mac, pDstProfile);
@@ -15802,10 +15803,11 @@ QDF_STATUS csr_send_join_req_msg(struct mac_context *mac, uint32_t sessionId,
 				sme_debug("Channel is 6G but country IE not present");
 			wlan_reg_read_current_country(mac->psoc,
 						      programmed_country);
-			status = wlan_reg_get_6g_power_type_for_ctry(
+			status = wlan_reg_get_6g_power_type_for_ctry(mac->psoc,
 					pIes->Country.country,
 					programmed_country, &power_type_6g,
-					&ctry_code_match);
+					&ctry_code_match,
+					pSession->ap_power_type);
 			if (QDF_IS_STATUS_ERROR(status))
 				break;
 			csr_join_req->ap_power_type_6g = power_type_6g;
@@ -16858,6 +16860,11 @@ static void csr_roam_link_down(struct mac_context *mac, uint32_t sessionId)
 				       eCSR_ROAM_LOSTLINK,
 				       eCSR_ROAM_RESULT_LOSTLINK);
 	}
+
+	/* In case of STA mode disconnect, stop the roam_invoke timer */
+	if (csr_roam_is_sta_mode(mac, sessionId))
+		csr_roam_invoke_timer_stop(mac, sessionId);
+
 	/* Indicate the neighbor roal algorithm about the disconnect
 	 * indication
 	 */
@@ -17044,7 +17051,9 @@ static void csr_update_btm_offload_config(struct mac_context *mac_ctx,
 		return;
 
 	/* For RSO Stop Disable BTM offload to firmware */
-	if (command == ROAM_SCAN_OFFLOAD_STOP) {
+	if (command == ROAM_SCAN_OFFLOAD_STOP ||
+	    session->pCurRoamProfile->is_hs_20_ap) {
+		sme_debug("RSO cmd: %d", command);
 		*btm_offload_config = 0;
 		return;
 	}
@@ -18654,6 +18663,9 @@ static QDF_STATUS csr_cm_roam_scan_offload_fill_lfr3_config(
 
 	csr_cm_update_rso_adaptive_11r(&rso_config->rso_11r_info,
 				       session);
+	rso_config->rso_11r_info.enable_ft_over_ds =
+		mac->mlme_cfg->lfr.enable_ft_over_ds;
+
 	csr_cm_update_rso_ese_info(mac, rso_config, roam_info, session);
 
 	akm = mac->roam.roamSession[vdev_id].connectedProfile.AuthType;
@@ -18721,6 +18733,8 @@ csr_cm_roam_scan_offload_fill_scan_params(
 	/* Parameters updated after association is complete */
 	wlan_scan_cfg_get_passive_dwelltime(mac->psoc,
 					    &scan_params->dwell_time_passive);
+	wlan_scan_cfg_get_min_dwelltime_6g(mac->psoc,
+					   &scan_params->min_dwell_time_6ghz);
 	/*
 	 * Here is the formula,
 	 * T(HomeAway) = N * T(dwell) + (N+1) * T(cs)
@@ -21211,7 +21225,6 @@ csr_process_roam_sync_callback(struct mac_context *mac_ctx,
 					   REASON_ROAM_ABORT);
 		csr_roam_roaming_offload_timer_action(mac_ctx,
 				0, session_id, ROAMING_OFFLOAD_TIMER_STOP);
-		csr_roam_invoke_timer_stop(mac_ctx, session_id);
 		csr_roam_call_callback(mac_ctx, session_id, NULL, 0,
 				eCSR_ROAM_ABORT, eCSR_ROAM_RESULT_SUCCESS);
 		goto end;
@@ -21301,7 +21314,6 @@ csr_process_roam_sync_callback(struct mac_context *mac_ctx,
 		}
 
 		policy_mgr_check_n_start_opportunistic_timer(mac_ctx->psoc);
-		policy_mgr_check_concurrent_intf_and_restart_sap(mac_ctx->psoc);
 		vdev_roam_params->roam_invoke_in_progress = false;
 
 		if (roam_synch_data->authStatus ==
@@ -21320,6 +21332,7 @@ csr_process_roam_sync_callback(struct mac_context *mac_ctx,
 						   WLAN_ROAM_INIT,
 						   REASON_CONNECT);
 		}
+		policy_mgr_check_concurrent_intf_and_restart_sap(mac_ctx->psoc);
 		goto end;
 	case SIR_ROAMING_DEAUTH:
 		csr_roam_roaming_offload_timer_action(

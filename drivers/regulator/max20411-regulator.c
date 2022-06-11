@@ -24,6 +24,7 @@
 #define MAX20411_SLEW_DVS_MASK		0xC
 #define MAX20411_SLEW_DVS_SHIFT		0x2
 #define MAX20411_SLEW_SR_MASK		0x3
+#define MAX20411_ETRSLLEN_OFFSET	0xE
 
 struct max20411_vreg {
 	struct device		*dev;
@@ -162,6 +163,13 @@ static int max20411_probe(struct i2c_client *client,
 	if (IS_ERR(vreg->rdev)) {
 		ret = PTR_ERR(vreg->rdev);
 		dev_err(vreg->dev, "Failed to register regulator: %d\n", ret);
+		return ret;
+	}
+
+	/* Disable Enhanced Transient Response (ETR) */
+	ret = regmap_update_bits(vreg->regmap, MAX20411_ETRSLLEN_OFFSET, 0xF, 0x0);
+	if (ret) {
+		dev_err(vreg->dev, "Failed to disable ETR, ret=%d\n", ret);
 		return ret;
 	}
 

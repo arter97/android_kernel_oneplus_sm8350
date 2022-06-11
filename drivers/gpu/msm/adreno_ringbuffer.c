@@ -1029,7 +1029,7 @@ int adreno_ringbuffer_submitcmd(struct adreno_device *adreno_dev,
 		memset(link_onstack, 0, dwords * sizeof(unsigned int));
 		link = link_onstack;
 	} else {
-		link = kcalloc(dwords, sizeof(unsigned int), GFP_KERNEL);
+		link = kvcalloc(dwords, sizeof(unsigned int), GFP_KERNEL);
 		if (!link) {
 			ret = -ENOMEM;
 			goto done;
@@ -1164,7 +1164,7 @@ done:
 			drawobj->flags, ret, drawctxt->type);
 
 	if (unlikely(link != link_onstack))
-		kfree(link);
+		kvfree(link);
 	return ret;
 }
 

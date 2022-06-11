@@ -1190,8 +1190,8 @@ static int msm_gpio_irq_set_type(struct irq_data *d, unsigned int type)
 	u32 offset = 0;
 	u32 val;
 
-	if (d->parent_data && test_bit(d->hwirq, pctrl->skip_wake_irqs)) {
-		if (pctrl->n_dir_conns > 0) {
+	if (d->parent_data) {
+		if (pctrl->n_dir_conns > 0 && test_bit(d->hwirq, pctrl->skip_wake_irqs)) {
 			if (type == IRQ_TYPE_EDGE_BOTH)
 				add_dirconn_tlmm(d, pctrl);
 			else if (is_gpio_dual_edge(d, &irq))
@@ -1323,6 +1323,21 @@ static int msm_gpio_irq_set_affinity(struct irq_data *d,
 {
 	struct gpio_chip *gc = irq_data_get_irq_chip_data(d);
 	struct msm_pinctrl *pctrl = gpiochip_get_data(gc);
+
+	unsigned int i, n_dir_conns = pctrl->n_dir_conns;
+	struct irq_data *gpio_irq_data;
+	struct msm_dir_conn *dc = NULL;
+
+	for (i = n_dir_conns; i > 0; i--) {
+		dc = &pctrl->soc->dir_conn[i];
+		gpio_irq_data = irq_get_irq_data(dc->irq);
+
+		if (!gpio_irq_data || !(gpio_irq_data->chip))
+			continue;
+
+		if (d->hwirq == dc->gpio)
+			return gpio_irq_data->chip->irq_set_affinity(gpio_irq_data, dest, force);
+	}
 
 	if (d->parent_data && test_bit(d->hwirq, pctrl->skip_wake_irqs))
 		return irq_chip_set_affinity_parent(d, dest, force);
@@ -1538,8 +1553,8 @@ static void msm_gpio_setup_dir_connects(struct msm_pinctrl *pctrl)
 
 		gpio_irq = irq_create_mapping(child_domain, dc->gpio);
 		irq_set_parent(gpio_irq, dirconn_irq);
-		irq_set_chip_and_handler_name(gpio_irq, &(pctrl->irq_chip), NULL, NULL);
 		irq_set_chip_data(gpio_irq, &(pctrl->chip));
+		irq_set_chip_and_handler_name(gpio_irq, &(pctrl->irq_chip), NULL, NULL);
 
 		gpio_irq_data = irq_get_irq_data(gpio_irq);
 		if (!gpio_irq_data)

@@ -106,6 +106,31 @@ int ethqos_init_regulators(struct qcom_ethqos *ethqos)
 			return PTR_ERR(ethqos->reg_emac_phy);
 		}
 
+		if (ethqos->emac_ver == EMAC_HW_v3_0_0_RG) {
+			ret = regulator_set_load(ethqos->reg_emac_phy, 100);
+			if (ret < 0) {
+				ETHQOSERR("Unable to set load for PHY regulator\n");
+				goto reg_error;
+			}
+		}
+
+		if (ethqos->phyad_change) {
+			/* Specific load needs to be voted for vreg_emac_phy-supply in this case*/
+			ret = regulator_set_load(ethqos->reg_emac_phy, 1000);
+			if (ret < 0) {
+				ETHQOSERR("Unable to set HPM of vreg_emac_phy:%d\n", ret);
+				goto reg_error;
+			}
+
+			/* Voting specific voltage for vreg_emac_phy-supply in this case*/
+			ret = regulator_set_voltage(ethqos->reg_emac_phy, ethqos->phyvoltage_min,
+						    ethqos->phyvoltage_max);
+			if (ret) {
+				ETHQOSERR("Unable to set voltage for vreg_emac_phy:%d\n", ret);
+				goto reg_error;
+			}
+		}
+
 		ret = regulator_enable(ethqos->reg_emac_phy);
 		if (ret) {
 			ETHQOSERR("Can not enable <%s>\n",

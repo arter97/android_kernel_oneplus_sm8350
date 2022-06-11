@@ -31,12 +31,11 @@ u32 arm_smmu_debug_tbu_testbus_output(void __iomem *tbu_base)
 
 u32 arm_smmu_debug_tcu_testbus_select(phys_addr_t phys_addr,
 		void __iomem *tcu_base, enum tcu_testbus testbus,
-		bool write, u32 val)
+		bool write, u32 val, u32 tcu_testbus_version)
 {
 	int offset;
 	u32 testbus_sel;
 	int ret = 0;
-
 	if (testbus == CLK_TESTBUS) {
 		if (write) {
 			offset = ARM_SMMU_TESTBUS_SEL_HLOS1_NS;
@@ -44,7 +43,10 @@ u32 arm_smmu_debug_tcu_testbus_select(phys_addr_t phys_addr,
 			/* Make sure tcu select register is written to */
 			wmb();
 		} else {
-			offset = ARM_SMMU_TCU_TESTBUS_HLOS1_NS;
+			if (tcu_testbus_version)
+				offset = ARM_SMMU_TESTBUS_SEL_HLOS1_NS;
+			else
+				offset = ARM_SMMU_TCU_TESTBUS_HLOS1_NS;
 			return readl_relaxed(tcu_base + offset);
 		}
 	} else {
@@ -157,18 +159,21 @@ static void arm_smmu_debug_program_tcu_testbus(struct device *dev,
 {
 	u32 reg;
 	int i;
+	struct iommu_fwspec *fwspec = dev_iommu_fwspec_get(dev);
+	struct arm_smmu_device *smmu = fwspec_smmu(fwspec);
 
 	for (i = start; i < end; i++) {
 		reg = arm_smmu_debug_tcu_testbus_select(phys_addr, tcu_base,
-				PTW_AND_CACHE_TESTBUS, READ, 0);
+				PTW_AND_CACHE_TESTBUS, READ, 0, smmu->tcu_testbus_version);
 		reg &= mask;
 		reg |= i << shift;
 		arm_smmu_debug_tcu_testbus_select(phys_addr, tcu_base,
-				PTW_AND_CACHE_TESTBUS, WRITE, reg);
+				PTW_AND_CACHE_TESTBUS, WRITE, reg, smmu->tcu_testbus_version);
 		if (print)
 			dev_info(dev, "testbus_sel: 0x%lx Index: %d val: 0x%lx\n",
 				 arm_smmu_debug_tcu_testbus_select(phys_addr,
-				 tcu_base, PTW_AND_CACHE_TESTBUS, READ, 0), i,
+				 tcu_base, PTW_AND_CACHE_TESTBUS, READ, 0,
+				 smmu->tcu_testbus_version), i,
 				 arm_smmu_debug_tcu_testbus_output(phys_addr));
 	}
 }
@@ -177,6 +182,8 @@ void arm_smmu_debug_dump_tcu_testbus(struct device *dev, phys_addr_t phys_addr,
 			void __iomem *tcu_base,	int tcu_testbus_sel)
 {
 	int i;
+	struct iommu_fwspec *fwspec = dev_iommu_fwspec_get(dev);
+	struct arm_smmu_device *smmu = fwspec_smmu(fwspec);
 
 	if (tcu_testbus_sel & TCU_CACHE_TESTBUS_SEL) {
 		dev_info(dev, "Dumping TCU cache testbus:\n");
@@ -212,17 +219,18 @@ void arm_smmu_debug_dump_tcu_testbus(struct device *dev, phys_addr_t phys_addr,
 						false);
 			dev_info(dev, "testbus_sel: 0x%lx Index: %d val: 0x%lx\n",
 				 arm_smmu_debug_tcu_testbus_select(phys_addr,
-				 tcu_base, PTW_AND_CACHE_TESTBUS, READ, 0), i,
+				 tcu_base, PTW_AND_CACHE_TESTBUS, READ, 0,
+				 smmu->tcu_testbus_version), i,
 				 arm_smmu_debug_tcu_testbus_output(phys_addr));
 		}
 	}
 
 	/* program ARM_SMMU_TESTBUS_SEL_HLOS1_NS to select TCU clk testbus*/
 	arm_smmu_debug_tcu_testbus_select(phys_addr, tcu_base,
-			CLK_TESTBUS, WRITE, TCU_CLK_TESTBUS_SEL);
+			CLK_TESTBUS, WRITE, TCU_CLK_TESTBUS_SEL, smmu->tcu_testbus_version);
 	dev_info(dev, "Programming Tcu clk gate controller: testbus_sel: 0x%lx\n",
 		arm_smmu_debug_tcu_testbus_select(phys_addr, tcu_base,
-						CLK_TESTBUS, READ, 0));
+						CLK_TESTBUS, READ, 0, smmu->tcu_testbus_version));
 }
 
 void arm_smmu_debug_set_tnx_tcr_cntl(void __iomem *tbu_base, u64 val)

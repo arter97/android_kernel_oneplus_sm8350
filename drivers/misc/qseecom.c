@@ -3,6 +3,7 @@
  * QTI Secure Execution Environment Communicator (QSEECOM) driver
  *
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #define pr_fmt(fmt) "QSEECOM: %s: " fmt, __func__
@@ -112,6 +113,9 @@
 
 #define FDE_FLAG_POS    4
 #define ENABLE_KEY_WRAP_IN_KS    (1 << FDE_FLAG_POS)
+
+#define DS_ENTERED 0x1
+#define DS_EXITED  0x0
 
 enum qseecom_clk_definitions {
 	CLK_DFAB = 0,
@@ -339,6 +343,7 @@ struct qseecom_control {
 	struct task_struct *unload_app_kthread_task;
 	wait_queue_head_t unload_app_kthread_wq;
 	atomic_t unload_app_kthread_state;
+	uint32_t qseecom_ds_state;
 };
 
 struct qseecom_unload_app_pending_list {
@@ -454,6 +459,7 @@ static int qseecom_query_ce_info(struct qseecom_dev_handle *data,
 						void __user *argp);
 static int __qseecom_unload_app(struct qseecom_dev_handle *data,
 				uint32_t app_id);
+static int qseecom_set_ds_state(uint32_t state);
 
 static int __maybe_unused get_qseecom_keymaster_status(char *str)
 {
@@ -2062,8 +2068,8 @@ static int qseecom_set_client_mem_param(struct qseecom_dev_handle *data,
 
 	if ((req.ifd_data_fd <= 0) || (req.virt_sb_base == NULL) ||
 					(req.sb_len == 0)) {
-		pr_err("Invalid input(s)ion_fd(%d), sb_len(%d), vaddr(0x%pK)\n",
-			req.ifd_data_fd, req.sb_len, req.virt_sb_base);
+		pr_err("Invalid input(s)ion_fd(%d), sb_len(%d)\n",
+			req.ifd_data_fd, req.sb_len);
 		return -EFAULT;
 	}
 	if (!access_ok((void __user *)req.virt_sb_base,
@@ -3130,7 +3136,8 @@ static int qseecom_unload_app(struct qseecom_dev_handle *data,
 	pr_debug("unload app %d(%s), app_crash flag %d\n", data->client.app_id,
 			data->client.app_name, app_crash);
 
-	if (!memcmp(data->client.app_name, "keymaste", strlen("keymaste"))) {
+	if (!memcmp(data->client.app_name, "keymaste", strlen("keymaste"))
+		&& !(qseecom.qseecom_ds_state == DS_ENTERED)) {
 		pr_debug("Do not unload keymaster app from tz\n");
 		goto unload_exit;
 	}
@@ -3164,7 +3171,7 @@ static int qseecom_unload_app(struct qseecom_dev_handle *data,
 		goto unload_exit;
 	}
 
-	if (!ptr_app->ref_cnt) {
+	if (!ptr_app->ref_cnt || (qseecom.qseecom_ds_state == DS_ENTERED)) {
 		ret = __qseecom_unload_app(data, data->client.app_id);
 		if (ret == -EBUSY) {
 			/*
@@ -6176,7 +6183,7 @@ static int __qseecom_generate_and_save_key(struct qseecom_dev_handle *data,
 		if (ret == -EINVAL &&
 			resp.result == QSEOS_RESULT_FAIL_KEY_ID_EXISTS) {
 			pr_debug("Key ID exists.\n");
-			ret = 0;
+			ret = QSEOS_RESULT_FAIL_KEY_ID_EXISTS;
 		} else {
 			pr_err("scm call to generate key failed : %d\n", ret);
 			ret = -EFAULT;
@@ -6189,13 +6196,14 @@ static int __qseecom_generate_and_save_key(struct qseecom_dev_handle *data,
 		break;
 	case QSEOS_RESULT_FAIL_KEY_ID_EXISTS:
 		pr_debug("Key ID exists.\n");
+		ret = QSEOS_RESULT_FAIL_KEY_ID_EXISTS;
 		break;
 	case QSEOS_RESULT_INCOMPLETE:
 		ret = __qseecom_process_incomplete_cmd(data, &resp);
 		if (ret) {
 			if (resp.result == QSEOS_RESULT_FAIL_KEY_ID_EXISTS) {
 				pr_debug("Key ID exists.\n");
-				ret = 0;
+				ret = QSEOS_RESULT_FAIL_KEY_ID_EXISTS;
 			} else {
 				pr_err("process_incomplete_cmd FAILED, resp.result %d\n",
 					resp.result);
@@ -6484,8 +6492,8 @@ static int qseecom_get_ce_hw_instance(uint32_t unit, uint32_t usage)
 	return pce_info_use->num_ce_pipe_entries;
 }
 
-static int qseecom_create_key(struct qseecom_dev_handle *data,
-			void __user *argp)
+int qseecom_create_key_in_slot(uint8_t usage_code, uint8_t key_slot, const uint8_t *key_id,
+								const uint8_t *inhash32)
 {
 	int i;
 	uint32_t *ce_hw = NULL;
@@ -6496,17 +6504,23 @@ static int qseecom_create_key(struct qseecom_dev_handle *data,
 	struct qseecom_key_generate_ireq generate_key_ireq;
 	struct qseecom_key_select_ireq set_key_ireq;
 	uint32_t entries = 0;
+	bool new_key_generated = false;
+	static struct qseecom_dev_handle local_handle = {0};
+	static struct qseecom_dev_handle *data = &local_handle;
 
-	ret = copy_from_user(&create_key_req, argp, sizeof(create_key_req));
-	if (ret) {
-		pr_err("copy_from_user failed\n");
-		return ret;
-	}
+
+	create_key_req.usage = usage_code;
+	memset((void *)create_key_req.hash32, 0, QSEECOM_HASH_SIZE);
 
 	if (create_key_req.usage < QSEOS_KM_USAGE_DISK_ENCRYPTION ||
 		create_key_req.usage >= QSEOS_KM_USAGE_MAX) {
 		pr_err("unsupported usage %d\n", create_key_req.usage);
 		ret = -EFAULT;
+		return ret;
+	}
+	if (key_id == NULL) {
+		pr_err("Key ID is NULL\n");
+		ret = -EINVAL;
 		return ret;
 	}
 	entries = qseecom_get_ce_hw_instance(DEFAULT_CE_INFO_UNIT,
@@ -6545,18 +6559,26 @@ static int qseecom_create_key(struct qseecom_dev_handle *data,
 			0, QSEECOM_KEY_ID_SIZE);
 	memset((void *)generate_key_ireq.hash32,
 			0, QSEECOM_HASH_SIZE);
-	memcpy((void *)generate_key_ireq.key_id,
-			(void *)key_id_array[create_key_req.usage].desc,
-			QSEECOM_KEY_ID_SIZE);
+	memcpy((void *)generate_key_ireq.key_id, key_id, QSEECOM_KEY_ID_SIZE);
+
+	//Copy inhash if available
+	if (inhash32 != NULL)
+		memcpy((void *)create_key_req.hash32, (void *)inhash32, QSEECOM_HASH_SIZE);
+
 	memcpy((void *)generate_key_ireq.hash32,
 			(void *)create_key_req.hash32,
 			QSEECOM_HASH_SIZE);
 
 	ret = __qseecom_generate_and_save_key(data,
 			create_key_req.usage, &generate_key_ireq);
-	if (ret) {
+
+	if ((ret != 0) && (ret != QSEOS_RESULT_FAIL_KEY_ID_EXISTS)) {
 		pr_err("Failed to generate key on storage: %d\n", ret);
 		goto free_buf;
+	}
+	if (ret == 0) {
+		//New key was created
+		new_key_generated = true;
 	}
 
 	for (i = 0; i < entries; i++) {
@@ -6564,12 +6586,12 @@ static int qseecom_create_key(struct qseecom_dev_handle *data,
 		if (create_key_req.usage ==
 				QSEOS_KM_USAGE_UFS_ICE_DISK_ENCRYPTION) {
 			set_key_ireq.ce = QSEECOM_UFS_ICE_CE_NUM;
-			set_key_ireq.pipe = QSEECOM_ICE_FDE_KEY_INDEX;
+			set_key_ireq.pipe = key_slot;
 
 		} else if (create_key_req.usage ==
 				QSEOS_KM_USAGE_SDCC_ICE_DISK_ENCRYPTION) {
 			set_key_ireq.ce = QSEECOM_SDCC_ICE_CE_NUM;
-			set_key_ireq.pipe = QSEECOM_ICE_FDE_KEY_INDEX;
+			set_key_ireq.pipe = key_slot;
 
 		} else {
 			set_key_ireq.ce = ce_hw[i];
@@ -6581,9 +6603,8 @@ static int qseecom_create_key(struct qseecom_dev_handle *data,
 		set_key_ireq.pipe_type = QSEOS_PIPE_ENC|QSEOS_PIPE_ENC_XTS;
 		memset((void *)set_key_ireq.key_id, 0, QSEECOM_KEY_ID_SIZE);
 		memset((void *)set_key_ireq.hash32, 0, QSEECOM_HASH_SIZE);
-		memcpy((void *)set_key_ireq.key_id,
-			(void *)key_id_array[create_key_req.usage].desc,
-			QSEECOM_KEY_ID_SIZE);
+
+		memcpy((void *)set_key_ireq.key_id, key_id, QSEECOM_KEY_ID_SIZE);
 		memcpy((void *)set_key_ireq.hash32,
 				(void *)create_key_req.hash32,
 				QSEECOM_HASH_SIZE);
@@ -6626,6 +6647,38 @@ static int qseecom_create_key(struct qseecom_dev_handle *data,
 
 free_buf:
 	kzfree(ce_hw);
+	if ((ret == 0) && (new_key_generated)) {
+		//Success , key already exists code
+		ret = QSEOS_RESULT_FAIL_KEY_ID_EXISTS;
+	}
+	return ret;
+}
+EXPORT_SYMBOL(qseecom_create_key_in_slot);
+
+static int qseecom_create_key(struct qseecom_dev_handle *data,
+			void __user *argp)
+{
+	int ret = 0;
+	struct qseecom_create_key_req create_key_req;
+
+
+	ret = copy_from_user(&create_key_req, argp, sizeof(create_key_req));
+	if (ret) {
+		pr_err("copy_from_user failed\n");
+		return ret;
+	}
+
+	if (create_key_req.usage < QSEOS_KM_USAGE_DISK_ENCRYPTION ||
+		create_key_req.usage >= QSEOS_KM_USAGE_MAX) {
+		pr_err("unsupported usage %d\n", create_key_req.usage);
+		ret = -EFAULT;
+		return ret;
+	}
+
+	ret = crypto_qti_ice_add_userdata(create_key_req.hash32);
+	if (ret == -EOPNOTSUPP)
+		pr_err("FDE is disabled\n");
+
 	return ret;
 }
 
@@ -7601,6 +7654,7 @@ long qseecom_ioctl(struct file *file,
 	struct qseecom_dev_handle *data = file->private_data;
 	void __user *argp = (void __user *) arg;
 	bool perf_enabled = false;
+	uint32_t ds_state = 0;
 
 	if (!data) {
 		pr_err("Invalid/uninitialized device handle\n");
@@ -8297,14 +8351,10 @@ long qseecom_ioctl(struct file *file,
 		break;
 	}
 	case QSEECOM_IOCTL_SET_ICE_INFO: {
-		struct qseecom_ice_data_t ice_data;
-
-		ret = copy_from_user(&ice_data, argp, sizeof(ice_data));
-		if (ret) {
-			pr_err("copy_from_user failed\n");
-			return -EFAULT;
-		}
-		crypto_qti_ice_set_fde_flag(ice_data.flag);
+		//Return success for backwards compatibility
+		//This call is redundant and not required anymore
+		pr_info("SET_ICE_INFO is reduntant call,return success for backwards compatibility\n");
+		ret = 0;
 		break;
 	}
 	case QSEECOM_IOCTL_FBE_CLEAR_KEY: {
@@ -8318,6 +8368,21 @@ long qseecom_ioctl(struct file *file,
 		pfk_fbe_clear_key((const unsigned char *) key_data.key,
 				key_data.key_len, (const unsigned char *)
 				key_data.salt, key_data.salt_len);
+		break;
+	}
+	case QSEECOM_IOCTL_DEEP_SLEEP_STATE: {
+		mutex_lock(&app_access_lock);
+		atomic_inc(&data->ioctl_count);
+		ret = copy_from_user(&ds_state, argp, sizeof(ds_state));
+		if (ret) {
+			pr_err("copy from user failed\n");
+			return -EFAULT;
+		}
+		ret = qseecom_set_ds_state(ds_state);
+		atomic_dec(&data->ioctl_count);
+		mutex_unlock(&app_access_lock);
+		if (ret)
+			pr_err("failed to set deep sleep state %d\n", ret);
 		break;
 	}
 	default:
@@ -9161,6 +9226,20 @@ out:
 	return ret;
 }
 
+static int qseecom_set_ds_state(uint32_t state)
+{
+	int ret = 0;
+
+	if (state == DS_ENTERED || state == DS_EXITED) {
+		qseecom.qseecom_ds_state = state;
+	} else {
+		qseecom.qseecom_ds_state = -EINVAL;
+		pr_err("Invalid deep sleep state = %d\n", state);
+		ret = -EINVAL;
+	}
+	return ret;
+}
+
 /*
  * Check whitelist feature, and if TZ feature version is < 1.0.0,
  * then whitelist feature is not supported.
@@ -9718,7 +9797,7 @@ static int qseecom_remove(struct platform_device *pdev)
 	return ret;
 }
 
-static int qseecom_suspend(struct platform_device *pdev, pm_message_t state)
+static int qseecom_suspend(struct device *dev)
 {
 	int ret = 0;
 	struct qseecom_clk *qclk;
@@ -9760,7 +9839,7 @@ static int qseecom_suspend(struct platform_device *pdev, pm_message_t state)
 	return 0;
 }
 
-static int qseecom_resume(struct platform_device *pdev)
+static int qseecom_resume(struct device *dev)
 {
 	int mode = 0;
 	int ret = 0;
@@ -9847,13 +9926,17 @@ static const struct of_device_id qseecom_match[] = {
 	{}
 };
 
+static const struct dev_pm_ops qseecom_pm_ops = {
+	.suspend_late = qseecom_suspend,
+	.resume_early = qseecom_resume,
+};
+
 static struct platform_driver qseecom_plat_driver = {
 	.probe = qseecom_probe,
 	.remove = qseecom_remove,
-	.suspend = qseecom_suspend,
-	.resume = qseecom_resume,
 	.driver = {
 		.name = "qseecom",
+		.pm = &qseecom_pm_ops,
 		.of_match_table = qseecom_match,
 	},
 };

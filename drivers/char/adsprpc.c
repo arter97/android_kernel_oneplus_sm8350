@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 /* Uncomment this block to log an error on every VERIFY failure */
@@ -148,6 +149,7 @@
 #define SDSP_DOMAIN_ID (2)
 #define CDSP_DOMAIN_ID (3)
 
+#define UNSIGNED_PD_SUPPORT 1
 /*
  * ctxid of every message is OR-ed with fl->pd (0/1/2) before
  * it is sent to DSP. So mask 2 LSBs to retrieve actual context
@@ -537,6 +539,8 @@ struct fastrpc_apps {
 	struct hlist_head drivers;
 	spinlock_t hlock;
 	struct device *dev;
+	/* Indicates fastrpc device node info */
+	struct device *dev_fastrpc;
 	unsigned int latency;
 	int rpmsg_register;
 	bool legacy_remote_heap;
@@ -555,6 +559,8 @@ struct fastrpc_apps {
 	void *ramdump_handle;
 	bool enable_ramdump;
 	struct mutex mut_uid;
+	/* Indicates cdsp device status */
+	int remote_cdsp_status;
 };
 
 struct fastrpc_mmap {
@@ -656,6 +662,7 @@ struct fastrpc_file {
 	bool is_ramdump_pend;
 	/* Flag to indicate dynamic process creation status*/
 	bool in_process_create;
+	struct completion shutdown;
 };
 
 static struct fastrpc_apps gfa;
@@ -2981,6 +2988,39 @@ static int fastrpc_invoke_send(struct smq_invoke_ctx *ctx,
 	return err;
 }
 
+/*
+ * name : fastrpc_get_dsp_status
+ * @in  : pointer to fastrpc_apps
+ * @out : void
+ * Description : This function reads the property
+ * string from device node and updates the cdsp device
+ * avialbility status if the node belongs to cdsp device.
+ */
+
+static void fastrpc_get_dsp_status(struct fastrpc_apps *me)
+{
+	int ret = -1;
+	struct device_node *node = NULL;
+	const char *name = NULL;
+
+	do {
+		node = of_find_compatible_node(node, NULL, "qcom,pil-tz-generic");
+		if (node) {
+			ret = of_property_read_string(node, "qcom,firmware-name", &name);
+			if (!strcmp(name, "cdsp")) {
+				ret =  of_device_is_available(node);
+				me->remote_cdsp_status = ret;
+				ADSPRPC_INFO("adsprpc: %s: cdsp node found with ret:%x\n",
+						__func__, ret);
+				break;
+			}
+		} else {
+			ADSPRPC_ERR("adsprpc: Error: %s: cdsp node not found\n", __func__);
+			break;
+		}
+	} while (1);
+}
+
 static void fastrpc_init(struct fastrpc_apps *me)
 {
 	int i;
@@ -4094,7 +4134,6 @@ static int fastrpc_send_cpuinfo_to_dsp(struct fastrpc_file *fl)
 	ioctl.perf_kernel = NULL;
 	ioctl.perf_dsp = NULL;
 	ioctl.job = NULL;
-	fl->pd = 1;
 
 	err = fastrpc_internal_invoke(fl, FASTRPC_MODE_PARALLEL, KERNEL_MSG_WITH_ZERO_PID, &ioctl);
 	if (!err)
@@ -4135,7 +4174,6 @@ static int fastrpc_get_info_from_dsp(struct fastrpc_file *fl,
 	ioctl.perf_kernel = NULL;
 	ioctl.perf_dsp = NULL;
 	ioctl.job = NULL;
-	fl->pd = 1;
 
 	err = fastrpc_internal_invoke(fl, FASTRPC_MODE_PARALLEL, KERNEL_MSG_WITH_ZERO_PID, &ioctl);
 bail:
@@ -4235,7 +4273,7 @@ static int fastrpc_release_current_dsp_process(struct fastrpc_file *fl)
 	}
 	VERIFY(err, fl->apps->channel[fl->cid].issubsystemup == 1);
 	if (err) {
-		err = -ECONNRESET;
+		wait_for_completion(&fl->shutdown);
 		goto bail;
 	}
 	tgid = fl->tgid;
@@ -5687,6 +5725,7 @@ static int fastrpc_device_open(struct inode *inode, struct file *filp)
 	spin_lock(&me->hlock);
 	hlist_add_head(&fl->hn, &me->drivers);
 	spin_unlock(&me->hlock);
+	init_completion(&fl->shutdown);
 	fl->dev_pm_qos_req = kcalloc(me->silvercores.corecount,
 				sizeof(struct dev_pm_qos_request),
 				GFP_KERNEL);
@@ -6164,6 +6203,28 @@ bail:
 	return err;
 }
 
+static int fastrpc_update_cdsp_support(struct fastrpc_file *fl)
+{
+	struct fastrpc_ioctl_capability *dsp_query;
+	struct fastrpc_apps *me = &gfa;
+	int err = 0;
+
+	VERIFY(err, NULL != (dsp_query = kzalloc(sizeof(*dsp_query),
+				GFP_KERNEL)));
+	if (err)
+		goto bail;
+	dsp_query->domain = CDSP_DOMAIN_ID;
+	dsp_query->attribute_ID = UNSIGNED_PD_SUPPORT;
+	err = fastrpc_get_info_from_kernel(dsp_query, fl);
+	if (err)
+		goto bail;
+	if (!dsp_query->capability)
+		me->channel[CDSP_DOMAIN_ID].unsigned_support = false;
+bail:
+	kfree(dsp_query);
+	return err;
+}
+
 static long fastrpc_device_ioctl(struct file *file, unsigned int ioctl_num,
 				 unsigned long ioctl_param)
 {
@@ -6172,6 +6233,7 @@ static long fastrpc_device_ioctl(struct file *file, unsigned int ioctl_num,
 	struct fastrpc_file *fl = (struct fastrpc_file *)file->private_data;
 	int size = 0, err = 0;
 	uint32_t info;
+	static bool isquerydone;
 
 	p.inv.fds = NULL;
 	p.inv.attrs = NULL;
@@ -6270,6 +6332,10 @@ static long fastrpc_device_ioctl(struct file *file, unsigned int ioctl_num,
 		VERIFY(err, 0 == (err = fastrpc_init_process(fl, &p.init)));
 		if (err)
 			goto bail;
+		if ((fl->cid == CDSP_DOMAIN_ID) && !isquerydone) {
+			if (!fastrpc_update_cdsp_support(fl))
+				isquerydone = true;
+		}
 		break;
 	case FASTRPC_IOCTL_GET_DSP_INFO:
 		err = fastrpc_get_dsp_info(&p.cap, param, fl);
@@ -6304,6 +6370,8 @@ static int fastrpc_restart_notifier_cb(struct notifier_block *nb,
 {
 	struct fastrpc_apps *me = &gfa;
 	struct fastrpc_channel_ctx *ctx;
+	struct fastrpc_file *fl;
+	struct hlist_node *n;
 	struct notif_data *notifdata = (struct notif_data *)data;
 	int cid = -1;
 
@@ -6316,6 +6384,16 @@ static int fastrpc_restart_notifier_cb(struct notifier_block *nb,
 		ctx->ssrcount++;
 		ctx->issubsystemup = 0;
 		mutex_unlock(&me->channel[cid].smd_mutex);
+	} else if (code == SUBSYS_AFTER_SHUTDOWN) {
+		pr_info("adsprpc: %s: %s subsystem is down\n",
+			__func__, gcinfo[cid].subsys);
+		spin_lock(&me->hlock);
+		hlist_for_each_entry_safe(fl, n, &me->drivers, hn) {
+			if (fl->cid != cid)
+				continue;
+			complete(&fl->shutdown);
+		}
+		spin_unlock(&me->hlock);
 	} else if (code == SUBSYS_RAMDUMP_NOTIFICATION) {
 		if (cid == RH_CID) {
 			if (me->ramdump_handle)
@@ -6736,6 +6814,52 @@ bail:
 	return err;
 }
 
+/*
+ * name : remote_cdsp_status_show
+ * @in  : dev : pointer to device node
+ *        attr: pointer to device attribute
+ * @out : buf : Contains remote cdsp status
+ * @Description : This function updates the buf with
+ * remote cdsp status by reading the fastrpc node
+ * @returns : bytes written to buf
+ */
+
+static ssize_t remote_cdsp_status_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct fastrpc_apps *me = &gfa;
+
+	/*
+	 * Default remote DSP status: 0
+	 * driver possibly not probed yet or not the main device.
+	 */
+
+	if (!dev || !dev->driver ||
+		!of_device_is_compatible(dev->of_node, "qcom,msm-fastrpc-compute")) {
+		ADSPRPC_ERR(
+			"adsprpc: Error: %s: driver not probed yet or not the main device\n",
+			__func__);
+		return 0;
+	}
+
+	return scnprintf(buf, PAGE_SIZE, "%d",
+			me->remote_cdsp_status);
+}
+
+/* Remote cdsp status attribute declartion as read only */
+static DEVICE_ATTR_RO(remote_cdsp_status);
+
+/* Declaring attribute for remote dsp */
+static struct attribute *msm_remote_dsp_attrs[] = {
+	&dev_attr_remote_cdsp_status.attr,
+	NULL
+};
+
+/* Defining remote dsp attributes in attributes group */
+static struct attribute_group msm_remote_dsp_attr_group = {
+	.attrs = msm_remote_dsp_attrs,
+};
+
 static int fastrpc_probe(struct platform_device *pdev)
 {
 	int err = 0;
@@ -6746,6 +6870,14 @@ static int fastrpc_probe(struct platform_device *pdev)
 
 	if (of_device_is_compatible(dev->of_node,
 					"qcom,msm-fastrpc-compute")) {
+		me->dev_fastrpc = dev;
+		err = sysfs_create_group(&pdev->dev.kobj, &msm_remote_dsp_attr_group);
+		if (err) {
+			ADSPRPC_ERR(
+				"adsprpc: Error: %s: initialization of sysfs create group failed with %d\n",
+				__func__, err);
+			goto bail;
+		}
 		init_secure_vmid_list(dev, "qcom,adsp-remoteheap-vmid",
 							&gcinfo[0].rhvm);
 		fastrpc_init_privileged_gids(dev, "qcom,fastrpc-gids",
@@ -6922,6 +7054,7 @@ static int __init fastrpc_device_init(void)
 	}
 	memset(me, 0, sizeof(*me));
 	fastrpc_init(me);
+	fastrpc_get_dsp_status(me);
 	me->dev = NULL;
 	me->legacy_remote_heap = false;
 	VERIFY(err, 0 == platform_driver_register(&fastrpc_driver));

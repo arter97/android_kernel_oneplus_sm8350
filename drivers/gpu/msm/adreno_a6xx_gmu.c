@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -177,7 +178,7 @@ void a6xx_load_rsc_ucode(struct adreno_device *adreno_dev)
 int a6xx_load_pdc_ucode(struct adreno_device *adreno_dev)
 {
 	struct a6xx_gmu_device *gmu = to_a6xx_gmu(adreno_dev);
-	struct resource *res_pdc, *res_cfg, *res_seq;
+	struct resource *res_pdc = NULL, *res_cfg, *res_seq;
 	unsigned int cfg_offset, seq_offset;
 	void __iomem *cfg = NULL, *seq = NULL;
 	const struct adreno_a6xx_core *a6xx_core = to_a6xx_core(adreno_dev);
@@ -227,14 +228,14 @@ int a6xx_load_pdc_ucode(struct adreno_device *adreno_dev)
 		seq_offset = 0x280000;
 	}
 
+	/* Get pointers to each of the possible PDC resources */
+	res_pdc = platform_get_resource_byname(gmu->pdev, IORESOURCE_MEM,
+			"kgsl_gmu_pdc_reg");
 	/*
 	 * Map the starting address for pdc_cfg programming. If the pdc_cfg
 	 * resource is not available use an offset from the base PDC resource.
 	 */
 	if (gmu->pdc_cfg_base == NULL) {
-		/* Get pointers to each of the possible PDC resources */
-		res_pdc = platform_get_resource_byname(gmu->pdev, IORESOURCE_MEM,
-				"kgsl_gmu_pdc_reg");
 		res_cfg = platform_get_resource_byname(gmu->pdev, IORESOURCE_MEM,
 				"kgsl_gmu_pdc_cfg");
 

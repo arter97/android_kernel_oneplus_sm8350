@@ -143,6 +143,13 @@ config F2FS_IOSTAT
 	  IO statistics tracepoint events. You have to turn on "iostat_enable"
 	  sysfs node to enable this feature.
 
+config F2FS_UNFAIR_RWSEM
+	bool "F2FS unfair rw_semaphore"
+	depends on F2FS_FS && BLK_CGROUP
+	help
+	  Use unfair rw_semaphore, if system configured IO priority by block
+	  cgroup.
+
 config F2FS_REPORT_FAKE_KERNEL_VERSION
 	bool "Report fake kernel version to fsck.f2fs"
 	depends on F2FS_FS

@@ -613,12 +613,15 @@ xfs_qm_init_timelimits(
 	 * a user or group before he or she can not perform any
 	 * more writing. If it is zero, a default is used.
 	 */
-	if (ddqp->d_btimer)
-		qinf->qi_btimelimit = be32_to_cpu(ddqp->d_btimer);
-	if (ddqp->d_itimer)
-		qinf->qi_itimelimit = be32_to_cpu(ddqp->d_itimer);
-	if (ddqp->d_rtbtimer)
-		qinf->qi_rtbtimelimit = be32_to_cpu(ddqp->d_rtbtimer);
+	if (ddqp->d_btimer || ddqp->d_btimer_high)
+		qinf->qi_btimelimit = be32_to_cpu(ddqp->d_btimer) +
+					((u64)ddqp->d_btimer_high << 32);
+	if (ddqp->d_itimer || ddqp->d_itimer_high)
+		qinf->qi_itimelimit = be32_to_cpu(ddqp->d_itimer) +
+					((u64)ddqp->d_itimer_high << 32);
+	if (ddqp->d_rtbtimer || ddqp->d_rtbtimer_high)
+		qinf->qi_rtbtimelimit = be32_to_cpu(ddqp->d_rtbtimer) +
+					((u64)ddqp->d_rtbtimer_high << 32);
 	if (ddqp->d_bwarns)
 		qinf->qi_bwarnlimit = be16_to_cpu(ddqp->d_bwarns);
 	if (ddqp->d_iwarns)
@@ -867,8 +870,11 @@ xfs_qm_reset_dqcounts(
 		ddq->d_icount = 0;
 		ddq->d_rtbcount = 0;
 		ddq->d_btimer = 0;
+		ddq->d_btimer_high = 0;
 		ddq->d_itimer = 0;
+		ddq->d_itimer_high = 0;
 		ddq->d_rtbtimer = 0;
+		ddq->d_rtbtimer_high = 0;
 		ddq->d_bwarns = 0;
 		ddq->d_iwarns = 0;
 		ddq->d_rtbwarns = 0;

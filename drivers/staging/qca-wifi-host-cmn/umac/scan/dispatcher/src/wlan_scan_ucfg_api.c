@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2017-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -152,6 +153,12 @@ QDF_STATUS ucfg_scan_deinit(void)
 }
 
 #ifdef FEATURE_WLAN_SCAN_PNO
+bool
+ucfg_is_6ghz_pno_scan_optimization_supported(struct wlan_objmgr_psoc *psoc)
+{
+	return wlan_psoc_nif_fw_ext_cap_get(psoc,
+					WLAN_SOC_PNO_SCAN_CONFIG_PER_CHANNEL);
+}
 
 QDF_STATUS ucfg_scan_pno_start(struct wlan_objmgr_vdev *vdev,
 	struct pno_scan_req_params *req)
@@ -176,6 +183,25 @@ QDF_STATUS ucfg_scan_pno_start(struct wlan_objmgr_vdev *vdev,
 		scan_vdev_obj->pno_in_progress = true;
 
 	return status;
+}
+
+void ucfg_scan_add_flags_to_pno_chan_list(struct wlan_objmgr_vdev *vdev,
+					  struct pno_scan_req_params *req,
+					  uint8_t *num_chan,
+					  uint32_t short_ssid,
+					  int list_idx)
+{
+	struct chan_list *pno_chan_list =
+				    &req->networks_list[list_idx].pno_chan_list;
+
+	/* Add RNR flags to channels based on scan_mode_6g ini */
+	scm_add_channel_flags(vdev, pno_chan_list, num_chan,
+			      req->scan_policy_colocated_6ghz, true);
+	/* Filter RNR flags in pno channel list based on short ssid entry in
+	 * RNR db cache.
+	 */
+	scm_filter_rnr_flag_pno(vdev, short_ssid,
+				&req->networks_list[0].pno_chan_list);
 }
 
 QDF_STATUS ucfg_scan_pno_stop(struct wlan_objmgr_vdev *vdev)

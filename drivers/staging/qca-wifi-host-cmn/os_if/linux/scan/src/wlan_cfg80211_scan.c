@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2017-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -50,6 +51,27 @@ const struct nla_policy cfg80211_scan_policy[
 	[QCA_WLAN_VENDOR_ATTR_SCAN_TX_NO_CCK_RATE] = {.type = NLA_FLAG},
 	[QCA_WLAN_VENDOR_ATTR_SCAN_COOKIE] = {.type = NLA_U64},
 };
+
+/**
+ * wlan_cfg80211_is_colocated_6ghz_scan_supported() - Check whether colocated
+ * 6ghz scan flag present in scan request or not
+ * @scan_flag: Flags bitmap coming from kernel
+ *
+ * Return: True if colocated 6ghz scan flag present in scan req
+ */
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0))
+static bool
+wlan_cfg80211_is_colocated_6ghz_scan_supported(uint32_t scan_flag)
+{
+	return !!(scan_flag & NL80211_SCAN_FLAG_COLOCATED_6GHZ);
+}
+#else
+static inline bool
+wlan_cfg80211_is_colocated_6ghz_scan_supported(uint32_t scan_flag)
+{
+	return false;
+}
+#endif
 
 #if defined(CFG80211_SCAN_RANDOM_MAC_ADDR) || \
 	(LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0))
@@ -429,6 +451,9 @@ int wlan_cfg80211_sched_scan_start(struct wlan_objmgr_vdev *vdev,
 
 	req->networks_cnt = request->n_match_sets;
 	req->vdev_id = wlan_vdev_get_id(vdev);
+	req->vdev = vdev;
+	req->scan_policy_colocated_6ghz =
+		 wlan_cfg80211_is_colocated_6ghz_scan_supported(request->flags);
 
 	if ((!req->networks_cnt) ||
 	    (req->networks_cnt > SCAN_PNO_MAX_SUPP_NETWORKS)) {
@@ -504,30 +529,42 @@ int wlan_cfg80211_sched_scan_start(struct wlan_objmgr_vdev *vdev,
 
 	/* Filling per profile  params */
 	for (i = 0; i < req->networks_cnt; i++) {
-		req->networks_list[i].ssid.length =
-			request->match_sets[i].ssid.ssid_len;
+		struct cfg80211_match_set *user_req = &request->match_sets[i];
+		struct pno_nw_type *tgt_req = &req->networks_list[i];
 
-		if ((!req->networks_list[i].ssid.length) ||
-		    (req->networks_list[i].ssid.length > WLAN_SSID_MAX_LEN)) {
+		tgt_req->ssid.length = user_req->ssid.ssid_len;
+
+		if (!tgt_req->ssid.length ||
+		    tgt_req->ssid.length > WLAN_SSID_MAX_LEN) {
 			osif_err(" SSID Len %d is not correct for network %d",
-				 req->networks_list[i].ssid.length, i);
+				 tgt_req->ssid.length, i);
 			ret = -EINVAL;
 			goto error;
 		}
 
-		qdf_mem_copy(req->networks_list[i].ssid.ssid,
-			request->match_sets[i].ssid.ssid,
-			req->networks_list[i].ssid.length);
-		req->networks_list[i].authentication = 0;   /*eAUTH_TYPE_ANY */
-		req->networks_list[i].encryption = 0;       /*eED_ANY */
-		req->networks_list[i].bc_new_type = 0;    /*eBCAST_UNKNOWN */
+		qdf_mem_copy(tgt_req->ssid.ssid, user_req->ssid.ssid,
+			     tgt_req->ssid.length);
+		tgt_req->authentication = 0;   /*eAUTH_TYPE_ANY */
+		tgt_req->encryption = 0;       /*eED_ANY */
+		tgt_req->bc_new_type = 0;    /*eBCAST_UNKNOWN */
+
 
 		/*Copying list of valid channel into request */
-		qdf_mem_copy(req->networks_list[i].channels, valid_ch,
-			num_chan * sizeof(uint32_t));
-		req->networks_list[i].channel_cnt = num_chan;
-		req->networks_list[i].rssi_thresh =
-			request->match_sets[i].rssi_thold;
+		for (j = 0; j < num_chan; j++)
+			tgt_req->pno_chan_list.chan[j].freq = valid_ch[j];
+		tgt_req->pno_chan_list.num_chan = num_chan;
+
+		if (ucfg_is_6ghz_pno_scan_optimization_supported(psoc)) {
+			uint32_t short_ssid =
+				wlan_construct_shortssid(tgt_req->ssid.ssid,
+							 tgt_req->ssid.length);
+
+			ucfg_scan_add_flags_to_pno_chan_list(vdev, req,
+							     &num_chan,
+							     short_ssid, i);
+		}
+
+		tgt_req->rssi_thresh = user_req->rssi_thold;
 	}
 
 	/* set scan to passive if no SSIDs are specified in the request */
@@ -1322,6 +1359,8 @@ static void wlan_cfg80211_update_scan_policy_type_flags(
 		scan_req->scan_policy_low_span = true;
 	if (req->flags & NL80211_SCAN_FLAG_LOW_POWER)
 		scan_req->scan_policy_low_power = true;
+	if (wlan_cfg80211_is_colocated_6ghz_scan_supported(req->flags))
+		scan_req->scan_policy_colocated_6ghz = true;
 }
 #else
 static inline void wlan_cfg80211_update_scan_policy_type_flags(
@@ -1496,8 +1535,7 @@ int wlan_cfg80211_scan(struct wlan_objmgr_vdev *vdev,
 		if (req->scan_req.scan_policy_high_accuracy)
 			req->scan_req.adaptive_dwell_time_mode =
 						SCAN_DWELL_MODE_STATIC;
-		if (req->scan_req.scan_policy_low_power ||
-		    req->scan_req.scan_policy_low_span)
+		if (req->scan_req.scan_policy_low_power)
 			req->scan_req.adaptive_dwell_time_mode =
 						SCAN_DWELL_MODE_AGGRESSIVE;
 	}

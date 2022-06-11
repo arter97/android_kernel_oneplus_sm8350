@@ -120,11 +120,11 @@ int sps_map_find(struct sps_connect *connect)
 
 	connect->desc.size = map->desc_size;
 	connect->desc.phys_base = map->desc_base;
-	connect->desc.base = desc;
+	connect->desc.base = (void __iomem *)desc;
 	if (map->data_size > 0 && map->data_base != SPS_ADDR_INVALID) {
 		connect->data.size = map->data_size;
 		connect->data.phys_base = map->data_base;
-		connect->data.base = data;
+		connect->data.base = (void __iomem *)data;
 	}
 
 	return 0;

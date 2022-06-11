@@ -309,6 +309,13 @@ config SDM_LPASSCC_845
 	  Say Y if you want to use the LPASS branch clocks of the LPASS clock
 	  controller to reset the LPASS subsystem.
 
+config SDX_GCC_55
+	tristate "SDX55 Global Clock Controller"
+	help
+	  Support for the global clock controller on SDX55 devices.
+	  Say Y if you want to use peripheral devices such as UART,
+	  SPI, I2C, USB, SD/UFS, PCIe etc.
+
 config SM_CAMCC_8150
 	tristate "SM8150 Camera Clock Controller"
 	select SM_GCC_8150
@@ -475,6 +482,61 @@ config MSM_DEBUGCC_LAHAINA
 	  Lahaina devices.
 	  Say Y if you want to support the debug clocks such as
 	  clock measurement functionality.
+
+config SM_GCC_KONA
+	tristate "KONA Global Clock Controller"
+	depends on COMMON_CLK_QCOM
+	select QCOM_GDSC
+	help
+	  Support for the global clock controller on Qualcomm Technologies, Inc
+	  KONA devices.
+	  Say Y if you want to use peripheral devices such as UART, SPI, I2C,
+	  USB, UFS, SD/eMMC, PCIe, etc.
+
+config SM_CAMCC_KONA
+	tristate "kona Camera Clock Controller"
+	depends on SM_GCC_KONA
+	help
+	  Support for the camera clock controller on Qualcomm Technologies, Inc.
+	  KONA devices.
+	  Say Y if you want to support camera devices and functionality such as
+	  capturing pictures.
+
+config SM_VIDEOCC_KONA
+	tristate "Kona Video Clock Controller"
+	depends on SM_GCC_KONA
+	help
+	  Support for the video clock controller on Qualcomm Technologies, Inc.
+	  KONA devices.
+	  Say Y if you want to support video devices and functionality such as
+	  video encode/decode.
+
+config SM_GPUCC_KONA
+	tristate "Kona Graphics Clock Controller"
+	depends on SM_GCC_KONA
+	help
+	  Support for the graphics clock controller on Qualcomm Technologies, Inc.
+	  KONA devices.
+	  Say Y if you want to support graphics controller devices and
+	  functionality such as 3D graphics.
+
+config SM_DISPCC_KONA
+	tristate "KONA Display Clock Controller"
+	depends on SM_GCC_KONA
+	help
+	  Support for the display clock controller on Qualcomm Technologies, Inc.
+	  Kona devices.
+	  Say Y if you want to support display devices and functionality such as
+	  splash screen.
+
+config SM_NPUCC_KONA
+	tristate "KONA NPU Clock Controller"
+	select SM_GCC_KONA
+	help
+	  Support for the NPU Clock Controller on Qualcomm Technologies, Inc.
+	  KONA devices.
+	  Say Y if you want to enable use of the Network Processing Unit in
+	  order to speed up certain types of calculations.
 
 config SM_GCC_HOLI
 	tristate "HOLI Global Clock Controller"
@@ -963,6 +1025,42 @@ config SM_DEBUGCC_BENGAL
 	  BENGAL devices.
 	  Say Y if you want to support the debug clocks such as
 	  clock measurement functionality.
+
+config SA_GCC_LEMANS
+	tristate "Lemans Global Clock Controller"
+	depends on COMMON_CLK_QCOM
+	help
+	  Support for the global clock controller on Qualcomm Technologies, Inc
+	  lemans devices.
+	  Say Y if you want to use peripheral devices such as UART, SPI, I2C,
+	  USB, UFS, SD/eMMC, PCIe, etc.
+
+config SA_CAMCC_LEMANS
+	tristate "LEMANS Camera Clock Controller"
+	select SA_GCC_LEMANS
+	help
+	  Support for the camera clock controller on Qualcomm Technologies, Inc.
+	  Lemans devices.
+	  Say Y if you want to support camera devices and functionality such as
+	  capturing pictures.
+
+config SA_VIDEOCC_LEMANS
+	tristate "LEMANS Video Clock Controller"
+	select SA_GCC_LEMANS
+	help
+	  Support for the video clock controller on Qualcomm Technologies, Inc.
+	  LEMANS devices.
+	  Say Y if you want to support video devices and functionality such as
+	  video encode/decode.
+
+config SA_GPUCC_LEMANS
+	tristate "LEMANS Graphics Clock Controllers"
+	select SA_GCC_LEMANS
+	help
+	  Support for the graphics clock controller on Qualcomm Technologies, Inc
+	  LEMANS devices.
+	  Say Y if you want to support graphics controller devices and
+	  functionality such as 3D graphics.
 
 endif
 

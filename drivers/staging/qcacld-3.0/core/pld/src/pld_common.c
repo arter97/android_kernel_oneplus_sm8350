@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2016-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -1318,11 +1319,13 @@ int pld_exit_power_save(struct device *dev)
 	switch (type) {
 	case PLD_BUS_TYPE_PCIE:
 	case PLD_BUS_TYPE_PCIE_FW_SIM:
-	case PLD_BUS_TYPE_IPCI_FW_SIM:
 	case PLD_BUS_TYPE_SNOC_FW_SIM:
 	case PLD_BUS_TYPE_SNOC:
 	case PLD_BUS_TYPE_SDIO:
 	case PLD_BUS_TYPE_USB:
+		break;
+	case PLD_BUS_TYPE_IPCI_FW_SIM:
+		ret = pld_pcie_fw_sim_exit_power_save(dev);
 		break;
 	case PLD_BUS_TYPE_IPCI:
 		ret = pld_ipci_exit_power_save(dev);
@@ -3151,6 +3154,32 @@ void pld_thermal_unregister(struct device *dev, int mon_id)
 	}
 }
 
+const char *pld_bus_width_type_to_str(enum pld_bus_width_type level)
+{
+	switch (level) {
+	/* initialize the wlan sub system */
+	case PLD_BUS_WIDTH_NONE:
+		return "NONE";
+	case PLD_BUS_WIDTH_IDLE:
+		return "IDLE";
+	case PLD_BUS_WIDTH_LOW:
+		return "LOW";
+	case PLD_BUS_WIDTH_MEDIUM:
+		return "MEDIUM";
+	case PLD_BUS_WIDTH_HIGH:
+		return "HIGH";
+	case PLD_BUS_WIDTH_VERY_HIGH:
+		return "VERY_HIGH";
+	case PLD_BUS_WIDTH_LOW_LATENCY:
+		return "LOW_LAT";
+	default:
+		if (level > PLD_BUS_WIDTH_ULTRA_HIGH)
+			return "ULTRA_HIGH+";
+		else
+			return "INVAL";
+	}
+}
+
 int pld_get_thermal_state(struct device *dev, unsigned long *thermal_state,
 			  int mon_id)
 {
@@ -3181,6 +3210,45 @@ int pld_get_thermal_state(struct device *dev, unsigned long *thermal_state,
 
 	return errno;
 }
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0))
+/**
+ * pld_is_ipa_offload_disabled() - Check if IPA offload is disabled or not
+ *
+ * @dev: device
+ *
+ * This API will be called to check if IPA offload is disabled or not.
+ *
+ *  Return: Non-zero for IPA offload is disabled
+ *          Otherwise IPA offload is enabled
+ */
+int pld_is_ipa_offload_disabled(struct device *dev)
+{
+	unsigned long dev_cfg = 0;
+
+	enum pld_bus_type type = pld_get_bus_type(dev);
+
+	switch (type) {
+	case PLD_BUS_TYPE_SNOC:
+		dev_cfg = pld_snoc_get_device_config();
+		break;
+	case PLD_BUS_TYPE_IPCI:
+	case PLD_BUS_TYPE_PCIE:
+	case PLD_BUS_TYPE_SDIO:
+	case PLD_BUS_TYPE_USB:
+	case PLD_BUS_TYPE_SNOC_FW_SIM:
+	case PLD_BUS_TYPE_PCIE_FW_SIM:
+	case PLD_BUS_TYPE_IPCI_FW_SIM:
+		pr_err("Not supported on type %d\n", type);
+		break;
+	default:
+		pr_err("Invalid device type %d\n", type);
+		break;
+	}
+
+	return test_bit(PLD_IPA_DISABLED, &dev_cfg);
+}
+#endif
 
 #ifdef FEATURE_WLAN_TIME_SYNC_FTM
 /**

@@ -83,7 +83,7 @@ u32 arm_smmu_debug_tbu_testbus_select(void __iomem *tbu_base,
 u32 arm_smmu_debug_tbu_testbus_output(void __iomem *tbu_base);
 u32 arm_smmu_debug_tcu_testbus_select(phys_addr_t phys_addr,
 		void __iomem *tcu_base, enum tcu_testbus testbus,
-		bool write, u32 val);
+		bool write, u32 vall, u32 tcu_testbus_version);
 u32 arm_smmu_debug_tcu_testbus_output(phys_addr_t phys_addr);
 void arm_smmu_debug_dump_tbu_testbus(struct device *dev, void __iomem *tbu_base,
 			int tbu_testbus_sel);
@@ -110,7 +110,7 @@ static inline u32 arm_smmu_debug_tbu_testbus_output(void __iomem *tbu_base)
 }
 u32 arm_smmu_debug_tcu_testbus_select(phys_addr_t phys_addr,
 		void __iomem *tcu_base,	enum tcu_testbus testbus,
-		bool write, u32 val)
+		bool write, u32 vall, u32 tcu_testbus_version)
 {
 }
 static inline u32 arm_smmu_debug_tcu_testbus_output(phys_addr_t phys_addr)

@@ -285,12 +285,11 @@ config PHYS_ADDR_T_64BIT
 config BOUNCE
 	bool "Enable bounce buffers"
 	default y
-	depends on BLOCK && MMU && (ZONE_DMA || HIGHMEM)
+	depends on BLOCK && MMU && HIGHMEM
 	help
-	  Enable bounce buffers for devices that cannot access
-	  the full range of memory available to the CPU. Enabled
-	  by default when ZONE_DMA or HIGHMEM is selected, but you
-	  may say n to override this.
+	  Enable bounce buffers for devices that cannot access the full range of
+	  memory available to the CPU. Enabled by default when HIGHMEM is
+	  selected, but you may say n to override this.
 
 config VIRT_TO_BUS
 	bool
@@ -815,32 +814,29 @@ config ARCH_HAS_PTE_SPECIAL
 config ARCH_HAS_HUGEPD
 	bool
 
-config PRIORITIZE_OOM_TASKS
-	bool "Attempt to further prioritize OOM killer kills"
-	depends on QGKI
+config LRU_GEN
+	bool "Multi-Gen LRU"
+	depends on MMU
+	# the following options can use up the spare bits in page flags
+	depends on !MAXSMP && (64BIT || !SPARSEMEM || SPARSEMEM_VMEMMAP)
 	help
-	  When the OOM killer selects a task to kill it considers all tasks
-	  with a oom_score_adj value > OOM_SCORE_ADJ_MIN. This doesn't work
-	  well when the OS has 'high priority' tasks which should only be
-	  considered for killing after all other 'lower priority' tasks
-	  have first been killed.
+	  A high performance LRU implementation to overcommit memory. See
+	  Documentation/admin-guide/mm/multigen_lru.rst for details.
 
-	  Enable this option to impose a limit on the minimum task
-	  oom_score_adj which should first be considered for killing
-	  before allowing the OOM killer to select tasks without
-	  limitation.
-
-	  If unsure, say N.
-
-config OOM_TASK_PRIORITY_ADJ_LIMIT
-	int "Min oom_score_adj when priotizing OOM killer kills"
-	depends on PRIORITIZE_OOM_TASKS
-	range -1000 1000
-	default 0
+config LRU_GEN_ENABLED
+	bool "Enable by default"
+	depends on LRU_GEN
 	help
-	  With this parameter you can limit the OOM killer to first kill
-	  tasks with an oom_score_adj value above a certain threshold
-	  before considering tasks with a lower oom_score_adj value.
+	  This option enables the multi-gen LRU by default.
+
+config LRU_GEN_STATS
+	bool "Full stats for debugging"
+	depends on LRU_GEN
+	help
+	  Do not enable this option unless you plan to look at historical stats
+	  from evicted generations for debugging purpose.
+
+	  This option has a per-memcg and per-node memory overhead.
 
 endmenu
 

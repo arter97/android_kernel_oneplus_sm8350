@@ -4799,7 +4799,11 @@ EXPORT_SYMBOL_GPL(ufshcd_make_hba_operational);
  * @hba: per adapter instance
  * @can_sleep: perform sleep or just spin
  */
+#if defined(CONFIG_SCSI_UFSHCD_QTI)
+void ufshcd_hba_stop(struct ufs_hba *hba, bool can_sleep)
+#else
 static inline void ufshcd_hba_stop(struct ufs_hba *hba, bool can_sleep)
+#endif
 {
 	int err;
 
@@ -6158,7 +6162,12 @@ static inline void ufshcd_schedule_eh_work(struct ufs_hba *hba)
 
 static void ufshcd_err_handling_prepare(struct ufs_hba *hba)
 {
+#if defined(CONFIG_SCSI_UFSHCD_QTI)
+	if (!hba->abort_triggered_wlun)
+		pm_runtime_get_sync(hba->dev);
+#else
 	pm_runtime_get_sync(hba->dev);
+#endif
 	if (pm_runtime_suspended(hba->dev)) {
 		/*
 		 * Don't assume anything of pm_runtime_get_sync(), if
@@ -6190,7 +6199,13 @@ static void ufshcd_err_handling_unprepare(struct ufs_hba *hba)
 	ufshcd_release(hba);
 	if (hba->clk_scaling.is_allowed)
 		ufshcd_resume_clkscaling(hba);
+#if defined(CONFIG_SCSI_UFSHCD_QTI)
+	if (!hba->abort_triggered_wlun)
+		pm_runtime_put(hba->dev);
+	hba->abort_triggered_wlun = false;
+#else
 	pm_runtime_put(hba->dev);
+#endif
 }
 
 static inline bool ufshcd_err_handling_should_stop(struct ufs_hba *hba)
@@ -7243,8 +7258,15 @@ static int ufshcd_abort(struct scsi_cmnd *cmd)
 	 * To avoid these unnecessary/illegal step we skip to the last error
 	 * handling stage: reset and restore.
 	 */
+#if defined(CONFIG_SCSI_UFSHCD_QTI)
+	if (lrbp->lun == UFS_UPIU_UFS_DEVICE_WLUN) {
+		hba->abort_triggered_wlun = true;
+		return ufshcd_eh_host_reset_handler(cmd);
+	}
+#else
 	if (lrbp->lun == UFS_UPIU_UFS_DEVICE_WLUN)
 		return ufshcd_eh_host_reset_handler(cmd);
+#endif
 
 	ufshcd_hold(hba, false);
 	reg = ufshcd_readl(hba, REG_UTP_TRANSFER_REQ_DOOR_BELL);
@@ -9736,7 +9758,32 @@ static int ufshcd_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 	}
 
 	if (!ufshcd_is_ufs_dev_active(hba)) {
+		/*
+		 * QCS610 UFS 3.x uses PMIC Buck regulator which requires
+		 * additional delay to settle its voltage back to normal 2.5
+		 * volts from the power down, so below delay_ssu flag is
+		 * used to enable delay before sending start stop unit command.
+		 */
+		if (hba->delay_ssu && hba->dev_info.wspecversion >= 0x300)
+			usleep_range(20, 25);
+
 		ret = ufshcd_set_dev_pwr_mode(hba, UFS_ACTIVE_PWR_MODE);
+#if defined(CONFIG_SCSI_UFSHCD_QTI)
+		if (ret) {
+			if (ufshcd_is_ufs_dev_active(hba) &&
+					ufshcd_is_link_active(hba)) {
+				ret = 0;
+				dev_err(hba->dev, "UFS device and link are Active\n");
+			} else if ((work_pending(&hba->eh_work)) ||
+					ufshcd_eh_in_progress(hba)) {
+				flush_work(&hba->eh_work);
+				ret = 0;
+				dev_err(hba->dev, "dev pwr mode=%d, UIC link state=%d\n",
+						hba->curr_dev_pwr_mode,
+						hba->uic_link_state);
+			}
+		}
+#endif
 		if (ret)
 			goto set_old_link_state;
 	}
@@ -9780,8 +9827,18 @@ static int ufshcd_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 	goto out;
 
 set_old_dev_pwr_mode:
-	if (old_pwr_mode != hba->curr_dev_pwr_mode)
+	if (old_pwr_mode != hba->curr_dev_pwr_mode) {
+		/*
+		 * QCS610 UFS 3.x uses PMIC Buck regulator which requires
+		 * additional delay to settle its voltage back to normal 2.5
+		 * volts from the power down, so below delay_ssu flag is
+		 * used to enable delay before sending start stop unit command.
+		 */
+		if (hba->delay_ssu && hba->dev_info.wspecversion >= 0x300)
+			usleep_range(20, 25);
+
 		ufshcd_set_dev_pwr_mode(hba, old_pwr_mode);
+	}
 set_old_link_state:
 	ufshcd_link_state_transition(hba, old_link_state, 0);
 vendor_suspend:

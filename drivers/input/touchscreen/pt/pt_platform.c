@@ -1039,7 +1039,7 @@ int pt_setup_irq(struct pt_core_platform_data *pdata, int on,
 			/* use edge triggered interrupts */
 			irq_flags = IRQF_TRIGGER_FALLING;
 		rc = request_threaded_irq(cd->irq, NULL, pt_irq,
-			irq_flags | IRQF_ONESHOT, dev_name(dev), cd);
+			irq_flags | IRQF_ONESHOT | IRQF_NO_SUSPEND, dev_name(dev), cd);
 		if (rc < 0)
 			pt_debug(dev, DL_ERROR,
 				"%s: Error, could not request irq\n", __func__);

@@ -130,6 +130,9 @@ static int silent_mode_enable_monitor(struct silent_mode_info *info)
 {
 	int result = 0;
 
+	if (!info)
+		return -EINVAL;
+
 	dev_info(&info->pdev->dev, " %s\n", __func__);
 	if (info != NULL) {
 		result = gpio_get_value(info->sgpio);
@@ -143,6 +146,9 @@ static int silent_mode_enable_monitor(struct silent_mode_info *info)
 
 static int silent_mode_disable_monitor(struct silent_mode_info *info)
 {
+	if (!info || !info->pdev)
+		return -EINVAL;
+
 	dev_info(&info->pdev->dev, "%s\n", __func__);
 	if (info != NULL)
 		disable_irq(info->sirq);
@@ -157,8 +163,8 @@ static int forced_mode_enforced(void)
 						"silent_boot_mode",
 						strlen(saved_command_line));
 
-	if (strnstr(match, "=forcednonsilent", strlen(match)) ||
-			strnstr(match, "=forcedsilent", strlen(match)))
+	if (match && (strnstr(match, "=forcednonsilent", strlen(match)) ||
+			strnstr(match, "=forcedsilent", strlen(match))))
 		return 1;
 
 	return 0;

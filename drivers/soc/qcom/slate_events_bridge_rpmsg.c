@@ -15,9 +15,10 @@ int seb_rpmsg_tx_msg(void  *msg, size_t len)
 {
 	int ret = 0;
 
-	if (pdev == NULL || !pdev->chnl_state)
+	if (pdev == NULL || !pdev->chnl_state) {
 		pr_err("pmsg_device is null, channel is closed\n");
-
+		return -ENETRESET;
+	}
 	pdev->message = msg;
 	pdev->message_length = len;
 	if (pdev->message != NULL) {

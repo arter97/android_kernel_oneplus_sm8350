@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include "hab.h"
 #include <linux/fdtable.h>
@@ -903,9 +904,11 @@ buffer_ready:
 	exp_info.flags = O_RDWR;
 	exp_info.priv = pglist;
 	dmabuf = dma_buf_export(&exp_info);
-	if (IS_ERR(dmabuf))
+	if (IS_ERR(dmabuf)) {
 		pr_err("export to dmabuf failed, exp %d, pchan %s\n",
 			exp->export_id, pchan->name);
+		pages_list_put(pglist);
+	}
 
 	return dmabuf;
 }
@@ -937,6 +940,9 @@ int habmem_imp_hyp_map(void *imp_ctx, struct hab_import *param,
 
 int habmm_imp_hyp_unmap(void *imp_ctx, struct export_desc *exp, int kernel)
 {
+	/* dma_buf is the only supported format in khab */
+	if (kernel)
+		dma_buf_put((struct dma_buf *)exp->kva);
 	return 0;
 }
 

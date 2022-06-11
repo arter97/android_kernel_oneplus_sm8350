@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/delay.h>
@@ -52,6 +53,12 @@ struct pdc_pin_region {
 	u32 cnt;
 };
 
+struct pdc_mux_region {
+	u32 pin_base;
+	u32 mux_base;
+	u32 index;
+};
+
 struct spi_cfg_regs {
 	union {
 		u64 start;
@@ -62,14 +69,22 @@ struct spi_cfg_regs {
 
 static DEFINE_RAW_SPINLOCK(pdc_lock);
 static void __iomem *pdc_base;
+static void __iomem *pdc_mux_base;
 static struct pdc_pin_region *pdc_region;
 static int pdc_region_cnt;
+static struct pdc_mux_region *pdc_mux_region;
+static int pdc_mux_region_cnt;
 static struct spi_cfg_regs *spi_cfg;
 #define pdc_ipc_log NULL
 
 static void pdc_reg_write(int reg, u32 i, u32 val)
 {
 	writel_relaxed(val, pdc_base + reg + i * sizeof(u32));
+}
+
+static void pdc_mux_reg_write(u32 i, u32 val)
+{
+	writel_relaxed(val, pdc_mux_base + i * 0x14);
 }
 
 static u32 pdc_reg_read(int reg, u32 i)
@@ -100,18 +115,19 @@ static int qcom_pdc_gic_set_irqchip_state(struct irq_data *d,
 static void pdc_enable_intr(struct irq_data *d, bool on)
 {
 	int pin_out = d->hwirq;
+	unsigned long flags;
 	u32 index, mask;
 	u32 enable;
 
 	index = pin_out / 32;
 	mask = pin_out % 32;
 
-	raw_spin_lock(&pdc_lock);
+	raw_spin_lock_irqsave(&pdc_lock, flags);
 	enable = pdc_reg_read(IRQ_ENABLE_BANK, index);
 	enable = on ? ENABLE_INTR(enable, mask) : CLEAR_INTR(enable, mask);
 	pdc_reg_write(IRQ_ENABLE_BANK, index, enable);
 	ipc_log_string(pdc_ipc_log, "PIN=%d enable=%d", d->hwirq, on);
-	raw_spin_unlock(&pdc_lock);
+	raw_spin_unlock_irqrestore(&pdc_lock, flags);
 }
 
 static void qcom_pdc_gic_disable(struct irq_data *d)
@@ -376,6 +392,22 @@ static irq_hw_number_t get_parent_hwirq(int pin)
 	return PDC_NO_PARENT_IRQ;
 }
 
+static int get_pin_mux(int pin, int *index)
+{
+	int i;
+	struct pdc_mux_region *region;
+
+	for (i = 0; i < pdc_mux_region_cnt; i++) {
+		region = &pdc_mux_region[i];
+		if (pin == region->pin_base) {
+			*index = region->index;
+			return region->mux_base;
+		}
+	}
+
+	return -EINVAL;
+}
+
 static int qcom_pdc_translate(struct irq_domain *d, struct irq_fwspec *fwspec,
 			      unsigned long *hwirq, unsigned int *type)
 {
@@ -445,6 +477,7 @@ static int qcom_pdc_gpio_alloc(struct irq_domain *domain, unsigned int virq,
 	irq_hw_number_t hwirq, parent_hwirq;
 	unsigned int type;
 	int ret;
+	int pdc_mux, index;
 
 	ret = qcom_pdc_translate(domain, fwspec, &hwirq, &type);
 	if (ret)
@@ -461,6 +494,12 @@ static int qcom_pdc_gpio_alloc(struct irq_domain *domain, unsigned int virq,
 	parent_hwirq = get_parent_hwirq(hwirq);
 	if (parent_hwirq == PDC_NO_PARENT_IRQ)
 		return 0;
+
+	if (pdc_mux_base) {
+		pdc_mux = get_pin_mux(hwirq, &index);
+		if (pdc_mux >= 0)
+			pdc_mux_reg_write(index, pdc_mux);
+	}
 
 	if (type & IRQ_TYPE_EDGE_BOTH)
 		type = IRQ_TYPE_EDGE_RISING;
@@ -529,11 +568,51 @@ static int pdc_setup_pin_mapping(struct device_node *np)
 	return 0;
 }
 
+static int pdc_setup_mux_mapping(struct device_node *np)
+{
+	int ret, n;
+
+	n = of_property_count_elems_of_size(np, "qcom,pdc-mux-ranges", sizeof(u32));
+	if (n <= 0)
+		return 0;
+
+	if (n % 3)
+		return -EINVAL;
+
+	pdc_mux_region_cnt = n / 3;
+	pdc_mux_region = kcalloc(pdc_mux_region_cnt, sizeof(*pdc_mux_region), GFP_KERNEL);
+	if (!pdc_mux_region) {
+		pdc_mux_region_cnt = 0;
+		return -ENOMEM;
+	}
+
+	for (n = 0; n < pdc_mux_region_cnt; n++) {
+		ret = of_property_read_u32_index(np, "qcom,pdc-mux-ranges",
+						 n * 3 + 0,
+						 &pdc_mux_region[n].pin_base);
+		if (ret)
+			return ret;
+		ret = of_property_read_u32_index(np, "qcom,pdc-mux-ranges",
+						 n * 3 + 1,
+						 &pdc_mux_region[n].mux_base);
+		if (ret)
+			return ret;
+		ret = of_property_read_u32_index(np, "qcom,pdc-mux-ranges",
+						 n * 3 + 2,
+						 &pdc_mux_region[n].index);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
 static int qcom_pdc_init(struct device_node *node, struct device_node *parent)
 {
 	struct irq_domain *parent_domain, *pdc_domain, *pdc_gpio_domain;
 	struct resource res;
 	int ret;
+	int index;
 
 	pdc_base = of_iomap(node, 0);
 	if (!pdc_base) {
@@ -554,6 +633,21 @@ static int qcom_pdc_init(struct device_node *node, struct device_node *parent)
 		goto fail;
 	}
 
+	index = of_property_match_string(node, "reg-names", "mux-base");
+	if (index >= 0) {
+		pdc_mux_base = of_iomap(node, index);
+		if (!pdc_mux_base) {
+			pr_err("%pOF: unable to map PDC Mux register\n", node);
+			goto fail;
+		}
+
+		ret = pdc_setup_mux_mapping(node);
+		if (ret) {
+			pr_err("%pOF: failed to setup PDC Mux mapping\n", node);
+			goto fail;
+		}
+	}
+
 	pdc_domain = irq_domain_create_hierarchy(parent_domain, 0, PDC_MAX_IRQS,
 						 of_fwnode_handle(node),
 						 &qcom_pdc_ops, NULL);
@@ -564,7 +658,7 @@ static int qcom_pdc_init(struct device_node *node, struct device_node *parent)
 	}
 
 	ret = of_address_to_resource(node, 1, &res);
-	if (!ret) {
+	if (!ret && !pdc_mux_base) {
 		spi_cfg = kcalloc(1, sizeof(*spi_cfg), GFP_KERNEL);
 		if (!spi_cfg) {
 			ret = -ENOMEM;
@@ -623,6 +717,7 @@ static const struct of_device_id qcom_pdc_match_table[] = {
 	{ .compatible = "qcom,sm8150-pdc" },
 	{ .compatible = "qcom,sm6150-pdc" },
 	{ .compatible = "qcom,yupik-pdc" },
+	{ .compatible = "qcom,kona-pdc" },
 	{}
 };
 MODULE_DEVICE_TABLE(of, qcom_pdc_match_table);
@@ -644,6 +739,8 @@ IRQCHIP_DECLARE(pdc_sm6150, "qcom,sm6150-pdc", qcom_pdc_init);
 IRQCHIP_DECLARE(pdc_sm8150, "qcom,sm8150-pdc", qcom_pdc_init);
 IRQCHIP_DECLARE(pdc_yupik, "qcom,yupik-pdc", qcom_pdc_init);
 IRQCHIP_DECLARE(pdc_sdxlemur, "qcom,sdxlemur-pdc", qcom_pdc_init);
+IRQCHIP_DECLARE(pdc_sa515m, "qcom,sa515m-pdc", qcom_pdc_init);
+IRQCHIP_DECLARE(pdc_kona, "qcom,kona-pdc", qcom_pdc_init);
 #endif
 
 MODULE_DESCRIPTION("Qualcomm Technologies, Inc. Power Domain Controller");

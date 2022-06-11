@@ -584,6 +584,8 @@ static const struct vadc_map_pt adcmap_gen3_batt_therm_100k[] = {
 	{ 6060,    980 }
 };
 
+static int g_r_comp_ohm;
+
 static int qcom_vadc_scale_hw_calib_volt(
 				const struct vadc_prescale_ratio *prescale,
 				const struct adc5_data *data,
@@ -696,6 +698,20 @@ static struct qcom_adc5_scale_type scale_adc5_fn[] = {
 	[SCALE_HW_CALIB_PM7_SMB_TEMP] = {qcom_vadc_scale_hw_pm7_smb_temp},
 	[SCALE_HW_CALIB_PM7_CHG_TEMP] = {qcom_vadc_scale_hw_pm7_chg_temp},
 };
+
+/**
+ * qcom_vadc_gen3_set_r_comp() - API to set resistor compensation value.
+ * @argument1: Value of resistor in ohms to compensate.
+ *
+ * API to set resistor compensation value which is used for Batt-id and
+ * Batt-Therm calculations to compensate for additional resistor in series.
+ *
+ * Return: None
+ */
+void qcom_vadc_gen3_set_r_comp(int r_comp_ohm)
+{
+	g_r_comp_ohm = r_comp_ohm;
+}
 
 static int qcom_vadc_map_voltage_temp(const struct vadc_map_pt *pts,
 				      u32 tablesize, s32 input, int *output)
@@ -1251,7 +1267,7 @@ static int qcom_adc5_gen3_scale_hw_calib_batt_therm_100(
 
 	/* (ADC code * R_PULLUP (100Kohm)) / (full_scale_code - ADC code)*/
 	resistance = (s64) adc_code * R_PU_100K;
-	resistance = div64_s64(resistance, (RATIO_MAX_ADC7 - adc_code));
+	resistance = div64_s64(resistance, (RATIO_MAX_ADC7 - adc_code)) - g_r_comp_ohm;
 
 	ret = qcom_vadc_map_voltage_temp(adcmap_gen3_batt_therm_100k,
 				 ARRAY_SIZE(adcmap_gen3_batt_therm_100k),
@@ -1278,7 +1294,7 @@ static int qcom_adc5_gen3_scale_hw_calib_batt_id_100(
 	resistance = (s64) adc_code * R_PU_100K;
 	resistance = div64_s64(resistance, (RATIO_MAX_ADC7 - adc_code));
 
-	*result_mdec = (int)resistance;
+	*result_mdec = (int)(resistance - g_r_comp_ohm);
 
 	return 0;
 };

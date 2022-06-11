@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _CRYPTO_QTI_VIRT_H
@@ -61,6 +62,8 @@ int crypto_qti_virt_derive_raw_secret_platform(const u8 *wrapped_key,
  * Return: zero on success, else a -errno value
  */
 int crypto_qti_virt_ice_get_info(uint32_t *total_num_slots);
+int crypto_qti_virt_get_crypto_capabilities(unsigned int *crypto_modes_supported,
+					    uint32_t crypto_array_size);
 #else
 static inline int crypto_qti_virt_program_key(const struct blk_crypto_key *key,
 						unsigned int slot)
@@ -80,6 +83,11 @@ static inline int crypto_qti_virt_derive_raw_secret_platform(
 }
 
 static inline int crypto_qti_virt_ice_get_info(uint32_t *total_num_slots)
+{
+	return -EOPNOTSUPP;
+}
+static inline int crypto_qti_virt_get_crypto_capabilities(unsigned int *crypto_modes_supported,
+							  uint32_t crypto_array_size)
 {
 	return -EOPNOTSUPP;
 }

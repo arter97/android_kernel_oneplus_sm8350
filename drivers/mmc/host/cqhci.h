@@ -249,6 +249,7 @@ struct cqhci_host_crypto_variant_ops {
 	int (*program_key)(struct cqhci_host *host,
 			   const union cqhci_crypto_cfg_entry *cfg,
 			   int slot);
+	int (*restore_from_hibernation)(struct cqhci_host *host);
 	void *priv;
 };
 

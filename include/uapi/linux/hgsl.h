@@ -464,4 +464,89 @@ struct hgsl_isync_forward {
 #define HGSL_IOCTL_ISYNC_FORWARD \
 				HGSL_IOW(0x18, \
 					 struct hgsl_isync_forward)
+
+/**
+ * struct hgsl_isync_timeline_create64 - create a isync timeline with 64 or 32bits timestamp
+ * @initial_ts: The initial timestamp value.
+ * @timeline_id: The timestamp for current fence
+ * @flags: flags used to timeline
+ */
+struct hgsl_timeline_create {
+	__u64 initial_ts;
+	__u32 timeline_id;
+	__s32 flags;
+};
+
+#define HGSL_IOCTL_TIMELINE_CREATE \
+				HGSL_IORW(0x19, struct hgsl_timeline_create)
+
+/**
+ * struct hgsl_timeline_val - A container to store a timeline/sequence number
+ * pair.
+ * @timepoint: timepoint to signal/query/wait
+ * @timeline: The timeline identifier to signal/query/wait
+ *
+ * A container to store a timeline/timepoint pair used by the query, signal and wait
+ * ioctls.
+ */
+struct hgsl_timeline_val {
+	__u64 timepoint;
+	__u32 timeline_id;
+	__u32 padding;
+};
+
+/**
+ * struct hgsl_timeline_query - query multiple timelines
+ * @timelines: Address of an array of &struct hgsl_timeline_val entries
+ * @count: Number of entries in @timeline
+ * @timelines_size: Size of each entry in @timelines
+ */
+struct hgsl_timeline_query {
+	__u64 timelines;
+	__u32 count;
+	__u32 timelines_size;
+};
+
+#define HGSL_IOCTL_TIMELINE_QUERY \
+				HGSL_IORW(0x1A, struct hgsl_timeline_query)
+
+/**
+ * struct hgsl_timeline_signal - signal multiple timelines
+ * @timelines: Address of an array of &struct hgsl_timeline_val entries
+ * @count: Number of entries in @timeline
+ * @timelines_size: Size of each entry in @timelines
+ */
+struct hgsl_timeline_signal {
+	__u64 timelines;
+	__u32 count;
+	__u32 timelines_size;
+};
+
+#define HGSL_IOCTL_TIMELINE_SIGNAL \
+				HGSL_IOW(0x1B, struct hgsl_timeline_signal)
+
+#define HGSL_TIMELINE_WAIT_ALL 1
+#define HGSL_TIMELINE_WAIT_ANY 2
+
+/**
+ * struct hgsl_timeline_wait - wait multiple timelines
+ * @timeout_nanosec: Number of nanoseconds to wait for the signal
+ * @timelines: Address of an array of &struct hgsl_timeline_val entries
+ * @count: Number of entries in @timeline
+ * @timelines_size: Size of each entry in @timelines
+ * @flags: One of HGSL_TIMELINE_WAIT_ALL or HGSL_TIMELINE_WAIT_ANY
+ */
+struct hgsl_timeline_wait {
+	__u64 timeout_nanosec;
+	__u64 timelines;
+	__u32 count;
+	__u32 timelines_size;
+	__u32 flags;
+/* private: padding for 64 bit compatibility */
+	__u32 padding;
+};
+
+#define HGSL_IOCTL_TIMELINE_WAIT \
+				HGSL_IOW(0x1C, struct hgsl_timeline_wait)
+
 #endif /* _UAPI_MSM_HGSL_H */

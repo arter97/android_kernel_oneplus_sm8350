@@ -7947,8 +7947,10 @@ fail_mem_ctrl:
 	kfree(ipa3_ctx->ipa_tz_unlock_reg);
 	ipa3_ctx->ipa_tz_unlock_reg = NULL;
 fail_tz_unlock_reg:
-	if (ipa3_ctx->logbuf)
+	if (ipa3_ctx->logbuf) {
 		ipc_log_context_destroy(ipa3_ctx->logbuf);
+		ipa3_ctx->logbuf = NULL;
+	}
 fail_uc_file_alloc:
 	kfree(ipa3_ctx->gsi_fw_file_name);
 	ipa3_ctx->gsi_fw_file_name = NULL;
@@ -9660,6 +9662,7 @@ static void ipa3_deepsleep_suspend(void)
 	/*Disabling IPA interrupt*/
 	ipa3_remove_interrupt_handler(IPA_TX_SUSPEND_IRQ);
 	ipa3_interrupts_destroy(ipa3_res.ipa_irq, &ipa3_ctx->master_pdev->dev);
+	ipa3_uc_interface_destroy();
 	/*Destroy the NAT device*/
 	ipa3_nat_ipv6ct_destroy_devices();
 	/*Freeing memory allocated for coalesing and dma task*/

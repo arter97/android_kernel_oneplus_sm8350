@@ -29,7 +29,6 @@ static int bcl_off_set_cur_state(struct thermal_cooling_device *cdev,
 				 unsigned long state)
 {
 	int  ret = 0;
-	uint8_t data = 0;
 	struct bcl_off_cdev *bcl_off_cdev = cdev->devdata;
 
 	if (state > BCL_OFF_MAX_LVL)
@@ -44,10 +43,10 @@ static int bcl_off_set_cur_state(struct thermal_cooling_device *cdev,
 	 * supposed to be called only one time. BCL cannot be re-enabled using this
 	 * function.
 	 */
-	ret = regmap_write(bcl_off_cdev->regmap, bcl_off_cdev->bcl_ctl_addr, &data);
+	ret = regmap_write(bcl_off_cdev->regmap, bcl_off_cdev->bcl_ctl_addr, 0);
 	if (ret < 0) {
-		pr_err("Error writing register:0x%04x val:0x%02x err:%d\n",
-				bcl_off_cdev->bcl_ctl_addr, data, ret);
+		pr_err("Error writing register:0x%04x err:%d\n",
+				bcl_off_cdev->bcl_ctl_addr, ret);
 		return ret;
 	}
 	bcl_off_cdev->bcl_off_state = state;

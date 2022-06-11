@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2016-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -77,6 +78,7 @@ enum pld_bus_type {
  * @PLD_BUS_WIDTH_MEDIUM: vote for medium bus bandwidth
  * @PLD_BUS_WIDTH_HIGH: vote for high bus bandwidth
  * @PLD_BUS_WIDTH_VERY_HIGH: vote for very high bus bandwidth
+ * @PLD_BUS_WIDTH_ULTRA_HIGH: vote for ultra high bus bandwidth
  * @PLD_BUS_WIDTH_LOW_LATENCY: vote for low latency bus bandwidth
  */
 enum pld_bus_width_type {
@@ -86,8 +88,11 @@ enum pld_bus_width_type {
 	PLD_BUS_WIDTH_MEDIUM,
 	PLD_BUS_WIDTH_HIGH,
 	PLD_BUS_WIDTH_VERY_HIGH,
+	PLD_BUS_WIDTH_ULTRA_HIGH,
+	PLD_BUS_WIDTH_MAX,
 	PLD_BUS_WIDTH_LOW_LATENCY,
 };
+
 
 #define PLD_MAX_FILE_NAME NAME_MAX
 
@@ -152,6 +157,16 @@ enum pld_uevent {
 	PLD_FW_HANG_EVENT,
 	PLD_SMMU_FAULT,
 };
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0))
+/**
+ * enum pld_device_config - Get PLD device config
+ * @PLD_IPA_DISABLD: IPA is disabled
+ */
+enum pld_device_config {
+	PLD_IPA_DISABLED,
+};
+#endif
 
 /**
  * struct pld_uevent_data - uevent status received from platform driver
@@ -932,6 +947,15 @@ int pld_thermal_register(struct device *dev, unsigned long state, int mon_id);
 void pld_thermal_unregister(struct device *dev, int mon_id);
 
 /**
+ * pld_bus_width_type_to_str() - Helper function to convert PLD bandwidth level
+ *				 to string
+ * @level: PLD bus width level
+ *
+ * Return: String corresponding to input "level"
+ */
+const char *pld_bus_width_type_to_str(enum pld_bus_width_type level);
+
+/**
  * pld_get_thermal_state() - Get the current thermal state from the PLD
  * @dev: The device structure
  * @thermal_state: param to store the current thermal state
@@ -941,6 +965,21 @@ void pld_thermal_unregister(struct device *dev, int mon_id);
  */
 int pld_get_thermal_state(struct device *dev, unsigned long *thermal_state,
 			  int mon_id);
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0))
+/**
+ * pld_is_ipa_offload_disabled() - Check if IPA offload is enabled or not
+ * @dev: The device structure
+ *
+ * Return: Non-zero code for IPA offload disable; zero for IPA offload enable
+ */
+int pld_is_ipa_offload_disabled(struct device *dev);
+#else
+int pld_is_ipa_offload_disabled(struct device *dev);
+{
+	return 0;
+}
+#endif
 
 #if IS_ENABLED(CONFIG_WCNSS_MEM_PRE_ALLOC) && defined(FEATURE_SKB_PRE_ALLOC)
 

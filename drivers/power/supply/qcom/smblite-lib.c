@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/device.h>
@@ -382,7 +383,7 @@ int smblite_lib_get_prop_from_bms(struct smb_charger *chg, int channel, int *val
 
 	if (chg->is_fg_remote) {
 		rc = remote_bms_get_prop(channel, val, BMS_GLINK);
-		if (rc < 0)
+		if ((rc < 0) && (rc != -EAGAIN))
 			smblite_lib_err(chg, "Couldn't get prop from remote bms, rc = %d",
 					rc);
 	} else {
@@ -698,7 +699,8 @@ int smblite_lib_set_icl_current(struct smb_charger *chg, const int icl_ua)
 	/* suspend if 25mA or less is requested */
 	bool suspend = (icl_ua <= USBIN_25UA);
 
-	schgm_flashlite_torch_priority(chg, suspend ? TORCH_BOOST_MODE :
+	if (chg->subtype == PM2250)
+		schgm_flashlite_torch_priority(chg, suspend ? TORCH_BOOST_MODE :
 							TORCH_BUCK_MODE);
 	/* Do not configure ICL from SW for DAM */
 	if (smblite_lib_get_prop_typec_mode(chg) ==
@@ -940,7 +942,7 @@ int smblite_lib_get_prop_batt_capacity(struct smb_charger *chg,
 
 	rc = smblite_lib_get_prop_from_bms(chg, SMB5_QG_CAPACITY,
 						&val->intval);
-	if (rc < 0)
+	if ((rc < 0) && (rc != -EAGAIN))
 		smblite_lib_err(chg, "Couldn't get capacity prop rc=%d\n", rc);
 
 	return rc;
@@ -1585,57 +1587,6 @@ int smblite_lib_run_aicl(struct smb_charger *chg, int type)
 	return 0;
 }
 
-static int poll_aicl_done(struct smb_charger *chg, int *settled_icl_ua)
-{
-	int rc, iteration = 20;
-	union power_supply_propval pval = {0, };
-	u8 stat;
-
-	/*
-	 * Poll for 1 sec with 50ms sleep till AICL_DONE bit
-	 * is not set.
-	 */
-	while (iteration) {
-		rc = smblite_lib_get_prop_usb_present(chg, &pval);
-		if (rc < 0) {
-			smblite_lib_err(chg, "Couldn't get USB present status rc=%d\n", rc);
-			return rc;
-		}
-
-		if (!pval.intval) {
-			smblite_lib_dbg(chg, PR_MISC, "USB removed\n");
-			return -EINVAL;
-		}
-
-		rc = smblite_lib_read(chg, AICL_STATUS_REG(chg->base), &stat);
-		if (rc < 0) {
-			smblite_lib_err(chg, "Couldn't read aicl_status rc=%d\n", rc);
-			return rc;
-		}
-
-		if (stat & AICL_DONE_BIT)
-			break;
-
-		iteration--;
-
-		msleep(50);
-	}
-
-	/* Get AICL Result */
-	rc = smblite_lib_get_prop_input_current_settled(chg, settled_icl_ua);
-	if (rc < 0) {
-		smblite_lib_err(chg, "Failed read AICL Result rc=%d\n", rc);
-		return -EINVAL;
-	}
-
-	smblite_lib_dbg(chg, PR_MISC,
-		"AICL_DONE = %s, settled_icl_ua = %d .. proceeding\n",
-			((stat & AICL_DONE_BIT) ? "True" : "False"),
-			*settled_icl_ua);
-
-	return 0;
-}
-
 #define BOOST_SS_TIMEOUT_COUNT 4
 static int smblite_lib_check_boost_ss(struct smb_charger *chg)
 {
@@ -1676,9 +1627,10 @@ static int smblite_lib_check_boost_ss(struct smb_charger *chg)
 }
 
 #define CONCURRENCY_REDUCED_ICL_UA 300000
+#define CONCURRENCY_MODE_SUPPORTED_ICL_UA 500000
 int smblite_lib_set_concurrent_config(struct smb_charger *chg, bool enable)
 {
-	int rc = 0, icl_ua = 0, settled_icl_ua = 0, usb_present = 0;
+	int rc = 0, icl_ua = 0, fixed_icl_ua = 0, usb_present = 0;
 	union power_supply_propval pval = {0, };
 	u8 apsd_status = 0;
 	bool boost_enabled = is_boost_en(chg);
@@ -1723,28 +1675,23 @@ int smblite_lib_set_concurrent_config(struct smb_charger *chg, bool enable)
 				"boost is already enabled. Skipping ICL vote.\n");
 		} else {
 			/*
-			 * On charger insertion, if concurrency mode is enabled it can cause
-			 * USB_ICL to be voted of much lower value due to AICL still going
-			 * on. Prevent this by waiting for AICL to complete and then reading
-			 * the settled current.
+			 * Incase were AICL is reruning and there is a request from Audio to
+			 * enable concurrency mode it may lead us to wait for 1+ secounds which
+			 * may in turn compromise with users Audio expirence. Eliminate this
+			 * delay by forcing ICL to a fixed value.
 			 */
-			rc = poll_aicl_done(chg, &settled_icl_ua);
-			if (rc < 0) {
-				smblite_lib_dbg(chg, PR_MISC,
-						"Failed to poll on AICL_DONE\n", rc);
-				goto failure;
-			}
+			fixed_icl_ua = CONCURRENCY_MODE_SUPPORTED_ICL_UA;
 
-			if (settled_icl_ua <= CONCURRENCY_REDUCED_ICL_UA) {
+			if (fixed_icl_ua <= CONCURRENCY_REDUCED_ICL_UA) {
 				/* Return as failure if settled ICL is less than required ICL. */
 				smblite_lib_err(chg,
-					"settled_icl_ua=%d less can't enable concurrency-mode\n",
-					settled_icl_ua);
+						"fixed_icl_ua=%d less can't enable concurrency-mode\n",
+						fixed_icl_ua);
 				return -EIO;
 			}
 
 			/* Reduce ICL to go into concurrency mode */
-			icl_ua = settled_icl_ua - CONCURRENCY_REDUCED_ICL_UA;
+			icl_ua = fixed_icl_ua - CONCURRENCY_REDUCED_ICL_UA;
 
 			rc = vote(chg->usb_icl_votable, CONCURRENT_MODE_VOTER, true,
 				  icl_ua);
@@ -1755,7 +1702,7 @@ int smblite_lib_set_concurrent_config(struct smb_charger *chg, bool enable)
 
 			smblite_lib_dbg(chg, PR_MISC,
 					"concurrent-mode: Reduced ICL to %d for concurrency mode\n",
-					settled_icl_ua);
+					icl_ua);
 		}
 
 		if (chg->hvdcp3_detected) {
@@ -1822,8 +1769,8 @@ int smblite_lib_set_concurrent_config(struct smb_charger *chg, bool enable)
 		}
 
 		chg->concurrent_mode_status = true;
-		smblite_lib_dbg(chg, PR_MISC, "Concurrent Mode enabled successfully: settled_icl_ua=%duA, icl_ua=%duA, is_hvdcp3=%d\n",
-					settled_icl_ua, icl_ua,
+		smblite_lib_dbg(chg, PR_MISC, "Concurrent Mode enabled successfully: fixed_icl_ua=%duA, icl_ua=%duA, is_hvdcp3=%d\n",
+					fixed_icl_ua, icl_ua,
 					chg->hvdcp3_detected);
 		goto out;
 	} else {
@@ -2871,7 +2818,8 @@ irqreturn_t smblite_usbin_uv_irq_handler(int irq, void *data)
 
 unsuspend_input:
 		/* Force torch in boost mode to ensure it works with low ICL */
-		schgm_flashlite_torch_priority(chg, TORCH_BOOST_MODE);
+		if (chg->subtype == PM2250)
+			schgm_flashlite_torch_priority(chg, TORCH_BOOST_MODE);
 
 		if (chg->aicl_max_reached) {
 			smblite_lib_dbg(chg, PR_MISC,

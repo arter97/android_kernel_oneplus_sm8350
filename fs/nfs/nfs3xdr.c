@@ -457,14 +457,14 @@ static void zero_nfs_fh3(struct nfs_fh *fh)
  *		uint32	nseconds;
  *	};
  */
-static __be32 *xdr_encode_nfstime3(__be32 *p, const struct timespec *timep)
+static __be32 *xdr_encode_nfstime3(__be32 *p, const struct timespec64 *timep)
 {
-	*p++ = cpu_to_be32(timep->tv_sec);
+	*p++ = cpu_to_be32((u32)timep->tv_sec);
 	*p++ = cpu_to_be32(timep->tv_nsec);
 	return p;
 }
 
-static __be32 *xdr_decode_nfstime3(__be32 *p, struct timespec *timep)
+static __be32 *xdr_decode_nfstime3(__be32 *p, struct timespec64 *timep)
 {
 	timep->tv_sec = be32_to_cpup(p++);
 	timep->tv_nsec = be32_to_cpup(p++);
@@ -534,7 +534,6 @@ static __be32 *xdr_decode_nfstime3(__be32 *p, struct timespec *timep)
 static void encode_sattr3(struct xdr_stream *xdr, const struct iattr *attr,
 		struct user_namespace *userns)
 {
-	struct timespec ts;
 	u32 nbytes;
 	__be32 *p;
 
@@ -584,10 +583,8 @@ static void encode_sattr3(struct xdr_stream *xdr, const struct iattr *attr,
 		*p++ = xdr_zero;
 
 	if (attr->ia_valid & ATTR_ATIME_SET) {
-		struct timespec ts;
 		*p++ = xdr_two;
-		ts = timespec64_to_timespec(attr->ia_atime);
-		p = xdr_encode_nfstime3(p, &ts);
+		p = xdr_encode_nfstime3(p, &attr->ia_atime);
 	} else if (attr->ia_valid & ATTR_ATIME) {
 		*p++ = xdr_one;
 	} else
@@ -595,8 +592,7 @@ static void encode_sattr3(struct xdr_stream *xdr, const struct iattr *attr,
 
 	if (attr->ia_valid & ATTR_MTIME_SET) {
 		*p++ = xdr_two;
-		ts = timespec64_to_timespec(attr->ia_mtime);
-		xdr_encode_nfstime3(p, &ts);
+		xdr_encode_nfstime3(p, &attr->ia_mtime);
 	} else if (attr->ia_valid & ATTR_MTIME) {
 		*p = xdr_one;
 	} else
@@ -1968,7 +1964,6 @@ int nfs3_decode_dirent(struct xdr_stream *xdr, struct nfs_entry *entry,
 		       bool plus)
 {
 	struct user_namespace *userns = rpc_userns(entry->server->client);
-	struct nfs_entry old = *entry;
 	__be32 *p;
 	int error;
 	u64 new_cookie;
@@ -1988,15 +1983,15 @@ int nfs3_decode_dirent(struct xdr_stream *xdr, struct nfs_entry *entry,
 
 	error = decode_fileid3(xdr, &entry->ino);
 	if (unlikely(error))
-		return error;
+		return -EAGAIN;
 
 	error = decode_inline_filename3(xdr, &entry->name, &entry->len);
 	if (unlikely(error))
-		return error;
+		return -EAGAIN;
 
 	error = decode_cookie3(xdr, &new_cookie);
 	if (unlikely(error))
-		return error;
+		return -EAGAIN;
 
 	entry->d_type = DT_UNKNOWN;
 
@@ -2004,7 +1999,7 @@ int nfs3_decode_dirent(struct xdr_stream *xdr, struct nfs_entry *entry,
 		entry->fattr->valid = 0;
 		error = decode_post_op_attr(xdr, entry->fattr, userns);
 		if (unlikely(error))
-			return error;
+			return -EAGAIN;
 		if (entry->fattr->valid & NFS_ATTR_FATTR_V3)
 			entry->d_type = nfs_umode_to_dtype(entry->fattr->mode);
 
@@ -2019,11 +2014,8 @@ int nfs3_decode_dirent(struct xdr_stream *xdr, struct nfs_entry *entry,
 			return -EAGAIN;
 		if (*p != xdr_zero) {
 			error = decode_nfs_fh3(xdr, entry->fh);
-			if (unlikely(error)) {
-				if (error == -E2BIG)
-					goto out_truncated;
-				return error;
-			}
+			if (unlikely(error))
+				return -EAGAIN;
 		} else
 			zero_nfs_fh3(entry->fh);
 	}
@@ -2032,11 +2024,6 @@ int nfs3_decode_dirent(struct xdr_stream *xdr, struct nfs_entry *entry,
 	entry->cookie = new_cookie;
 
 	return 0;
-
-out_truncated:
-	dprintk("NFS: directory entry contains invalid file handle\n");
-	*entry = old;
-	return -EAGAIN;
 }
 
 /*

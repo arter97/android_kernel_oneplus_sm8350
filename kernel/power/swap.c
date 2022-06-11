@@ -976,6 +976,7 @@ int swsusp_write(unsigned int flags)
 	}
 out_finish:
 	error = swap_writer_finish(&handle, flags, error);
+	deinit_aes_encrypt();
 	return error;
 }
 

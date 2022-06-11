@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2017-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -98,7 +99,34 @@ ucfg_scan_get_scan_id(struct wlan_objmgr_psoc *psoc);
  * Return: 0 for success or error code.
  */
 QDF_STATUS ucfg_scan_pno_start(struct wlan_objmgr_vdev *vdev,
-struct pno_scan_req_params *req);
+			       struct pno_scan_req_params *req);
+
+/**
+ * ucfg_scan_add_flags_to_pno_chan_list() - This API to update flags for all 6g
+ * channels in pno scan request
+ * @vdev: vdev pointer
+ * @req: pno req params
+ * @num_chan: number of channels
+ * @short_ssid: short ssid
+ * @list_idx: index of network_list in pno request
+ *
+ * Return: None
+ */
+void ucfg_scan_add_flags_to_pno_chan_list(struct wlan_objmgr_vdev *vdev,
+					  struct pno_scan_req_params *req,
+					  uint8_t *num_chan,
+					  uint32_t short_ssid,
+					  int list_idx);
+
+/**
+ * ucfg_is_6ghz_pno_scan_optimization_supported() - Public API to check
+ * 6ghz pno scan optimization supported in fw
+ * @psoc: psoc object
+ *
+ * Return: 0 for success.
+ */
+bool
+ucfg_is_6ghz_pno_scan_optimization_supported(struct wlan_objmgr_psoc *psoc);
 
 /**
  * ucfg_scan_pno_stop() - Public API to stop PNO

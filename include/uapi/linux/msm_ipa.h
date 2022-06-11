@@ -146,6 +146,7 @@
 #define IPA_IOCTL_FLT_MEM_PERIPHERAL_SET_PRIO_HIGH 91
 #define IPA_IOCTL_ADD_MACSEC_MAPPING            92
 #define IPA_IOCTL_DEL_MACSEC_MAPPING            93
+#define IPA_IOCTL_QUERY_CACHED_DRIVER_MSG	94
 
 /**
  * max size of the header to be inserted
@@ -914,7 +915,13 @@ enum ipa_macsec_event {
 #define IPA_MACSEC_EVENT_MAX IPA_MACSEC_EVENT_MAX
 };
 
-#define IPA_EVENT_MAX_NUM (IPA_MACSEC_EVENT_MAX)
+enum ipa_done_restore_event {
+	IPA_DONE_RESTORE_EVENT = IPA_MACSEC_EVENT_MAX,
+	IPA_DONE_RESTORE_EVENT_MAX
+	#define IPA_DONE_RESTORE_EVENT_MAX IPA_DONE_RESTORE_EVENT_MAX
+};
+
+#define IPA_EVENT_MAX_NUM (IPA_DONE_RESTORE_EVENT_MAX)
 #define IPA_EVENT_MAX ((int)IPA_EVENT_MAX_NUM)
 
 /**
@@ -1005,8 +1012,9 @@ enum ipa_hw_type {
 	IPA_HW_v4_11 = 20,
 	IPA_HW_v5_0 = 21,
 	IPA_HW_v5_1 = 22,
+	IPA_HW_v5_2 = 23,
 };
-#define IPA_HW_MAX (IPA_HW_v5_1 + 1)
+#define IPA_HW_MAX (IPA_HW_v5_2 + 1)
 
 #define IPA_HW_v4_0 IPA_HW_v4_0
 #define IPA_HW_v4_1 IPA_HW_v4_1
@@ -1017,6 +1025,7 @@ enum ipa_hw_type {
 #define IPA_HW_v4_11 IPA_HW_v4_11
 #define IPA_HW_v5_0 IPA_HW_v5_0
 #define IPA_HW_v5_1 IPA_HW_v5_1
+#define IPA_HW_v5_2 IPA_HW_v5_2
 
 /**
  * enum ipa_hw_feature_support - IPA HW supported feature
@@ -2736,6 +2745,7 @@ struct ipa_msg_meta {
  * struct ipa_wlan_msg - To hold information about wlan client
  * @name: name of the wlan interface
  * @mac_addr: mac address of wlan client
+ * @if_index: netdev interface index
  *
  * wlan drivers need to pass name of wlan iface and mac address of
  * wlan client along with ipa_wlan_event, whenever a wlan client is
@@ -2744,6 +2754,7 @@ struct ipa_msg_meta {
 struct ipa_wlan_msg {
 	char name[IPA_RESOURCE_NAME_MAX];
 	uint8_t mac_addr[IPA_MAC_ADDR_SIZE];
+	int16_t if_index;
 };
 
 /**
@@ -3643,6 +3654,8 @@ struct ipa_ioc_macsec_info {
 #define IPA_IOC_DEL_UC_ACT_ENTRY _IOWR(IPA_IOC_MAGIC, \
 				IPA_IOCTL_DEL_UC_ACT_ENTRY, \
 				__u16)
+#define IPA_IOC_QUERY_CACHED_DRIVER_MSG _IO(IPA_IOC_MAGIC,\
+				IPA_IOCTL_QUERY_CACHED_DRIVER_MSG)
 
 #define IPA_IOC_SET_SW_FLT _IOWR(IPA_IOC_MAGIC, \
 				IPA_IOCTL_SET_SW_FLT, \
