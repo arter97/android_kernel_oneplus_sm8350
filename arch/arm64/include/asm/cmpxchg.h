@@ -32,6 +32,7 @@ static inline u##sz __xchg_case_##name##sz(u##sz x, volatile void *ptr)		\
 	"	cbnz	%w1, 1b\n"						\
 	"	" #mb,								\
 	/* LSE atomics */							\
+	"	prfm	pstl1strm, %2\n"					\
 	"	swp" #acq_lse #rel #sfx "\t%" #w "3, %" #w "0, %2\n"		\
 		__nops(3)							\
 	"	" #nop_lse)							\
