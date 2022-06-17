@@ -73,6 +73,11 @@ if ! mount | grep -q "$BIND" && [ ! -e /sbin/recovery ] && [ ! -e /dev/ep/.post_
   # lazy unmount /dev/ep for invisibility
   umount -l /dev/ep
 
+  # Wait until "on init" is triggered
+  while [ ! -e /dev/cpuset/background ]; do
+    sleep 1
+  done
+
   # Setup swap
   while [ ! -e /dev/block/zram0 ]; do
     sleep 1
@@ -110,6 +115,9 @@ if ! mount | grep -q "$BIND" && [ ! -e /sbin/recovery ] && [ ! -e /dev/ep/.post_
 
   #liochen@SYSTEM, 2020/11/02, Add for enable ufs performance
   echo 0 > /sys/class/scsi_host/host0/../../../clkscale_enable
+
+  # SSG
+  echo 25 > /dev/blkio/background/blkio.ssg.max_available_ratio
 
   # Re-enable SELinux
   echo "97" > /sys/fs/selinux/enforce

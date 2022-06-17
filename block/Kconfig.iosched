@@ -18,6 +18,20 @@ config MQ_IOSCHED_KYBER
 	  synchronous writes, it will self-tune queue depths to achieve that
 	  goal.
 
+config MQ_IOSCHED_SSG
+	tristate "SamSung Generic I/O scheduler"
+	default n
+	---help---
+	  SamSung Generic IO scheduler.
+
+config MQ_IOSCHED_SSG_CGROUP
+	tristate "Control Group for SamSung Generic I/O scheduler"
+	default n
+	depends on BLK_CGROUP
+	depends on MQ_IOSCHED_SSG
+	---help---
+	  Control Group for SamSung Generic IO scheduler.
+
 config IOSCHED_BFQ
 	tristate "BFQ I/O scheduler"
 	---help---
