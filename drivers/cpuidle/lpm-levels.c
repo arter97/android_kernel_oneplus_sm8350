@@ -272,7 +272,7 @@ static void program_rimps_timer(struct lpm_cpu *cpu)
 	spin_lock(&cpu->cpu_lock);
 
 	/* RIMPS timer pending should be read before programming timeout val */
-	readl_relaxed(cpu->rimps_tmr_base + TIMER_PENDING);
+	readl(cpu->rimps_tmr_base + TIMER_PENDING);
 	ctrl_val = readl_relaxed(cpu->rimps_tmr_base + TIMER_CTRL);
 	writel_relaxed(ctrl_val & ~(TIMER_CONTROL_EN),
 				cpu->rimps_tmr_base + TIMER_CTRL);
