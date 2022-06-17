@@ -111,6 +111,9 @@ if ! mount | grep -q "$BIND" && [ ! -e /sbin/recovery ] && [ ! -e /dev/ep/.post_
   #liochen@SYSTEM, 2020/11/02, Add for enable ufs performance
   echo 0 > /sys/class/scsi_host/host0/../../../clkscale_enable
 
+  # SSG
+  echo 25 > /dev/blkio/background/blkio.ssg.max_available_ratio
+
   # Re-enable SELinux
   echo "97" > /sys/fs/selinux/enforce
 
