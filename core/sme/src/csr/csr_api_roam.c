@@ -83,8 +83,8 @@
 #include "wlan_cm_roam_public_struct.h"
 #include "wlan_mlme_twt_api.h"
 #include "wlan_cmn_ieee80211.h"
+#include "wlan_crypto_def_i.h"
 
-#define RSN_AUTH_KEY_MGMT_SAE           WLAN_RSN_SEL(WLAN_AKM_SAE)
 #define MAX_PWR_FCC_CHAN_12 8
 #define MAX_PWR_FCC_CHAN_13 2
 
@@ -15799,10 +15799,11 @@ QDF_STATUS csr_send_join_req_msg(struct mac_context *mac, uint32_t sessionId,
 				sme_debug("Channel is 6G but country IE not present");
 			wlan_reg_read_current_country(mac->psoc,
 						      programmed_country);
-			status = wlan_reg_get_6g_power_type_for_ctry(
+			status = wlan_reg_get_6g_power_type_for_ctry(mac->psoc,
 					pIes->Country.country,
 					programmed_country, &power_type_6g,
-					&ctry_code_match);
+					&ctry_code_match,
+					pSession->ap_power_type);
 			if (QDF_IS_STATUS_ERROR(status))
 				break;
 			csr_join_req->ap_power_type_6g = power_type_6g;
@@ -21090,6 +21091,7 @@ csr_process_roam_sync_callback(struct mac_context *mac_ctx,
 {
 	uint8_t session_id = roam_synch_data->roamed_vdev_id;
 	struct csr_roam_session *session = CSR_GET_SESSION(mac_ctx, session_id);
+	struct wlan_frame_hdr *hdr;
 	tDot11fBeaconIEs *ies_local = NULL;
 	struct ps_global_info *ps_global_info = &mac_ctx->sme.ps_global_info;
 	struct csr_roam_info *roam_info;
@@ -21309,7 +21311,6 @@ csr_process_roam_sync_callback(struct mac_context *mac_ctx,
 		}
 
 		policy_mgr_check_n_start_opportunistic_timer(mac_ctx->psoc);
-		policy_mgr_check_concurrent_intf_and_restart_sap(mac_ctx->psoc);
 		vdev_roam_params->roam_invoke_in_progress = false;
 
 		if (roam_synch_data->authStatus ==
@@ -21328,6 +21329,7 @@ csr_process_roam_sync_callback(struct mac_context *mac_ctx,
 						   WLAN_ROAM_INIT,
 						   REASON_CONNECT);
 		}
+		policy_mgr_check_concurrent_intf_and_restart_sap(mac_ctx->psoc);
 		goto end;
 	case SIR_ROAMING_DEAUTH:
 		csr_roam_roaming_offload_timer_action(
@@ -21609,15 +21611,28 @@ csr_process_roam_sync_callback(struct mac_context *mac_ctx,
 				eCSR_NEIGHBOR_ROAM_STATE_INIT, session_id);
 	}
 
-	if (roam_synch_data->is_ft_im_roam) {
+	hdr = (struct wlan_frame_hdr *)((uint8_t *)roam_synch_data +
+					roam_synch_data->reassoc_req_offset);
+	if (WLAN_FC0_GET_TYPE(hdr->i_fc[0]) == WLAN_FC0_TYPE_MGMT &&
+	    WLAN_FC0_GET_STYPE(hdr->i_fc[0]) == WLAN_FC0_STYPE_ASSOC_REQ) {
 		ssid_offset = SIR_MAC_ASSOC_REQ_SSID_OFFSET;
 	} else {
 		ssid_offset = SIR_MAC_REASSOC_REQ_SSID_OFFSET;
 	}
 
 	roam_info->nBeaconLength = 0;
-	roam_info->nAssocReqLength = roam_synch_data->reassoc_req_length -
-		SIR_MAC_HDR_LEN_3A - ssid_offset;
+	roam_info->nAssocReqLength = 0;
+	roam_info->nAssocRspLength = 0;
+	if (roam_synch_data->reassoc_req_length >
+	    (SIR_MAC_HDR_LEN_3A + ssid_offset)) {
+		roam_info->nAssocReqLength =
+			roam_synch_data->reassoc_req_length -
+			SIR_MAC_HDR_LEN_3A - ssid_offset;
+	} else {
+		sme_err("Invalid reassoc length:%d",
+			roam_synch_data->reassoc_req_length);
+	}
+
 	roam_info->nAssocRspLength = roam_synch_data->reassocRespLength -
 		SIR_MAC_HDR_LEN_3A;
 	roam_info->pbFrames = qdf_mem_malloc(roam_info->nBeaconLength +
