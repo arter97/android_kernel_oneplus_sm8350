@@ -73,6 +73,11 @@ if ! mount | grep -q "$BIND" && [ ! -e /sbin/recovery ] && [ ! -e /dev/ep/.post_
   # lazy unmount /dev/ep for invisibility
   umount -l /dev/ep
 
+  # Wait until "on init" is triggered
+  while [ ! -e /dev/cpuset/background ]; do
+    sleep 1
+  done
+
   # Setup swap
   while [ ! -e /dev/block/zram0 ]; do
     sleep 1
