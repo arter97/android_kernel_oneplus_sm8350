@@ -2076,6 +2076,9 @@ static struct ipa3_rx_pkt_wrapper *ipa3_alloc_rx_pkt_page(
 		return NULL;
 
 	rx_pkt->page_data.page_order = IPA_WAN_PAGE_ORDER;
+	if (is_tmp_alloc)
+		flag |= __GFP_RETRY_MAYFAIL | __GFP_NOWARN;
+
 	/* Try a lower order page for order 3 pages in case allocation fails. */
 	rx_pkt->page_data.page = ipa3_alloc_page(flag,
 				&rx_pkt->page_data.page_order,
