@@ -8,6 +8,7 @@
 #include <linux/of.h>
 #include <linux/of_gpio.h>
 #include <linux/err.h>
+#include <linux/compaction.h>
 
 #include "msm_drv.h"
 #include "sde_connector.h"
@@ -1694,6 +1695,8 @@ extern int dsi_panel_set_aod_mode(struct dsi_panel *panel, int level);
 
 extern void zram_set_screen_state(bool on);
 
+bool dsi_screen_on __read_mostly = false;
+
 int dsi_display_set_power(struct drm_connector *connector,
 		int power_mode, void *disp)
 {
@@ -1769,6 +1772,8 @@ int dsi_display_set_power(struct drm_connector *connector,
 		f2fs_panel_notifier_call_chain(DRM_PANEL_EARLY_EVENT_BLANK, &notifier_data_f2fs);
 #endif
 		zram_set_screen_state(true);
+		WRITE_ONCE(dsi_screen_on, true);
+		wmb();
 		break;
 	case SDE_MODE_DPMS_OFF:
 		blank = DRM_PANEL_BLANK_POWERDOWN_CUST;
@@ -1782,6 +1787,9 @@ int dsi_display_set_power(struct drm_connector *connector,
 		f2fs_panel_notifier_call_chain(DRM_PANEL_EARLY_EVENT_BLANK, &notifier_data_f2fs);
 #endif
 		zram_set_screen_state(false);
+		WRITE_ONCE(dsi_screen_on, false);
+		wmb();
+		trigger_proactive_compaction(false);
 		break;
 	default:
 		return rc;
