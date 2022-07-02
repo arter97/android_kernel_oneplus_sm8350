@@ -1,3 +1,24 @@
+ca2864e52d39 mm: compaction: make sure highest is above the min_pfn
+65d759c8f9f5 mm: compaction: support triggering of proactive compaction by user
+e1e92bfa3825 mm: compaction: optimize proactive compaction deferrals
+b55ca5264b0c mm/compaction: fix 'limit' in fast_isolate_freepages
+d2155fe54ddb mm: compaction: remove duplicate !list_empty(&sublist) check
+40d7e2032007 mm/compaction: correct deferral logic for proactive compaction
+e2d26aa5fb39 mm/compaction: remove duplicated VM_BUG_ON_PAGE !PageLocked
+9df41314390b mm/compaction: do page isolation first in compaction
+2271b016bf36 mm/compaction: make defer_compaction and compaction_deferred static
+2b1a20c3afbc mm/compaction: move compaction_suitable's comment to right place
+19d3cf9de1c7 mm/compaction: rename 'start_pfn' to 'iteration_start_pfn' in compact_zone()
+d20bdd571ee5 mm/compaction: stop isolation if too many pages are isolated and we have pages to migrate
+38935861d85a mm/compaction: count pages and stop correctly during page isolation
+62b35fe0eba2 mm/compaction.c: micro-optimization remove unnecessary branch
+a1c1dbeb2e1a mm/compaction.c: delete duplicated word
+860b32729a21 mm/compaction: correct the comments of compact_defer_shift
+d34c0a7599ea mm: use unsigned types for fragmentation score
+25788738eb9c mm: fix compile error due to COMPACTION_HPAGE_ORDER
+facdaa917c4d mm: proactive compaction
+d25b5bd8a8f4 mm/lru: introduce TestClearPageLRU()
+
 0a7dd4e901b8 mm/vmalloc: Fix unlock order in s_stop()
 e36176be1c39 mm/vmalloc: rework vmap_area_lock
 060650a2a059 mm/vmalloc: add more comments to the adjust_va_to_fit_type()
