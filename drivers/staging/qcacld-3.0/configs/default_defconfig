@@ -1174,6 +1174,12 @@ ifeq ($(CONFIG_ARCH_QCS405), y)
 CONFIG_FEATURE_WLAN_TIME_SYNC_FTM := y
 endif
 
+ifeq ($(CONFIG_CNSS_QCA6490), y)
+ifeq ($(CONFIG_ARCH_LAHAINA), y)
+CONFIG_DP_RX_UDP_OVER_PEER_ROAM := y
+endif
+endif
+
 #Flag to enable interface manager
 CONFIG_INTERFACE_MGR := y
 
