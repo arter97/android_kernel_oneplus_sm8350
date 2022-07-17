@@ -836,7 +836,7 @@ out:
 	return ret;
 }
 
-static char *cnss_driver_event_to_str(enum cnss_driver_event_type type)
+static __maybe_unused char *cnss_driver_event_to_str(enum cnss_driver_event_type type)
 {
 	switch (type) {
 	case CNSS_DRIVER_EVENT_SERVER_ARRIVE:

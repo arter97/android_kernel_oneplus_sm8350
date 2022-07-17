@@ -41,21 +41,10 @@ extern void *cnss_ipc_log_long_context;
 	cnss_debug_log_print(proc_name, __func__, \
 			     KERN_WARNING, _fmt, ##__VA_ARGS__)
 
-#define cnss_pr_info(_fmt, ...) \
-	cnss_debug_log_print(proc_name, __func__, \
-			     KERN_INFO, _fmt, ##__VA_ARGS__)
-
-#define cnss_pr_dbg(_fmt, ...) \
-	cnss_debug_log_print(proc_name, __func__, \
-			     KERN_DEBUG, _fmt, ##__VA_ARGS__)
-
-#define cnss_pr_vdbg(_fmt, ...) \
-	cnss_debug_log_long_print(proc_name, __func__, \
-				  KERN_DEBUG, _fmt, ##__VA_ARGS__)
-
-#define cnss_pr_buf(_fmt, ...) \
-	cnss_debug_log_long_print(proc_name, __func__, \
-				  NULL, _fmt, ##__VA_ARGS__)
+#define cnss_pr_info(_fmt, ...) ((void)0)
+#define cnss_pr_dbg(_fmt, ...) ((void)0)
+#define cnss_pr_vdbg(_fmt, ...) ((void)0)
+#define cnss_pr_buf(_fmt, ...) ((void)0)
 
 #ifdef CONFIG_CNSS2_DEBUG
 #define CNSS_ASSERT(_condition) do {					\
