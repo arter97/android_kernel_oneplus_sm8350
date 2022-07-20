@@ -7730,12 +7730,26 @@ static void oplus_chg_dual_charger_config(struct oplus_chg_chip *chip)
 
 static void oplus_chg_reset_adapter_work(struct work_struct *work)
 {
+	int mode;
+
 	oplus_chg_suspend_charger();
 	msleep(1000);
 	if (g_charger_chip->mmi_chg) {
 		oplus_chg_unsuspend_charger();
 		oplus_warp_set_ap_clk_high();
 		oplus_warp_reset_mcu();
+
+		// Reset input current
+		msleep(500);
+		if (g_charger_chip->led_on)
+			mode = OPLUS_CHG_EVENT_LCD_ON;
+		else
+			mode = OPLUS_CHG_EVENT_LCD_OFF;
+
+		if (is_usb_ocm_available(g_charger_chip))
+			oplus_chg_anon_mod_event(g_charger_chip->usb_ocm, mode);
+		if (is_wls_ocm_available(g_charger_chip))
+			oplus_chg_anon_mod_event(g_charger_chip->wls_ocm, mode);
 	}
 }
 
