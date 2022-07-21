@@ -1,0 +1,9 @@
+menu "Techpack Drivers"
+
+source "techpack/datarmnet-ext/offload/Kconfig"
+
+source "techpack/datarmnet-ext/shs/Kconfig"
+
+source "techpack/datarmnet/core/Kconfig"
+
+endmenu
