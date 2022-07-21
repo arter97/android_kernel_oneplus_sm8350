@@ -3564,12 +3564,15 @@ static void oplus_chg_set_charging_current(struct oplus_chg_chip *chip)
 
 #ifdef OPLUS_CHG_OP_DEF
 	if ((chip->chg_strategy_batt_curr_ma > 0) && (chip->chg_strategy_batt_curr_ma < charging_current)) {
+		chg_debug("charging current limited from %d to %d due to strategy limit\n", charging_current, chip->chg_strategy_batt_curr_ma);
 		charging_current = chip->chg_strategy_batt_curr_ma;
 	}
 	if ((chip->chg_ctrl_by_camera) && (chip->camera_on) && (charging_current > chip->limits.batt_current_camera_ma)) {
+		chg_debug("charging current limited from %d to %d due to camera\n", charging_current, chip->limits.batt_current_camera_ma);
 		charging_current = chip->limits.batt_current_camera_ma;
 	}
 	if ((chip->chg_ctrl_by_calling) && (chip->calling_on) && (charging_current > chip->limits.batt_current_calling_ma)) {
+		chg_debug("charging current limited from %d to %d due to calling\n", charging_current, chip->limits.batt_current_calling_ma);
 		charging_current = chip->limits.batt_current_calling_ma;
 	}
 #endif
@@ -3587,6 +3590,8 @@ void oplus_chg_set_input_current_limit(struct oplus_chg_chip *chip)
 	int current_limit = 0;
 	bool is_mcu_fastchg = false;
 	is_mcu_fastchg = (oplus_warp_get_fastchg_started() && (chip->vbatt_num != 2 || oplus_warp_get_fast_chg_type() != CHARGER_SUBTYPE_FASTCHG_WARP));
+
+#define CURRENT_LIMIT_PRINT(str) chg_debug("current limit set to %d (%s)\n", current_limit, str)
 
 	if (is_mcu_fastchg) {
 		chg_err("MCU_READING_iic,return");
@@ -3617,27 +3622,35 @@ void oplus_chg_set_input_current_limit(struct oplus_chg_chip *chip)
 		return;
 	case POWER_SUPPLY_TYPE_USB:
 		current_limit = chip->limits.input_current_usb_ma;
+		CURRENT_LIMIT_PRINT("USB");
 		break;
 	case POWER_SUPPLY_TYPE_USB_DCP:
 		if (chip->chg_ops->get_charger_subtype() == CHARGER_SUBTYPE_PD && !limit_pd) {
 			current_limit = 3000;
+			CURRENT_LIMIT_PRINT("USB PD - 3A");
 		} else {
 			current_limit = chip->limits.input_current_charger_ma;
+			CURRENT_LIMIT_PRINT("USB DCP");
 		}
 #ifdef OPLUS_CHG_OP_DEF
 		if (chip->norchg_reconnect_count == 1) {
 			pr_info("norchg_reconnect_count = 1\n");
-			if (current_limit > 1500)
+			if (current_limit > 1500) {
 				current_limit = 1500;
+				CURRENT_LIMIT_PRINT("norchg_reconnect_count == 1");
+			}
 		} else if (chip->norchg_reconnect_count > 1) {
 			pr_info("norchg_reconnect_count = %d\n", chip->norchg_reconnect_count);
-			if (current_limit > 1000)
+			if (current_limit > 1000) {
 				current_limit = 1000;
+				CURRENT_LIMIT_PRINT("norchg_reconnect_count > 1");
+			}
 		}
 #endif
 		break;
 	case POWER_SUPPLY_TYPE_USB_CDP:
 		current_limit = chip->limits.input_current_cdp_ma;
+		CURRENT_LIMIT_PRINT("USB CDP");
 		break;
 	default:
 		return;
@@ -3648,8 +3661,8 @@ void oplus_chg_set_input_current_limit(struct oplus_chg_chip *chip)
 		if (forced_current > 4000 || forced_current < 0) {
 			pr_err("invalid forced_current: %d\n", forced_current);
 		} else {
-			pr_info("overriding current_limit from %d to %d\n", current_limit, forced_current);
 			current_limit = forced_current;
+			CURRENT_LIMIT_PRINT("forced");
 			goto out;
 		}
 	}
@@ -3659,14 +3672,17 @@ void oplus_chg_set_input_current_limit(struct oplus_chg_chip *chip)
 			if (chip->led_temp_status == LED_TEMP_STATUS__HIGH) {
 				if (current_limit > chip->limits.input_current_led_ma_high) {
 					current_limit = chip->limits.input_current_led_ma_high;
+					CURRENT_LIMIT_PRINT("led_ma_high");
 				}
 			} else if (chip->led_temp_status == LED_TEMP_STATUS__WARM) {
 				if (current_limit > chip->limits.input_current_led_ma_warm) {
 					current_limit = chip->limits.input_current_led_ma_warm;
+					CURRENT_LIMIT_PRINT("led_ma_warm");
 				}
 			} else {
 				if (current_limit > chip->limits.input_current_led_ma_normal) {
 					current_limit = chip->limits.input_current_led_ma_normal;
+					CURRENT_LIMIT_PRINT("led_ma_normal");
 				}
 			}
 			charger_xlog_printk(CHG_LOG_CRTI, "[BATTERY]LED STATUS CHANGED, IS ON\n");
@@ -3674,32 +3690,41 @@ void oplus_chg_set_input_current_limit(struct oplus_chg_chip *chip)
 		if ((chip->chg_ctrl_by_camera) && (chip->camera_on) && (current_limit > chip->limits.input_current_camera_ma)) {
 			current_limit = chip->limits.input_current_camera_ma;
 			charger_xlog_printk(CHG_LOG_CRTI, "[BATTERY]CAMERA STATUS CHANGED, IS ON\n");
+			CURRENT_LIMIT_PRINT("camera");
 		}
 	} else if ((chip->chg_ctrl_by_camera) && (chip->camera_on) && (current_limit > chip->limits.input_current_camera_ma)) {
 		current_limit = chip->limits.input_current_camera_ma;
 		charger_xlog_printk(CHG_LOG_CRTI, "[BATTERY]CAMERA STATUS CHANGED, IS ON\n");
+		CURRENT_LIMIT_PRINT("camera");
 	}
 	if ((chip->chg_ctrl_by_calling) && (chip->calling_on) && (current_limit > chip->limits.input_current_calling_ma)) {
 		current_limit = chip->limits.input_current_calling_ma;
 		charger_xlog_printk(CHG_LOG_CRTI, "[BATTERY]calling STATUS CHANGED, IS ON\n");
+		CURRENT_LIMIT_PRINT("calling");
 	}
 	if (chip->chg_ctrl_by_warp && chip->vbatt_num == 2 && oplus_warp_get_fast_chg_type() == CHARGER_SUBTYPE_FASTCHG_WARP &&
 	    oplus_warp_get_fastchg_started() == true) {
 		if (chip->led_on) {
 			if (chip->warp_temp_status == WARP_TEMP_STATUS__HIGH) {
 				current_limit = chip->limits.input_current_warp_led_ma_high;
+				CURRENT_LIMIT_PRINT("warp_led_ma_high");
 			} else if (chip->warp_temp_status == WARP_TEMP_STATUS__WARM) {
 				current_limit = chip->limits.input_current_warp_led_ma_warm;
+				CURRENT_LIMIT_PRINT("warp_led_ma_warm");
 			} else if (chip->warp_temp_status == WARP_TEMP_STATUS__NORMAL) {
 				current_limit = chip->limits.input_current_warp_led_ma_normal;
+				CURRENT_LIMIT_PRINT("warp_led_ma_normal");
 			}
 		} else if (!(chip->chg_ctrl_by_calling && chip->calling_on)) {
 			if (chip->warp_temp_status == WARP_TEMP_STATUS__HIGH) {
 				current_limit = chip->limits.input_current_warp_ma_high;
+				CURRENT_LIMIT_PRINT("warp_ma_high");
 			} else if (chip->warp_temp_status == WARP_TEMP_STATUS__WARM) {
 				current_limit = chip->limits.input_current_warp_ma_warm;
+				CURRENT_LIMIT_PRINT("warp_ma_warm");
 			} else if (chip->warp_temp_status == WARP_TEMP_STATUS__NORMAL) {
 				current_limit = chip->limits.input_current_warp_ma_normal;
+				CURRENT_LIMIT_PRINT("warp_ma_normal");
 			}
 		}
 		chg_err("chg_ctrl_by_warp,  \
@@ -3715,6 +3740,7 @@ void oplus_chg_set_input_current_limit(struct oplus_chg_chip *chip)
 	}
 	if (chip->chg_ctrl_by_cool_down && (current_limit > chip->limits.input_current_cool_down_ma)) {
 		current_limit = chip->limits.input_current_cool_down_ma;
+		CURRENT_LIMIT_PRINT("cool_down");
 	}
 #ifndef OPLUS_CHG_OP_DEF
 	charger_xlog_printk(CHG_LOG_CRTI, " led_on = %d, \
