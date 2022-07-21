@@ -2,6 +2,9 @@
 /*
  * Copyright (C) 2018-2020 Oplus. All rights reserved.
  */
+
+#define pr_fmt(fmt) "[OPLUS_CHG][%s:%d]" fmt, __func__, __LINE__
+
 #include <linux/delay.h>
 #include <linux/power_supply.h>
 #include <linux/proc_fs.h>
