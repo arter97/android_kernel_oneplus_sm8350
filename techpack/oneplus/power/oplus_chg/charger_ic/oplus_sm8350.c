@@ -2855,9 +2855,11 @@ static bool oplus_chg_get_pd_type(void)
 	return is_pd_type;
 }
 
+extern bool oplus_chg_get_limit_pd(void);
+
 static int oplus_chg_set_pd_config(void)
 {
-	int rc = 0;
+	int rc = 0, curr;
 	struct battery_chg_dev *bcdev = NULL;
 	struct ocm_state *pst = NULL;
 	struct oplus_chg_chip *chip = g_oplus_chip;
@@ -2891,11 +2893,12 @@ static int oplus_chg_set_pd_config(void)
 		else
 			chg_err("set PDO 9V OK\n");
 
-		rc = write_property_id(bcdev, pst, USB_INPUT_CURR_LIMIT, 2000 * 1000);
+		curr = oplus_chg_get_limit_pd() ? 2000 : 3000;
+		rc = write_property_id(bcdev, pst, USB_INPUT_CURR_LIMIT, curr * 1000);
 		if (rc) {
-			chg_err("pd set icl to 2A fail, rc=%d\n", rc);
+			chg_err("pd set icl to %dmA fail, rc=%d\n", curr, rc);
 		} else {
-			chg_err("pd set icl to 2A\n");
+			chg_err("pd set icl to %dmA\n", curr);
 		}
 	}
 
