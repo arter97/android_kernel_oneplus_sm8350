@@ -3310,39 +3310,6 @@ int oplus_chg_parse_charger_dt(struct oplus_chg_chip *chip)
 	}
 
 #ifdef OPLUS_CHG_OP_DEF
-	rc = read_chg_strategy_data_from_node(node, "oplus,warp_chg_led_on_strategy_data", chip->dynamic_config.warp_chg_led_on_strategy_data);
-	if (rc < 0) {
-		chg_err("read oplus,warp_chg_led_on_strategy_data error, rc=%d\n", rc);
-	}
-	for (i = 0; i < rc; i++) {
-		chg_err("warp_chg_led_on_strategy[%d]: %d %d %d %d %d\n", i, chip->dynamic_config.warp_chg_led_on_strategy_data[i].cool_temp,
-			chip->dynamic_config.warp_chg_led_on_strategy_data[i].heat_temp, chip->dynamic_config.warp_chg_led_on_strategy_data[i].curr_data,
-			chip->dynamic_config.warp_chg_led_on_strategy_data[i].heat_next_index,
-			chip->dynamic_config.warp_chg_led_on_strategy_data[i].cool_next_index);
-	}
-
-	rc = read_chg_strategy_data_from_node(node, "oplus,pd9v_chg_led_on_strategy_data", chip->dynamic_config.pd9v_chg_led_on_strategy_data);
-	if (rc < 0) {
-		chg_err("read oplus,pd9v_chg_led_on_strategy_data error, rc=%d\n", rc);
-	}
-	for (i = 0; i < rc; i++) {
-		chg_err("pd9v_chg_led_on_strategy[%d]: %d %d %d %d %d\n", i, chip->dynamic_config.pd9v_chg_led_on_strategy_data[i].cool_temp,
-			chip->dynamic_config.pd9v_chg_led_on_strategy_data[i].heat_temp, chip->dynamic_config.pd9v_chg_led_on_strategy_data[i].curr_data,
-			chip->dynamic_config.pd9v_chg_led_on_strategy_data[i].heat_next_index,
-			chip->dynamic_config.pd9v_chg_led_on_strategy_data[i].cool_next_index);
-	}
-
-	rc = read_chg_strategy_data_from_node(node, "oplus,pd5v_chg_led_on_strategy_data", chip->dynamic_config.pd5v_chg_led_on_strategy_data);
-	if (rc < 0) {
-		pr_err("read oplus,pd5v_chg_led_on_strategy_data error, rc=%d\n", rc);
-	}
-	for (i = 0; i < rc; i++) {
-		pr_err("pd5v_chg_led_on_strategy[%d]: %d %d %d %d %d\n", i, chip->dynamic_config.pd5v_chg_led_on_strategy_data[i].cool_temp,
-		       chip->dynamic_config.pd5v_chg_led_on_strategy_data[i].heat_temp, chip->dynamic_config.pd5v_chg_led_on_strategy_data[i].curr_data,
-		       chip->dynamic_config.pd5v_chg_led_on_strategy_data[i].heat_next_index,
-		       chip->dynamic_config.pd5v_chg_led_on_strategy_data[i].cool_next_index);
-	}
-
 	rc = read_chg_strategy_data_from_node(node, "oplus,swarp_chg_led_on_strategy_data", chip->dynamic_config.swarp_chg_led_on_strategy_data);
 	if (rc < 0) {
 		pr_err("read oplus,swarp_chg_led_on_strategy_data error, rc=%d\n", rc);
@@ -3387,17 +3354,6 @@ int oplus_chg_parse_charger_dt(struct oplus_chg_chip *chip)
 		       chip->dynamic_config.swarp_chg_led_off_strategy_data_high[i].curr_data,
 		       chip->dynamic_config.swarp_chg_led_off_strategy_data_high[i].heat_next_index,
 		       chip->dynamic_config.swarp_chg_led_off_strategy_data_high[i].cool_next_index);
-	}
-
-	rc = read_chg_strategy_data_from_node(node, "oplus,normal_chg_led_off_strategy_data", chip->dynamic_config.normal_chg_led_off_strategy_data);
-	if (rc < 0) {
-		pr_err("read oplus,normal_chg_led_off_strategy_data error, rc=%d\n", rc);
-	}
-	for (i = 0; i < rc; i++) {
-		pr_err("normal_chg_led_off_strategy[%d]: %d %d %d %d %d\n", i, chip->dynamic_config.normal_chg_led_off_strategy_data[i].cool_temp,
-		       chip->dynamic_config.normal_chg_led_off_strategy_data[i].heat_temp, chip->dynamic_config.normal_chg_led_off_strategy_data[i].curr_data,
-		       chip->dynamic_config.normal_chg_led_off_strategy_data[i].heat_next_index,
-		       chip->dynamic_config.normal_chg_led_off_strategy_data[i].cool_next_index);
 	}
 
 	rc = read_chg_strategy_data_from_node(node, "oplus,swarp_general_chg_strategy_data_low", chip->dynamic_config.swarp_general_chg_strategy_data_low);
@@ -4098,20 +4054,6 @@ void oplus_chg_turn_on_charging(struct oplus_chg_chip *chip)
 		chg_err("can't get skin temp\n");
 		skin_temp = 250;
 	}
-#ifdef CONFIG_OPLUS_CHG_OOS
-	oplus_chg_strategy_init(&warp_chg_led_on_strategy, chip->dynamic_config.warp_chg_led_on_strategy_data,
-				oplus_chg_get_chg_strategy_data_len(chip->dynamic_config.warp_chg_led_on_strategy_data, CHG_STRATEGY_DATA_TABLE_MAX),
-				skin_temp);
-	oplus_chg_strategy_init(&pd9v_chg_led_on_strategy, chip->dynamic_config.pd9v_chg_led_on_strategy_data,
-				oplus_chg_get_chg_strategy_data_len(chip->dynamic_config.pd9v_chg_led_on_strategy_data, CHG_STRATEGY_DATA_TABLE_MAX),
-				skin_temp);
-	oplus_chg_strategy_init(&pd5v_chg_led_on_strategy, chip->dynamic_config.pd5v_chg_led_on_strategy_data,
-				oplus_chg_get_chg_strategy_data_len(chip->dynamic_config.pd5v_chg_led_on_strategy_data, CHG_STRATEGY_DATA_TABLE_MAX),
-				skin_temp);
-#endif /* CONFIG_OPLUS_CHG_OOS */
-	oplus_chg_strategy_init(&normal_chg_led_off_strategy, chip->dynamic_config.normal_chg_led_off_strategy_data,
-				oplus_chg_get_chg_strategy_data_len(chip->dynamic_config.normal_chg_led_off_strategy_data, CHG_STRATEGY_DATA_TABLE_MAX),
-				skin_temp);
 #endif /* OPLUS_CHG_OP_DEF */
 
 	oplus_chg_check_tbatt_status(chip);
@@ -5795,61 +5737,6 @@ static void oplus_chg_aicl_check(struct oplus_chg_chip *chip)
 	}
 }
 
-static void oplus_chg_check_chg_strategy_status(struct oplus_chg_chip *chip)
-{
-	int skin_temp = 250;
-	int curr_ma = 0;
-	int rc;
-
-	if (chip->led_on) {
-#ifdef CONFIG_OPLUS_CHG_OOS
-		if (chip->vbatt_num == 2 && oplus_warp_get_fast_chg_type() == CHARGER_SUBTYPE_FASTCHG_WARP && oplus_warp_get_fastchg_started() == true) {
-			chip->strategy = &warp_chg_led_on_strategy;
-		} else if (chip->chg_ops->oplus_chg_get_pd_type && chip->chg_ops->oplus_chg_get_pd_type()) {
-			if (chip->charger_volt > 7500)
-				chip->strategy = &pd9v_chg_led_on_strategy;
-			else
-				chip->strategy = &pd5v_chg_led_on_strategy;
-		} else {
-			chip->strategy = NULL;
-		}
-#else
-		chip->strategy = NULL;
-#endif
-	} else {
-		if (chip->vbatt_num == 2 && oplus_warp_get_fast_chg_type() == CHARGER_SUBTYPE_FASTCHG_WARP && oplus_warp_get_fastchg_started() == true) {
-			chip->strategy = &normal_chg_led_off_strategy;
-		} else if (chip->chg_ops->oplus_chg_get_pd_type && chip->chg_ops->oplus_chg_get_pd_type()) {
-			if (chip->charger_volt > 7500)
-				chip->strategy = &normal_chg_led_off_strategy;
-			else
-				chip->strategy = &normal_chg_led_off_strategy;
-		} else if (chip->chg_ops->get_charger_subtype() == CHARGER_SUBTYPE_QC) {
-			chip->strategy = &normal_chg_led_off_strategy;
-		} else {
-			chip->strategy = NULL;
-		}
-	}
-
-	if (chip->strategy && chip->strategy->initialized) {
-		rc = oplus_chg_get_skin_temp(chip, &skin_temp);
-		if (rc < 0) {
-			chg_err("can't get skin temp\n");
-			skin_temp = 250;
-		}
-	}
-	spin_lock(&chip->strategy_lock);
-	if (chip->strategy && chip->strategy->initialized)
-		curr_ma = oplus_chg_strategy_get_data(chip->strategy, &chip->strategy->temp_region, skin_temp);
-	spin_unlock(&chip->strategy_lock);
-
-	if (chip->chg_strategy_batt_curr_ma != curr_ma) {
-		chip->chg_strategy_batt_curr_ma = curr_ma;
-		chg_err("skin_temp=%d, led_on=%d, curr=%d\n", skin_temp, chip->led_on, curr_ma);
-		oplus_chg_set_charging_current(chip);
-	}
-}
-
 #define ALLOW_DIFF_VALUE 1000000
 #ifdef OPLUS_CHG_OP_DEF
 void oplus_check_ovp_status(struct oplus_chg_chip *chg)
@@ -6002,7 +5889,6 @@ static void oplus_chg_protection_check(struct oplus_chg_chip *chip)
 		oplus_chg_check_cool_down_ichging(chip);
 	}
 #ifdef OPLUS_CHG_OP_DEF
-	oplus_chg_check_chg_strategy_status(chip);
 	if (chip->led_on_change) {
 		oplus_chg_set_charging_current(chip);
 		chip->led_on_change = false;
