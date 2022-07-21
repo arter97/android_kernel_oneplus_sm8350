@@ -627,13 +627,9 @@ enum oplus_chg_linit_level_7bit {
 };
 
 struct oplus_chg_dynamic_config {
-	struct oplus_chg_strategy_data warp_chg_led_on_strategy_data[CHG_STRATEGY_DATA_TABLE_MAX];
-	struct oplus_chg_strategy_data pd9v_chg_led_on_strategy_data[CHG_STRATEGY_DATA_TABLE_MAX];
-	struct oplus_chg_strategy_data pd5v_chg_led_on_strategy_data[CHG_STRATEGY_DATA_TABLE_MAX];
 	struct oplus_chg_strategy_data swarp_chg_led_on_strategy_data[CHG_STRATEGY_DATA_TABLE_MAX];
 	struct oplus_chg_strategy_data swarp_chg_led_off_strategy_data[CHG_STRATEGY_DATA_TABLE_MAX];
 	struct oplus_chg_strategy_data swarp_chg_led_off_strategy_data_high[CHG_STRATEGY_DATA_TABLE_MAX];
-	struct oplus_chg_strategy_data normal_chg_led_off_strategy_data[CHG_STRATEGY_DATA_TABLE_MAX];
 	struct oplus_chg_strategy_data swarp_general_chg_strategy_data_low[CHG_STRATEGY_DATA_TABLE_MAX];
 	struct oplus_chg_strategy_data swarp_general_chg_strategy_data_high[CHG_STRATEGY_DATA_TABLE_MAX];
 };
