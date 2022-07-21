@@ -2050,15 +2050,26 @@ static void oplus_chg_wls_chging_keep_clean_work(struct work_struct *work)
 	comm_dev->wls_chging_keep = false;
 }
 
+extern bool oplus_chg_get_ignore_screen_state(void);
+
 #ifdef CONFIG_OPLUS_CHG_OOS
 static void oplus_chg_led_power_on_report_work(struct work_struct *work)
 {
 	struct delayed_work *dwork = to_delayed_work(work);
 	struct oplus_chg_comm *comm_dev = container_of(dwork, struct oplus_chg_comm, led_power_on_report_work);
+	int mode;
+
+	if (oplus_chg_get_ignore_screen_state()) {
+		pr_warn("ignoring screen state, the device will charge using the screen-off settings\n");
+		mode = OPLUS_CHG_EVENT_LCD_OFF;
+	} else {
+		mode = OPLUS_CHG_EVENT_LCD_ON;
+	}
+
 	if (is_usb_ocm_available(comm_dev))
-		oplus_chg_anon_mod_event(comm_dev->usb_ocm, OPLUS_CHG_EVENT_LCD_ON);
+		oplus_chg_anon_mod_event(comm_dev->usb_ocm, mode);
 	if (is_wls_ocm_available(comm_dev))
-		oplus_chg_anon_mod_event(comm_dev->wls_ocm, OPLUS_CHG_EVENT_LCD_ON);
+		oplus_chg_anon_mod_event(comm_dev->wls_ocm, mode);
 }
 #endif
 
