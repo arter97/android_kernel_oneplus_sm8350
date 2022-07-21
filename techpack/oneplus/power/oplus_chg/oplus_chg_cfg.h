@@ -25,21 +25,21 @@ struct oplus_chg_cfg_head {
 	u32 size;
 	u32 param_index[OPLUS_CHG_PARAM_MAX];
 	u8 signature[512];
-} __attribute__ ((packed));
+} __attribute__((packed));
 
 struct oplus_chg_param_head {
 	u32 magic;
 	u32 size;
 	u32 type;
 	u8 data[0];
-} __attribute__ ((packed));
+} __attribute__((packed));
 
 struct oplus_chg_cfg_data_head {
 	u32 magic;
 	u32 index;
 	u32 size;
 	u8 data[0];
-} __attribute__ ((packed));
+} __attribute__((packed));
 
 int oplus_chg_check_cfg_data(void *buf);
 void *oplus_chg_get_param(void *buf, enum oplus_chg_param_type type);

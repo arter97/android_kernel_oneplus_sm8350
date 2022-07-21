@@ -88,7 +88,7 @@ struct oplus_chg_ic_dev *oplsu_chg_ic_find_by_name(const char *name)
 	}
 
 	mutex_lock(&list_lock);
-	list_for_each_entry(dev_temp, &ic_list, list){
+	list_for_each_entry(dev_temp, &ic_list, list) {
 		if (dev_temp->name == NULL)
 			continue;
 		if (strcmp(dev_temp->name, name) == 0) {
@@ -107,8 +107,8 @@ struct oplus_chg_ic_dev *of_get_oplus_chg_ic(struct device_node *node, const cha
 
 	ic_node = of_parse_phandle(node, prop_name, 0);
 	if (!ic_node)
-  		return NULL;
-	
+		return NULL;
+
 	return oplsu_chg_ic_find_by_name(ic_node->name);
 }
 
@@ -155,15 +155,14 @@ void oplus_chg_ic_reg_dump_all(void)
 	struct oplus_chg_ic_dev *dev_temp;
 
 	mutex_lock(&list_lock);
-	list_for_each_entry(dev_temp, &ic_list, list){
+	list_for_each_entry(dev_temp, &ic_list, list) {
 		(void)oplus_chg_ic_reg_dump(dev_temp);
 	}
 	mutex_unlock(&list_lock);
 }
 #endif /* OPLUS_CHG_REG_DUMP_ENABLE */
 
-struct oplus_chg_ic_dev *oplus_chg_ic_register(struct device *dev,
-	const char *name, int index)
+struct oplus_chg_ic_dev *oplus_chg_ic_register(struct device *dev, const char *name, int index)
 {
 	struct oplus_chg_ic_dev *dev_temp;
 	struct oplus_chg_ic_dev *ic_dev;
@@ -183,7 +182,7 @@ struct oplus_chg_ic_dev *oplus_chg_ic_register(struct device *dev,
 	ic_dev->dev = dev;
 
 	mutex_lock(&list_lock);
-	list_for_each_entry(dev_temp, &ic_list, list){
+	list_for_each_entry(dev_temp, &ic_list, list) {
 		if (dev_temp->name == NULL)
 			continue;
 		if (strcmp(dev_temp->name, ic_dev->name) == 0) {
@@ -235,8 +234,7 @@ static int devm_oplus_chg_ic_match(struct device *dev, void *res, void *data)
 	return this->ic_dev == match->ic_dev;
 }
 
-struct oplus_chg_ic_dev *devm_oplus_chg_ic_register(struct device *dev,
-	const char *name, int index)
+struct oplus_chg_ic_dev *devm_oplus_chg_ic_register(struct device *dev, const char *name, int index)
 {
 	struct ic_devres *dr;
 	struct oplus_chg_ic_dev *dev_temp;
@@ -247,8 +245,7 @@ struct oplus_chg_ic_dev *devm_oplus_chg_ic_register(struct device *dev,
 		return NULL;
 	}
 
-	dr = devres_alloc(devm_oplus_chg_ic_release, sizeof(struct ic_devres),
-  			  GFP_KERNEL);
+	dr = devres_alloc(devm_oplus_chg_ic_release, sizeof(struct ic_devres), GFP_KERNEL);
 	if (!dr) {
 		pr_err("devres_alloc error\n");
 		return NULL;
@@ -265,7 +262,7 @@ struct oplus_chg_ic_dev *devm_oplus_chg_ic_register(struct device *dev,
 	ic_dev->dev = dev;
 
 	mutex_lock(&list_lock);
-	list_for_each_entry(dev_temp, &ic_list, list){
+	list_for_each_entry(dev_temp, &ic_list, list) {
 		if (dev_temp->name == NULL)
 			continue;
 		if (strcmp(dev_temp->name, ic_dev->name) == 0) {
@@ -302,8 +299,7 @@ int devm_oplus_chg_ic_unregister(struct device *dev, struct oplus_chg_ic_dev *ic
 		return -ENODEV;
 	}
 
-	WARN_ON(devres_destroy(dev, devm_oplus_chg_ic_release,
-			       devm_oplus_chg_ic_match, &match_data));
+	WARN_ON(devres_destroy(dev, devm_oplus_chg_ic_release, devm_oplus_chg_ic_match, &match_data));
 
 	return 0;
 }

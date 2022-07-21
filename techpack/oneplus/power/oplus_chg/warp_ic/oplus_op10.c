@@ -68,54 +68,54 @@ extern struct oplus_warp_chip *g_warp_chip;
 static int op10_get_fw_old_version(struct oplus_warp_chip *chip, u8 version_info[]);
 
 #ifdef CONFIG_OPLUS_CHARGER_MTK
-#define I2C_MASK_FLAG	(0x00ff)
-#define I2C_ENEXT_FLAG	(0x0200)
-#define I2C_DMA_FLAG	(0xdead2000)
+#define I2C_MASK_FLAG (0x00ff)
+#define I2C_ENEXT_FLAG (0x0200)
+#define I2C_DMA_FLAG (0xdead2000)
 #endif
 
-#define GTP_DMA_MAX_TRANSACTION_LENGTH	255 /* for DMA mode */
+#define GTP_DMA_MAX_TRANSACTION_LENGTH 255 /* for DMA mode */
 
-#define ERASE_COUNT			959 /*0x0000-0x3BFF*/
+#define ERASE_COUNT 959 /*0x0000-0x3BFF*/
 
-#define BYTE_OFFSET			2
-#define BYTES_TO_WRITE		16
-#define FW_CHECK_FAIL		0
-#define FW_CHECK_SUCCESS	1
+#define BYTE_OFFSET 2
+#define BYTES_TO_WRITE 16
+#define FW_CHECK_FAIL 0
+#define FW_CHECK_SUCCESS 1
 
-#define POLYNOMIAL				0x04C11DB7
-#define INITIAL_REMAINDER		0xFFFFFFFF
-#define FINAL_XOR_VALUE		0xFFFFFFFF
+#define POLYNOMIAL 0x04C11DB7
+#define INITIAL_REMAINDER 0xFFFFFFFF
+#define FINAL_XOR_VALUE 0xFFFFFFFF
 
-#define WIDTH		(8 * sizeof(u32))
-#define TOPBIT		(1U << (WIDTH - 1))
-#define REFLECT_DATA(X)			(X)
-#define REFLECT_REMAINDER(X)	(X)
+#define WIDTH (8 * sizeof(u32))
+#define TOPBIT (1U << (WIDTH - 1))
+#define REFLECT_DATA(X) (X)
+#define REFLECT_REMAINDER(X) (X)
 
-#define CMD_SET_ADDR			0x01
-#define CMD_XFER_W_DAT		0x02
-#define CMD_XFER_R_DATA		0x03
-#define CMD_PRG_START			0x05
-#define CMD_USER_BOOT			0x06
-#define CMD_CHIP_ERASE			0x07
-#define CMD_GET_VERSION			0x08
-#define CMD_GET_CRC32			0x09
-#define CMD_SET_CKSM_LEN		0x0A
-#define CMD_DEV_STATUS			0x0B
+#define CMD_SET_ADDR 0x01
+#define CMD_XFER_W_DAT 0x02
+#define CMD_XFER_R_DATA 0x03
+#define CMD_PRG_START 0x05
+#define CMD_USER_BOOT 0x06
+#define CMD_CHIP_ERASE 0x07
+#define CMD_GET_VERSION 0x08
+#define CMD_GET_CRC32 0x09
+#define CMD_SET_CKSM_LEN 0x0A
+#define CMD_DEV_STATUS 0x0B
 
-#define I2C_RW_LEN_MAX			32
-#define ONE_WRITE_LEN_MAX		256
-#define FW_VERSION_LEN			11
+#define I2C_RW_LEN_MAX 32
+#define ONE_WRITE_LEN_MAX 256
+#define FW_VERSION_LEN 11
 
 static struct oplus_warp_chip *the_chip = NULL;
 struct wakeup_source *op10_update_wake_lock = NULL;
 
 #ifdef CONFIG_OPLUS_CHARGER_MTK
-#define GTP_SUPPORT_I2C_DMA		0
-#define I2C_MASTER_CLOCK			300
+#define GTP_SUPPORT_I2C_DMA 0
+#define I2C_MASTER_CLOCK 300
 
 DEFINE_MUTEX(dma_wr_access_op10);
 
-static char gpDMABuf_pa[GTP_DMA_MAX_TRANSACTION_LENGTH] = {0};
+static char gpDMABuf_pa[GTP_DMA_MAX_TRANSACTION_LENGTH] = { 0 };
 
 #if GTP_SUPPORT_I2C_DMA
 static int i2c_dma_write(struct i2c_client *client, u8 addr, s32 len, u8 *txbuf);
@@ -132,21 +132,13 @@ static int i2c_dma_read(struct i2c_client *client, u8 addr, s32 len, u8 *rxbuf)
 	u8 buffer[1];
 
 	struct i2c_msg msg[2] = {
-		{
-			.addr = (client->addr & I2C_MASK_FLAG),
-			.flags = 0,
-			.buf = buffer,
-			.len = 1,
-			.timing = I2C_MASTER_CLOCK
-		},
-		{
-			.addr = (client->addr & I2C_MASK_FLAG),
-			.ext_flag = (client->ext_flag | I2C_ENEXT_FLAG | I2C_DMA_FLAG),
-			.flags = I2C_M_RD,
-			.buf = (__u8 *)gpDMABuf_pa, /*modified by PengNan*/
-			.len = len,
-			.timing = I2C_MASTER_CLOCK
-		},
+		{ .addr = (client->addr & I2C_MASK_FLAG), .flags = 0, .buf = buffer, .len = 1, .timing = I2C_MASTER_CLOCK },
+		{ .addr = (client->addr & I2C_MASK_FLAG),
+		  .ext_flag = (client->ext_flag | I2C_ENEXT_FLAG | I2C_DMA_FLAG),
+		  .flags = I2C_M_RD,
+		  .buf = (__u8 *)gpDMABuf_pa, /*modified by PengNan*/
+		  .len = len,
+		  .timing = I2C_MASTER_CLOCK },
 	};
 
 	mutex_lock(&dma_wr_access_op10);
@@ -176,14 +168,12 @@ static int i2c_dma_write(struct i2c_client *client, u8 addr, s32 len, u8 const *
 	int ret = 0;
 	s32 retry = 0;
 	u8 *wr_buf = gpDMABuf_va;
-	struct i2c_msg msg = {
-		.addr = (client->addr & I2C_MASK_FLAG),
-		.ext_flag = (client->ext_flag | I2C_ENEXT_FLAG | I2C_DMA_FLAG),
-		.flags = 0,
-		.buf = (__u8 *)gpDMABuf_pa, /*modified by PengNan*/
-		.len = 1 + len,
-		.timing = I2C_MASTER_CLOCK
-	};
+	struct i2c_msg msg = { .addr = (client->addr & I2C_MASK_FLAG),
+			       .ext_flag = (client->ext_flag | I2C_ENEXT_FLAG | I2C_DMA_FLAG),
+			       .flags = 0,
+			       .buf = (__u8 *)gpDMABuf_pa, /*modified by PengNan*/
+			       .len = 1 + len,
+			       .timing = I2C_MASTER_CLOCK };
 
 	mutex_lock(&dma_wr_access_op10);
 	wr_buf[0] = (u8)(addr & 0xFF);
@@ -240,13 +230,13 @@ static int check_flash_idle(struct oplus_warp_chip *chip, u32 try_count)
 
 	do {
 		rx_buf = 0xff;
-		rc = oplus_warp_i2c_read(chip->client, CMD_DEV_STATUS,1, &rx_buf);
+		rc = oplus_warp_i2c_read(chip->client, CMD_DEV_STATUS, 1, &rx_buf);
 		if (rc < 0) {
 			chg_debug("read CMD_DEV_STATUS error:%0x\n", rx_buf);
 			goto i2c_err;
 		}
 		//chg_debug("the rx_buf=%0x\n", rx_buf);
-		if ((rx_buf & 0x01) == 0x0) {// check OP10 flash is idle
+		if ((rx_buf & 0x01) == 0x0) { // check OP10 flash is idle
 			return 0;
 		}
 		try_count--;
@@ -310,8 +300,8 @@ static bool op10_fw_update_check(struct oplus_warp_chip *chip)
 {
 	int i = 0;
 	int ret = 0;
-	u8 fw_version[FW_VERSION_LEN] = {0};
-	u8 rx_buf[4] = {0};
+	u8 fw_version[FW_VERSION_LEN] = { 0 };
+	u8 rx_buf[4] = { 0 };
 	u32 check_status_try_count = 100;
 	u32 fw_status_address = 0x4000 - 0x10;
 	u32 new_fw_crc32 = 0;
@@ -345,7 +335,7 @@ static bool op10_fw_update_check(struct oplus_warp_chip *chip)
 	oplus_warp_i2c_read(chip->client, CMD_XFER_R_DATA, 4, rx_buf);
 	chg_debug("fw crc32 status:0x%08x\n", *((u32 *)rx_buf));
 
-	chip->fw_mcu_version = fw_version[FW_VERSION_LEN-4];
+	chip->fw_mcu_version = fw_version[FW_VERSION_LEN - 4];
 
 	for (i = 0; i < FW_VERSION_LEN; i++) {
 		chg_debug("the old version: %0x, the fw version: %0x\n", fw_version[i], chip->firmware_data[chip->fw_data_count - FW_VERSION_LEN + i]);
@@ -370,16 +360,15 @@ static bool op10_fw_update_check(struct oplus_warp_chip *chip)
 		return false;
 	}
 
-
 	return true;
 }
 
 #ifdef OPLUS_CHG_DEBUG
 static int op10_fw_update_by_buf(struct oplus_warp_chip *chip, u8 *fw_buf, u32 fw_size)
 {
-	u32 check_status_try_count = 100;//try 2s
-	u32 write_done_try_count = 500;//max try 10s
-	u8 rx_buf[4] = {0};
+	u32 check_status_try_count = 100; //try 2s
+	u32 write_done_try_count = 500; //max try 10s
+	u8 rx_buf[4] = { 0 };
 	u32 fw_len = 0, fw_offset = 0;
 	u32 write_len = 0, write_len_temp = 0, chunk_index = 0, chunk_len = 0;
 	u32 new_fw_crc32 = 0;
@@ -468,9 +457,9 @@ update_fw_err:
 
 static int op10_fw_update(struct oplus_warp_chip *chip)
 {
-	u32 check_status_try_count = 100;//try 2s
-	u32 write_done_try_count = 500;//max try 10s
-	u8 rx_buf[4] = {0};
+	u32 check_status_try_count = 100; //try 2s
+	u32 write_done_try_count = 500; //max try 10s
+	u8 rx_buf[4] = { 0 };
 	u32 fw_len = 0, fw_offset = 0;
 	u32 write_len = 0, write_len_temp = 0, chunk_index = 0, chunk_len = 0;
 	u32 new_fw_crc32 = 0;
@@ -559,12 +548,12 @@ update_fw_err:
 
 static int op10_get_fw_old_version(struct oplus_warp_chip *chip, u8 version_info[])
 {
-	u8 rx_buf[4] = {0};//i = 0;
+	u8 rx_buf[4] = { 0 }; //i = 0;
 	u32 fw_version_address = 0;
-	u32 check_status_try_count = 100;//try 2s
+	u32 check_status_try_count = 100; //try 2s
 	u32 fw_len_address = 0x4000 - 8;
 
-	memset(version_info, 0xFF, FW_VERSION_LEN);//clear version info at first
+	memset(version_info, 0xFF, FW_VERSION_LEN); //clear version info at first
 
 	if (check_flash_idle(chip, check_status_try_count) == -1) {
 		chg_debug("cannot get the fw old version because of the device is always busy!\n");
@@ -587,7 +576,6 @@ static int op10_get_fw_old_version(struct oplus_warp_chip *chip, u8 version_info
 		chg_debug("warning:fw length is invalid\n");
 	}
 
-
 	/* below code is used for debug log,pls comment it after this interface test pass */
 	/*chg_debug("the fw old version is:\n");
 	for (i = 0; i < FW_VERSION_LEN; i++) {
@@ -600,8 +588,8 @@ static int op10_get_fw_old_version(struct oplus_warp_chip *chip, u8 version_info
 
 static int op10_get_fw_verion_from_ic(struct oplus_warp_chip *chip)
 {
-	unsigned char addr_buf[2] = {0x3B, 0xF0};
-	unsigned char data_buf[4] = {0};
+	unsigned char addr_buf[2] = { 0x3B, 0xF0 };
+	unsigned char data_buf[4] = { 0 };
 	int rc = 0;
 	int update_result = 0;
 
@@ -627,7 +615,7 @@ static int op10_get_fw_verion_from_ic(struct oplus_warp_chip *chip)
 		//first:set address
 		rc = oplus_warp_i2c_write(chip->client, 0x01, 2, &addr_buf[0]);
 		if (rc < 0) {
-			chg_err(" i2c_write 0x01 error\n" );
+			chg_err(" i2c_write 0x01 error\n");
 			return FW_CHECK_FAIL;
 		}
 		msleep(2);
@@ -714,9 +702,9 @@ int op10_set_battery_temperature_soc(int temp_bat, int soc_bat)
 
 	ret = oplus_warp_i2c_write(the_chip->client, (u8)0xE, 2, read_buf);
 	if (ret < 0) {
-			chg_err("op10 write slave ack fail");
-			return -1;
-		}
+		chg_err("op10 write slave ack fail");
+		return -1;
+	}
 	return 0;
 }
 
@@ -782,7 +770,6 @@ void op10_update_temperature_soc(void)
 
 	chg_err("kilody in! soc = %d,temp = %d,chging = %d\n", soc, temp, oplus_warp_get_fastchg_ing());
 }
-
 
 struct oplus_warp_operations oplus_op10_ops = {
 	.fw_update = op10_fw_update,
@@ -863,8 +850,8 @@ static void op10_shutdown(struct i2c_client *client)
 
 static ssize_t warp_fw_check_read(struct file *filp, char __user *buff, size_t count, loff_t *off)
 {
-	char page[256] = {0};
-	char read_data[32] = {0};
+	char page[256] = { 0 };
+	char read_data[32] = { 0 };
 	int len = 0;
 
 	if (the_chip && the_chip->warp_fw_check == true) {
@@ -1012,7 +999,7 @@ static int op10_driver_probe(struct i2c_client *client, const struct i2c_device_
 		chip->firmware_data = op10_fw_data_4400_warp_ffc_15c;
 		chip->fw_data_count = sizeof(op10_fw_data_4400_warp_ffc_15c);
 		chip->fw_data_version = op10_fw_data_4400_warp_ffc_15c[chip->fw_data_count - 4];
-	} else {//default
+	} else { //default
 		chip->firmware_data = op10_fw_data_4400_warp_ffc_15c;
 		chip->fw_data_count = sizeof(op10_fw_data_4400_warp_ffc_15c);
 		chip->fw_data_version = op10_fw_data_4400_warp_ffc_15c[chip->fw_data_count - 4];
@@ -1081,16 +1068,13 @@ static int op10_driver_probe(struct i2c_client *client, const struct i2c_device_
 		asic->warp_fw_type = WARP_FW_TYPE_INVALID;
 	}
 
-	chg_debug("oplus_warp_fw_type_dt batt_type_4400 is %d,warp_fw_type = 0x%x\n",
-		asic->batt_type_4400mv, asic->warp_fw_type);
+	chg_debug("oplus_warp_fw_type_dt batt_type_4400 is %d,warp_fw_type = 0x%x\n", asic->batt_type_4400mv, asic->warp_fw_type);
 
-	rc = of_property_read_u32(node, "qcom,warp_reply_mcu_bits",
-		&asic->warp_reply_mcu_bits);
+	rc = of_property_read_u32(node, "qcom,warp_reply_mcu_bits", &asic->warp_reply_mcu_bits);
 	if (rc) {
 		asic->warp_reply_mcu_bits = 4;
 	} else {
-		chg_debug("qcom,warp_reply_mcu_bits is %d\n",
-			asic->warp_reply_mcu_bits);
+		chg_debug("qcom,warp_reply_mcu_bits is %d\n", asic->warp_reply_mcu_bits);
 	}
 
 	rc = of_property_read_u32(node, "qcom,warp_cool_bat_volt", &asic->warp_cool_bat_volt);
@@ -1153,7 +1137,7 @@ static int op10_driver_probe(struct i2c_client *client, const struct i2c_device_
 		asic->firmware_data = op10_fw_data_4400_warp_ffc_15c;
 		asic->fw_data_count = sizeof(op10_fw_data_4400_warp_ffc_15c);
 		asic->fw_data_version = op10_fw_data_4400_warp_ffc_15c[asic->fw_data_count - 4];
-	} else {//default
+	} else { //default
 		asic->firmware_data = op10_fw_data_4400_warp_ffc_15c;
 		asic->fw_data_count = sizeof(op10_fw_data_4400_warp_ffc_15c);
 		asic->fw_data_version = op10_fw_data_4400_warp_ffc_15c[asic->fw_data_count - 4];
@@ -1216,13 +1200,13 @@ static int op10_driver_probe(struct i2c_client *client, const struct i2c_device_
   *
   *********************************************************/
 static const struct of_device_id op10_match[] = {
-	{ .compatible = "oplus,op10-fastcg"},
-	{ .compatible = "oplus,sy6610-fastcg"},
+	{ .compatible = "oplus,op10-fastcg" },
+	{ .compatible = "oplus,sy6610-fastcg" },
 	{},
 };
 
 static const struct i2c_device_id op10_id[] = {
-	{"op10-fastcg", 0},
+	{ "op10-fastcg", 0 },
 	{},
 };
 MODULE_DEVICE_TABLE(i2c, op10_id);
@@ -1271,4 +1255,3 @@ oplus_chg_module_register(op10_driver);
 MODULE_DESCRIPTION("Driver for oplus warp op10 fast mcu");
 MODULE_LICENSE("GPL v2");
 #endif
-

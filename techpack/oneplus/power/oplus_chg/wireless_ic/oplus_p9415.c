@@ -145,8 +145,7 @@ error:
 	return rc;
 }
 
-static int p9415_read_data(struct oplus_p9415 *chip, u16 addr,
-			   u8 *buf, int len)
+static int p9415_read_data(struct oplus_p9415 *chip, u16 addr, u8 *buf, int len)
 {
 	char cmd_buf[2] = { addr >> 8, addr & 0xff };
 	int rc;
@@ -196,8 +195,7 @@ static int p9415_write_byte(struct oplus_p9415 *chip, u16 addr, u8 data)
 	return 0;
 }
 
-static int p9415_write_data(struct oplus_p9415 *chip, u16 addr,
-			   u8 *buf, int len)
+static int p9415_write_data(struct oplus_p9415 *chip, u16 addr, u8 *buf, int len)
 {
 	u8 *buf_temp;
 	int i;
@@ -229,8 +227,7 @@ static int p9415_write_data(struct oplus_p9415 *chip, u16 addr,
 	return 0;
 }
 
-__maybe_unused static int p9415_read_byte_mask(struct oplus_p9415 *chip, u16 addr,
-				u8 mask, u8 *data)
+__maybe_unused static int p9415_read_byte_mask(struct oplus_p9415 *chip, u16 addr, u8 mask, u8 *data)
 {
 	u8 temp;
 	int rc;
@@ -244,8 +241,7 @@ __maybe_unused static int p9415_read_byte_mask(struct oplus_p9415 *chip, u16 add
 	return 0;
 }
 
-static int p9415_write_byte_mask(struct oplus_p9415 *chip, u16 addr,
-				 u8 mask, u8 data)
+static int p9415_write_byte_mask(struct oplus_p9415 *chip, u16 addr, u8 mask, u8 data)
 {
 	u8 temp;
 	int rc;
@@ -321,15 +317,12 @@ static int p9415_set_rx_enable(struct oplus_chg_ic_dev *dev, bool en)
 	}
 	chip = oplus_chg_ic_get_drvdata(dev);
 
-	if (IS_ERR_OR_NULL(chip->pinctrl) ||
-	    IS_ERR_OR_NULL(chip->rx_en_active) ||
-	    IS_ERR_OR_NULL(chip->rx_en_sleep)) {
+	if (IS_ERR_OR_NULL(chip->pinctrl) || IS_ERR_OR_NULL(chip->rx_en_active) || IS_ERR_OR_NULL(chip->rx_en_sleep)) {
 		pr_err("rx_en pinctrl error\n");
 		return -ENODEV;
 	}
 
-	rc = pinctrl_select_state(chip->pinctrl,
-		en ? chip->rx_en_active : chip->rx_en_sleep);
+	rc = pinctrl_select_state(chip->pinctrl, en ? chip->rx_en_active : chip->rx_en_sleep);
 	if (rc < 0)
 		pr_err("can't %s rx\n", en ? "enable" : "disable");
 	else
@@ -538,7 +531,6 @@ static int p9415_get_cep_val(struct oplus_chg_ic_dev *dev, int *val)
 	return rc;
 }
 
-
 static int p9415_get_work_freq(struct oplus_chg_ic_dev *dev, int *val)
 {
 	struct oplus_p9415 *chip;
@@ -580,18 +572,18 @@ static int p9415_get_rx_mode(struct oplus_chg_ic_dev *dev, enum oplus_chg_wls_rx
 	if (temp == P9415_RX_MODE_EPP) {
 		rc = p9415_read_data(chip, P9415_REG_RX_PWR, &temp, 1);
 		if (rc < 0) {
-			pr_err("Couldn't read rx pwr, rc = %d\n",rc);
+			pr_err("Couldn't read rx pwr, rc = %d\n", rc);
 			return rc;
 		}
 		if (temp >= P9415_RX_PWR_15W)
 			*rx_mode = OPLUS_CHG_WLS_RX_MODE_EPP_PLUS;
-		else if(temp >= P9415_RX_PWR_10W)
+		else if (temp >= P9415_RX_PWR_10W)
 			*rx_mode = OPLUS_CHG_WLS_RX_MODE_EPP;
 		else
 			*rx_mode = OPLUS_CHG_WLS_RX_MODE_EPP_5W;
 	} else if (temp == P9415_RX_MODE_BPP) {
 		*rx_mode = OPLUS_CHG_WLS_RX_MODE_BPP;
-	} else{
+	} else {
 		*rx_mode = OPLUS_CHG_WLS_RX_MODE_UNKNOWN;
 	}
 	pr_debug("rx_mode=%d\n", *rx_mode);
@@ -610,8 +602,7 @@ static int p9415_set_dcdc_enable(struct oplus_chg_ic_dev *dev)
 	}
 	chip = oplus_chg_ic_get_drvdata(dev);
 
-	rc = p9415_write_byte_mask(chip, P9415_REG_PWR_CTRL,
-		P9415_DCDC_EN, P9415_DCDC_EN);
+	rc = p9415_write_byte_mask(chip, P9415_REG_PWR_CTRL, P9415_DCDC_EN, P9415_DCDC_EN);
 	if (rc < 0)
 		pr_err("set dcdc enable error, rc=%d\n", rc);
 
@@ -629,8 +620,7 @@ static int p9415_set_trx_enable(struct oplus_chg_ic_dev *dev, bool en)
 	}
 	chip = oplus_chg_ic_get_drvdata(dev);
 
-	rc = p9415_write_byte(chip, P9415_REG_TRX_CTRL,
-		en ? P9415_TRX_EN : 0x00);
+	rc = p9415_write_byte(chip, P9415_REG_TRX_CTRL, en ? P9415_TRX_EN : 0x00);
 	if (rc < 0)
 		pr_err("can't %s trx, rc=%d\n", rc, en ? "enable" : "disable");
 
@@ -753,7 +743,7 @@ static u8 p9415_calculate_checksum(const u8 *data, int len)
 {
 	u8 temp = 0;
 
-	while(len--)
+	while (len--)
 		temp ^= *data++;
 
 	pr_debug("checksum = %d\n", temp);
@@ -765,7 +755,7 @@ static int p9415_send_match_q(struct oplus_chg_ic_dev *dev, u8 data)
 	struct oplus_p9415 *chip;
 	u8 buf[4] = { 0x38, 0x48, 0x00, data };
 	u8 checksum;
-	
+
 	if (dev == NULL) {
 		pr_err("oplus_chg_ic_dev is NULL");
 		return -ENODEV;
@@ -847,8 +837,7 @@ static int p9415_send_msg(struct oplus_chg_ic_dev *dev, unsigned char msg[], int
 	return 0;
 }
 
-static int p9415_register_msg_callback(struct oplus_chg_ic_dev *dev, void *dev_data,
-				       void (*msg_call_back)(void *, u8 []))
+static int p9415_register_msg_callback(struct oplus_chg_ic_dev *dev, void *dev_data, void (*msg_call_back)(void *, u8[]))
 {
 	struct oplus_p9415 *chip;
 
@@ -916,9 +905,8 @@ static int p9415_load_bootloader(struct oplus_p9415 *chip)
 	msleep(10);
 
 	pr_err("<IDT UPDATE>-b-3--!\n");
-	rc = p9415_write_data(
-		chip, 0x0800, MTPBootloader9320,
-		sizeof(MTPBootloader9320)); // load provided by IDT array
+	rc = p9415_write_data(chip, 0x0800, MTPBootloader9320,
+			      sizeof(MTPBootloader9320)); // load provided by IDT array
 	if (rc != 0) {
 		pr_err("<IDT UPDATE>Write 0x1c00 reg error!\n");
 		return rc;
@@ -949,8 +937,7 @@ static int p9415_load_fw(struct oplus_p9415 *chip, unsigned char *fw_data, int C
 	unsigned char write_ack = 0;
 	int rc = 0;
 
-	rc = p9415_write_data(chip, 0x400, fw_data,
-							((CodeLength + 8 + 15) / 16) * 16);
+	rc = p9415_write_data(chip, 0x400, fw_data, ((CodeLength + 8 + 15) / 16) * 16);
 	if (rc != 0) {
 		pr_err("<IDT UPDATE>ERROR: write multi byte data error!\n");
 		goto LOAD_ERR;
@@ -1228,7 +1215,7 @@ static int p9415_get_fw_version_by_chip(struct oplus_chg_ic_dev *dev, u32 *versi
 	struct oplus_p9415 *chip;
 	char temp[4];
 	int rc;
-	
+
 	if (dev == NULL) {
 		pr_err("oplus_chg_ic_dev is NULL");
 		return false;
@@ -1300,7 +1287,6 @@ static int p9415_upgrade_firmware_by_buf(struct oplus_chg_ic_dev *dev, unsigned 
 	}
 	msleep(50);
 
-
 	rc = p9415_mtp(chip, fw_buf, fw_size);
 	if (rc != 0) {
 		pr_err("<IDT UPDATE>update error, rc=%d\n", rc);
@@ -1334,9 +1320,9 @@ static void p9415_event_process(struct oplus_p9415 *chip)
 {
 	int rc = -1;
 	char temp[2] = { 0, 0 };
-	char val_buf[6] = { 0, 0, 0, 0, 0, 0};
+	char val_buf[6] = { 0, 0, 0, 0, 0, 0 };
 
-	if(!p9415_rx_is_enable(chip->ic_dev)) {
+	if (!p9415_rx_is_enable(chip->ic_dev)) {
 		pr_info("RX is sleep, Ignore events");
 		return;
 	}
@@ -1363,10 +1349,10 @@ static void p9415_event_process(struct oplus_p9415 *chip)
 		if (rc) {
 			pr_err("Couldn't read 0x%04x, rc=%d\n", 0x0058, rc);
 		} else {
-			pr_err("Received TX data: 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x",
-				val_buf[0], val_buf[1], val_buf[2], val_buf[3], val_buf[4], val_buf[5]);
+			pr_err("Received TX data: 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x", val_buf[0], val_buf[1], val_buf[2], val_buf[3], val_buf[4],
+			       val_buf[5]);
 			if (chip->rx_msg.msg_call_back != NULL)
-					chip->rx_msg.msg_call_back(chip->rx_msg.dev_data, val_buf);
+				chip->rx_msg.msg_call_back(chip->rx_msg.dev_data, val_buf);
 		}
 	}
 	if (temp[0] & P9415_TRX_EVENT) {
@@ -1399,7 +1385,6 @@ static int p9415_connect_check(struct oplus_chg_ic_dev *dev)
 
 static int p9415_set_chip_info(struct oplus_chg_ic_dev *dev)
 {
-
 	if (dev == NULL) {
 		pr_err("oplus_chg_ic_dev is NULL");
 		return false;
@@ -1442,18 +1427,17 @@ static struct oplus_chg_ic_rx_ops p9415_dev_ops = {
 static void p9415_check_event_work(struct work_struct *work)
 {
 	struct delayed_work *dwork = to_delayed_work(work);
-	struct oplus_p9415 *chip =
-		container_of(dwork, struct oplus_p9415, check_event_work);
+	struct oplus_p9415 *chip = container_of(dwork, struct oplus_p9415, check_event_work);
 
 	bool od2_state;
 
 	od2_state = p9415_get_rx_event_gpio_val(chip);
 
 	pr_info("od2_state = %s", od2_state ? "true" : "false");
-	if (od2_state == false){
+	if (od2_state == false) {
 		msleep(50);
 		od2_state = p9415_get_rx_event_gpio_val(chip);
-		if (od2_state == false){
+		if (od2_state == false) {
 			pr_err("OD2 is low, reread the event.");
 			p9415_event_process(chip);
 			schedule_delayed_work(&chip->check_event_work, msecs_to_jiffies(1000));
@@ -1464,8 +1448,7 @@ static void p9415_check_event_work(struct work_struct *work)
 static void p9415_check_ldo_on_work(struct work_struct *work)
 {
 	struct delayed_work *dwork = to_delayed_work(work);
-	struct oplus_p9415 *chip =
-		container_of(dwork, struct oplus_p9415, check_ldo_on_work);
+	struct oplus_p9415 *chip = container_of(dwork, struct oplus_p9415, check_ldo_on_work);
 
 	pr_info("connected_ldo_on = %s", chip->connected_ldo_on ? "true" : "false");
 	if ((!chip->connected_ldo_on) && p9415_rx_is_connected(chip->ic_dev)) {
@@ -1477,8 +1460,7 @@ static void p9415_check_ldo_on_work(struct work_struct *work)
 static void p9415_event_work(struct work_struct *work)
 {
 	struct delayed_work *dwork = to_delayed_work(work);
-	struct oplus_p9415 *chip =
-		container_of(dwork, struct oplus_p9415, event_work);
+	struct oplus_p9415 *chip = container_of(dwork, struct oplus_p9415, event_work);
 
 	p9415_event_process(chip);
 }
@@ -1486,8 +1468,7 @@ static void p9415_event_work(struct work_struct *work)
 static void p9415_connect_work(struct work_struct *work)
 {
 	struct delayed_work *dwork = to_delayed_work(work);
-	struct oplus_p9415 *chip =
-		container_of(dwork, struct oplus_p9415, connect_work);
+	struct oplus_p9415 *chip = container_of(dwork, struct oplus_p9415, connect_work);
 	bool connected, pre_connected;
 
 	pre_connected = p9415_rx_is_connected(chip->ic_dev);
@@ -1560,8 +1541,7 @@ static int p9415_gpio_init(struct oplus_p9415 *chip)
 	gpio_direction_input(chip->rx_event_gpio);
 	pinctrl_select_state(chip->pinctrl, chip->rx_event_default);
 	chip->rx_event_irq = gpio_to_irq(chip->rx_event_gpio);
-	rc = devm_request_irq(chip->dev, chip->rx_event_irq, p9415_event_handler,
-			IRQF_TRIGGER_FALLING, "rx_event_irq", chip);
+	rc = devm_request_irq(chip->dev, chip->rx_event_irq, p9415_event_handler, IRQF_TRIGGER_FALLING, "rx_event_irq", chip);
 	if (rc < 0) {
 		pr_err("rx_event_irq request error, rc=%d\n", rc);
 		goto free_event_gpio;
@@ -1586,9 +1566,7 @@ static int p9415_gpio_init(struct oplus_p9415 *chip)
 	gpio_direction_input(chip->rx_con_gpio);
 	pinctrl_select_state(chip->pinctrl, chip->rx_con_default);
 	chip->rx_con_irq = gpio_to_irq(chip->rx_con_gpio);
-	rc = devm_request_irq(chip->dev, chip->rx_con_irq, p9415_connect_handler,
-			IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
-			"rx_con_irq", chip);
+	rc = devm_request_irq(chip->dev, chip->rx_con_irq, p9415_connect_handler, IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING, "rx_con_irq", chip);
 	if (rc < 0) {
 		pr_err("rx_con_irq request error, rc=%d\n", rc);
 		goto free_con_gpio;
@@ -1658,13 +1636,12 @@ static void p9415_shutdown(struct i2c_client *client)
 }
 
 static struct regmap_config p9415_regmap_config = {
-	.reg_bits	= 16,
-	.val_bits	= 8,
-	.max_register	= 0xFFFF,
+	.reg_bits = 16,
+	.val_bits = 8,
+	.max_register = 0xFFFF,
 };
 
-static int p9415_driver_probe(struct i2c_client *client,
-			      const struct i2c_device_id *id)
+static int p9415_driver_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
 	struct oplus_p9415 *chip;
 	struct device_node *node = client->dev.of_node;
@@ -1756,7 +1733,7 @@ static const struct of_device_id p9415_match[] = {
 
 static const struct i2c_device_id p9415_id_table[] = {
 	{ "oplus,p9415-rx", 0 },
-	{ },
+	{},
 };
 MODULE_DEVICE_TABLE(i2c, p9415_id_table);
 
