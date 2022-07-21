@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+
 /*
  * Copyright (C) 2018-2020 Oplus. All rights reserved.
  */
@@ -17,9 +17,9 @@
 #include <linux/platform_device.h>
 #include <asm/atomic.h>
 #include <linux/xlog.h>
-//#include <upmu_common.h>
+
 #include <linux/gpio.h>
-//#include <linux/irqchip/mtk-eic.h>
+
 #include <linux/of.h>
 #include <linux/of_irq.h>
 #include <linux/of_gpio.h>
@@ -79,7 +79,7 @@ bool __attribute__((weak)) qpnp_is_power_off_charging(void)
 extern bool is_sala_a(void);
 #endif
 
-extern	int oplus_warp_mcu_hwid_check(struct oplus_warp_chip *chip);
+extern int oplus_warp_mcu_hwid_check(struct oplus_warp_chip *chip);
 extern int oplus_warp_asic_hwid_check(struct oplus_warp_chip *chip);
 
 #ifdef OPLUS_CHG_OP_DEF
@@ -100,7 +100,7 @@ int get_warp_mcu_type(struct oplus_warp_chip *chip)
 {
 	int mcu_hwid_type = OPLUS_WARP_MCU_HWID_UNKNOW;
 
-	if(chip == NULL){
+	if (chip == NULL) {
 		chg_err("oplus_warp_chip is not ready, enable stm8s\n");
 		return OPLUS_WARP_MCU_HWID_STM8S;
 	}
@@ -125,100 +125,84 @@ static int opchg_bq27541_gpio_pinctrl_init(struct oplus_warp_chip *chip)
 	}
 	/* set switch1 is active and switch2 is active*/
 	if (1) {
-		chip->warp_gpio.gpio_switch1_act_switch2_act =
-			pinctrl_lookup_state(chip->warp_gpio.pinctrl, "switch1_act_switch3_act");
+		chip->warp_gpio.gpio_switch1_act_switch2_act = pinctrl_lookup_state(chip->warp_gpio.pinctrl, "switch1_act_switch3_act");
 		if (IS_ERR_OR_NULL(chip->warp_gpio.gpio_switch1_act_switch2_act)) {
 			chg_err(": %d Failed to get the active state pinctrl handle\n", __LINE__);
 			return -EINVAL;
 		}
 		/* set switch1 is sleep and switch2 is sleep*/
-		chip->warp_gpio.gpio_switch1_sleep_switch2_sleep =
-			pinctrl_lookup_state(chip->warp_gpio.pinctrl, "switch1_sleep_switch3_sleep");
+		chip->warp_gpio.gpio_switch1_sleep_switch2_sleep = pinctrl_lookup_state(chip->warp_gpio.pinctrl, "switch1_sleep_switch3_sleep");
 		if (IS_ERR_OR_NULL(chip->warp_gpio.gpio_switch1_sleep_switch2_sleep)) {
 			chg_err(": %d Failed to get the suspend state pinctrl handle\n", __LINE__);
 			return -EINVAL;
 		}
 
-		chip->warp_gpio.gpio_switch1_ctr1_act =
-			pinctrl_lookup_state(chip->warp_gpio.pinctrl, "charging_switch1_ctr1_active");
+		chip->warp_gpio.gpio_switch1_ctr1_act = pinctrl_lookup_state(chip->warp_gpio.pinctrl, "charging_switch1_ctr1_active");
 		if (IS_ERR_OR_NULL(chip->warp_gpio.gpio_switch1_ctr1_act)) {
 			chg_err(": %d Failed to get the charging_switch1_ctr1_active handle\n", __LINE__);
-			//return -EINVAL;
 		}
 
-		chip->warp_gpio.gpio_switch1_ctr1_sleep =
-			pinctrl_lookup_state(chip->warp_gpio.pinctrl, "charging_switch1_ctr1_sleep");
+		chip->warp_gpio.gpio_switch1_ctr1_sleep = pinctrl_lookup_state(chip->warp_gpio.pinctrl, "charging_switch1_ctr1_sleep");
 		if (IS_ERR_OR_NULL(chip->warp_gpio.gpio_switch1_ctr1_sleep)) {
 			chg_err(": %d Failed to get the charging_switch1_ctr1_sleep handle\n", __LINE__);
-			//return -EINVAL;
 		}
 	} else {
-		chip->warp_gpio.gpio_switch1_act_switch2_act =
-			pinctrl_lookup_state(chip->warp_gpio.pinctrl, "switch1_act_switch2_act");
+		chip->warp_gpio.gpio_switch1_act_switch2_act = pinctrl_lookup_state(chip->warp_gpio.pinctrl, "switch1_act_switch2_act");
 		if (IS_ERR_OR_NULL(chip->warp_gpio.gpio_switch1_act_switch2_act)) {
 			chg_err(": %d Failed to get the active state pinctrl handle\n", __LINE__);
 			return -EINVAL;
 		}
 		/* set switch1 is sleep and switch2 is sleep*/
-		chip->warp_gpio.gpio_switch1_sleep_switch2_sleep =
-			pinctrl_lookup_state(chip->warp_gpio.pinctrl, "switch1_sleep_switch2_sleep");
+		chip->warp_gpio.gpio_switch1_sleep_switch2_sleep = pinctrl_lookup_state(chip->warp_gpio.pinctrl, "switch1_sleep_switch2_sleep");
 		if (IS_ERR_OR_NULL(chip->warp_gpio.gpio_switch1_sleep_switch2_sleep)) {
 			chg_err(": %d Failed to get the suspend state pinctrl handle\n", __LINE__);
 			return -EINVAL;
 		}
 	}
 	/* set switch1 is active and switch2 is sleep*/
-	chip->warp_gpio.gpio_switch1_act_switch2_sleep =
-		pinctrl_lookup_state(chip->warp_gpio.pinctrl, "switch1_act_switch2_sleep");
+	chip->warp_gpio.gpio_switch1_act_switch2_sleep = pinctrl_lookup_state(chip->warp_gpio.pinctrl, "switch1_act_switch2_sleep");
 	if (IS_ERR_OR_NULL(chip->warp_gpio.gpio_switch1_act_switch2_sleep)) {
 		chg_err(": %d Failed to get the state 2 pinctrl handle\n", __LINE__);
 		return -EINVAL;
 	}
 	/* set switch1 is sleep and switch2 is active*/
-	chip->warp_gpio.gpio_switch1_sleep_switch2_act =
-		pinctrl_lookup_state(chip->warp_gpio.pinctrl, "switch1_sleep_switch2_act");
+	chip->warp_gpio.gpio_switch1_sleep_switch2_act = pinctrl_lookup_state(chip->warp_gpio.pinctrl, "switch1_sleep_switch2_act");
 	if (IS_ERR_OR_NULL(chip->warp_gpio.gpio_switch1_sleep_switch2_act)) {
-			chg_err(": %d Failed to get the state 3 pinctrl handle\n", __LINE__);
+		chg_err(": %d Failed to get the state 3 pinctrl handle\n", __LINE__);
 		return -EINVAL;
 	}
 	/* set clock is active*/
-	chip->warp_gpio.gpio_clock_active =
-		pinctrl_lookup_state(chip->warp_gpio.pinctrl, "clock_active");
+	chip->warp_gpio.gpio_clock_active = pinctrl_lookup_state(chip->warp_gpio.pinctrl, "clock_active");
 	if (IS_ERR_OR_NULL(chip->warp_gpio.gpio_clock_active)) {
-			chg_err(": %d Failed to get the state 3 pinctrl handle\n", __LINE__);
+		chg_err(": %d Failed to get the state 3 pinctrl handle\n", __LINE__);
 		return -EINVAL;
 	}
 	/* set clock is sleep*/
-	chip->warp_gpio.gpio_clock_sleep =
-		pinctrl_lookup_state(chip->warp_gpio.pinctrl, "clock_sleep");
+	chip->warp_gpio.gpio_clock_sleep = pinctrl_lookup_state(chip->warp_gpio.pinctrl, "clock_sleep");
 	if (IS_ERR_OR_NULL(chip->warp_gpio.gpio_clock_sleep)) {
 		chg_err(": %d Failed to get the state 3 pinctrl handle\n", __LINE__);
 		return -EINVAL;
 	}
 	/* set clock is active*/
-	chip->warp_gpio.gpio_data_active =
-		pinctrl_lookup_state(chip->warp_gpio.pinctrl, "data_active");
+	chip->warp_gpio.gpio_data_active = pinctrl_lookup_state(chip->warp_gpio.pinctrl, "data_active");
 	if (IS_ERR_OR_NULL(chip->warp_gpio.gpio_data_active)) {
 		chg_err(": %d Failed to get the state 3 pinctrl handle\n", __LINE__);
 		return -EINVAL;
 	}
 	/* set clock is sleep*/
-	chip->warp_gpio.gpio_data_sleep =
-		pinctrl_lookup_state(chip->warp_gpio.pinctrl, "data_sleep");
+	chip->warp_gpio.gpio_data_sleep = pinctrl_lookup_state(chip->warp_gpio.pinctrl, "data_sleep");
 	if (IS_ERR_OR_NULL(chip->warp_gpio.gpio_data_sleep)) {
 		chg_err(": %d Failed to get the state 3 pinctrl handle\n", __LINE__);
 		return -EINVAL;
 	}
 	/* set reset is atcive*/
-	chip->warp_gpio.gpio_reset_active =
-		pinctrl_lookup_state(chip->warp_gpio.pinctrl, "reset_active");
+	chip->warp_gpio.gpio_reset_active = pinctrl_lookup_state(chip->warp_gpio.pinctrl, "reset_active");
 	if (IS_ERR_OR_NULL(chip->warp_gpio.gpio_reset_active)) {
 		chg_err(": %d Failed to get the state 3 pinctrl handle\n", __LINE__);
 		return -EINVAL;
 	}
 	/* set reset is sleep*/
-	chip->warp_gpio.gpio_reset_sleep =
-		pinctrl_lookup_state(chip->warp_gpio.pinctrl, "reset_sleep");
+	chip->warp_gpio.gpio_reset_sleep = pinctrl_lookup_state(chip->warp_gpio.pinctrl, "reset_sleep");
 	if (IS_ERR_OR_NULL(chip->warp_gpio.gpio_reset_sleep)) {
 		chg_err(": %d Failed to get the state 3 pinctrl handle\n", __LINE__);
 		return -EINVAL;
@@ -234,48 +218,41 @@ void oplus_warp_fw_type_dt(struct oplus_warp_chip *chip)
 
 	if (!node) {
 		dev_err(chip->dev, "device tree info. missing\n");
-		return ;
+		return;
 	}
 
-	chip->warp_current_lvl_cnt = of_property_count_elems_of_size(node,
-				"qcom,warp_current_lvl", sizeof(*chip->warp_current_lvl));
+	chip->warp_current_lvl_cnt = of_property_count_elems_of_size(node, "qcom,warp_current_lvl", sizeof(*chip->warp_current_lvl));
 	if (chip->warp_current_lvl_cnt > 0) {
 		chg_err("warp_current_lvl_cnt[%d]\n", chip->warp_current_lvl_cnt);
-		chip->warp_current_lvl = devm_kcalloc(chip->dev, chip->warp_current_lvl_cnt,
-			sizeof(*chip->warp_current_lvl), GFP_KERNEL);
-		if (!chip->warp_current_lvl){
+		chip->warp_current_lvl = devm_kcalloc(chip->dev, chip->warp_current_lvl_cnt, sizeof(*chip->warp_current_lvl), GFP_KERNEL);
+		if (!chip->warp_current_lvl) {
 			chg_err("devm_kcalloc warp_current_lvl error\n");
 			return;
 		}
-		rc = of_property_read_u32_array(node,
-			"qcom,warp_current_lvl", chip->warp_current_lvl, chip->warp_current_lvl_cnt);
+		rc = of_property_read_u32_array(node, "qcom,warp_current_lvl", chip->warp_current_lvl, chip->warp_current_lvl_cnt);
 		if (rc) {
 			chg_err("qcom,cp_ffc_current_lvl error\n");
 			return;
 		}
 
-		for(loop = 0; loop < chip->warp_current_lvl_cnt; loop++) {
+		for (loop = 0; loop < chip->warp_current_lvl_cnt; loop++) {
 			chg_err("warp_current_lvl[%d]\n", chip->warp_current_lvl[loop]);
 		}
 	}
 	chip->batt_type_4400mv = of_property_read_bool(node, "qcom,oplus_batt_4400mv");
-	chip->support_warp_by_normal_charger_path = of_property_read_bool(node,
-		"qcom,support_warp_by_normal_charger_path");
+	chip->support_warp_by_normal_charger_path = of_property_read_bool(node, "qcom,support_warp_by_normal_charger_path");
 
 	rc = of_property_read_u32(node, "qcom,warp-fw-type", &chip->warp_fw_type);
 	if (rc) {
 		chip->warp_fw_type = WARP_FW_TYPE_INVALID;
 	}
 
-	chg_debug("oplus_warp_fw_type_dt batt_type_4400 is %d,warp_fw_type = 0x%x\n",
-		chip->batt_type_4400mv, chip->warp_fw_type);
+	chg_debug("oplus_warp_fw_type_dt batt_type_4400 is %d,warp_fw_type = 0x%x\n", chip->batt_type_4400mv, chip->warp_fw_type);
 
-	chip->warp_fw_update_newmethod = of_property_read_bool(node,
-		"qcom,warp_fw_update_newmethod");
+	chip->warp_fw_update_newmethod = of_property_read_bool(node, "qcom,warp_fw_update_newmethod");
 	chg_debug(" warp_fw_upate:%d\n", chip->warp_fw_update_newmethod);
 
-	rc = of_property_read_u32(node, "qcom,warp-low-temp",
-		&chip->warp_low_temp);
+	rc = of_property_read_u32(node, "qcom,warp-low-temp", &chip->warp_low_temp);
 	if (rc) {
 		chip->warp_low_temp = 165;
 	} else {
@@ -284,8 +261,7 @@ void oplus_warp_fw_type_dt(struct oplus_warp_chip *chip)
 
 	chip->warp_batt_over_low_temp = chip->warp_low_temp - 5;
 
-	rc = of_property_read_u32(node, "qcom,warp-little-cool-temp",
-			&chip->warp_little_cool_temp);
+	rc = of_property_read_u32(node, "qcom,warp-little-cool-temp", &chip->warp_little_cool_temp);
 	if (rc) {
 		chip->warp_little_cool_temp = 160;
 	} else {
@@ -293,8 +269,7 @@ void oplus_warp_fw_type_dt(struct oplus_warp_chip *chip)
 	}
 	chip->warp_little_cool_temp_default = chip->warp_little_cool_temp;
 
-	rc = of_property_read_u32(node, "qcom,warp-cool-temp",
-			&chip->warp_cool_temp);
+	rc = of_property_read_u32(node, "qcom,warp-cool-temp", &chip->warp_cool_temp);
 	if (rc) {
 		chip->warp_cool_temp = 120;
 	} else {
@@ -302,8 +277,7 @@ void oplus_warp_fw_type_dt(struct oplus_warp_chip *chip)
 	}
 	chip->warp_cool_temp_default = chip->warp_cool_temp;
 
-	rc = of_property_read_u32(node, "qcom,warp-little-cold-temp",
-			&chip->warp_little_cold_temp);
+	rc = of_property_read_u32(node, "qcom,warp-little-cold-temp", &chip->warp_little_cold_temp);
 	if (rc) {
 		chip->warp_little_cold_temp = 50;
 	} else {
@@ -311,16 +285,13 @@ void oplus_warp_fw_type_dt(struct oplus_warp_chip *chip)
 	}
 	chip->warp_little_cold_temp_default = chip->warp_little_cold_temp;
 
-	
-	rc = of_property_read_u32(node, "qcom,warp-normal-low-temp",
-			&chip->warp_normal_low_temp);
+	rc = of_property_read_u32(node, "qcom,warp-normal-low-temp", &chip->warp_normal_low_temp);
 	if (rc) {
 		chip->warp_normal_low_temp = 250;
 	} else {
 		chg_debug("qcom,warp-normal-low-temp is %d\n", chip->warp_normal_low_temp);
 	}
 	chip->warp_normal_low_temp_default = chip->warp_normal_low_temp;
-	
 
 	rc = of_property_read_u32(node, "qcom,warp-high-temp", &chip->warp_high_temp);
 	if (rc) {
@@ -401,252 +372,196 @@ void oplus_warp_fw_type_dt(struct oplus_warp_chip *chip)
 	}
 #endif
 
-	chip->warp_multistep_adjust_current_support = of_property_read_bool(node,
-		"qcom,warp_multistep_adjust_current_support");
-	chg_debug("qcom,warp_multistep_adjust_current_supportis %d\n",
-		chip->warp_multistep_adjust_current_support);
+	chip->warp_multistep_adjust_current_support = of_property_read_bool(node, "qcom,warp_multistep_adjust_current_support");
+	chg_debug("qcom,warp_multistep_adjust_current_supportis %d\n", chip->warp_multistep_adjust_current_support);
 
-	rc = of_property_read_u32(node, "qcom,warp_reply_mcu_bits",
-		&chip->warp_reply_mcu_bits);
+	rc = of_property_read_u32(node, "qcom,warp_reply_mcu_bits", &chip->warp_reply_mcu_bits);
 	if (rc) {
 		chip->warp_reply_mcu_bits = 4;
 	} else {
-		chg_debug("qcom,warp_reply_mcu_bits is %d\n",
-			chip->warp_reply_mcu_bits);
+		chg_debug("qcom,warp_reply_mcu_bits is %d\n", chip->warp_reply_mcu_bits);
 	}
 
-	rc = of_property_read_u32(node, "qcom,warp_multistep_initial_batt_temp",
-		&chip->warp_multistep_initial_batt_temp);
+	rc = of_property_read_u32(node, "qcom,warp_multistep_initial_batt_temp", &chip->warp_multistep_initial_batt_temp);
 	if (rc) {
 		chip->warp_multistep_initial_batt_temp = 305;
 	} else {
-		chg_debug("qcom,warp_multistep_initial_batt_temp is %d\n",
-			chip->warp_multistep_initial_batt_temp);
+		chg_debug("qcom,warp_multistep_initial_batt_temp is %d\n", chip->warp_multistep_initial_batt_temp);
 	}
 
-	rc = of_property_read_u32(node, "qcom,warp_strategy_normal_current",
-		&chip->warp_strategy_normal_current);
+	rc = of_property_read_u32(node, "qcom,warp_strategy_normal_current", &chip->warp_strategy_normal_current);
 	if (rc) {
 		chip->warp_strategy_normal_current = 0x03;
 	} else {
-		chg_debug("qcom,warp_strategy_normal_current is %d\n",
-			chip->warp_strategy_normal_current);
+		chg_debug("qcom,warp_strategy_normal_current is %d\n", chip->warp_strategy_normal_current);
 	}
 
-	rc = of_property_read_u32(node, "qcom,warp_strategy1_batt_low_temp1",
-		&chip->warp_strategy1_batt_low_temp1);
+	rc = of_property_read_u32(node, "qcom,warp_strategy1_batt_low_temp1", &chip->warp_strategy1_batt_low_temp1);
 	if (rc) {
-		chip->warp_strategy1_batt_low_temp1  = chip->warp_multistep_initial_batt_temp;
+		chip->warp_strategy1_batt_low_temp1 = chip->warp_multistep_initial_batt_temp;
 	} else {
-		chg_debug("qcom,warp_strategy1_batt_low_temp1 is %d\n",
-			chip->warp_strategy1_batt_low_temp1);
+		chg_debug("qcom,warp_strategy1_batt_low_temp1 is %d\n", chip->warp_strategy1_batt_low_temp1);
 	}
 
-	rc = of_property_read_u32(node, "qcom,warp_strategy1_batt_low_temp2",
-		&chip->warp_strategy1_batt_low_temp2);
+	rc = of_property_read_u32(node, "qcom,warp_strategy1_batt_low_temp2", &chip->warp_strategy1_batt_low_temp2);
 	if (rc) {
 		chip->warp_strategy1_batt_low_temp2 = chip->warp_multistep_initial_batt_temp;
 	} else {
-		chg_debug("qcom,warp_strategy1_batt_low_temp2 is %d\n",
-			chip->warp_strategy1_batt_low_temp2);
+		chg_debug("qcom,warp_strategy1_batt_low_temp2 is %d\n", chip->warp_strategy1_batt_low_temp2);
 	}
 
-	rc = of_property_read_u32(node, "qcom,warp_strategy1_batt_low_temp0",
-		&chip->warp_strategy1_batt_low_temp0);
+	rc = of_property_read_u32(node, "qcom,warp_strategy1_batt_low_temp0", &chip->warp_strategy1_batt_low_temp0);
 	if (rc) {
 		chip->warp_strategy1_batt_low_temp0 = chip->warp_multistep_initial_batt_temp;
 	} else {
-		chg_debug("qcom,warp_strategy1_batt_low_temp0 is %d\n",
-			chip->warp_strategy1_batt_low_temp0);
+		chg_debug("qcom,warp_strategy1_batt_low_temp0 is %d\n", chip->warp_strategy1_batt_low_temp0);
 	}
 
-	rc = of_property_read_u32(node, "qcom,warp_strategy1_batt_high_temp0",
-		&chip->warp_strategy1_batt_high_temp0);
+	rc = of_property_read_u32(node, "qcom,warp_strategy1_batt_high_temp0", &chip->warp_strategy1_batt_high_temp0);
 	if (rc) {
 		chip->warp_strategy1_batt_high_temp0 = chip->warp_multistep_initial_batt_temp;
 	} else {
-		chg_debug("qcom,warp_strategy1_batt_high_temp0 is %d\n",
-			chip->warp_strategy1_batt_high_temp0);
+		chg_debug("qcom,warp_strategy1_batt_high_temp0 is %d\n", chip->warp_strategy1_batt_high_temp0);
 	}
 
-	rc = of_property_read_u32(node, "qcom,warp_strategy1_batt_high_temp1",
-		&chip->warp_strategy1_batt_high_temp1);
+	rc = of_property_read_u32(node, "qcom,warp_strategy1_batt_high_temp1", &chip->warp_strategy1_batt_high_temp1);
 	if (rc) {
 		chip->warp_strategy1_batt_high_temp1 = chip->warp_multistep_initial_batt_temp;
 	} else {
-		chg_debug("qcom,warp_strategy1_batt_high_temp1 is %d\n",
-			chip->warp_strategy1_batt_high_temp1);
+		chg_debug("qcom,warp_strategy1_batt_high_temp1 is %d\n", chip->warp_strategy1_batt_high_temp1);
 	}
 
-	rc = of_property_read_u32(node, "qcom,warp_strategy1_batt_high_temp2",
-		&chip->warp_strategy1_batt_high_temp2);
+	rc = of_property_read_u32(node, "qcom,warp_strategy1_batt_high_temp2", &chip->warp_strategy1_batt_high_temp2);
 	if (rc) {
 		chip->warp_strategy1_batt_high_temp2 = chip->warp_multistep_initial_batt_temp;
 	} else {
-		chg_debug("qcom,warp_strategy1_batt_high_temp2 is %d\n",
-			chip->warp_strategy1_batt_high_temp2);
+		chg_debug("qcom,warp_strategy1_batt_high_temp2 is %d\n", chip->warp_strategy1_batt_high_temp2);
 	}
 
-	rc = of_property_read_u32(node, "qcom,warp_strategy1_high_current0",
-		&chip->warp_strategy1_high_current0);
+	rc = of_property_read_u32(node, "qcom,warp_strategy1_high_current0", &chip->warp_strategy1_high_current0);
 	if (rc) {
-		chip->warp_strategy1_high_current0  = chip->warp_strategy_normal_current;
+		chip->warp_strategy1_high_current0 = chip->warp_strategy_normal_current;
 	} else {
-		chg_debug("qcom,warp_strategy1_high_current0 is %d\n",
-			chip->warp_strategy1_high_current0);
+		chg_debug("qcom,warp_strategy1_high_current0 is %d\n", chip->warp_strategy1_high_current0);
 	}
 
-	rc = of_property_read_u32(node, "qcom,warp_strategy1_high_current1",
-		&chip->warp_strategy1_high_current1);
+	rc = of_property_read_u32(node, "qcom,warp_strategy1_high_current1", &chip->warp_strategy1_high_current1);
 	if (rc) {
-		chip->warp_strategy1_high_current1  = chip->warp_strategy_normal_current;
+		chip->warp_strategy1_high_current1 = chip->warp_strategy_normal_current;
 	} else {
-		chg_debug("qcom,warp_strategy1_high_current1 is %d\n",
-			chip->warp_strategy1_high_current1);
+		chg_debug("qcom,warp_strategy1_high_current1 is %d\n", chip->warp_strategy1_high_current1);
 	}
 
-	rc = of_property_read_u32(node, "qcom,warp_strategy1_high_current2",
-		&chip->warp_strategy1_high_current2);
+	rc = of_property_read_u32(node, "qcom,warp_strategy1_high_current2", &chip->warp_strategy1_high_current2);
 	if (rc) {
-		chip->warp_strategy1_high_current2  = chip->warp_strategy_normal_current;
+		chip->warp_strategy1_high_current2 = chip->warp_strategy_normal_current;
 	} else {
-		chg_debug("qcom,warp_strategy1_high_current2 is %d\n",
-			chip->warp_strategy1_high_current2);
+		chg_debug("qcom,warp_strategy1_high_current2 is %d\n", chip->warp_strategy1_high_current2);
 	}
 
-	rc = of_property_read_u32(node, "qcom,warp_strategy1_low_current2",
-		&chip->warp_strategy1_low_current2);
+	rc = of_property_read_u32(node, "qcom,warp_strategy1_low_current2", &chip->warp_strategy1_low_current2);
 	if (rc) {
-		chip->warp_strategy1_low_current2  = chip->warp_strategy_normal_current;
+		chip->warp_strategy1_low_current2 = chip->warp_strategy_normal_current;
 	} else {
-		chg_debug("qcom,warp_strategy1_low_current2 is %d\n",
-			chip->warp_strategy1_low_current2);
+		chg_debug("qcom,warp_strategy1_low_current2 is %d\n", chip->warp_strategy1_low_current2);
 	}
 
-	rc = of_property_read_u32(node, "qcom,warp_strategy1_low_current1",
-		&chip->warp_strategy1_low_current1);
+	rc = of_property_read_u32(node, "qcom,warp_strategy1_low_current1", &chip->warp_strategy1_low_current1);
 	if (rc) {
-		chip->warp_strategy1_low_current1  = chip->warp_strategy_normal_current;
+		chip->warp_strategy1_low_current1 = chip->warp_strategy_normal_current;
 	} else {
-		chg_debug("qcom,warp_strategy1_low_current1 is %d\n",
-			chip->warp_strategy1_low_current1);
+		chg_debug("qcom,warp_strategy1_low_current1 is %d\n", chip->warp_strategy1_low_current1);
 	}
 
-	rc = of_property_read_u32(node, "qcom,warp_strategy1_low_current0",
-		&chip->warp_strategy1_low_current0);
+	rc = of_property_read_u32(node, "qcom,warp_strategy1_low_current0", &chip->warp_strategy1_low_current0);
 	if (rc) {
-		chip->warp_strategy1_low_current0  = chip->warp_strategy_normal_current;
+		chip->warp_strategy1_low_current0 = chip->warp_strategy_normal_current;
 	} else {
-		chg_debug("qcom,warp_strategy1_low_current0 is %d\n",
-			chip->warp_strategy1_low_current0);
+		chg_debug("qcom,warp_strategy1_low_current0 is %d\n", chip->warp_strategy1_low_current0);
 	}
 
-	rc = of_property_read_u32(node, "qcom,warp_strategy2_batt_up_temp1",
-		&chip->warp_strategy2_batt_up_temp1);
+	rc = of_property_read_u32(node, "qcom,warp_strategy2_batt_up_temp1", &chip->warp_strategy2_batt_up_temp1);
 	if (rc) {
-		chip->warp_strategy2_batt_up_temp1  = chip->warp_multistep_initial_batt_temp;
+		chip->warp_strategy2_batt_up_temp1 = chip->warp_multistep_initial_batt_temp;
 	} else {
-		chg_debug("qcom,warp_strategy2_batt_up_temp1 is %d\n",
-			chip->warp_strategy2_batt_up_temp1);
+		chg_debug("qcom,warp_strategy2_batt_up_temp1 is %d\n", chip->warp_strategy2_batt_up_temp1);
 	}
 
-	rc = of_property_read_u32(node, "qcom,warp_strategy2_batt_up_down_temp2",
-		&chip->warp_strategy2_batt_up_down_temp2);
+	rc = of_property_read_u32(node, "qcom,warp_strategy2_batt_up_down_temp2", &chip->warp_strategy2_batt_up_down_temp2);
 	if (rc) {
-		chip->warp_strategy2_batt_up_down_temp2  = chip->warp_multistep_initial_batt_temp;
+		chip->warp_strategy2_batt_up_down_temp2 = chip->warp_multistep_initial_batt_temp;
 	} else {
-		chg_debug("qcom,warp_strategy2_batt_up_down_temp2 is %d\n",
-			chip->warp_strategy2_batt_up_down_temp2);
+		chg_debug("qcom,warp_strategy2_batt_up_down_temp2 is %d\n", chip->warp_strategy2_batt_up_down_temp2);
 	}
 
-	rc = of_property_read_u32(node, "qcom,warp_strategy2_batt_up_temp3",
-		&chip->warp_strategy2_batt_up_temp3);
+	rc = of_property_read_u32(node, "qcom,warp_strategy2_batt_up_temp3", &chip->warp_strategy2_batt_up_temp3);
 	if (rc) {
-		chip->warp_strategy2_batt_up_temp3  = chip->warp_multistep_initial_batt_temp;
+		chip->warp_strategy2_batt_up_temp3 = chip->warp_multistep_initial_batt_temp;
 	} else {
-		chg_debug("qcom,warp_strategy2_batt_up_temp3 is %d\n",
-			chip->warp_strategy2_batt_up_temp3);
+		chg_debug("qcom,warp_strategy2_batt_up_temp3 is %d\n", chip->warp_strategy2_batt_up_temp3);
 	}
 
-	rc = of_property_read_u32(node, "qcom,warp_strategy2_batt_up_down_temp4",
-		&chip->warp_strategy2_batt_up_down_temp4);
+	rc = of_property_read_u32(node, "qcom,warp_strategy2_batt_up_down_temp4", &chip->warp_strategy2_batt_up_down_temp4);
 	if (rc) {
-		chip->warp_strategy2_batt_up_down_temp4  = chip->warp_multistep_initial_batt_temp;
+		chip->warp_strategy2_batt_up_down_temp4 = chip->warp_multistep_initial_batt_temp;
 	} else {
-		chg_debug("qcom,warp_strategy2_batt_up_down_temp4 is %d\n",
-			chip->warp_strategy2_batt_up_down_temp4);
+		chg_debug("qcom,warp_strategy2_batt_up_down_temp4 is %d\n", chip->warp_strategy2_batt_up_down_temp4);
 	}
 
-	rc = of_property_read_u32(node, "qcom,warp_strategy2_batt_up_temp5",
-		&chip->warp_strategy2_batt_up_temp5);
+	rc = of_property_read_u32(node, "qcom,warp_strategy2_batt_up_temp5", &chip->warp_strategy2_batt_up_temp5);
 	if (rc) {
-		chip->warp_strategy2_batt_up_temp5  = chip->warp_multistep_initial_batt_temp;
+		chip->warp_strategy2_batt_up_temp5 = chip->warp_multistep_initial_batt_temp;
 	} else {
-		chg_debug("qcom,warp_strategy2_batt_up_temp5 is %d\n",
-			chip->warp_strategy2_batt_up_temp5);
+		chg_debug("qcom,warp_strategy2_batt_up_temp5 is %d\n", chip->warp_strategy2_batt_up_temp5);
 	}
 
-	rc = of_property_read_u32(node, "qcom,warp_strategy2_batt_up_temp6",
-		&chip->warp_strategy2_batt_up_temp6);
+	rc = of_property_read_u32(node, "qcom,warp_strategy2_batt_up_temp6", &chip->warp_strategy2_batt_up_temp6);
 	if (rc) {
-		chip->warp_strategy2_batt_up_temp6  = chip->warp_multistep_initial_batt_temp;
+		chip->warp_strategy2_batt_up_temp6 = chip->warp_multistep_initial_batt_temp;
 	} else {
-		chg_debug("qcom,warp_strategy2_batt_up_temp6 is %d\n",
-			chip->warp_strategy2_batt_up_temp6);
+		chg_debug("qcom,warp_strategy2_batt_up_temp6 is %d\n", chip->warp_strategy2_batt_up_temp6);
 	}
 
-	rc = of_property_read_u32(node, "qcom,warp_strategy2_high0_current",
-		&chip->warp_strategy2_high0_current);
+	rc = of_property_read_u32(node, "qcom,warp_strategy2_high0_current", &chip->warp_strategy2_high0_current);
 	if (rc) {
-		chip->warp_strategy2_high0_current	= chip->warp_strategy_normal_current;
+		chip->warp_strategy2_high0_current = chip->warp_strategy_normal_current;
 	} else {
-		chg_debug("qcom,warp_strategy2_high0_current is %d\n",
-			chip->warp_strategy2_high0_current);
+		chg_debug("qcom,warp_strategy2_high0_current is %d\n", chip->warp_strategy2_high0_current);
 	}
 
-	rc = of_property_read_u32(node, "qcom,warp_strategy2_high1_current",
-		&chip->warp_strategy2_high1_current);
+	rc = of_property_read_u32(node, "qcom,warp_strategy2_high1_current", &chip->warp_strategy2_high1_current);
 	if (rc) {
-		chip->warp_strategy2_high1_current	= chip->warp_strategy_normal_current;
+		chip->warp_strategy2_high1_current = chip->warp_strategy_normal_current;
 	} else {
-		chg_debug("qcom,warp_strategy2_high1_current is %d\n",
-			chip->warp_strategy2_high1_current);
+		chg_debug("qcom,warp_strategy2_high1_current is %d\n", chip->warp_strategy2_high1_current);
 	}
 
-	rc = of_property_read_u32(node, "qcom,warp_strategy2_high2_current",
-		&chip->warp_strategy2_high2_current);
+	rc = of_property_read_u32(node, "qcom,warp_strategy2_high2_current", &chip->warp_strategy2_high2_current);
 	if (rc) {
-		chip->warp_strategy2_high2_current	= chip->warp_strategy_normal_current;
+		chip->warp_strategy2_high2_current = chip->warp_strategy_normal_current;
 	} else {
-		chg_debug("qcom,warp_strategy2_high2_current is %d\n",
-			chip->warp_strategy2_high2_current);
+		chg_debug("qcom,warp_strategy2_high2_current is %d\n", chip->warp_strategy2_high2_current);
 	}
 
-	rc = of_property_read_u32(node, "qcom,warp_strategy2_high3_current",
-		&chip->warp_strategy2_high3_current);
+	rc = of_property_read_u32(node, "qcom,warp_strategy2_high3_current", &chip->warp_strategy2_high3_current);
 	if (rc) {
-		chip->warp_strategy2_high3_current	= chip->warp_strategy_normal_current;
+		chip->warp_strategy2_high3_current = chip->warp_strategy_normal_current;
 	} else {
-		chg_debug("qcom,warp_strategy2_high3_current is %d\n",
-			chip->warp_strategy2_high3_current);
+		chg_debug("qcom,warp_strategy2_high3_current is %d\n", chip->warp_strategy2_high3_current);
 	}
 
-	rc = of_property_read_u32(node, "qcom,warp_batt_over_high_temp",
-		&chip->warp_batt_over_high_temp);
+	rc = of_property_read_u32(node, "qcom,warp_batt_over_high_temp", &chip->warp_batt_over_high_temp);
 	if (rc) {
 		chip->warp_batt_over_high_temp = -EINVAL;
 	} else {
-		chg_debug("qcom,warp_batt_over_high_temp is %d\n",
-			chip->warp_batt_over_high_temp);
+		chg_debug("qcom,warp_batt_over_high_temp is %d\n", chip->warp_batt_over_high_temp);
 	}
 
-	rc = of_property_read_u32(node, "qcom,warp_over_high_or_low_current",
-		&chip->warp_over_high_or_low_current);
+	rc = of_property_read_u32(node, "qcom,warp_over_high_or_low_current", &chip->warp_over_high_or_low_current);
 	if (rc) {
 		chip->warp_over_high_or_low_current = -EINVAL;
 	} else {
-		chg_debug("qcom,warp_over_high_or_low_current is %d\n",
-			chip->warp_over_high_or_low_current);
+		chg_debug("qcom,warp_over_high_or_low_current is %d\n", chip->warp_over_high_or_low_current);
 	}
 }
 
@@ -661,12 +576,12 @@ int oplus_warp_asic_hwid_check(struct oplus_warp_chip *chip)
 	static int asic_hwid_type = OPLUS_WARP_MCU_HWID_UNKNOW;
 	struct device_node *node = NULL;
 
-	if(asic_hwid_type != OPLUS_WARP_MCU_HWID_UNKNOW) {
+	if (asic_hwid_type != OPLUS_WARP_MCU_HWID_UNKNOW) {
 		chg_debug("asic_hwid_type[%d]\n", asic_hwid_type);
 		return asic_hwid_type;
 	}
 
-	if(chip == NULL) {
+	if (chip == NULL) {
 		chg_err("oplus_warp_chip is not ready\n");
 		asic_hwid_type = OPLUS_WARP_ASIC_HWID_NON_EXIST;
 		return OPLUS_WARP_ASIC_HWID_NON_EXIST;
@@ -674,8 +589,7 @@ int oplus_warp_asic_hwid_check(struct oplus_warp_chip *chip)
 
 	node = chip->dev->of_node;
 	/* Parsing gpio swutch1*/
-	chip->warp_gpio.warp_asic_id_gpio = of_get_named_gpio(node,
-		"qcom,warp_asic_id-gpio", 0);
+	chip->warp_gpio.warp_asic_id_gpio = of_get_named_gpio(node, "qcom,warp_asic_id-gpio", 0);
 	if (chip->warp_gpio.warp_asic_id_gpio < 0) {
 		chg_err("chip->warp_gpio.warp_asic_id_gpio not specified\n");
 		asic_hwid_type = OPLUS_WARP_ASIC_HWID_NON_EXIST;
@@ -684,14 +598,12 @@ int oplus_warp_asic_hwid_check(struct oplus_warp_chip *chip)
 		if (gpio_is_valid(chip->warp_gpio.warp_asic_id_gpio)) {
 			rc = gpio_request(chip->warp_gpio.warp_asic_id_gpio, "warp-asic-id-gpio");
 			if (rc) {
-				chg_err("unable to request gpio [%d]\n",
-					chip->warp_gpio.warp_asic_id_gpio);
+				chg_err("unable to request gpio [%d]\n", chip->warp_gpio.warp_asic_id_gpio);
 				asic_hwid_type = OPLUS_WARP_ASIC_HWID_NON_EXIST;
 				return OPLUS_WARP_ASIC_HWID_NON_EXIST;
 			}
 		}
-		chg_err("chip->warp_gpio.warp_asic_id_gpio =%d\n",
-			chip->warp_gpio.warp_asic_id_gpio);
+		chg_err("chip->warp_gpio.warp_asic_id_gpio =%d\n", chip->warp_gpio.warp_asic_id_gpio);
 	}
 
 	chip->warp_gpio.pinctrl = devm_pinctrl_get(chip->dev);
@@ -701,39 +613,37 @@ int oplus_warp_asic_hwid_check(struct oplus_warp_chip *chip)
 		return OPLUS_WARP_ASIC_HWID_NON_EXIST;
 	}
 
-	chip->warp_gpio.gpio_warp_asic_id_sleep =
-		pinctrl_lookup_state(chip->warp_gpio.pinctrl, "warp_asic_id_sleep");
+	chip->warp_gpio.gpio_warp_asic_id_sleep = pinctrl_lookup_state(chip->warp_gpio.pinctrl, "warp_asic_id_sleep");
 	if (IS_ERR_OR_NULL(chip->warp_gpio.gpio_warp_asic_id_sleep)) {
 		chg_err(": %d Failed to get the gpio_warp_asic_id_sleep\
-			pinctrl handle\n", __LINE__);
+			pinctrl handle\n",
+			__LINE__);
 		asic_hwid_type = OPLUS_WARP_ASIC_HWID_NON_EXIST;
 		return OPLUS_WARP_ASIC_HWID_NON_EXIST;
 	}
 
-	chip->warp_gpio.gpio_warp_asic_id_active =
-		pinctrl_lookup_state(chip->warp_gpio.pinctrl, "warp_asic_id_active");
+	chip->warp_gpio.gpio_warp_asic_id_active = pinctrl_lookup_state(chip->warp_gpio.pinctrl, "warp_asic_id_active");
 	if (IS_ERR_OR_NULL(chip->warp_gpio.gpio_warp_asic_id_active)) {
 		chg_err(": %d Failed to get the gpio_warp_asic_id_active\
-			pinctrl handle\n", __LINE__);
+			pinctrl handle\n",
+			__LINE__);
 		asic_hwid_type = OPLUS_WARP_ASIC_HWID_NON_EXIST;
 		return OPLUS_WARP_ASIC_HWID_NON_EXIST;
 	}
 
-	pinctrl_select_state(chip->warp_gpio.pinctrl,
-		chip->warp_gpio.gpio_warp_asic_id_sleep);
+	pinctrl_select_state(chip->warp_gpio.pinctrl, chip->warp_gpio.gpio_warp_asic_id_sleep);
 
 	usleep_range(10000, 10000);
-	if(gpio_get_value(chip->warp_gpio.warp_asic_id_gpio) == 1) {
+	if (gpio_get_value(chip->warp_gpio.warp_asic_id_gpio) == 1) {
 		chg_debug("it is  rk826\n");
 		asic_hwid_type = OPLUS_WARP_ASIC_HWID_RK826;
 		return OPLUS_WARP_ASIC_HWID_RK826;
 	}
 
-	pinctrl_select_state(chip->warp_gpio.pinctrl,
-		chip->warp_gpio.gpio_warp_asic_id_active);
+	pinctrl_select_state(chip->warp_gpio.pinctrl, chip->warp_gpio.gpio_warp_asic_id_active);
 
 	usleep_range(10000, 10000);
-	if(gpio_get_value(chip->warp_gpio.warp_asic_id_gpio) == 1) {
+	if (gpio_get_value(chip->warp_gpio.warp_asic_id_gpio) == 1) {
 		chg_debug("it is  rt5125\n");
 		asic_hwid_type = OPLUS_WARP_ASIC_HWID_RT5125;
 		return OPLUS_WARP_ASIC_HWID_RT5125;
@@ -755,19 +665,19 @@ int oplus_warp_mcu_hwid_check(struct oplus_warp_chip *chip)
 	return main_hwid5_val;
 #endif
 
-	if(mcu_hwid_type != -1) {
+	if (mcu_hwid_type != -1) {
 		chg_debug("mcu_hwid_type[%d]\n", mcu_hwid_type);
 		return mcu_hwid_type;
 	}
 
-	if(chip == NULL){
+	if (chip == NULL) {
 		chg_err("oplus_warp_chip is not ready, enable stm8s\n");
-			mcu_hwid_type = OPLUS_WARP_MCU_HWID_STM8S;
+		mcu_hwid_type = OPLUS_WARP_MCU_HWID_STM8S;
 		return OPLUS_WARP_MCU_HWID_STM8S;
 	}
 
 #ifdef CONFIG_MACH_MT6785
-	if (is_sala_a()) { //sala_a use rk826
+	if (is_sala_a()) {
 		chg_debug("[%s]sala_a return rk826\n", __func__);
 		mcu_hwid_type = OPLUS_WARP_ASIC_HWID_RK826;
 		return OPLUS_WARP_ASIC_HWID_RK826;
@@ -776,8 +686,7 @@ int oplus_warp_mcu_hwid_check(struct oplus_warp_chip *chip)
 
 	node = chip->dev->of_node;
 	/* Parsing gpio swutch1*/
-	chip->warp_gpio.warp_mcu_id_gpio = of_get_named_gpio(node,
-		"qcom,warp_mcu_id-gpio", 0);
+	chip->warp_gpio.warp_mcu_id_gpio = of_get_named_gpio(node, "qcom,warp_mcu_id-gpio", 0);
 	if (chip->warp_gpio.warp_mcu_id_gpio < 0) {
 		chg_err("chip->warp_gpio.warp_mcu_id_gpio not specified, enable stm8s\n");
 		mcu_hwid_type = OPLUS_WARP_MCU_HWID_STM8S;
@@ -786,35 +695,32 @@ int oplus_warp_mcu_hwid_check(struct oplus_warp_chip *chip)
 		if (gpio_is_valid(chip->warp_gpio.warp_mcu_id_gpio)) {
 			rc = gpio_request(chip->warp_gpio.warp_mcu_id_gpio, "warp-mcu-id-gpio");
 			if (rc) {
-				chg_err("unable to request gpio [%d]\n",
-					chip->warp_gpio.warp_mcu_id_gpio);
+				chg_err("unable to request gpio [%d]\n", chip->warp_gpio.warp_mcu_id_gpio);
 			}
 		}
-		chg_err("chip->warp_gpio.warp_mcu_id_gpio =%d\n",
-			chip->warp_gpio.warp_mcu_id_gpio);
+		chg_err("chip->warp_gpio.warp_mcu_id_gpio =%d\n", chip->warp_gpio.warp_mcu_id_gpio);
 	}
 
 	chip->warp_gpio.pinctrl = devm_pinctrl_get(chip->dev);
 	if (IS_ERR_OR_NULL(chip->warp_gpio.pinctrl)) {
 		chg_err(": %d Getting pinctrl handle failed, enable stm8s\n", __LINE__);
-			mcu_hwid_type = OPLUS_WARP_MCU_HWID_STM8S;
-		return OPLUS_WARP_MCU_HWID_STM8S;
-	}
-
-	chip->warp_gpio.gpio_warp_mcu_id_default =
-		pinctrl_lookup_state(chip->warp_gpio.pinctrl, "warp_mcu_id_default");
-	if (IS_ERR_OR_NULL(chip->warp_gpio.gpio_warp_mcu_id_default)) {
-		chg_err(": %d Failed to get the gpio_warp_mcu_id_default\
-			pinctrl handle, enable stm8s\n", __LINE__);
 		mcu_hwid_type = OPLUS_WARP_MCU_HWID_STM8S;
 		return OPLUS_WARP_MCU_HWID_STM8S;
 	}
-	pinctrl_select_state(chip->warp_gpio.pinctrl,
-		chip->warp_gpio.gpio_warp_mcu_id_default);
+
+	chip->warp_gpio.gpio_warp_mcu_id_default = pinctrl_lookup_state(chip->warp_gpio.pinctrl, "warp_mcu_id_default");
+	if (IS_ERR_OR_NULL(chip->warp_gpio.gpio_warp_mcu_id_default)) {
+		chg_err(": %d Failed to get the gpio_warp_mcu_id_default\
+			pinctrl handle, enable stm8s\n",
+			__LINE__);
+		mcu_hwid_type = OPLUS_WARP_MCU_HWID_STM8S;
+		return OPLUS_WARP_MCU_HWID_STM8S;
+	}
+	pinctrl_select_state(chip->warp_gpio.pinctrl, chip->warp_gpio.gpio_warp_mcu_id_default);
 
 	usleep_range(10000, 10000);
-	if (gpio_is_valid(chip->warp_gpio.warp_mcu_id_gpio)){
-		if(gpio_get_value(chip->warp_gpio.warp_mcu_id_gpio) == 0){
+	if (gpio_is_valid(chip->warp_gpio.warp_mcu_id_gpio)) {
+		if (gpio_get_value(chip->warp_gpio.warp_mcu_id_gpio) == 0) {
 			chg_debug("it is  n76e\n");
 			mcu_hwid_type = OPLUS_WARP_MCU_HWID_N76E;
 			return OPLUS_WARP_MCU_HWID_N76E;
@@ -822,7 +728,7 @@ int oplus_warp_mcu_hwid_check(struct oplus_warp_chip *chip)
 	}
 
 	chg_debug("it is  stm8s\n");
-		mcu_hwid_type = OPLUS_WARP_MCU_HWID_STM8S;
+	mcu_hwid_type = OPLUS_WARP_MCU_HWID_STM8S;
 	return OPLUS_WARP_MCU_HWID_STM8S;
 }
 
@@ -832,21 +738,17 @@ int oplus_warp_gpio_dt_init(struct oplus_warp_chip *chip)
 	struct device_node *node = chip->dev->of_node;
 
 	/* Parsing gpio swutch1*/
-	chip->warp_gpio.switch1_gpio = of_get_named_gpio(node,
-		"qcom,charging_switch1-gpio", 0);
+	chip->warp_gpio.switch1_gpio = of_get_named_gpio(node, "qcom,charging_switch1-gpio", 0);
 	if (chip->warp_gpio.switch1_gpio < 0) {
 		chg_err("chip->warp_gpio.switch1_gpio not specified\n");
 	} else {
 		if (gpio_is_valid(chip->warp_gpio.switch1_gpio)) {
-			rc = gpio_request(chip->warp_gpio.switch1_gpio,
-				"charging-switch1-gpio");
+			rc = gpio_request(chip->warp_gpio.switch1_gpio, "charging-switch1-gpio");
 			if (rc) {
-				chg_err("unable to request gpio [%d]\n",
-					chip->warp_gpio.switch1_gpio);
+				chg_err("unable to request gpio [%d]\n", chip->warp_gpio.switch1_gpio);
 			}
 		}
-		chg_err("chip->warp_gpio.switch1_gpio =%d\n",
-			chip->warp_gpio.switch1_gpio);
+		chg_err("chip->warp_gpio.switch1_gpio =%d\n", chip->warp_gpio.switch1_gpio);
 	}
 
 	chip->warp_gpio.switch1_ctr1_gpio = of_get_named_gpio(node, "qcom,charging_switch1_ctr1-gpio", 0);
@@ -866,56 +768,44 @@ int oplus_warp_gpio_dt_init(struct oplus_warp_chip *chip)
 	/* Parsing gpio swutch2*/
 	/*if(get_PCB_Version()== 0)*/
 	if (1) {
-		chip->warp_gpio.switch2_gpio = of_get_named_gpio(node,
-			"qcom,charging_switch3-gpio", 0);
+		chip->warp_gpio.switch2_gpio = of_get_named_gpio(node, "qcom,charging_switch3-gpio", 0);
 		if (chip->warp_gpio.switch2_gpio < 0) {
 			chg_err("chip->warp_gpio.switch2_gpio not specified\n");
 		} else {
 			if (gpio_is_valid(chip->warp_gpio.switch2_gpio)) {
-				rc = gpio_request(chip->warp_gpio.switch2_gpio,
-					"charging-switch3-gpio");
+				rc = gpio_request(chip->warp_gpio.switch2_gpio, "charging-switch3-gpio");
 				if (rc) {
-					chg_err("unable to request gpio [%d]\n",
-						chip->warp_gpio.switch2_gpio);
+					chg_err("unable to request gpio [%d]\n", chip->warp_gpio.switch2_gpio);
 				}
 			}
-			chg_err("chip->warp_gpio.switch2_gpio =%d\n",
-				chip->warp_gpio.switch2_gpio);
+			chg_err("chip->warp_gpio.switch2_gpio =%d\n", chip->warp_gpio.switch2_gpio);
 		}
 	} else {
-		chip->warp_gpio.switch2_gpio = of_get_named_gpio(node,
-			"qcom,charging_switch2-gpio", 0);
+		chip->warp_gpio.switch2_gpio = of_get_named_gpio(node, "qcom,charging_switch2-gpio", 0);
 		if (chip->warp_gpio.switch2_gpio < 0) {
 			chg_err("chip->warp_gpio.switch2_gpio not specified\n");
 		} else {
 			if (gpio_is_valid(chip->warp_gpio.switch2_gpio)) {
-				rc = gpio_request(chip->warp_gpio.switch2_gpio,
-					"charging-switch2-gpio");
+				rc = gpio_request(chip->warp_gpio.switch2_gpio, "charging-switch2-gpio");
 				if (rc) {
-					chg_err("unable to request gpio [%d]\n",
-						chip->warp_gpio.switch2_gpio);
+					chg_err("unable to request gpio [%d]\n", chip->warp_gpio.switch2_gpio);
 				}
 			}
-			chg_err("chip->warp_gpio.switch2_gpio =%d\n",
-				chip->warp_gpio.switch2_gpio);
+			chg_err("chip->warp_gpio.switch2_gpio =%d\n", chip->warp_gpio.switch2_gpio);
 		}
 	}
 	/* Parsing gpio reset*/
-	chip->warp_gpio.reset_gpio = of_get_named_gpio(node,
-		"qcom,charging_reset-gpio", 0);
+	chip->warp_gpio.reset_gpio = of_get_named_gpio(node, "qcom,charging_reset-gpio", 0);
 	if (chip->warp_gpio.reset_gpio < 0) {
 		chg_err("chip->warp_gpio.reset_gpio not specified\n");
 	} else {
 		if (gpio_is_valid(chip->warp_gpio.reset_gpio)) {
-			rc = gpio_request(chip->warp_gpio.reset_gpio,
-				"charging-reset-gpio");
+			rc = gpio_request(chip->warp_gpio.reset_gpio, "charging-reset-gpio");
 			if (rc) {
-				chg_err("unable to request gpio [%d]\n",
-					chip->warp_gpio.reset_gpio);
+				chg_err("unable to request gpio [%d]\n", chip->warp_gpio.reset_gpio);
 			}
 		}
-		chg_err("chip->warp_gpio.reset_gpio =%d\n",
-			chip->warp_gpio.reset_gpio);
+		chg_err("chip->warp_gpio.reset_gpio =%d\n", chip->warp_gpio.reset_gpio);
 	}
 	/* Parsing gpio clock*/
 	chip->warp_gpio.clock_gpio = of_get_named_gpio(node, "qcom,charging_clock-gpio", 0);
@@ -925,8 +815,7 @@ int oplus_warp_gpio_dt_init(struct oplus_warp_chip *chip)
 		if (gpio_is_valid(chip->warp_gpio.clock_gpio)) {
 			rc = gpio_request(chip->warp_gpio.clock_gpio, "charging-clock-gpio");
 			if (rc) {
-				chg_err("unable to request gpio [%d], rc = %d\n",
-					chip->warp_gpio.clock_gpio, rc);
+				chg_err("unable to request gpio [%d], rc = %d\n", chip->warp_gpio.clock_gpio, rc);
 			}
 		}
 		chg_err("chip->warp_gpio.clock_gpio =%d\n", chip->warp_gpio.clock_gpio);
@@ -948,9 +837,8 @@ int oplus_warp_gpio_dt_init(struct oplus_warp_chip *chip)
 	rc = opchg_bq27541_gpio_pinctrl_init(chip);
 	chg_debug(" switch1_gpio = %d,switch2_gpio = %d, reset_gpio = %d,\
 			clock_gpio = %d, data_gpio = %d, data_irq = %d\n",
-			chip->warp_gpio.switch1_gpio, chip->warp_gpio.switch2_gpio,
-			chip->warp_gpio.reset_gpio, chip->warp_gpio.clock_gpio,
-			chip->warp_gpio.data_gpio, chip->warp_gpio.data_irq);
+		  chip->warp_gpio.switch1_gpio, chip->warp_gpio.switch2_gpio, chip->warp_gpio.reset_gpio, chip->warp_gpio.clock_gpio, chip->warp_gpio.data_gpio,
+		  chip->warp_gpio.data_irq);
 	return rc;
 }
 
@@ -963,7 +851,7 @@ void opchg_set_clock_active(struct oplus_warp_chip *chip)
 
 	mutex_lock(&chip->pinctrl_mutex);
 	pinctrl_select_state(chip->warp_gpio.pinctrl, chip->warp_gpio.gpio_clock_sleep); /* PULL_down */
-	gpio_direction_output(chip->warp_gpio.clock_gpio, 0);		/* out 0 */
+	gpio_direction_output(chip->warp_gpio.clock_gpio, 0); /* out 0 */
 	mutex_unlock(&chip->pinctrl_mutex);
 }
 
@@ -975,15 +863,15 @@ void opchg_set_clock_sleep(struct oplus_warp_chip *chip)
 	}
 
 	mutex_lock(&chip->pinctrl_mutex);
-	pinctrl_select_state(chip->warp_gpio.pinctrl, chip->warp_gpio.gpio_clock_active);/* PULL_up */
-	gpio_direction_output(chip->warp_gpio.clock_gpio, 1);	/* out 1 */
+	pinctrl_select_state(chip->warp_gpio.pinctrl, chip->warp_gpio.gpio_clock_active); /* PULL_up */
+	gpio_direction_output(chip->warp_gpio.clock_gpio, 1); /* out 1 */
 	mutex_unlock(&chip->pinctrl_mutex);
 }
 
 void opchg_set_data_active(struct oplus_warp_chip *chip)
 {
 	mutex_lock(&chip->pinctrl_mutex);
-	gpio_direction_input(chip->warp_gpio.data_gpio);	/* in */
+	gpio_direction_input(chip->warp_gpio.data_gpio); /* in */
 	pinctrl_select_state(chip->warp_gpio.pinctrl, chip->warp_gpio.gpio_data_active); /* no_PULL */
 	mutex_unlock(&chip->pinctrl_mutex);
 }
@@ -991,20 +879,20 @@ void opchg_set_data_active(struct oplus_warp_chip *chip)
 void opchg_set_data_sleep(struct oplus_warp_chip *chip)
 {
 	mutex_lock(&chip->pinctrl_mutex);
-	pinctrl_select_state(chip->warp_gpio.pinctrl, chip->warp_gpio.gpio_data_sleep);/* PULL_down */
-	gpio_direction_output(chip->warp_gpio.data_gpio, 0);	/* out 1 */
+	pinctrl_select_state(chip->warp_gpio.pinctrl, chip->warp_gpio.gpio_data_sleep); /* PULL_down */
+	gpio_direction_output(chip->warp_gpio.data_gpio, 0); /* out 1 */
 	mutex_unlock(&chip->pinctrl_mutex);
 }
 
 void opchg_set_reset_sleep(struct oplus_warp_chip *chip)
 {
 	if (chip->adapter_update_real == ADAPTER_FW_NEED_UPDATE || chip->btb_temp_over || chip->mcu_update_ing) {
-		chg_debug(" adapter_fw_need_update:%d,btb_temp_over:%d,mcu_update_ing:%d,return\n",
-			chip->adapter_update_real, chip->btb_temp_over, chip->mcu_update_ing);
+		chg_debug(" adapter_fw_need_update:%d,btb_temp_over:%d,mcu_update_ing:%d,return\n", chip->adapter_update_real, chip->btb_temp_over,
+			  chip->mcu_update_ing);
 		return;
 	}
 	mutex_lock(&chip->pinctrl_mutex);
-	gpio_direction_output(chip->warp_gpio.switch1_gpio, 0);	/* in 0*/
+	gpio_direction_output(chip->warp_gpio.switch1_gpio, 0); /* in 0*/
 	gpio_direction_output(chip->warp_gpio.reset_gpio, 0); /* out 0 */
 	usleep_range(10000, 10000);
 #ifdef CONFIG_OPLUS_CHARGER_MTK
@@ -1022,14 +910,12 @@ void opchg_set_reset_sleep(struct oplus_warp_chip *chip)
 
 void opchg_set_reset_active(struct oplus_warp_chip *chip)
 {
-	if (chip->adapter_update_real == ADAPTER_FW_NEED_UPDATE
-			|| chip->btb_temp_over || chip->mcu_update_ing) {
-		chg_debug(" adapter_fw_need_update:%d,btb_temp_over:%d,mcu_update_ing:%d,return\n",
-			chip->adapter_update_real, chip->btb_temp_over, chip->mcu_update_ing);
+	if (chip->adapter_update_real == ADAPTER_FW_NEED_UPDATE || chip->btb_temp_over || chip->mcu_update_ing) {
+		chg_debug(" adapter_fw_need_update:%d,btb_temp_over:%d,mcu_update_ing:%d,return\n", chip->adapter_update_real, chip->btb_temp_over,
+			  chip->mcu_update_ing);
 		return;
 	}
 	opchg_set_reset_active_force(chip);
-
 }
 
 void opchg_set_reset_active_force(struct oplus_warp_chip *chip)
@@ -1040,14 +926,10 @@ void opchg_set_reset_active_force(struct oplus_warp_chip *chip)
 
 	mcu_hwid_type = get_warp_mcu_type(chip);
 #ifndef OPLUS_CHG_OP_DEF
-	if (mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RK826
-		|| mcu_hwid_type == OPLUS_WARP_ASIC_HWID_OP10
-		|| mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RT5125) {
+	if (mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RK826 || mcu_hwid_type == OPLUS_WARP_ASIC_HWID_OP10 || mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RT5125) {
 #else
-	if (mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RK826
-		|| mcu_hwid_type == OPLUS_WARP_ASIC_HWID_OP10
-		|| mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RT5125
-		|| is_warp_asic_hwid_check_by_i2c(chip)) {
+	if (mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RK826 || mcu_hwid_type == OPLUS_WARP_ASIC_HWID_OP10 || mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RT5125 ||
+	    is_warp_asic_hwid_check_by_i2c(chip)) {
 #endif
 		active_level = 1;
 		sleep_level = 0;
@@ -1055,23 +937,19 @@ void opchg_set_reset_active_force(struct oplus_warp_chip *chip)
 #ifndef OPLUS_CHG_OP_DEF
 	if (mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RK826) {
 #else
-	if ((mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RK826) ||
-	    ((chip->mcu_hwid_type == OPLUS_WARP_MCU_HWID_UNKNOW) &&
-	     is_warp_asic_hwid_check_by_i2c(chip))) {
+	if ((mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RK826) || ((chip->mcu_hwid_type == OPLUS_WARP_MCU_HWID_UNKNOW) && is_warp_asic_hwid_check_by_i2c(chip))) {
 #endif
 		if (oplus_is_rf_ftm_mode())
 			return;
 	}
 	mutex_lock(&chip->pinctrl_mutex);
-	gpio_direction_output(chip->warp_gpio.switch1_gpio, 0);	/* in 0*/
-	gpio_direction_output(chip->warp_gpio.reset_gpio, active_level);		/* out 1 */
+	gpio_direction_output(chip->warp_gpio.switch1_gpio, 0); /* in 0*/
+	gpio_direction_output(chip->warp_gpio.reset_gpio, active_level); /* out 1 */
 
 #ifdef CONFIG_OPLUS_CHARGER_MTK
-	pinctrl_select_state(chip->warp_gpio.pinctrl,
-		chip->warp_gpio.gpio_reset_sleep);	/* PULL_down */
+	pinctrl_select_state(chip->warp_gpio.pinctrl, chip->warp_gpio.gpio_reset_sleep); /* PULL_down */
 #else
-	pinctrl_select_state(chip->warp_gpio.pinctrl,
-		chip->warp_gpio.gpio_reset_active);	/* PULL_up */
+	pinctrl_select_state(chip->warp_gpio.pinctrl, chip->warp_gpio.gpio_reset_active); /* PULL_up */
 #endif
 
 	gpio_set_value(chip->warp_gpio.reset_gpio, active_level);
@@ -1081,12 +959,11 @@ void opchg_set_reset_active_force(struct oplus_warp_chip *chip)
 	gpio_set_value(chip->warp_gpio.reset_gpio, active_level);
 	usleep_range(2500, 2500);
 	if (chip->dpdm_switch_mode == WARP_CHARGER_MODE) {
-		gpio_direction_output(chip->warp_gpio.switch1_gpio, 1);	/* in 1*/
+		gpio_direction_output(chip->warp_gpio.switch1_gpio, 1); /* in 1*/
 	}
 	mutex_unlock(&chip->pinctrl_mutex);
 	chg_debug("%s\n", __func__);
 }
-
 
 int oplus_warp_get_reset_gpio_val(struct oplus_warp_chip *chip)
 {
@@ -1134,8 +1011,7 @@ bool oplus_is_charger_reboot(struct oplus_warp_chip *chip)
 static void delay_reset_mcu_work_func(struct work_struct *work)
 {
 	struct delayed_work *dwork = to_delayed_work(work);
-	struct oplus_warp_chip *chip = container_of(dwork,
-		struct oplus_warp_chip, delay_reset_mcu_work);
+	struct oplus_warp_chip *chip = container_of(dwork, struct oplus_warp_chip, delay_reset_mcu_work);
 	opchg_set_clock_sleep(chip);
 	opchg_set_reset_active(chip);
 }
@@ -1147,8 +1023,7 @@ void oplus_warp_delay_reset_mcu_init(struct oplus_warp_chip *chip)
 
 static void oplus_warp_delay_reset_mcu(struct oplus_warp_chip *chip)
 {
-	schedule_delayed_work(&chip->delay_reset_mcu_work,
-		round_jiffies_relative(msecs_to_jiffies(1500)));
+	schedule_delayed_work(&chip->delay_reset_mcu_work, round_jiffies_relative(msecs_to_jiffies(1500)));
 }
 
 static bool is_allow_fast_chg_real(struct oplus_warp_chip *chip)
@@ -1175,25 +1050,19 @@ static bool is_allow_fast_chg_real(struct oplus_warp_chip *chip)
 	}
 
 	mcu_hwid_type = get_warp_mcu_type(chip);
-	chg_err("temp is %d, volt is %d, suspend_charger is %d, mcu_hwid_type is %d\n",
-		temp, volt, chip->suspend_charger, mcu_hwid_type);
+	chg_err("temp is %d, volt is %d, suspend_charger is %d, mcu_hwid_type is %d\n", temp, volt, chip->suspend_charger, mcu_hwid_type);
 #ifndef OPLUS_CHG_OP_DEF
-	if (mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RK826
-		|| mcu_hwid_type == OPLUS_WARP_ASIC_HWID_OP10
-		|| mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RT5125) {
+	if (mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RK826 || mcu_hwid_type == OPLUS_WARP_ASIC_HWID_OP10 || mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RT5125) {
 #else
-	if (mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RK826
-		|| mcu_hwid_type == OPLUS_WARP_ASIC_HWID_OP10
-		|| mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RT5125
-		|| is_warp_asic_hwid_check_by_i2c(chip)) {
+	if (mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RK826 || mcu_hwid_type == OPLUS_WARP_ASIC_HWID_OP10 || mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RT5125 ||
+	    is_warp_asic_hwid_check_by_i2c(chip)) {
 #endif
 		if (!chip->suspend_charger) {
 			if (temp < oplus_chg_get_cool_bat_decidegc()) {
 				if (volt < chip->warp_cool_bat_volt) {
 					return false;
 				}
-			} else if (temp <
-				   oplus_chg_get_little_cool_bat_decidegc()) {
+			} else if (temp < oplus_chg_get_little_cool_bat_decidegc()) {
 				if (volt < chip->warp_little_cool_bat_volt) {
 					return false;
 				}
@@ -1212,8 +1081,7 @@ static bool is_allow_fast_chg_real(struct oplus_warp_chip *chip)
 				if (volt < chip->warp_cool_bat_suspend_volt) {
 					return false;
 				}
-			} else if (temp <
-				   oplus_chg_get_little_cool_bat_decidegc()) {
+			} else if (temp < oplus_chg_get_little_cool_bat_decidegc()) {
 				if (volt < chip->warp_little_cool_bat_suspend_volt) {
 					return false;
 				}
@@ -1240,7 +1108,7 @@ static bool is_allow_fast_chg_real(struct oplus_warp_chip *chip)
 		return false;
 	}
 
-	if(chip->disable_real_fast_chg)
+	if (chip->disable_real_fast_chg)
 		return false;
 
 	return true;
@@ -1272,16 +1140,12 @@ static bool is_allow_fast_chg_dummy(struct oplus_warp_chip *chip)
 
 	mcu_hwid_type = get_warp_mcu_type(chip);
 #ifndef OPLUS_CHG_OP_DEF
-	if (mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RK826
-		|| mcu_hwid_type == OPLUS_WARP_ASIC_HWID_OP10
-		|| mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RT5125) {
+	if (mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RK826 || mcu_hwid_type == OPLUS_WARP_ASIC_HWID_OP10 || mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RT5125) {
 #else
-	if (mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RK826
-		|| mcu_hwid_type == OPLUS_WARP_ASIC_HWID_OP10
-		|| mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RT5125
-		|| is_warp_asic_hwid_check_by_i2c(chip)) {
+	if (mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RK826 || mcu_hwid_type == OPLUS_WARP_ASIC_HWID_OP10 || mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RT5125 ||
+	    is_warp_asic_hwid_check_by_i2c(chip)) {
 #endif
-		if (oplus_warp_get_fastchg_dummy_started() == true && allow_real && !chip->reset_adapter){
+		if (oplus_warp_get_fastchg_dummy_started() == true && allow_real && !chip->reset_adapter) {
 			chip->reset_adapter = true;
 			chip->suspend_charger = true;
 			oplus_chg_suspend_charger();
@@ -1299,9 +1163,7 @@ void switch_fast_chg(struct oplus_warp_chip *chip)
 {
 	bool allow_real = false;
 
-	if (chip->dpdm_switch_mode == WARP_CHARGER_MODE
-		&& gpio_get_value(chip->warp_gpio.switch1_gpio) == 1)
-		{
+	if (chip->dpdm_switch_mode == WARP_CHARGER_MODE && gpio_get_value(chip->warp_gpio.switch1_gpio) == 1) {
 		if (oplus_warp_get_fastchg_started() == false) {
 			allow_real = is_allow_fast_chg_real(chip);
 			oplus_warp_set_fastchg_allow(allow_real);
@@ -1314,16 +1176,14 @@ void switch_fast_chg(struct oplus_warp_chip *chip)
 			oplus_warp_delay_reset_mcu(chip);
 			opchg_set_switch_mode(chip, WARP_CHARGER_MODE);
 		} else {
-			if (oplus_warp_get_fastchg_allow() == false
-					&& oplus_warp_get_fastchg_to_warm() == true) {
+			if (oplus_warp_get_fastchg_allow() == false && oplus_warp_get_fastchg_to_warm() == true) {
 				chg_err(" fastchg_allow false, to_warm true, don't switch to warp mode\n");
 			} else {
 				opchg_set_clock_sleep(chip);
 				opchg_set_reset_active(chip);
 				opchg_set_switch_mode(chip, WARP_CHARGER_MODE);
 
-				if(opchg_get_mcu_update_state() == false &&
-				   oplus_warp_check_asic_fw_status() == 0){
+				if (opchg_get_mcu_update_state() == false && oplus_warp_check_asic_fw_status() == 0) {
 					chg_err("check fw fail, go to update fw!\n");
 					oplus_chg_set_chargerid_switch_val(0);
 					opchg_set_switch_mode(chip, NORMAL_CHARGER_MODE);
@@ -1340,9 +1200,7 @@ bool switch_fast_chg(struct oplus_warp_chip *chip)
 {
 	bool allow_real = false;
 
-	if (chip->dpdm_switch_mode == WARP_CHARGER_MODE
-		&& gpio_get_value(chip->warp_gpio.switch1_gpio) == 1)
-		{
+	if (chip->dpdm_switch_mode == WARP_CHARGER_MODE && gpio_get_value(chip->warp_gpio.switch1_gpio) == 1) {
 		if (oplus_warp_get_fastchg_started() == false) {
 			allow_real = is_allow_fast_chg_real(chip);
 			oplus_warp_set_fastchg_allow(allow_real);
@@ -1358,8 +1216,7 @@ bool switch_fast_chg(struct oplus_warp_chip *chip)
 			opchg_set_switch_mode(chip, WARP_CHARGER_MODE);
 			allow_real = true;
 		} else {
-			if (oplus_warp_get_fastchg_allow() == false
-					&& oplus_warp_get_fastchg_to_warm() == true) {
+			if (oplus_warp_get_fastchg_allow() == false && oplus_warp_get_fastchg_to_warm() == true) {
 				chg_err(" fastchg_allow false, to_warm true, don't switch to warp mode\n");
 				allow_real = false;
 			} else {
@@ -1367,8 +1224,7 @@ bool switch_fast_chg(struct oplus_warp_chip *chip)
 				opchg_set_reset_active(chip);
 				opchg_set_switch_mode(chip, WARP_CHARGER_MODE);
 				allow_real = true;
-				if(opchg_get_mcu_update_state() == false &&
-				   oplus_warp_check_asic_fw_status() == 0){
+				if (opchg_get_mcu_update_state() == false && oplus_warp_check_asic_fw_status() == 0) {
 					chg_err("check fw fail, go to update fw!\n");
 					oplus_chg_set_chargerid_switch_val(0);
 					opchg_set_switch_mode(chip, NORMAL_CHARGER_MODE);
@@ -1435,12 +1291,12 @@ void opchg_reply_mcu_data(struct oplus_warp_chip *chip, int ret_info, int device
 	chg_err("reply_counts = %d,ret_info:%d\n", reply_counts, ret_info);
 	if (chip->w_soc_temp_to_mcu == false) {
 		for (i = 1; i < reply_counts; i++) {
-				gpio_set_value(chip->warp_gpio.data_gpio, (ret_info >> (reply_counts - i - 1)) & 0x01);
-				chg_err("send_bit[%d] = %d\n", i, (ret_info >> (reply_counts - i - 1)) & 0x01);
-				opchg_set_clock_active(chip);
-				usleep_range(1000, 1000);
-				opchg_set_clock_sleep(chip);
-				usleep_range(19000, 19000);
+			gpio_set_value(chip->warp_gpio.data_gpio, (ret_info >> (reply_counts - i - 1)) & 0x01);
+			chg_err("send_bit[%d] = %d\n", i, (ret_info >> (reply_counts - i - 1)) & 0x01);
+			opchg_set_clock_active(chip);
+			usleep_range(1000, 1000);
+			opchg_set_clock_sleep(chip);
+			usleep_range(19000, 19000);
 		}
 		gpio_set_value(chip->warp_gpio.data_gpio, device_type);
 		chg_err("i=%d, device_type = %d\n", i, device_type);
@@ -1451,23 +1307,21 @@ void opchg_reply_mcu_data(struct oplus_warp_chip *chip, int ret_info, int device
 	} else {
 		chip->w_soc_temp_to_mcu = false;
 		for (i = 0; i < reply_counts; i++) {
-				gpio_set_value(chip->warp_gpio.data_gpio, (ret_info >> (reply_counts - i - 1)) & 0x01);
-				chg_err("send_bit[%d] = %d\n", i, (ret_info >> (reply_counts - i - 1)) & 0x01);
-				opchg_set_clock_active(chip);
-				usleep_range(1000, 1000);
-				opchg_set_clock_sleep(chip);
-				usleep_range(19000, 19000);
+			gpio_set_value(chip->warp_gpio.data_gpio, (ret_info >> (reply_counts - i - 1)) & 0x01);
+			chg_err("send_bit[%d] = %d\n", i, (ret_info >> (reply_counts - i - 1)) & 0x01);
+			opchg_set_clock_active(chip);
+			usleep_range(1000, 1000);
+			opchg_set_clock_sleep(chip);
+			usleep_range(19000, 19000);
 		}
 	}
 }
 
-
-void opchg_reply_mcu_data_4bits
-		(struct oplus_warp_chip *chip, int ret_info, int device_type)
+void opchg_reply_mcu_data_4bits(struct oplus_warp_chip *chip, int ret_info, int device_type)
 {
 	int i = 0;
 	for (i = 0; i < 4; i++) {
-		if (i == 0) {					/*tell mcu1503 device_type*/
+		if (i == 0) { /*tell mcu1503 device_type*/
 			gpio_set_value(chip->warp_gpio.data_gpio, ret_info >> 2);
 			chg_err("first_send_bit = %d\n", ret_info >> 2);
 		} else if (i == 1) {
@@ -1476,7 +1330,7 @@ void opchg_reply_mcu_data_4bits
 		} else if (i == 2) {
 			gpio_set_value(chip->warp_gpio.data_gpio, ret_info & 0x1);
 			chg_err("third_send_bit = %d\n", ret_info & 0x1);
-		}else {
+		} else {
 			gpio_set_value(chip->warp_gpio.data_gpio, device_type);
 			chg_err("device_type = %d\n", device_type);
 		}
@@ -1487,15 +1341,14 @@ void opchg_reply_mcu_data_4bits
 	}
 }
 
-
 void opchg_set_switch_fast_charger(struct oplus_warp_chip *chip)
 {
-	gpio_direction_output(chip->warp_gpio.switch1_gpio, 1);	/* out 1*/
-	if (chip->warp_gpio.switch1_ctr1_gpio > 0) {//asic rk826
+	gpio_direction_output(chip->warp_gpio.switch1_gpio, 1); /* out 1*/
+	if (chip->warp_gpio.switch1_ctr1_gpio > 0) {
 #ifndef OPLUS_CHG_OP_DEF
-		gpio_direction_output(chip->warp_gpio.switch1_ctr1_gpio, 0);        /* out 0*/
+		gpio_direction_output(chip->warp_gpio.switch1_ctr1_gpio, 0); /* out 0*/
 #else
-		gpio_direction_output(chip->warp_gpio.switch1_ctr1_gpio, 1);        /* out 1*/
+		gpio_direction_output(chip->warp_gpio.switch1_ctr1_gpio, 1); /* out 1*/
 #endif
 	}
 }
@@ -1511,7 +1364,7 @@ void opchg_set_warp_chargerid_switch_val(struct oplus_warp_chip *chip, int value
 	else
 		return;
 	/*
-	if (chip->warp_gpio.switch1_ctr1_gpio > 0) {//asic rk826/op10
+	if (chip->warp_gpio.switch1_ctr1_gpio > 0) {
 		if (level == 1) {
 			gpio_direction_output(chip->warp_gpio.reset_gpio, 1);
 			gpio_set_value(chip->warp_gpio.reset_gpio, 1);
@@ -1531,10 +1384,10 @@ void opchg_set_warp_chargerid_switch_val(struct oplus_warp_chip *chip, int value
 void opchg_set_switch_normal_charger(struct oplus_warp_chip *chip)
 {
 	if (chip->warp_gpio.switch1_gpio > 0) {
-		gpio_direction_output(chip->warp_gpio.switch1_gpio, 0);	/* in 0*/
+		gpio_direction_output(chip->warp_gpio.switch1_gpio, 0); /* in 0*/
 	}
-	if (chip->warp_gpio.switch1_ctr1_gpio > 0) {//asic rk826
-		gpio_direction_output(chip->warp_gpio.switch1_ctr1_gpio, 0);/* out 0*/
+	if (chip->warp_gpio.switch1_ctr1_gpio > 0) {
+		gpio_direction_output(chip->warp_gpio.switch1_ctr1_gpio, 0); /* out 0*/
 		/*gpio_set_value(chip->warp_gpio.reset_gpio, 0);*/
 	}
 }
@@ -1553,8 +1406,7 @@ void opchg_set_switch_mode(struct oplus_warp_chip *chip, int mode)
 #endif
 
 	if (chip->adapter_update_real == ADAPTER_FW_NEED_UPDATE || chip->btb_temp_over) {
-		chg_err("adapter_fw_need_update: %d, btb_temp_over: %d\n",
-			chip->adapter_update_real, chip->btb_temp_over);
+		chg_err("adapter_fw_need_update: %d, btb_temp_over: %d\n", chip->adapter_update_real, chip->btb_temp_over);
 		return;
 	}
 	if (mode == WARP_CHARGER_MODE && chip->mcu_update_ing) {
@@ -1565,20 +1417,16 @@ void opchg_set_switch_mode(struct oplus_warp_chip *chip, int mode)
 	mcu_hwid_type = get_warp_mcu_type(chip);
 
 	switch (mode) {
-	case WARP_CHARGER_MODE:	       /*11*/
+	case WARP_CHARGER_MODE: /*11*/
 #ifdef OPLUS_CHG_OP_DEF
 		if (chg_chip && chg_chip->chg_ops->disconnect_pd && chg_chip->is_oplus_svid)
 			chg_chip->chg_ops->disconnect_pd(true);
 #endif
 #ifndef OPLUS_CHG_OP_DEF
-		if (mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RK826
-			|| mcu_hwid_type == OPLUS_WARP_ASIC_HWID_OP10
-			|| mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RT5125) {
+		if (mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RK826 || mcu_hwid_type == OPLUS_WARP_ASIC_HWID_OP10 || mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RT5125) {
 #else
-		if (mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RK826
-			|| mcu_hwid_type == OPLUS_WARP_ASIC_HWID_OP10
-			|| mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RT5125
-			|| is_warp_asic_hwid_check_by_i2c(chip)) {
+		if (mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RK826 || mcu_hwid_type == OPLUS_WARP_ASIC_HWID_OP10 || mcu_hwid_type == OPLUS_WARP_ASIC_HWID_RT5125 ||
+		    is_warp_asic_hwid_check_by_i2c(chip)) {
 #endif
 			do {
 				if (gpio_get_value(chip->warp_gpio.reset_gpio) == 1) {
@@ -1586,15 +1434,15 @@ void opchg_set_switch_mode(struct oplus_warp_chip *chip, int mode)
 					chg_err(" warp mode, switch1_gpio:%d\n", gpio_get_value(chip->warp_gpio.switch1_gpio));
 					break;
 				}
-				usleep_range(5000,5000);
-			} while((--retry > 0));
+				usleep_range(5000, 5000);
+			} while ((--retry > 0));
 			break;
 		} else {
 			opchg_set_switch_fast_charger(chip);
 			chg_err(" warp mode, switch1_gpio:%d\n", gpio_get_value(chip->warp_gpio.switch1_gpio));
 			break;
 		}
-	case HEADPHONE_MODE:		  /*10*/
+	case HEADPHONE_MODE: /*10*/
 #ifdef OPLUS_CHG_OP_DEF
 		if (chg_chip && chg_chip->chg_ops->disconnect_pd && chg_chip->is_oplus_svid)
 			chg_chip->chg_ops->disconnect_pd(false);
@@ -1603,7 +1451,7 @@ void opchg_set_switch_mode(struct oplus_warp_chip *chip, int mode)
 		opchg_set_switch_earphone(chip);
 		chg_err(" headphone mode, switch1_gpio:%d\n", gpio_get_value(chip->warp_gpio.switch1_gpio));
 		break;
-	case NORMAL_CHARGER_MODE:	    /*01*/
+	case NORMAL_CHARGER_MODE: /*01*/
 	default:
 #ifdef OPLUS_CHG_OP_DEF
 		if (chg_chip && chg_chip->chg_ops->disconnect_pd && chg_chip->is_oplus_svid)
@@ -1649,7 +1497,7 @@ void oplus_warp_data_irq_init(struct oplus_warp_chip *chip)
 #ifdef CONFIG_OPLUS_CHARGER_MTK
 	struct device_node *node = NULL;
 	struct device_node *node_new = NULL;
-	u32 intr[2] = {0, 0};
+	u32 intr[2] = { 0, 0 };
 
 	node = of_find_compatible_node(NULL, NULL, "mediatek, WARP_AP_DATA-eint");
 	node_new = of_find_compatible_node(NULL, NULL, "mediatek, WARP_EINT_NEW_FUNCTION");
@@ -1658,7 +1506,7 @@ void oplus_warp_data_irq_init(struct oplus_warp_chip *chip)
 			chip->warp_gpio.data_irq = gpio_to_irq(chip->warp_gpio.data_gpio);
 			chg_err("warp_gpio.data_irq:%d\n", chip->warp_gpio.data_irq);
 		} else {
-			of_property_read_u32_array(node , "interrupts", intr, ARRAY_SIZE(intr));
+			of_property_read_u32_array(node, "interrupts", intr, ARRAY_SIZE(intr));
 			chg_debug(" intr[0]  = %d, intr[1]  = %d\r\n", intr[0], intr[1]);
 			chip->warp_gpio.data_irq = irq_of_parse_and_map(node, 0);
 		}
@@ -1680,16 +1528,14 @@ void oplus_warp_eint_register(struct oplus_warp_chip *chip)
 	node = of_find_compatible_node(NULL, NULL, "mediatek, WARP_EINT_NEW_FUNCTION");
 	if (node) {
 		opchg_set_data_active(chip);
-		ret = request_irq(chip->warp_gpio.data_irq, (irq_handler_t)irq_rx_handler,
-				IRQF_TRIGGER_RISING, "WARP_AP_DATA-eint", chip);
+		ret = request_irq(chip->warp_gpio.data_irq, (irq_handler_t)irq_rx_handler, IRQF_TRIGGER_RISING, "WARP_AP_DATA-eint", chip);
 		if (ret < 0) {
 			chg_err("ret = %d, oplus_warp_eint_register failed to request_irq \n", ret);
 		}
 	} else {
 		if (!register_status) {
 			opchg_set_data_active(chip);
-			ret = request_irq(chip->warp_gpio.data_irq, (irq_handler_t)irq_rx_handler,
-					IRQF_TRIGGER_RISING, "WARP_AP_DATA-eint",  NULL);
+			ret = request_irq(chip->warp_gpio.data_irq, (irq_handler_t)irq_rx_handler, IRQF_TRIGGER_RISING, "WARP_AP_DATA-eint", NULL);
 			if (ret) {
 				chg_err("ret = %d, oplus_warp_eint_register failed to request_irq \n", ret);
 			}
@@ -1728,4 +1574,3 @@ void oplus_warp_eint_unregister(struct oplus_warp_chip *chip)
 	free_irq(chip->warp_gpio.data_irq, chip);
 #endif
 }
-

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+
 /*
  * Copyright (c) 2015-2017, 2019 The Linux Foundation. All rights reserved.
  */
@@ -24,25 +24,18 @@ struct oplus_chg_cfg_head {
 	u32 head_size;
 	u32 size;
 	u32 param_index[OPLUS_CHG_PARAM_MAX];
-	u8 signature[512];
-} __attribute__ ((packed));
+	u8 digest[128];
+};
 
 struct oplus_chg_param_head {
 	u32 magic;
 	u32 size;
 	u32 type;
 	u8 data[0];
-} __attribute__ ((packed));
-
-struct oplus_chg_cfg_data_head {
-	u32 magic;
-	u32 index;
-	u32 size;
-	u8 data[0];
-} __attribute__ ((packed));
+};
 
 int oplus_chg_check_cfg_data(void *buf);
 void *oplus_chg_get_param(void *buf, enum oplus_chg_param_type type);
-int oplus_chg_cfg_load_param(void *src, enum oplus_chg_param_type type, u8 *out_buf);
+int load_word_val_by_buf(u8 *buf, int index, int *val);
 
 #endif /* __OPLUS_CHG_CFG_H__ */

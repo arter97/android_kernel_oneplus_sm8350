@@ -2681,7 +2681,8 @@ static int cnss_qca6290_powerup(struct cnss_pci_data *pci_priv)
 	int ret = 0;
 	struct cnss_plat_data *plat_priv = pci_priv->plat_priv;
 	unsigned int timeout;
-	int retry = 0, sw_ctrl_gpio = plat_priv->pinctrl_info.sw_ctrl_gpio;
+	int retry = 0;
+	int __maybe_unused sw_ctrl_gpio = plat_priv->pinctrl_info.sw_ctrl_gpio;
 
 	if (plat_priv->ramdump_info_v2.dump_data_valid) {
 		cnss_pci_clear_dump_info(pci_priv);
@@ -5461,7 +5462,7 @@ static int cnss_pci_update_fw_name(struct cnss_pci_data *pci_priv)
 	return 0;
 }
 
-static char *cnss_mhi_notify_status_to_str(enum MHI_CB status)
+static __maybe_unused char *cnss_mhi_notify_status_to_str(enum MHI_CB status)
 {
 	switch (status) {
 	case MHI_CB_IDLE:

@@ -442,6 +442,15 @@ enum htt_dbg_ext_stats_type {
      */
     HTT_DBG_SOC_ERROR_STATS = 45,
 
+    /** HTT_DBG_PDEV_PUNCTURE_STATS
+     * PARAMS:
+     *    - param 0: enum from htt_tx_pdev_puncture_stats_upload_t, indicating
+     *      the stats to upload
+     * RESP MSG:
+     *    - one or more htt_pdev_puncture_stats_tlv, depending on param 0
+     */
+    HTT_DBG_PDEV_PUNCTURE_STATS = 46,
+
 
     /* keep this last */
     HTT_DBG_NUM_EXT_STATS = 256,
@@ -592,6 +601,21 @@ typedef enum {
      */
     HTT_UPLOAD_BE_TXBF_OFDMA_STATS,
 } htt_tx_pdev_txbf_ofdma_stats_upload_t;
+
+/* htt_tx_pdev_puncture_stats_upload_t
+ * Enumerations for specifying which stats to upload in response to
+ * HTT_DBG_PDEV_PUNCTURE_STATS.
+ */
+typedef enum {
+    /* upload puncture stats for all supported modes, both TX and RX */
+    HTT_UPLOAD_PUNCTURE_STATS_ALL,
+
+    /* upload puncture stats for all supported TX modes */
+    HTT_UPLOAD_PUNCTURE_STATS_TX,
+
+    /* upload puncture stats for all supported RX modes */
+    HTT_UPLOAD_PUNCTURE_STATS_RX,
+} htt_tx_pdev_puncture_stats_upload_t;
 
 #define HTT_STATS_MAX_STRING_SZ32 4
 #define HTT_STATS_MACID_INVALID 0xff
@@ -1418,6 +1442,22 @@ typedef struct {
     A_UINT32 remove_mpdus_max_retries;
 } htt_peer_stats_cmn_tlv;
 
+#define HTT_PEER_DETAILS_ML_PEER_OFFSET_BYTES 32
+#define HTT_PEER_DETAILS_ML_PEER_OFFSET_DWORD 8
+#define HTT_PEER_DETAILS_ML_PEER_ID_VALID_M   0x00000001
+#define HTT_PEER_DETAILS_ML_PEER_ID_VALID_S   0
+#define HTT_PEER_DETAILS_ML_PEER_ID_M         0x00001ffe
+#define HTT_PEER_DETAILS_ML_PEER_ID_S         1
+
+#define HTT_PEER_DETAILS_SET(word, httsym, val)  \
+    do {                                         \
+        HTT_CHECK_SET_VAL(HTT_PEER_DETAILS_ ## httsym, val);          \
+            (word) |= ((val) << HTT_PEER_DETAILS_ ## httsym ## _S);         \
+    } while(0)
+
+#define HTT_PEER_DETAILS_GET(word, httsym) \
+    (((word) & HTT_PEER_DETAILS_ ## httsym ## _M) >> HTT_PEER_DETAILS_ ## httsym ## _S)
+
 typedef struct {
     htt_tlv_hdr_t tlv_hdr;
     /** This enum type of HTT_PEER_TYPE */
@@ -1432,6 +1472,10 @@ typedef struct {
     htt_mac_addr mac_addr;
     A_UINT32     peer_flags;
     A_UINT32     qpeer_flags;
+    /* Dword 8 */
+    A_UINT32     ml_peer_id_valid  : 1,   /* [0:0] */
+                 ml_peer_id        : 12,  /* [12:1] */
+                 rsvd              : 19;  /* [31:13] */
 } htt_peer_details_tlv;
 
 typedef struct {
@@ -1450,6 +1494,19 @@ typedef struct {
         intra_bss      : 1,
         reserved       : 16;
 } htt_ast_entry_tlv;
+
+typedef enum {
+    HTT_STATS_DIRECTION_TX,
+    HTT_STATS_DIRECTION_RX,
+} HTT_STATS_DIRECTION;
+
+typedef enum {
+    HTT_STATS_PPDU_TYPE_MODE_SU,
+    HTT_STATS_PPDU_TYPE_DL_MU_MIMO,
+    HTT_STATS_PPDU_TYPE_UL_MU_MIMO,
+    HTT_STATS_PPDU_TYPE_DL_MU_OFDMA,
+    HTT_STATS_PPDU_TYPE_UL_MU_OFDMA,
+} HTT_STATS_PPDU_TYPE;
 
 typedef enum {
     HTT_STATS_PREAM_OFDM,
@@ -3260,6 +3317,17 @@ typedef enum {
     HTT_SCHED_TID_FALLBACK_TO_PREV_DECISION,    /* Fall back to previous decision                                                                */
     HTT_SCHED_TID_SKIP_PEER_ALREADY_IN_TXQ,     /* skip tid, peer is already available in the txq                                                */
     HTT_SCHED_TID_SKIP_DELAY_UL_SCHED,          /* skip tid delay UL schedule                                                                    */
+    HTT_SCHED_TID_SKIP_PWR_SAVE_STATE_OFF,      /* Limit UL scheduling to primary link if not in power save state                                */
+    HTT_SCHED_TID_SKIP_TWT_SUSPEND,             /* Skip UL trigger for certain cases ex TWT suspend                                              */
+    HTT_SCHED_TID_SKIP_DISABLE_160MHZ_OFDMA,    /* Skip ul tid if peer supports 160MHZ                                                           */
+    HTT_SCHED_TID_SKIP_ULMU_DISABLE_FROM_OMI,   /* Skip ul tid if sta send omi to indicate to disable UL mu data                                 */
+    HTT_SCHED_TID_SKIP_UL_MAX_SCHED_CMD_EXCEEDED,/* skip ul tid if max sched cmd is exceeded                                                     */
+    HTT_SCHED_TID_SKIP_UL_SMALL_QDEPTH,         /* Skip ul tid for small qdepth                                                                  */
+    HTT_SCHED_TID_SKIP_UL_TWT_PAUSED,           /* Skip ul tid if twt txq is paused                                                              */
+    HTT_SCHED_TID_SKIP_PEER_UL_RX_NOT_ACTIVE,   /* Skip ul tid if peer ul rx is not active                                                       */
+    HTT_SCHED_TID_SKIP_NO_FORCE_TRIGGER,        /* Skip ul tid if there is no force triggers                                                     */
+    HTT_SCHED_TID_SKIP_SMART_BASIC_TRIGGER,     /* Skip ul tid if smart basic trigger doesnot have enough data                                   */
+
 
     HTT_SCHED_INELIGIBILITY_MAX,
 } htt_sched_txq_sched_ineligibility_tlv_enum;
@@ -5351,6 +5419,8 @@ typedef struct {
     A_INT8 be_rx_ul_mumimo_fd_rssi[HTT_RX_PDEV_MAX_ULMUMIMO_NUM_USER][HTT_RX_PDEV_STATS_ULMUMIMO_NUM_SPATIAL_STREAMS];
     /** Average pilot EVM measued for RX UL TB PPDU */
     A_INT8 be_rx_ulmumimo_pilot_evm_dB_mean[HTT_RX_PDEV_MAX_ULMUMIMO_NUM_USER][HTT_RX_PDEV_STATS_ULMUMIMO_NUM_SPATIAL_STREAMS];
+    /** Number of times UL MUMIMO TB PPDUs received in a punctured mode */
+    A_UINT32 rx_ul_mumimo_punctured_mode[HTT_RX_PDEV_STATS_NUM_PUNCTURED_MODE_COUNTERS];
 } htt_rx_pdev_ul_mumimo_trig_be_stats_tlv;
 
 /* STATS_TYPE : HTT_DBG_EXT_STATS_PDEV_UL_MUMIMO_TRIG_STATS
@@ -7423,5 +7493,93 @@ typedef struct {
     A_UINT32  engage_count;
     A_UINT32  drain_dest_ring_mask;
 } htt_dmac_reset_stats_tlv;
+
+
+/* Support up to 640 MHz mode for future expansion */
+#define HTT_PUNCTURE_STATS_MAX_SUBBAND_COUNT 32
+
+#define HTT_PDEV_PUNCTURE_STATS_MAC_ID_M 0x000000ff
+#define HTT_PDEV_PUNCTURE_STATS_MAC_ID_S 0
+
+#define HTT_PDEV_PUNCTURE_STATS_MAC_ID_GET(_var) \
+    (((_var) & HTT_PDEV_PUNCTURE_STATS_MAC_ID_M) >> \
+     HTT_PDEV_PUNCTURE_STATS_MAC_ID_S)
+
+#define HTT_PDEV_PUNCTURE_STATS_MAC_ID_SET(_var, _val) \
+    do { \
+        HTT_CHECK_SET_VAL(HTT_PDEV_PUNCTURE_STATS_MAC_ID, _val); \
+        ((_var) |= ((_val) << HTT_PDEV_PUNCTURE_STATS_MAC_ID_S)); \
+    } while (0)
+
+/*
+ * TLV used to provide puncturing related stats for TX/RX and each PPDU type.
+ */
+typedef struct {
+    htt_tlv_hdr_t tlv_hdr;
+
+    /**
+     * BIT [ 7 :  0]   :- mac_id
+     * BIT [31 :  8]   :- reserved
+     */
+    union {
+        struct {
+            A_UINT32 mac_id:    8,
+                     reserved: 24;
+        };
+        A_UINT32 mac_id__word;
+    };
+
+    /*
+     * Stats direction (TX/RX). Enum value from HTT_STATS_DIRECTION.
+     */
+    A_UINT32 direction;
+
+    /*
+     * Preamble type. Enum value from HTT_STATS_PREAM_TYPE.
+     *
+     * Note that for although OFDM rates don't technically support
+     * "puncturing", this TLV can be used to indicate the 20 MHz sub-bands
+     * utilized for OFDM legacy duplicate packets, which are also used during
+     * puncturing sequences.
+     */
+    A_UINT32 preamble;
+
+    /*
+     * Stats PPDU type. Enum value from HTT_STATS_PPDU_TYPE.
+     */
+    A_UINT32 ppdu_type;
+
+    /*
+     * Indicates the number of valid elements in the
+     * "num_subbands_used_cnt" array, and must be <=
+     * HTT_PUNCTURE_STATS_MAX_SUBBAND_COUNT.
+     *
+     * Also indicates how many bits in the last_used_pattern_mask may be
+     * non-zero.
+     */
+    A_UINT32 subband_count;
+
+    /*
+     * The last used transmit 20 MHz subband mask. Bit 0 represents the lowest
+     * 20 MHz subband mask, bit 1 the second lowest, and so on.
+     *
+     * All 32 bits are valid and will be used for expansion to higher BW modes.
+     */
+    A_UINT32 last_used_pattern_mask;
+
+
+    /*
+     * Number of array elements with valid values is equal to "subband_count".
+     * If subband_count is < HTT_PUNCTURE_STATS_MAX_SUBBAND_COUNT, the
+     * remaining elements will be implicitly set to 0x0.
+     *
+     * The array index is the number of 20 MHz subbands utilized during TX/RX,
+     * and the counter value at that index is the number of times that subband
+     * count was used.
+     *
+     * The count is incremented once for each OTA PPDU transmitted / received.
+     */
+    A_UINT32 num_subbands_used_cnt[HTT_PUNCTURE_STATS_MAX_SUBBAND_COUNT];
+} htt_pdev_puncture_stats_tlv;
 
 #endif /* __HTT_STATS_H__ */

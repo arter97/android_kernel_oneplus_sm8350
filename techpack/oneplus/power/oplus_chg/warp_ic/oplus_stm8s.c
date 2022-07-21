@@ -60,25 +60,25 @@
 #include "oplus_warp_fw.h"
 
 #ifdef CONFIG_OPLUS_CHARGER_MTK
-#define I2C_MASK_FLAG	(0x00ff)
+#define I2C_MASK_FLAG (0x00ff)
 #define I2C_ENEXT_FLAG (0x0200)
-#define I2C_DMA_FLAG	(0xdead2000)
+#define I2C_DMA_FLAG (0xdead2000)
 #endif
-#define ERASE_COUNT					192		/*0x8800-0x9FFF*/
-#define READ_COUNT					191
+#define ERASE_COUNT 192 /*0x8800-0x9FFF*/
+#define READ_COUNT 191
 
-#define BYTE_OFFSET					2
-#define BYTES_TO_WRITE				16
-#define FW_CHECK_FAIL				0
-#define FW_CHECK_SUCCESS			1
+#define BYTE_OFFSET 2
+#define BYTES_TO_WRITE 16
+#define FW_CHECK_FAIL 0
+#define FW_CHECK_SUCCESS 1
 static struct oplus_warp_chip *the_chip = NULL;
 
 #ifdef CONFIG_OPLUS_CHARGER_MTK
 
-#define GTP_SUPPORT_I2C_DMA   			0
+#define GTP_SUPPORT_I2C_DMA 0
 
-#define I2C_MASTER_CLOCK				300
-#define GTP_DMA_MAX_TRANSACTION_LENGTH	255		/* for DMA mode */
+#define I2C_MASTER_CLOCK 300
+#define GTP_DMA_MAX_TRANSACTION_LENGTH 255 /* for DMA mode */
 
 DEFINE_MUTEX(dma_wr_access_stm);
 
@@ -96,23 +96,14 @@ static int i2c_dma_read(struct i2c_client *client, u8 addr, s32 len, u8 *rxbuf)
 	s32 retry = 0;
 	u8 buffer[1];
 
-	struct i2c_msg msg[2] =
-	{
-		{
-			.addr = (client->addr & I2C_MASK_FLAG),
-			.flags = 0,
-			.buf = buffer,
-			.len = 1,
-			.timing = I2C_MASTER_CLOCK
-		},
-		{
-			.addr = (client->addr & I2C_MASK_FLAG),
-			.ext_flag = (client->ext_flag | I2C_ENEXT_FLAG | I2C_DMA_FLAG),
-			.flags = I2C_M_RD,
-			.buf = (__u8 *)gpDMABuf_pa,   /*modified by PengNan*/
-			.len = len,
-			.timing = I2C_MASTER_CLOCK
-		},
+	struct i2c_msg msg[2] = {
+		{ .addr = (client->addr & I2C_MASK_FLAG), .flags = 0, .buf = buffer, .len = 1, .timing = I2C_MASTER_CLOCK },
+		{ .addr = (client->addr & I2C_MASK_FLAG),
+		  .ext_flag = (client->ext_flag | I2C_ENEXT_FLAG | I2C_DMA_FLAG),
+		  .flags = I2C_M_RD,
+		  .buf = (__u8 *)gpDMABuf_pa, /*modified by PengNan*/
+		  .len = len,
+		  .timing = I2C_MASTER_CLOCK },
 	};
 	mutex_lock(&dma_wr_access_stm);
 	/*buffer[0] = (addr >> 8) & 0xFF;*/
@@ -141,22 +132,19 @@ static int i2c_dma_write(struct i2c_client *client, u8 addr, s32 len, u8 const *
 	int ret = 0;
 	s32 retry = 0;
 	u8 *wr_buf = gpDMABuf_va;
-	struct i2c_msg msg =
-	{
-		.addr = (client->addr & I2C_MASK_FLAG),
-		.ext_flag = (client->ext_flag | I2C_ENEXT_FLAG | I2C_DMA_FLAG),
-		.flags = 0,
-		.buf = (__u8 *)gpDMABuf_pa,	/*modified by PengNan*/
-		.len = 1 + len,
-		.timing = I2C_MASTER_CLOCK
-	};
+	struct i2c_msg msg = { .addr = (client->addr & I2C_MASK_FLAG),
+			       .ext_flag = (client->ext_flag | I2C_ENEXT_FLAG | I2C_DMA_FLAG),
+			       .flags = 0,
+			       .buf = (__u8 *)gpDMABuf_pa, /*modified by PengNan*/
+			       .len = 1 + len,
+			       .timing = I2C_MASTER_CLOCK };
 	mutex_lock(&dma_wr_access_stm);
 	wr_buf[0] = (u8)(addr & 0xFF);
 	if (txbuf == NULL) {
 		mutex_unlock(&dma_wr_access_stm);
 		return -1;
 	}
-	memcpy(wr_buf+1, txbuf, len);
+	memcpy(wr_buf + 1, txbuf, len);
 	for (retry = 0; retry < 5; ++retry) {
 		ret = i2c_transfer(client->adapter, &msg, 1);
 		if (ret < 0) {
@@ -196,13 +184,12 @@ static int oplus_warp_i2c_write(struct i2c_client *client, u8 addr, s32 len, u8 
 #else
 	return i2c_smbus_write_i2c_block_data(client, addr, len, txbuf);
 #endif
-
 }
 
 static bool stm8s_fw_check_frontline(struct oplus_warp_chip *chip)
 {
-	unsigned char addr_buf[2] = {0x88, 0x00};
-	unsigned char data_buf[32] = {0x0};
+	unsigned char addr_buf[2] = { 0x88, 0x00 };
+	unsigned char data_buf[32] = { 0x0 };
 	int rc, i, j, addr;
 	int fw_line = 0;
 
@@ -218,7 +205,7 @@ static bool stm8s_fw_check_frontline(struct oplus_warp_chip *chip)
 		goto i2c_err;
 	}
 	msleep(10);
-	for (i = 0;i < READ_COUNT;i++) {	/*1508:448, 1503:192*/
+	for (i = 0; i < READ_COUNT; i++) { /*1508:448, 1503:192*/
 		oplus_warp_i2c_read(chip->client, 0x03, 16, &data_buf[0]);
 		msleep(2);
 		oplus_warp_i2c_read(chip->client, 0x03, 16, &data_buf[16]);
@@ -228,28 +215,27 @@ static bool stm8s_fw_check_frontline(struct oplus_warp_chip *chip)
 		/*#ifdef CONFIG_OPLUS_CHARGER_MTK*/
 		/*#if 1 check  all bytes in every line*/
 		if (addr == ((chip->firmware_data[fw_line * 34 + 1] << 8) | chip->firmware_data[fw_line * 34])) {
-			for (j = 0;j < 32;j++) {
+			for (j = 0; j < 32; j++) {
 				if (data_buf[j] != chip->firmware_data[fw_line * 34 + 2 + j]) {
-					chg_err(" fail, data_buf[%d]:0x%x != Stm8s_firmware_data[%d]:0x%x\n",
-						j, data_buf[j], (fw_line * 34 + 2 + j), chip->firmware_data[fw_line * 34 + 2 + j]);
+					chg_err(" fail, data_buf[%d]:0x%x != Stm8s_firmware_data[%d]:0x%x\n", j, data_buf[j], (fw_line * 34 + 2 + j),
+						chip->firmware_data[fw_line * 34 + 2 + j]);
 					chg_err("addr = 0x%x, %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x "
 						"%x %x %x %x %x %x %x %x %x %x %x %x %x %x %x\n",
 						addr, data_buf[0], data_buf[1], data_buf[2], data_buf[3], data_buf[4], data_buf[5], data_buf[6], data_buf[7],
-						data_buf[8], data_buf[9], data_buf[10], data_buf[11], data_buf[12], data_buf[13], data_buf[14],
-						data_buf[15], data_buf[16], data_buf[17], data_buf[18], data_buf[19], data_buf[20], data_buf[21], data_buf[22],
-						data_buf[23], data_buf[24], data_buf[25], data_buf[26], data_buf[27], data_buf[28], data_buf[29], data_buf[30],
-						data_buf[31]);
+						data_buf[8], data_buf[9], data_buf[10], data_buf[11], data_buf[12], data_buf[13], data_buf[14], data_buf[15],
+						data_buf[16], data_buf[17], data_buf[18], data_buf[19], data_buf[20], data_buf[21], data_buf[22], data_buf[23],
+						data_buf[24], data_buf[25], data_buf[26], data_buf[27], data_buf[28], data_buf[29], data_buf[30], data_buf[31]);
 					return FW_CHECK_FAIL;
 				}
 			}
 			fw_line++;
 		} else {
-		/*chg_err(" addr dismatch, addr:0x%x, stm_data:0x%x\n" ,*/
-				/*addr, (Stm8s_firmware_data[fw_line * 34 + 1] << 8) | Stm8s_firmware_data[fw_line * 34]);*/
+			/*chg_err(" addr dismatch, addr:0x%x, stm_data:0x%x\n" ,*/
+			/*addr, (Stm8s_firmware_data[fw_line * 34 + 1] << 8) | Stm8s_firmware_data[fw_line * 34]);*/
 		}
-/*#else*/
-/***only check the first byte in every line  */
-/*		j = 0;
+		/*#else*/
+		/***only check the first byte in every line  */
+		/*		j = 0;
 		if (addr == ((Stm8s_firmware_data[fw_line * 34 + 1] << 8) | Stm8s_firmware_data[fw_line * 34])){
 				if (data_buf[0] != Stm8s_firmware_data[fw_line * 34 + 2]){
 					chg_err("  fail, data_buf[%d]:0x%x != Stm8s_firmware_data[%d]:0x%x\n" ,
@@ -268,8 +254,8 @@ static bool stm8s_fw_check_frontline(struct oplus_warp_chip *chip)
 				addr, (Stm8s_firmware_data[fw_line * 34 + 1] << 8) | Stm8s_firmware_data[fw_line * 34]);
 		}
 */
-/*#endif*/
-	/*compare recv_buf with Stm8s_firmware_data[] end*/
+		/*#endif*/
+		/*compare recv_buf with Stm8s_firmware_data[] end*/
 	}
 	/*pr_info("  success\n"  );*/
 	return FW_CHECK_SUCCESS;
@@ -281,8 +267,8 @@ i2c_err:
 
 static bool stm8s_fw_check_lastline(struct oplus_warp_chip *chip)
 {
-	unsigned char addr_buf[2] = {0x9F, 0xE0};
-	unsigned char data_buf[32] = {0x0};
+	unsigned char addr_buf[2] = { 0x9F, 0xE0 };
+	unsigned char data_buf[32] = { 0x0 };
 	int i = 0, rc = 0;
 
 	if (!chip->firmware_data) {
@@ -300,30 +286,25 @@ static bool stm8s_fw_check_lastline(struct oplus_warp_chip *chip)
 	oplus_warp_i2c_read(chip->client, 0x03, 16, &data_buf[0]);
 	msleep(2);
 	oplus_warp_i2c_read(chip->client, 0x03, 16, &data_buf[16]);
-		chip->fw_mcu_version = data_buf[28];
-/*#ifdef CONFIG_OPLUS_CHARGER_MTK*/
-/*#if 1   check  all bytes in last line*/
-	for (i = 0;i < 32;i++) {
+	chip->fw_mcu_version = data_buf[28];
+	/*#ifdef CONFIG_OPLUS_CHARGER_MTK*/
+	/*#if 1   check  all bytes in last line*/
+	for (i = 0; i < 32; i++) {
 		if (data_buf[i] != chip->firmware_data[chip->fw_data_count - 32 + i]) {
-			chg_err("  fail, data_buf[%d]:0x%x != Stm8s_firmware_data[]:0x%x\n" ,
-				i, data_buf[i], chip->firmware_data[chip->fw_data_count - 32 + i]);
+			chg_err("  fail, data_buf[%d]:0x%x != Stm8s_firmware_data[]:0x%x\n", i, data_buf[i], chip->firmware_data[chip->fw_data_count - 32 + i]);
 			chg_err(" data %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x \
-				%x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x\n" ,
-				data_buf[0], data_buf[1], data_buf[2], data_buf[3],
-				data_buf[4], data_buf[5], data_buf[6], data_buf[7],
-				data_buf[8], data_buf[9], data_buf[10], data_buf[11],
-				data_buf[12], data_buf[13], data_buf[14], data_buf[15],
-				data_buf[16], data_buf[17], data_buf[18], data_buf[19],
-				data_buf[20], data_buf[21], data_buf[22], data_buf[23],
-				data_buf[24], data_buf[25], data_buf[26], data_buf[27],
-				data_buf[28], data_buf[29], data_buf[30], data_buf[31]);
+				%x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x\n",
+				data_buf[0], data_buf[1], data_buf[2], data_buf[3], data_buf[4], data_buf[5], data_buf[6], data_buf[7], data_buf[8],
+				data_buf[9], data_buf[10], data_buf[11], data_buf[12], data_buf[13], data_buf[14], data_buf[15], data_buf[16], data_buf[17],
+				data_buf[18], data_buf[19], data_buf[20], data_buf[21], data_buf[22], data_buf[23], data_buf[24], data_buf[25], data_buf[26],
+				data_buf[27], data_buf[28], data_buf[29], data_buf[30], data_buf[31]);
 
 			return FW_CHECK_FAIL;
 		}
 	}
-/*#else*/
-/**only check the first byte in last line  */
-/*
+	/*#else*/
+	/**only check the first byte in last line  */
+	/*
 	if (data_buf[0] != Stm8s_firmware_data[sizeof(Stm8s_firmware_data) - 32]) {
 		chg_err(" fail, data_buf[0]:0x%x != Stm8s_firmware_data[]:0x%x\n" ,
 			data_buf[0], Stm8s_firmware_data[sizeof(Stm8s_firmware_data) - 32]);
@@ -336,8 +317,8 @@ static bool stm8s_fw_check_lastline(struct oplus_warp_chip *chip)
 		return FW_CHECK_FAIL;
 	}
 **/
-/*#endif*/
-/*
+	/*#endif*/
+	/*
 		if(chip->warp_fw_update_newmethod) {
 			chip->fw_data_version = data_buf[28];
 			chg_debug("fw_version:0x%x\n",chip->fw_data_version);
@@ -346,13 +327,12 @@ static bool stm8s_fw_check_lastline(struct oplus_warp_chip *chip)
 	return FW_CHECK_SUCCESS;
 }
 
-static int stm8s_fw_write(struct oplus_warp_chip *chip,
-		const unsigned char *data_buf, unsigned int offset, unsigned int length)
+static int stm8s_fw_write(struct oplus_warp_chip *chip, const unsigned char *data_buf, unsigned int offset, unsigned int length)
 {
 	unsigned int count = 0;
-	unsigned char zero_buf[1] = {0};
-	unsigned char temp_buf[1] = {0};
-	unsigned char addr_buf[2] = {0x88, 0x00};
+	unsigned char zero_buf[1] = { 0 };
+	unsigned char temp_buf[1] = { 0 };
+	unsigned char addr_buf[2] = { 0x88, 0x00 };
 	int rc;
 
 	if (!chip->firmware_data) {
@@ -366,7 +346,7 @@ static int stm8s_fw_write(struct oplus_warp_chip *chip,
 		addr_buf[0] = data_buf[count + 1];
 		addr_buf[1] = data_buf[count];
 		/*chg_err(" write data addr_buf[0]:0x%x, addr_buf[1]:0x%x\n", addr_buf[0], addr_buf[1]);*/
-			rc = oplus_warp_i2c_write(chip->client, 0x01, 2, &addr_buf[0]);
+		rc = oplus_warp_i2c_write(chip->client, 0x01, 2, &addr_buf[0]);
 		if (rc < 0) {
 			chg_err(" i2c_write 0x01 error\n");
 			return -1;
@@ -376,13 +356,13 @@ static int stm8s_fw_write(struct oplus_warp_chip *chip,
 
 		/*swap low byte and high byte end*/
 		/*write 16 bytes data to stm8s*/
-		oplus_warp_i2c_write(chip->client, 0x02, BYTES_TO_WRITE, &data_buf[count+BYTE_OFFSET]);
+		oplus_warp_i2c_write(chip->client, 0x02, BYTES_TO_WRITE, &data_buf[count + BYTE_OFFSET]);
 		oplus_warp_i2c_write(chip->client, 0x05, 1, &zero_buf[0]);
 		oplus_warp_i2c_read(chip->client, 0x05, 1, &temp_buf[0]);
 		/*chg_err("lfc read 0x05, temp_buf[0]:0x%x\n", temp_buf[0]);*/
 
 		/*write 16 bytes data to stm8s again*/
-		oplus_warp_i2c_write(chip->client, 0x02, BYTES_TO_WRITE, &data_buf[count+BYTE_OFFSET+BYTES_TO_WRITE]);
+		oplus_warp_i2c_write(chip->client, 0x02, BYTES_TO_WRITE, &data_buf[count + BYTE_OFFSET + BYTES_TO_WRITE]);
 		oplus_warp_i2c_write(chip->client, 0x05, 1, &zero_buf[0]);
 		oplus_warp_i2c_read(chip->client, 0x05, 1, &temp_buf[0]);
 		/*chg_err("lfc read again 0x05, temp_buf[0]:0x%x\n", temp_buf[0]);*/
@@ -400,9 +380,9 @@ static int stm8s_fw_write(struct oplus_warp_chip *chip,
 
 static int stm8s_fw_update(struct oplus_warp_chip *chip)
 {
-	unsigned char zero_buf[1] = {0};
-	unsigned char addr_buf[2] = {0x88, 0x00};
-	unsigned char temp_buf[1] = {0};
+	unsigned char zero_buf[1] = { 0 };
+	unsigned char addr_buf[2] = { 0x88, 0x00 };
+	unsigned char temp_buf[1] = { 0 };
 	int i, rc = 0;
 	unsigned int addr = 0x8800;
 	int download_again = 0;
@@ -473,7 +453,7 @@ update_fw:
 	chip->mcu_update_ing = false;
 	/*pull down GPIO96 to power off MCU1503/1508*/
 	chip->warp_fw_check = true;
-		chip->fw_mcu_version = chip->fw_data_version;
+	chip->fw_mcu_version = chip->fw_data_version;
 	chg_debug(" success\n");
 	return 0;
 
@@ -484,20 +464,20 @@ update_fw_err:
 }
 static int stm8s_get_fw_verion_from_ic(struct oplus_warp_chip *chip)
 {
-	unsigned char addr_buf[2] = {0x9F,0xFC};
-	unsigned char data_buf[4] = {0};
+	unsigned char addr_buf[2] = { 0x9F, 0xFC };
+	unsigned char data_buf[4] = { 0 };
 	int rc = 0;
 	int update_result = 0;
 
-//	if (!chip->firmware_data) {
-//		chg_err("Stm8s_fw_data Null, Return\n");
-//		return FW_CHECK_FAIL;
-//	}
-	if(oplus_is_power_off_charging(chip) == true || oplus_is_charger_reboot(chip)== true) {
+	//	if (!chip->firmware_data) {
+	//		chg_err("Stm8s_fw_data Null, Return\n");
+	//		return FW_CHECK_FAIL;
+	//	}
+	if (oplus_is_power_off_charging(chip) == true || oplus_is_charger_reboot(chip) == true) {
 		chip->mcu_update_ing = true;
 		update_result = stm8s_fw_update(chip);
 		chip->mcu_update_ing = false;
-		if(update_result) {
+		if (update_result) {
 			msleep(30);
 			opchg_set_clock_sleep(chip);
 			opchg_set_reset_active(chip);
@@ -512,23 +492,21 @@ static int stm8s_get_fw_verion_from_ic(struct oplus_warp_chip *chip)
 		chip->mcu_boot_by_gpio = false;
 		opchg_set_clock_sleep(chip);
 
-	//first:set address
-	rc = oplus_warp_i2c_write(chip->client,0x01,2,&addr_buf[0]);
-	if (rc < 0) {
-		chg_err(" i2c_write 0x01 error\n" );
-		return FW_CHECK_FAIL;
-	}
-	msleep(2);
-	oplus_warp_i2c_read(chip->client,0x03,4,data_buf);
-	//	strcpy(ver,&data_buf[0]);
-	chg_err("data:%x %x %x %x, fw_ver:%x\n",
-		data_buf[0], data_buf[1], data_buf[2], data_buf[3],data_buf[0]);
+		//first:set address
+		rc = oplus_warp_i2c_write(chip->client, 0x01, 2, &addr_buf[0]);
+		if (rc < 0) {
+			chg_err(" i2c_write 0x01 error\n");
+			return FW_CHECK_FAIL;
+		}
+		msleep(2);
+		oplus_warp_i2c_read(chip->client, 0x03, 4, data_buf);
+		//	strcpy(ver,&data_buf[0]);
+		chg_err("data:%x %x %x %x, fw_ver:%x\n", data_buf[0], data_buf[1], data_buf[2], data_buf[3], data_buf[0]);
 
-	chip->mcu_update_ing = false;
-	msleep(5);
-	opchg_set_reset_active(chip);
+		chip->mcu_update_ing = false;
+		msleep(5);
+		opchg_set_reset_active(chip);
 	}
-
 
 	return data_buf[0];
 }
@@ -545,7 +523,7 @@ static int stm8s_fw_check_then_recover(struct oplus_warp_chip *chip)
 		chg_debug(" begin\n");
 	}
 
-	if (oplus_is_power_off_charging(chip) == true || oplus_is_charger_reboot(chip)== true) {
+	if (oplus_is_power_off_charging(chip) == true || oplus_is_charger_reboot(chip) == true) {
 		chip->mcu_update_ing = true;
 		update_result = stm8s_fw_update(chip);
 		chip->mcu_update_ing = false;
@@ -608,7 +586,7 @@ struct oplus_warp_operations oplus_stm8s_ops = {
 	.get_reset_gpio_val = oplus_warp_get_reset_gpio_val,
 	.get_switch_gpio_val = oplus_warp_get_switch_gpio_val,
 	.get_ap_clk_gpio_val = oplus_warp_get_ap_clk_gpio_val,
-	.get_fw_version		= stm8s_get_fw_verion_from_ic,
+	.get_fw_version = stm8s_get_fw_verion_from_ic,
 	.get_clk_gpio_num = opchg_get_clk_gpio_num,
 	.get_data_gpio_num = opchg_get_data_gpio_num,
 };
@@ -644,11 +622,10 @@ static void stm8s_shutdown(struct i2c_client *client)
 	return;
 }
 
-static ssize_t warp_fw_check_read(struct file *filp,
-		char __user *buff, size_t count, loff_t *off)
+static ssize_t warp_fw_check_read(struct file *filp, char __user *buff, size_t count, loff_t *off)
 {
-	char page[256] = {0};
-	char read_data[32] = {0};
+	char page[256] = { 0 };
+	char read_data[32] = { 0 };
 	int len = 0;
 
 	if (the_chip && the_chip->warp_fw_check == true) {
@@ -685,8 +662,7 @@ static int init_proc_warp_fw_check(void)
 	return 0;
 }
 
-static int stm8s_driver_probe(struct i2c_client *client,
-		const struct i2c_device_id *id)
+static int stm8s_driver_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
 	struct oplus_warp_chip *chip;
 
@@ -703,8 +679,7 @@ static int stm8s_driver_probe(struct i2c_client *client,
 #ifdef CONFIG_OPLUS_CHARGER_MTK
 #if GTP_SUPPORT_I2C_DMA
 	client->dev.coherent_dma_mask = DMA_BIT_MASK(32);
-	gpDMABuf_va = (u8 *)dma_alloc_coherent(&client->dev
-		GTP_DMA_MAX_TRANSACTION_LENGTH, &gpDMABuf_pa, GFP_KERNEL);
+	gpDMABuf_va = (u8 *)dma_alloc_coherent(&client->dev GTP_DMA_MAX_TRANSACTION_LENGTH, &gpDMABuf_pa, GFP_KERNEL);
 	if (!gpDMABuf_va) {
 		chg_err("[Error] Allocate DMA I2C Buffer failed!\n");
 	} else {
@@ -713,7 +688,7 @@ static int stm8s_driver_probe(struct i2c_client *client,
 	memset(gpDMABuf_va, 0, GTP_DMA_MAX_TRANSACTION_LENGTH);
 #endif
 #endif
-	if(get_warp_mcu_type(chip) != OPLUS_WARP_MCU_HWID_STM8S){
+	if (get_warp_mcu_type(chip) != OPLUS_WARP_MCU_HWID_STM8S) {
 		chg_err("It is not stm8s\n");
 		return -ENOMEM;
 	}
@@ -734,136 +709,136 @@ static int stm8s_driver_probe(struct i2c_client *client,
 	}
 
 	switch (chip->warp_fw_type) {
-		case WARP_FW_TYPE_STM8S_4400_AVOID_FAKE_ADAPTER:
-			chip->firmware_data = Stm8s_fw_data_4400_avoid_fake_adapter;
-			chip->fw_data_count = sizeof(Stm8s_fw_data_4400_avoid_fake_adapter);
-			chip->fw_data_version = Stm8s_fw_data_4400_avoid_fake_adapter[chip->fw_data_count - 4];
-			break;
-		case WARP_FW_TYPE_STM8S_4400_AVOID_FG_I2C_ERR:
-			chip->firmware_data = Stm8s_fw_data_4400_avoid_fg_i2c_err;
-			chip->fw_data_count = sizeof(Stm8s_fw_data_4400_avoid_fg_i2c_err);
-			chip->fw_data_version = Stm8s_fw_data_4400_avoid_fg_i2c_err[chip->fw_data_count - 4];
-			break;
-		case WARP_FW_TYPE_STM8S_4400_AVOID_OVER_TEMP:
-			chip->firmware_data = Stm8s_fw_data_4400_avoid_over_temp;
-			chip->fw_data_count = sizeof(Stm8s_fw_data_4400_avoid_over_temp);
-			chip->fw_data_version = Stm8s_fw_data_4400_avoid_over_temp[chip->fw_data_count - 4];
-			break;
-		case WARP_FW_TYPE_STM8S_4400_AVOID_OVER_TEMP_NTC61C:
-			chip->firmware_data = Stm8s_fw_data_4400_avoid_over_temp_ntc61c;
-			chip->fw_data_count = sizeof(Stm8s_fw_data_4400_avoid_over_temp_ntc61c);
-			chip->fw_data_version = Stm8s_fw_data_4400_avoid_over_temp_ntc61c[chip->fw_data_count - 4];
-			break;
-		case WARP_FW_TYPE_STM8S_4400_WARP_FFC_09C:
-			chip->firmware_data = Stm8s_fw_data_4400_warp_ffc_09c;
-			chip->fw_data_count = sizeof(Stm8s_fw_data_4400_warp_ffc_09c);
-			chip->fw_data_version = Stm8s_fw_data_4400_warp_ffc_09c[chip->fw_data_count - 4];
-			break;
-		case WARP_FW_TYPE_STM8S_4400_WARP_FFC_15C:
-			chip->firmware_data = Stm8s_fw_data_4400_warp_ffc_15c;
-			chip->fw_data_count = sizeof(Stm8s_fw_data_4400_warp_ffc_15c);
-			chip->fw_data_version = Stm8s_fw_data_4400_warp_ffc_15c[chip->fw_data_count - 4];
-			break;
-		case WARP_FW_TYPE_STM8S_4400_WARP_FFC_15C_FV4450:
-			chip->firmware_data = Stm8s_fw_data_4400_warp_ffc_15c_fv4450;
-			chip->fw_data_count = sizeof(Stm8s_fw_data_4400_warp_ffc_15c_fv4450);
-			chip->fw_data_version = Stm8s_fw_data_4400_warp_ffc_15c_fv4450[chip->fw_data_count - 4];
-			break;
-		case WARP_FW_TYPE_STM8S_4450_FFC:
-			chip->firmware_data = Stm8s_fw_data_4450_ffc;
-			chip->fw_data_count = sizeof(Stm8s_fw_data_4450_ffc);
-			chip->fw_data_version = Stm8s_fw_data_4450_ffc[chip->fw_data_count - 4];
-			break;
-		case WARP_FW_TYPE_STM8S_4450_FFC_5V6A:
-			chip->firmware_data = Stm8s_fw_data_4450_ffc_5v6a;
-			chip->fw_data_count = sizeof(Stm8s_fw_data_4450_ffc_5v6a);
-			chip->fw_data_version = Stm8s_fw_data_4450_ffc_5v6a[chip->fw_data_count - 4];
-			break;
-		case WARP_FW_TYPE_STM8S_4400_WARP_FFC_15C_TI411:
-			chip->firmware_data = Stm8s_fw_data_4400_warp_ffc_15c_ti411;
-			chip->fw_data_count = sizeof(Stm8s_fw_data_4400_warp_ffc_15c_ti411);
-			chip->fw_data_version = Stm8s_fw_data_4400_warp_ffc_15c_ti411[chip->fw_data_count - 4];
-			break;
-		case WARP_FW_TYPE_STM8S_4450_FFC_5C_WARP:
-			chip->firmware_data = Stm8s_fw_data_4450_ffc_5c_warp;
-			chip->fw_data_count = sizeof(Stm8s_fw_data_4450_ffc_5c_warp);
-			chip->fw_data_version = Stm8s_fw_data_4450_ffc_5c_warp[chip->fw_data_count - 4];
-			break;
-		case WARP_FW_TYPE_STM8S_4400_FFC_5V5P9A:
-			chip->firmware_data = Stm8s_fw_data_4400_ffc_5v5p9a;
-			chip->fw_data_count = sizeof(Stm8s_fw_data_4400_ffc_5v5p9a);
-			chip->fw_data_version = Stm8s_fw_data_4400_ffc_5v5p9a[chip->fw_data_count - 4];
-			break;
-		case WARP_FW_TYPE_STM8S_4450_FFC_5V6A_WARP_4052MA_3BIT:
-			chip->firmware_data = Stm8s_fw_data_4450_ffc_5v6a_3bit;
-			chip->fw_data_count = sizeof(Stm8s_fw_data_4450_ffc_5v6a_3bit);
-			chip->fw_data_version = Stm8s_fw_data_4450_ffc_5v6a_3bit[chip->fw_data_count - 4];
-			break;
-		case WARP_FW_TYPE_STM8S_4450_FFC_5V4A_WARP_4052MA_3BIT:
-			chip->firmware_data = Stm8s_fw_data_4450_warp_ffc_5v4a_3bit;
-			chip->fw_data_count = sizeof(Stm8s_fw_data_4450_warp_ffc_5v4a_3bit);
-			chip->fw_data_version = Stm8s_fw_data_4450_warp_ffc_5v4a_3bit[chip->fw_data_count - 4];
-			break;
-		case WARP_FW_TYPE_STM8S_4400_WARP_FFC_15C_18041:
-			chip->firmware_data = Stm8s_fw_data_4400_warp_ffc_15c_18041;
-			chip->fw_data_count = sizeof(Stm8s_fw_data_4400_warp_ffc_15c_18041);
-			chip->fw_data_version = Stm8s_fw_data_4400_warp_ffc_15c_18041[chip->fw_data_count - 4];
-			break;
-		case WARP_FW_TYPE_STM8S_4450_WARP_FFC_5V6A_19365:
-			chip->firmware_data = Stm8s_fw_data_4450_WARP_FFC_5V6A_19365;
-			chip->fw_data_count = sizeof(Stm8s_fw_data_4450_WARP_FFC_5V6A_19365);
-			chip->fw_data_version = Stm8s_fw_data_4450_WARP_FFC_5V6A_19365[chip->fw_data_count - 4];
-			break;
-		case WARP_FW_TYPE_STM8S_4450_FFC_SHORT_RESET_WINDOW:
-			chip->firmware_data = Stm8s_fw_data_4450_ffc_ShortResetWindow;
-			chip->fw_data_count = sizeof(Stm8s_fw_data_4450_ffc_ShortResetWindow);
-			chip->fw_data_version = Stm8s_fw_data_4450_ffc_ShortResetWindow[chip->fw_data_count - 4];
-			break;
-		case WARP_FW_TYPE_STM8S_4400_SWARP_3500MA:
-			chip->firmware_data = Stm8s_fw_data_4400_swarp_3500MA;
-			chip->fw_data_count = sizeof(Stm8s_fw_data_4400_swarp_3500MA);
-			chip->fw_data_version = Stm8s_fw_data_4400_swarp_3500MA[chip->fw_data_count - 4];
-			break;
-		case WARP_FW_TYPE_STM8S_4400_SWARP_1000MA:
-			chip->firmware_data = Stm8s_fw_data_4400_swarp_1000MA;
-			chip->fw_data_count = sizeof(Stm8s_fw_data_4400_swarp_1000MA);
-			chip->fw_data_version = Stm8s_fw_data_4400_swarp_1000MA[chip->fw_data_count - 4];
-			break;
-		case WARP_FW_TYPE_STM8S_4400_SWARP_5000MA :
-			chip->firmware_data = Stm8s_fw_data_4400_swarp_5000MA;
-			chip->fw_data_count = sizeof(Stm8s_fw_data_4400_swarp_5000MA);
-			chip->fw_data_version = Stm8s_fw_data_4400_swarp_5000MA[chip->fw_data_count - 4];
-			break;
-		case WARP_FW_TYPE_STM8S_4400_SWARP_6500MA:
-			chip->firmware_data = Stm8s_fw_data_4400_swarp_6500MA;
-			chip->fw_data_count = sizeof(Stm8s_fw_data_4400_swarp_6500MA);
-			chip->fw_data_version = Stm8s_fw_data_4400_swarp_6500MA[chip->fw_data_count - 4];
-			break;
-		case WARP_FW_TYPE_STM8S_4450_SWARP_6500MA:
-			chip->firmware_data = Stm8s_fw_data_4450_swarp_6500MA;
-			chip->fw_data_count = sizeof(Stm8s_fw_data_4450_swarp_6500MA);
-			chip->fw_data_version = Stm8s_fw_data_4450_swarp_6500MA[chip->fw_data_count - 4];
-			break;
-		case WARP_FW_TYPE_STM8S_4450_SWARP_6500MA_FV4490:
-			chip->firmware_data = Stm8s_fw_data_4450_swarp_6500MA_fv4490;
-			chip->fw_data_count = sizeof(Stm8s_fw_data_4450_swarp_6500MA_fv4490);
-			chip->fw_data_version = Stm8s_fw_data_4450_swarp_6500MA_fv4490[chip->fw_data_count - 4];
-			break;
-		case WARP_FW_TYPE_STM8S_4450_SWARP_6500MA_disableI2C:
-			chip->firmware_data = Stm8s_fw_data_4450_swarp_6500MA_disableI2C;
-			chip->fw_data_count = sizeof(Stm8s_fw_data_4450_swarp_6500MA_disableI2C);
-			chip->fw_data_version = Stm8s_fw_data_4450_swarp_6500MA_disableI2C[chip->fw_data_count - 4];
-			break;
-		case WARP_FW_TYPE_STM8S_4400_SWARP_6500MA_8250:
-			chip->firmware_data = Stm8s_fw_data_4400_swarp_6500MA_8250;
-			chip->fw_data_count = sizeof(Stm8s_fw_data_4400_swarp_6500MA_8250);
-			chip->fw_data_version = Stm8s_fw_data_4400_swarp_6500MA_8250[chip->fw_data_count - 4];
-			break;
-		case WARP_FW_TYPE_STM8S_4450_SWARP_6500MA_8250:
-			chip->firmware_data = Stm8s_fw_data_4450_swarp_6500MA_8250;
-			chip->fw_data_count = sizeof(Stm8s_fw_data_4450_swarp_6500MA_8250);
-			chip->fw_data_version = Stm8s_fw_data_4450_swarp_6500MA_8250[chip->fw_data_count - 4];
-			break;
+	case WARP_FW_TYPE_STM8S_4400_AVOID_FAKE_ADAPTER:
+		chip->firmware_data = Stm8s_fw_data_4400_avoid_fake_adapter;
+		chip->fw_data_count = sizeof(Stm8s_fw_data_4400_avoid_fake_adapter);
+		chip->fw_data_version = Stm8s_fw_data_4400_avoid_fake_adapter[chip->fw_data_count - 4];
+		break;
+	case WARP_FW_TYPE_STM8S_4400_AVOID_FG_I2C_ERR:
+		chip->firmware_data = Stm8s_fw_data_4400_avoid_fg_i2c_err;
+		chip->fw_data_count = sizeof(Stm8s_fw_data_4400_avoid_fg_i2c_err);
+		chip->fw_data_version = Stm8s_fw_data_4400_avoid_fg_i2c_err[chip->fw_data_count - 4];
+		break;
+	case WARP_FW_TYPE_STM8S_4400_AVOID_OVER_TEMP:
+		chip->firmware_data = Stm8s_fw_data_4400_avoid_over_temp;
+		chip->fw_data_count = sizeof(Stm8s_fw_data_4400_avoid_over_temp);
+		chip->fw_data_version = Stm8s_fw_data_4400_avoid_over_temp[chip->fw_data_count - 4];
+		break;
+	case WARP_FW_TYPE_STM8S_4400_AVOID_OVER_TEMP_NTC61C:
+		chip->firmware_data = Stm8s_fw_data_4400_avoid_over_temp_ntc61c;
+		chip->fw_data_count = sizeof(Stm8s_fw_data_4400_avoid_over_temp_ntc61c);
+		chip->fw_data_version = Stm8s_fw_data_4400_avoid_over_temp_ntc61c[chip->fw_data_count - 4];
+		break;
+	case WARP_FW_TYPE_STM8S_4400_WARP_FFC_09C:
+		chip->firmware_data = Stm8s_fw_data_4400_warp_ffc_09c;
+		chip->fw_data_count = sizeof(Stm8s_fw_data_4400_warp_ffc_09c);
+		chip->fw_data_version = Stm8s_fw_data_4400_warp_ffc_09c[chip->fw_data_count - 4];
+		break;
+	case WARP_FW_TYPE_STM8S_4400_WARP_FFC_15C:
+		chip->firmware_data = Stm8s_fw_data_4400_warp_ffc_15c;
+		chip->fw_data_count = sizeof(Stm8s_fw_data_4400_warp_ffc_15c);
+		chip->fw_data_version = Stm8s_fw_data_4400_warp_ffc_15c[chip->fw_data_count - 4];
+		break;
+	case WARP_FW_TYPE_STM8S_4400_WARP_FFC_15C_FV4450:
+		chip->firmware_data = Stm8s_fw_data_4400_warp_ffc_15c_fv4450;
+		chip->fw_data_count = sizeof(Stm8s_fw_data_4400_warp_ffc_15c_fv4450);
+		chip->fw_data_version = Stm8s_fw_data_4400_warp_ffc_15c_fv4450[chip->fw_data_count - 4];
+		break;
+	case WARP_FW_TYPE_STM8S_4450_FFC:
+		chip->firmware_data = Stm8s_fw_data_4450_ffc;
+		chip->fw_data_count = sizeof(Stm8s_fw_data_4450_ffc);
+		chip->fw_data_version = Stm8s_fw_data_4450_ffc[chip->fw_data_count - 4];
+		break;
+	case WARP_FW_TYPE_STM8S_4450_FFC_5V6A:
+		chip->firmware_data = Stm8s_fw_data_4450_ffc_5v6a;
+		chip->fw_data_count = sizeof(Stm8s_fw_data_4450_ffc_5v6a);
+		chip->fw_data_version = Stm8s_fw_data_4450_ffc_5v6a[chip->fw_data_count - 4];
+		break;
+	case WARP_FW_TYPE_STM8S_4400_WARP_FFC_15C_TI411:
+		chip->firmware_data = Stm8s_fw_data_4400_warp_ffc_15c_ti411;
+		chip->fw_data_count = sizeof(Stm8s_fw_data_4400_warp_ffc_15c_ti411);
+		chip->fw_data_version = Stm8s_fw_data_4400_warp_ffc_15c_ti411[chip->fw_data_count - 4];
+		break;
+	case WARP_FW_TYPE_STM8S_4450_FFC_5C_WARP:
+		chip->firmware_data = Stm8s_fw_data_4450_ffc_5c_warp;
+		chip->fw_data_count = sizeof(Stm8s_fw_data_4450_ffc_5c_warp);
+		chip->fw_data_version = Stm8s_fw_data_4450_ffc_5c_warp[chip->fw_data_count - 4];
+		break;
+	case WARP_FW_TYPE_STM8S_4400_FFC_5V5P9A:
+		chip->firmware_data = Stm8s_fw_data_4400_ffc_5v5p9a;
+		chip->fw_data_count = sizeof(Stm8s_fw_data_4400_ffc_5v5p9a);
+		chip->fw_data_version = Stm8s_fw_data_4400_ffc_5v5p9a[chip->fw_data_count - 4];
+		break;
+	case WARP_FW_TYPE_STM8S_4450_FFC_5V6A_WARP_4052MA_3BIT:
+		chip->firmware_data = Stm8s_fw_data_4450_ffc_5v6a_3bit;
+		chip->fw_data_count = sizeof(Stm8s_fw_data_4450_ffc_5v6a_3bit);
+		chip->fw_data_version = Stm8s_fw_data_4450_ffc_5v6a_3bit[chip->fw_data_count - 4];
+		break;
+	case WARP_FW_TYPE_STM8S_4450_FFC_5V4A_WARP_4052MA_3BIT:
+		chip->firmware_data = Stm8s_fw_data_4450_warp_ffc_5v4a_3bit;
+		chip->fw_data_count = sizeof(Stm8s_fw_data_4450_warp_ffc_5v4a_3bit);
+		chip->fw_data_version = Stm8s_fw_data_4450_warp_ffc_5v4a_3bit[chip->fw_data_count - 4];
+		break;
+	case WARP_FW_TYPE_STM8S_4400_WARP_FFC_15C_18041:
+		chip->firmware_data = Stm8s_fw_data_4400_warp_ffc_15c_18041;
+		chip->fw_data_count = sizeof(Stm8s_fw_data_4400_warp_ffc_15c_18041);
+		chip->fw_data_version = Stm8s_fw_data_4400_warp_ffc_15c_18041[chip->fw_data_count - 4];
+		break;
+	case WARP_FW_TYPE_STM8S_4450_WARP_FFC_5V6A_19365:
+		chip->firmware_data = Stm8s_fw_data_4450_WARP_FFC_5V6A_19365;
+		chip->fw_data_count = sizeof(Stm8s_fw_data_4450_WARP_FFC_5V6A_19365);
+		chip->fw_data_version = Stm8s_fw_data_4450_WARP_FFC_5V6A_19365[chip->fw_data_count - 4];
+		break;
+	case WARP_FW_TYPE_STM8S_4450_FFC_SHORT_RESET_WINDOW:
+		chip->firmware_data = Stm8s_fw_data_4450_ffc_ShortResetWindow;
+		chip->fw_data_count = sizeof(Stm8s_fw_data_4450_ffc_ShortResetWindow);
+		chip->fw_data_version = Stm8s_fw_data_4450_ffc_ShortResetWindow[chip->fw_data_count - 4];
+		break;
+	case WARP_FW_TYPE_STM8S_4400_SWARP_3500MA:
+		chip->firmware_data = Stm8s_fw_data_4400_swarp_3500MA;
+		chip->fw_data_count = sizeof(Stm8s_fw_data_4400_swarp_3500MA);
+		chip->fw_data_version = Stm8s_fw_data_4400_swarp_3500MA[chip->fw_data_count - 4];
+		break;
+	case WARP_FW_TYPE_STM8S_4400_SWARP_1000MA:
+		chip->firmware_data = Stm8s_fw_data_4400_swarp_1000MA;
+		chip->fw_data_count = sizeof(Stm8s_fw_data_4400_swarp_1000MA);
+		chip->fw_data_version = Stm8s_fw_data_4400_swarp_1000MA[chip->fw_data_count - 4];
+		break;
+	case WARP_FW_TYPE_STM8S_4400_SWARP_5000MA:
+		chip->firmware_data = Stm8s_fw_data_4400_swarp_5000MA;
+		chip->fw_data_count = sizeof(Stm8s_fw_data_4400_swarp_5000MA);
+		chip->fw_data_version = Stm8s_fw_data_4400_swarp_5000MA[chip->fw_data_count - 4];
+		break;
+	case WARP_FW_TYPE_STM8S_4400_SWARP_6500MA:
+		chip->firmware_data = Stm8s_fw_data_4400_swarp_6500MA;
+		chip->fw_data_count = sizeof(Stm8s_fw_data_4400_swarp_6500MA);
+		chip->fw_data_version = Stm8s_fw_data_4400_swarp_6500MA[chip->fw_data_count - 4];
+		break;
+	case WARP_FW_TYPE_STM8S_4450_SWARP_6500MA:
+		chip->firmware_data = Stm8s_fw_data_4450_swarp_6500MA;
+		chip->fw_data_count = sizeof(Stm8s_fw_data_4450_swarp_6500MA);
+		chip->fw_data_version = Stm8s_fw_data_4450_swarp_6500MA[chip->fw_data_count - 4];
+		break;
+	case WARP_FW_TYPE_STM8S_4450_SWARP_6500MA_FV4490:
+		chip->firmware_data = Stm8s_fw_data_4450_swarp_6500MA_fv4490;
+		chip->fw_data_count = sizeof(Stm8s_fw_data_4450_swarp_6500MA_fv4490);
+		chip->fw_data_version = Stm8s_fw_data_4450_swarp_6500MA_fv4490[chip->fw_data_count - 4];
+		break;
+	case WARP_FW_TYPE_STM8S_4450_SWARP_6500MA_disableI2C:
+		chip->firmware_data = Stm8s_fw_data_4450_swarp_6500MA_disableI2C;
+		chip->fw_data_count = sizeof(Stm8s_fw_data_4450_swarp_6500MA_disableI2C);
+		chip->fw_data_version = Stm8s_fw_data_4450_swarp_6500MA_disableI2C[chip->fw_data_count - 4];
+		break;
+	case WARP_FW_TYPE_STM8S_4400_SWARP_6500MA_8250:
+		chip->firmware_data = Stm8s_fw_data_4400_swarp_6500MA_8250;
+		chip->fw_data_count = sizeof(Stm8s_fw_data_4400_swarp_6500MA_8250);
+		chip->fw_data_version = Stm8s_fw_data_4400_swarp_6500MA_8250[chip->fw_data_count - 4];
+		break;
+	case WARP_FW_TYPE_STM8S_4450_SWARP_6500MA_8250:
+		chip->firmware_data = Stm8s_fw_data_4450_swarp_6500MA_8250;
+		chip->fw_data_count = sizeof(Stm8s_fw_data_4450_swarp_6500MA_8250);
+		chip->fw_data_version = Stm8s_fw_data_4450_swarp_6500MA_8250[chip->fw_data_count - 4];
+		break;
 	case WARP_FW_TYPE_STM8S_4400_SWARP_6500MA_8250_LINK:
 		chip->firmware_data = Stm8s_fw_data_4400_swarp_6500MA_8250_link;
 		chip->fw_data_count = sizeof(Stm8s_fw_data_4400_swarp_6500MA_8250_link);
@@ -874,10 +849,9 @@ static int stm8s_driver_probe(struct i2c_client *client,
 		chip->fw_data_count = sizeof(Stm8s_fw_data_4400_swarp_6500MA_8250_link_lite);
 		chip->fw_data_version = Stm8s_fw_data_4400_swarp_6500MA_8250_link_lite[chip->fw_data_count - 4];
 		break;
-		default:
-			break;
+	default:
+		break;
 	}
-
 
 	chip->vops = &oplus_stm8s_ops;
 	chip->fw_mcu_version = 0;
@@ -885,8 +859,8 @@ static int stm8s_driver_probe(struct i2c_client *client,
 	opchg_set_clock_sleep(chip);
 	oplus_warp_delay_reset_mcu_init(chip);
 
-	if(chip->warp_fw_update_newmethod) {
-		if(oplus_is_rf_ftm_mode()){
+	if (chip->warp_fw_update_newmethod) {
+		if (oplus_is_rf_ftm_mode()) {
 			oplus_warp_fw_update_work_init(chip);
 		}
 	} else {
@@ -901,9 +875,7 @@ static int stm8s_driver_probe(struct i2c_client *client,
 		fw_type = 0x%x, \
 		fw_version = 0x%x, \
 		mcu_version = 0x%x\n",
-		chip->warp_fw_type,
-		chip->fw_data_version,
-		chip->fw_mcu_version);
+		  chip->warp_fw_type, chip->fw_data_version, chip->fw_mcu_version);
 	return 0;
 }
 
@@ -913,12 +885,12 @@ static int stm8s_driver_probe(struct i2c_client *client,
   *
   *********************************************************/
 static const struct of_device_id stm8s_match[] = {
-	{ .compatible = "oplus,stm8s-fastcg"},
-	{ },
+	{ .compatible = "oplus,stm8s-fastcg" },
+	{},
 };
 
 static const struct i2c_device_id stm8s_id[] = {
-	{ "stm8s-fastcg", 0},
+	{ "stm8s-fastcg", 0 },
 	{},
 };
 MODULE_DEVICE_TABLE(i2c, pic16f_id);
@@ -956,4 +928,3 @@ static void  pic16f_exit(void)
 subsys_initcall(stm8s_subsys_init);
 MODULE_DESCRIPTION("Driver for oplus warp stm8s fast mcu");
 MODULE_LICENSE("GPL v2");
-

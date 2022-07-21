@@ -44,23 +44,23 @@ struct oplus_gauge_operations {
 	bool (*get_battery_authenticate)(void);
 	bool (*get_battery_hmac)(void);
 	void (*set_battery_full)(bool);
-	int (*get_prev_battery_mvolts) (void);
-	int (*get_prev_battery_temperature) (void);
-	int (*get_prev_battery_soc) (void);
-	int (*get_prev_average_current) (void);
+	int (*get_prev_battery_mvolts)(void);
+	int (*get_prev_battery_temperature)(void);
+	int (*get_prev_battery_soc)(void);
+	int (*get_prev_average_current)(void);
 	int (*get_prev_batt_remaining_capacity)(void);
-	int (*get_battery_mvolts_2cell_max) (void);
-	int (*get_battery_mvolts_2cell_min) (void);
-	int (*get_prev_battery_mvolts_2cell_max) (void);
-	int (*get_prev_battery_mvolts_2cell_min) (void);
+	int (*get_battery_mvolts_2cell_max)(void);
+	int (*get_battery_mvolts_2cell_min)(void);
+	int (*get_prev_battery_mvolts_2cell_max)(void);
+	int (*get_prev_battery_mvolts_2cell_min)(void);
 	int (*get_prev_batt_fcc)(void);
-	int (*update_battery_dod0) (void);
-	int (*update_soc_smooth_parameter) (void);
-	int (*get_battery_cb_status) (void);
-	int (*get_gauge_i2c_err) (void);
-	void (*clear_gauge_i2c_err) (void);
-	int (*get_passdchg) (int *val);
-	int (*dump_register) (void);
+	int (*update_battery_dod0)(void);
+	int (*update_soc_smooth_parameter)(void);
+	int (*get_battery_cb_status)(void);
+	int (*get_gauge_i2c_err)(void);
+	void (*clear_gauge_i2c_err)(void);
+	int (*get_passdchg)(int *val);
+	int (*dump_register)(void);
 };
 
 /****************************************

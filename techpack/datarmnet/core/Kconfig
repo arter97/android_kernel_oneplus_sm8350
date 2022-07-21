@@ -2,7 +2,8 @@
 # RMNET MAP driver
 #
 
-menuconfig RMNET_CORE
+config RMNET_CORE
+	tristate "RMNET Core"
 	default m 
 	select GRO_CELLS
 	---help---
@@ -11,7 +12,8 @@ menuconfig RMNET_CORE
 	  format in the embedded data path. RMNET devices can be attached to
 	  any IP mode physical device.
 
-menuconfig RMNET_CTL
+config RMNET_CTL
+	tristate "RMNET CTL"
 	default m
 	---help---
 	  Enable the RMNET CTL module which is used for handling QMAP commands
