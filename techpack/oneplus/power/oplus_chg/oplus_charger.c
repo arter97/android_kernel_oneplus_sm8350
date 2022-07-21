@@ -84,6 +84,14 @@
 static int forced_current;
 module_param(forced_current, int, 0644);
 
+static bool limit_pd = 1;
+module_param(limit_pd, bool, 0644);
+
+bool oplus_chg_get_limit_pd(void)
+{
+	return limit_pd;
+}
+
 static struct oplus_chg_chip *g_charger_chip = NULL;
 
 #define MAX_UI_DECIMAL_TIME 24
@@ -3603,7 +3611,11 @@ void oplus_chg_set_input_current_limit(struct oplus_chg_chip *chip)
 		current_limit = chip->limits.input_current_usb_ma;
 		break;
 	case POWER_SUPPLY_TYPE_USB_DCP:
-		current_limit = chip->limits.input_current_charger_ma;
+		if (chip->chg_ops->get_charger_subtype() == CHARGER_SUBTYPE_PD && !limit_pd) {
+			current_limit = 3000;
+		} else {
+			current_limit = chip->limits.input_current_charger_ma;
+		}
 #ifdef OPLUS_CHG_OP_DEF
 		if (chip->norchg_reconnect_count == 1) {
 			pr_info("norchg_reconnect_count = 1\n");
