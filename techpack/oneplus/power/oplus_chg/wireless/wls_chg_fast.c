@@ -19,7 +19,7 @@ static bool is_fast_ic_available(struct oplus_wls_chg_fast *wls_fast)
 {
 	struct device_node *node = wls_fast->dev->of_node;
 
-	if(wls_fast->fast_ic == NULL)
+	if (wls_fast->fast_ic == NULL)
 		wls_fast->fast_ic = of_get_oplus_chg_ic(node, "oplus,fast_ic");
 	return !!wls_fast->fast_ic;
 }

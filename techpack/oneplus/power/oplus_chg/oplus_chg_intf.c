@@ -157,9 +157,9 @@ static int oplus_chg_typec_cc_orientation(struct oplus_chg_device *dev, int *ori
 }
 
 #ifndef CONFIG_OPLUS_CHG_OOS
-#define DISCONNECT			0
-#define STANDARD_TYPEC_DEV_CONNECT	BIT(0)
-#define OTG_DEV_CONNECT			BIT(1)
+#define DISCONNECT 0
+#define STANDARD_TYPEC_DEV_CONNECT BIT(0)
+#define OTG_DEV_CONNECT BIT(1)
 static int oplus_get_otg_online_status(struct oplus_chg_device *dev, int *otg_online)
 {
 	struct oplus_chg_ic_dev *typec_ic;
@@ -223,8 +223,7 @@ static int oplus_chg_hw_detect(struct oplus_chg_device *dev, int *hw_detect)
 
 static void oplus_otg_enable_work(struct work_struct *work)
 {
-	struct oplus_chg_device *dev = container_of(work,
-				struct oplus_chg_device, otg_enable_work);
+	struct oplus_chg_device *dev = container_of(work, struct oplus_chg_device, otg_enable_work);
 
 	struct oplus_chg_ic_dev *typec_ic;
 	struct oplus_chg_ic_typec_ops *typec_ic_ops;
@@ -247,8 +246,7 @@ static void oplus_otg_enable_work(struct work_struct *work)
 
 static void oplus_otg_disable_work(struct work_struct *work)
 {
-	struct oplus_chg_device *dev = container_of(work,
-				struct oplus_chg_device, otg_disable_work);
+	struct oplus_chg_device *dev = container_of(work, struct oplus_chg_device, otg_disable_work);
 
 	struct oplus_chg_ic_dev *typec_ic;
 	struct oplus_chg_ic_typec_ops *typec_ic_ops;
@@ -297,8 +295,7 @@ static void oplus_adsp_recover_work(struct work_struct *work)
 #ifdef OPLUS_CHG_REG_DUMP_ENABLE
 static void oplus_chg_reg_dump_work(struct work_struct *work)
 {
-	struct oplus_chg_device *dev = container_of(work,
-				struct oplus_chg_device, reg_dump_work);
+	struct oplus_chg_device *dev = container_of(work, struct oplus_chg_device, reg_dump_work);
 
 	struct oplus_chg_ic_dev *typec_ic;
 
@@ -320,8 +317,7 @@ static void oplus_chg_reg_dump_work(struct work_struct *work)
 static void oplus_chg_batt_update_work(struct work_struct *work)
 {
 	struct delayed_work *dwork = to_delayed_work(work);
-	struct oplus_chg_device *dev = container_of(dwork,
-				struct oplus_chg_device, batt_update_work);
+	struct oplus_chg_device *dev = container_of(dwork, struct oplus_chg_device, batt_update_work);
 
 	if (!atomic_read(&dev->usb_present)) {
 		dev->batt_update_count = 0;
@@ -342,8 +338,7 @@ static void oplus_chg_batt_update_work(struct work_struct *work)
 static void oplus_chg_connect_check_work(struct work_struct *work)
 {
 	struct delayed_work *dwork = to_delayed_work(work);
-	struct oplus_chg_device *dev = container_of(dwork,
-				struct oplus_chg_device, connect_check_work);
+	struct oplus_chg_device *dev = container_of(dwork, struct oplus_chg_device, connect_check_work);
 	struct oplus_chg_chip *chip = oplus_chg_get_chg_struct();
 
 	if (atomic_read(&dev->usb_online) == 0) {
@@ -365,8 +360,7 @@ static void oplus_chg_connect_check_work(struct work_struct *work)
 static void oplus_chg_charger_status_check_work(struct work_struct *work)
 {
 	struct delayed_work *dwork = to_delayed_work(work);
-	struct oplus_chg_device *dev = container_of(dwork,
-				struct oplus_chg_device, charger_status_check_work);
+	struct oplus_chg_device *dev = container_of(dwork, struct oplus_chg_device, charger_status_check_work);
 	struct oplus_chg_chip *chip = oplus_chg_get_chg_struct();
 
 	if (chip == NULL) {
@@ -384,15 +378,13 @@ static void oplus_chg_charger_status_check_work(struct work_struct *work)
 
 #ifdef OPLUS_CHG_DEBUG
 #define UPGRADE_START 0
-#define UPGRADE_FW    1
-#define UPGRADE_END   2
+#define UPGRADE_FW 1
+#define UPGRADE_END 2
 struct oplus_chg_fw_head {
 	u8 magic[4];
 	int size;
 };
-static ssize_t oplus_chg_intf_usb_upgrade_fw_show(struct device *dev,
-					struct device_attribute *attr,
-					char *buf)
+static ssize_t oplus_chg_intf_usb_upgrade_fw_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	int ret;
 
@@ -400,9 +392,7 @@ static ssize_t oplus_chg_intf_usb_upgrade_fw_show(struct device *dev,
 	return ret;
 }
 
-static ssize_t oplus_chg_intf_usb_upgrade_fw_store(struct device *dev,
-					struct device_attribute *attr,
-					const char *buf, size_t count)
+static ssize_t oplus_chg_intf_usb_upgrade_fw_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
 	u8 temp_buf[sizeof(struct oplus_chg_fw_head)];
 	static u8 *fw_buf;
@@ -422,8 +412,7 @@ start:
 		memset(temp_buf, 0, sizeof(struct oplus_chg_fw_head));
 		memcpy(temp_buf, buf, sizeof(struct oplus_chg_fw_head));
 		fw_head = (struct oplus_chg_fw_head *)temp_buf;
-		if (fw_head->magic[0] == 0x02 && fw_head->magic[1] == 0x00 &&
-		    fw_head->magic[2] == 0x03 && fw_head->magic[3] == 0x00) {
+		if (fw_head->magic[0] == 0x02 && fw_head->magic[1] == 0x00 && fw_head->magic[2] == 0x03 && fw_head->magic[3] == 0x00) {
 			fw_size = fw_head->size;
 			fw_buf = kzalloc(fw_size, GFP_KERNEL);
 			if (fw_buf == NULL) {
@@ -479,46 +468,24 @@ start:
 #endif /* OPLUS_CHG_DEBUG */
 
 static enum oplus_chg_mod_property oplus_chg_intf_usb_props[] = {
-	OPLUS_CHG_PROP_ONLINE,
-	OPLUS_CHG_PROP_PRESENT,
-	OPLUS_CHG_PROP_VOLTAGE_NOW,
-	OPLUS_CHG_PROP_VOLTAGE_MAX,
-	OPLUS_CHG_PROP_VOLTAGE_MIN,
-	OPLUS_CHG_PROP_CURRENT_NOW,
-	OPLUS_CHG_PROP_CURRENT_MAX,
-	OPLUS_CHG_PROP_USB_TYPE,
-	OPLUS_CHG_PROP_FASTCHG_STATUS,
-	OPLUS_CHG_PROP_ADAPTER_SID,
-	OPLUS_CHG_PROP_CON_TEMP1,
-	OPLUS_CHG_PROP_CON_TEMP2,
-	OPLUS_CHG_PROP_CHG_ENABLE,
-	OPLUS_CHG_PROP_OTG_MODE,
-	OPLUS_CHG_PROP_TYPEC_CC_ORIENTATION,
-	OPLUS_CHG_PROP_HW_DETECT,
-	OPLUS_CHG_PROP_CONNECT_DISABLE,
-	OPLUS_CHG_PROP_OTG_SWITCH,
+	OPLUS_CHG_PROP_ONLINE,	       OPLUS_CHG_PROP_PRESENT,	       OPLUS_CHG_PROP_VOLTAGE_NOW,
+	OPLUS_CHG_PROP_VOLTAGE_MAX,    OPLUS_CHG_PROP_VOLTAGE_MIN,     OPLUS_CHG_PROP_CURRENT_NOW,
+	OPLUS_CHG_PROP_CURRENT_MAX,    OPLUS_CHG_PROP_USB_TYPE,	       OPLUS_CHG_PROP_FASTCHG_STATUS,
+	OPLUS_CHG_PROP_ADAPTER_SID,    OPLUS_CHG_PROP_CON_TEMP1,       OPLUS_CHG_PROP_CON_TEMP2,
+	OPLUS_CHG_PROP_CHG_ENABLE,     OPLUS_CHG_PROP_OTG_MODE,	       OPLUS_CHG_PROP_TYPEC_CC_ORIENTATION,
+	OPLUS_CHG_PROP_HW_DETECT,      OPLUS_CHG_PROP_CONNECT_DISABLE, OPLUS_CHG_PROP_OTG_SWITCH,
 #ifdef OPLUS_CHG_REG_DUMP_ENABLE
 	OPLUS_CHG_PROP_REG_DUMP,
 #endif
 #ifndef CONFIG_OPLUS_CHG_OOS
-	OPLUS_CHG_PROP_OTG_ONLINE,
-	OPLUS_CHG_PROP_USB_STATUS,
-	OPLUS_CHG_PROP_FAST_CHG_TYPE,
-	OPLUS_CHG_PROP_USBTEMP_VOLT_L,
-	OPLUS_CHG_PROP_USBTEMP_VOLT_R,
+	OPLUS_CHG_PROP_OTG_ONLINE,     OPLUS_CHG_PROP_USB_STATUS,      OPLUS_CHG_PROP_FAST_CHG_TYPE,
+	OPLUS_CHG_PROP_USBTEMP_VOLT_L, OPLUS_CHG_PROP_USBTEMP_VOLT_R,
 #endif /* CONFIG_OPLUS_CHG_OOS */
 };
 
 static enum oplus_chg_mod_property oplus_chg_intf_usb_uevent_props[] = {
-	OPLUS_CHG_PROP_ONLINE,
-	OPLUS_CHG_PROP_PRESENT,
-	OPLUS_CHG_PROP_VOLTAGE_NOW,
-	OPLUS_CHG_PROP_CURRENT_NOW,
-	OPLUS_CHG_PROP_USB_TYPE,
-	OPLUS_CHG_PROP_FASTCHG_STATUS,
-	OPLUS_CHG_PROP_ADAPTER_SID,
-	OPLUS_CHG_PROP_CHG_ENABLE,
-	OPLUS_CHG_PROP_OTG_MODE,
+	OPLUS_CHG_PROP_ONLINE,	       OPLUS_CHG_PROP_PRESENT,	   OPLUS_CHG_PROP_VOLTAGE_NOW, OPLUS_CHG_PROP_CURRENT_NOW, OPLUS_CHG_PROP_USB_TYPE,
+	OPLUS_CHG_PROP_FASTCHG_STATUS, OPLUS_CHG_PROP_ADAPTER_SID, OPLUS_CHG_PROP_CHG_ENABLE,  OPLUS_CHG_PROP_OTG_MODE,
 };
 
 #ifdef OPLUS_CHG_DEBUG
@@ -528,22 +495,11 @@ static struct oplus_chg_exten_prop oplus_chg_intf_usb_exten_props[] = {
 #endif
 
 __maybe_unused static const enum oplus_chg_usb_type oplus_type_to_oplus_chg_usb_type[] = {
-	OPLUS_CHG_USB_TYPE_UNKNOWN,
-	OPLUS_CHG_USB_TYPE_UNKNOWN,
-	OPLUS_CHG_USB_TYPE_UNKNOWN,
-	OPLUS_CHG_USB_TYPE_UNKNOWN,
-	OPLUS_CHG_USB_TYPE_SDP,
-	OPLUS_CHG_USB_TYPE_DCP,
-	OPLUS_CHG_USB_TYPE_CDP,
-	OPLUS_CHG_USB_TYPE_ACA,
-	OPLUS_CHG_USB_TYPE_C,
-	OPLUS_CHG_USB_TYPE_PD,
-	OPLUS_CHG_USB_TYPE_PD_DRP,
-	OPLUS_CHG_USB_TYPE_APPLE_BRICK_ID,
+	OPLUS_CHG_USB_TYPE_UNKNOWN, OPLUS_CHG_USB_TYPE_UNKNOWN, OPLUS_CHG_USB_TYPE_UNKNOWN, OPLUS_CHG_USB_TYPE_UNKNOWN,
+	OPLUS_CHG_USB_TYPE_SDP,	    OPLUS_CHG_USB_TYPE_DCP,	OPLUS_CHG_USB_TYPE_CDP,	    OPLUS_CHG_USB_TYPE_ACA,
+	OPLUS_CHG_USB_TYPE_C,	    OPLUS_CHG_USB_TYPE_PD,	OPLUS_CHG_USB_TYPE_PD_DRP,  OPLUS_CHG_USB_TYPE_APPLE_BRICK_ID,
 };
-static int oplus_chg_intf_usb_get_prop(struct oplus_chg_mod *ocm,
-			enum oplus_chg_mod_property prop,
-			union oplus_chg_mod_propval *pval)
+static int oplus_chg_intf_usb_get_prop(struct oplus_chg_mod *ocm, enum oplus_chg_mod_property prop, union oplus_chg_mod_propval *pval)
 {
 	struct oplus_chg_device *oplus_dev = oplus_chg_mod_get_drvdata(ocm);
 	struct oplus_chg_chip *chip = oplus_chg_get_chg_struct();
@@ -571,8 +527,7 @@ static int oplus_chg_intf_usb_get_prop(struct oplus_chg_mod *ocm,
 		if (chip->usb_chg_disable) {
 			pval->intval = false;
 		} else {
-			pval->intval = atomic_read(&oplus_dev->usb_online) &&
-				(chip->charger_exist_delay ? 1 : chip->charger_exist);
+			pval->intval = atomic_read(&oplus_dev->usb_online) && (chip->charger_exist_delay ? 1 : chip->charger_exist);
 			if (!chip->mmi_chg && (chip->charger_volt > CHG_VUSBIN_VOL_THR))
 				pval->intval = true;
 			if (oplus_dev->icon_debounce)
@@ -591,8 +546,7 @@ static int oplus_chg_intf_usb_get_prop(struct oplus_chg_mod *ocm,
 			 * The usb present signal is prone to glitches, here we no longer
 			 * use usb present, use usb present instead.
 			 */
-			pval->intval = atomic_read(&oplus_dev->usb_online) &&
-				(chip->charger_exist_delay ? 1 : chip->charger_exist);
+			pval->intval = atomic_read(&oplus_dev->usb_online) && (chip->charger_exist_delay ? 1 : chip->charger_exist);
 			if (!chip->mmi_chg && (chip->charger_volt > CHG_VUSBIN_VOL_THR))
 				pval->intval = true;
 			if (oplus_dev->icon_debounce)
@@ -648,7 +602,7 @@ static int oplus_chg_intf_usb_get_prop(struct oplus_chg_mod *ocm,
 			pval->intval = OPLUS_CHG_USB_TYPE_SWARP;
 		} else
 #endif
-		if (oplus_warp_get_fast_chg_type() == CHARGER_SUBTYPE_FASTCHG_WARP) {
+			if (oplus_warp_get_fast_chg_type() == CHARGER_SUBTYPE_FASTCHG_WARP) {
 			pval->intval = OPLUS_CHG_USB_TYPE_WARP;
 		} else if (oplus_warp_get_fast_chg_type() == CHARGER_SUBTYPE_FASTCHG_SWARP) {
 			pval->intval = OPLUS_CHG_USB_TYPE_SWARP;
@@ -670,8 +624,7 @@ static int oplus_chg_intf_usb_get_prop(struct oplus_chg_mod *ocm,
 					oplus_dev->usb_type_backup = chip->oplus_usb_type;
 				}
 			} else {
-				switch (sid_to_adapter_chg_type(sid))
-				{
+				switch (sid_to_adapter_chg_type(sid)) {
 				case CHARGER_TYPE_UNKNOWN:
 				case CHARGER_TYPE_NORMAL:
 				case CHARGER_TYPE_WARP:
@@ -691,10 +644,10 @@ static int oplus_chg_intf_usb_get_prop(struct oplus_chg_mod *ocm,
 		pval->intval = oplus_warp_get_adapter_sid();
 		break;
 	case OPLUS_CHG_PROP_CON_TEMP1:
-		pval->intval = chip->usb_temp_l*10;
+		pval->intval = chip->usb_temp_l * 10;
 		break;
 	case OPLUS_CHG_PROP_CON_TEMP2:
-		pval->intval = chip->usb_temp_r*10;
+		pval->intval = chip->usb_temp_r * 10;
 		break;
 	case OPLUS_CHG_PROP_CHG_ENABLE:
 		if (chip->chg_ops && chip->chg_ops->get_charger_current) {
@@ -705,7 +658,7 @@ static int oplus_chg_intf_usb_get_prop(struct oplus_chg_mod *ocm,
 		pval->intval = !(ibus_ma < 10);
 		if (chip->usb_chg_disable == !!pval->intval) {
 			printk_ratelimited(KERN_ERR "OPLUS_CHG[INTF]: %s[%d]: usb_chg_disable status does not match ibus, usb_chg_disable=%d, ibus=%d\n",
-				__func__, __LINE__, chip->usb_chg_disable, ibus_ma);
+					   __func__, __LINE__, chip->usb_chg_disable, ibus_ma);
 		}
 		break;
 	case OPLUS_CHG_PROP_OTG_MODE:
@@ -751,8 +704,7 @@ static int oplus_chg_intf_usb_get_prop(struct oplus_chg_mod *ocm,
 		if (is_wls_ocm_available(oplus_dev) && (pval->intval == 0)) {
 			rc = oplus_chg_mod_get_property(oplus_dev->wls_ocm, OPLUS_CHG_PROP_WLS_TYPE, &temp_val);
 			if (rc == 0) {
-				if ((temp_val.intval == OPLUS_CHG_WLS_WARP) ||
-				    (temp_val.intval == OPLUS_CHG_WLS_SWARP)) {
+				if ((temp_val.intval == OPLUS_CHG_WLS_WARP) || (temp_val.intval == OPLUS_CHG_WLS_SWARP)) {
 					rc = oplus_chg_mod_get_property(oplus_dev->wls_ocm, OPLUS_CHG_PROP_ADAPTER_TYPE, &temp_val);
 					if (rc == 0)
 						pval->intval = temp_val.intval;
@@ -761,8 +713,7 @@ static int oplus_chg_intf_usb_get_prop(struct oplus_chg_mod *ocm,
 		}
 #else
 		if (pval->intval == 0) {
-			if (oplus_wpc_get_adapter_type() == CHARGER_SUBTYPE_FASTCHG_WARP
-				|| oplus_wpc_get_adapter_type() == CHARGER_SUBTYPE_FASTCHG_SWARP)
+			if (oplus_wpc_get_adapter_type() == CHARGER_SUBTYPE_FASTCHG_WARP || oplus_wpc_get_adapter_type() == CHARGER_SUBTYPE_FASTCHG_SWARP)
 				pval->intval = oplus_wpc_get_adapter_type();
 		}
 #endif
@@ -785,9 +736,7 @@ static int oplus_chg_intf_usb_get_prop(struct oplus_chg_mod *ocm,
 	return 0;
 }
 
-static int oplus_chg_intf_usb_set_prop(struct oplus_chg_mod *ocm,
-			enum oplus_chg_mod_property prop,
-			const union oplus_chg_mod_propval *pval)
+static int oplus_chg_intf_usb_set_prop(struct oplus_chg_mod *ocm, enum oplus_chg_mod_property prop, const union oplus_chg_mod_propval *pval)
 {
 	struct oplus_chg_chip *chip = oplus_chg_get_chg_struct();
 	struct oplus_chg_device *oplus_dev = oplus_chg_mod_get_drvdata(ocm);
@@ -810,7 +759,7 @@ static int oplus_chg_intf_usb_set_prop(struct oplus_chg_mod *ocm,
 		break;
 	case OPLUS_CHG_PROP_CHG_ENABLE:
 		if (!pval->intval) {
-			if(chip->unwakelock_chg == 1) {
+			if (chip->unwakelock_chg == 1) {
 				rc = -EINVAL;
 				pr_err("unwakelock testing , this test not allowed.\n");
 			} else {
@@ -826,13 +775,12 @@ static int oplus_chg_intf_usb_set_prop(struct oplus_chg_mod *ocm,
 				chip->usb_chg_disable = true;
 			}
 		} else {
-			if(chip->unwakelock_chg == 1) {
+			if (chip->unwakelock_chg == 1) {
 				rc = -EINVAL;
 				pr_err("unwakelock testing , this test not allowed.\n");
 			} else {
 				if (oplus_dev->usb_ocm) {
-					rc = oplus_chg_mod_get_property(oplus_dev->usb_ocm,
-									OPLUS_CHG_PROP_CHG_ENABLE, &temp_val);
+					rc = oplus_chg_mod_get_property(oplus_dev->usb_ocm, OPLUS_CHG_PROP_CHG_ENABLE, &temp_val);
 					if (rc == 0)
 						usb_chg_enable = temp_val.intval;
 					rc = 0;
@@ -875,8 +823,7 @@ static int oplus_chg_intf_usb_set_prop(struct oplus_chg_mod *ocm,
 	return rc;
 }
 
-static int oplus_chg_intf_usb_prop_is_writeable(struct oplus_chg_mod *ocm,
-				enum oplus_chg_mod_property prop)
+static int oplus_chg_intf_usb_prop_is_writeable(struct oplus_chg_mod *ocm, enum oplus_chg_mod_property prop)
 {
 	switch (prop) {
 	case OPLUS_CHG_PROP_VOLTAGE_MAX:
@@ -915,32 +862,30 @@ static const struct oplus_chg_mod_desc oplus_chg_intf_usb_mod_desc = {
 #endif
 	.get_property = oplus_chg_intf_usb_get_prop,
 	.set_property = oplus_chg_intf_usb_set_prop,
-	.property_is_writeable	= oplus_chg_intf_usb_prop_is_writeable,
+	.property_is_writeable = oplus_chg_intf_usb_prop_is_writeable,
 };
 
-static int oplus_chg_intf_usb_event_notifier_call(struct notifier_block *nb,
-		unsigned long val, void *v)
+static int oplus_chg_intf_usb_event_notifier_call(struct notifier_block *nb, unsigned long val, void *v)
 {
 	struct oplus_chg_device *op_dev = container_of(nb, struct oplus_chg_device, usb_event_nb);
 	struct oplus_chg_mod *owner_ocm = v;
 	struct oplus_chg_chip *chip = oplus_chg_get_chg_struct();
 	int boot_mode = get_boot_mode();
 
-	switch(val) {
+	switch (val) {
 	case OPLUS_CHG_EVENT_ONLINE:
 		if (owner_ocm == NULL) {
-			pr_err("This event(=%d) does not support anonymous sending\n",
-				val);
+			pr_err("This event(=%d) does not support anonymous sending\n", val);
 			return NOTIFY_BAD;
 		}
 		if (!strcmp(owner_ocm->desc->name, "usb")) {
 			pr_info("usb online\n");
-		if (is_usb_psy_available(op_dev))
-			power_supply_changed(op_dev->usb_psy);
-		if (is_batt_psy_available(op_dev))
-			power_supply_changed(op_dev->batt_psy);
-		if (is_wls_psy_available(op_dev))
-			power_supply_changed(op_dev->wls_psy);
+			if (is_usb_psy_available(op_dev))
+				power_supply_changed(op_dev->usb_psy);
+			if (is_batt_psy_available(op_dev))
+				power_supply_changed(op_dev->batt_psy);
+			if (is_wls_psy_available(op_dev))
+				power_supply_changed(op_dev->wls_psy);
 		}
 		if (!strcmp(owner_ocm->desc->name, "wireless")) {
 			pr_info("wls online\n");
@@ -948,8 +893,7 @@ static int oplus_chg_intf_usb_event_notifier_call(struct notifier_block *nb,
 		break;
 	case OPLUS_CHG_EVENT_OFFLINE:
 		if (owner_ocm == NULL) {
-			pr_err("This event(=%d) does not support anonymous sending\n",
-				val);
+			pr_err("This event(=%d) does not support anonymous sending\n", val);
 			return NOTIFY_BAD;
 		}
 		if (!strcmp(owner_ocm->desc->name, "usb")) {
@@ -968,8 +912,7 @@ static int oplus_chg_intf_usb_event_notifier_call(struct notifier_block *nb,
 		break;
 	case OPLUS_CHG_EVENT_PRESENT:
 		if (owner_ocm == NULL) {
-			pr_err("This event(=%d) does not support anonymous sending\n",
-				val);
+			pr_err("This event(=%d) does not support anonymous sending\n", val);
 			return NOTIFY_BAD;
 		}
 		if (!strcmp(owner_ocm->desc->name, "usb")) {
@@ -977,17 +920,14 @@ static int oplus_chg_intf_usb_event_notifier_call(struct notifier_block *nb,
 		}
 #ifdef OPLUS_CHG_OP_DEF
 		if (chip && chip->ctrl_lcm_frequency.work.func)
-			mod_delayed_work(system_highpri_wq, &chip->ctrl_lcm_frequency,
-								50);
-		if (chip && chip->recovery_chg_type_work.work.func
-			&& chip->abnormal_volt_detected && (boot_mode == MSM_BOOT_MODE__NORMAL))
+			mod_delayed_work(system_highpri_wq, &chip->ctrl_lcm_frequency, 50);
+		if (chip && chip->recovery_chg_type_work.work.func && chip->abnormal_volt_detected && (boot_mode == MSM_BOOT_MODE__NORMAL))
 			schedule_delayed_work(&chip->recovery_chg_type_work, msecs_to_jiffies(800));
 #endif
 		break;
 	case OPLUS_CHG_EVENT_APSD_DONE:
 		if (owner_ocm == NULL) {
-			pr_err("This event(=%d) does not support anonymous sending\n",
-				val);
+			pr_err("This event(=%d) does not support anonymous sending\n", val);
 			return NOTIFY_BAD;
 		}
 		if (!strcmp(owner_ocm->desc->name, "usb")) {
@@ -999,8 +939,7 @@ static int oplus_chg_intf_usb_event_notifier_call(struct notifier_block *nb,
 		break;
 	case OPLUS_CHG_EVENT_SWARP_ONLINE:
 		if (owner_ocm == NULL) {
-			pr_err("This event(=%d) does not support anonymous sending\n",
-				val);
+			pr_err("This event(=%d) does not support anonymous sending\n", val);
 			return NOTIFY_BAD;
 		}
 		if (!strcmp(owner_ocm->desc->name, "usb")) {
@@ -1016,8 +955,7 @@ static int oplus_chg_intf_usb_event_notifier_call(struct notifier_block *nb,
 	return NOTIFY_OK;
 }
 
-static int oplus_chg_intf_usb_mod_notifier_call(struct notifier_block *nb,
-		unsigned long val, void *v)
+static int oplus_chg_intf_usb_mod_notifier_call(struct notifier_block *nb, unsigned long val, void *v)
 {
 	struct oplus_chg_device *op_dev = container_of(nb, struct oplus_chg_device, usb_mod_nb);
 	struct oplus_chg_mod *owner_ocm = v;
@@ -1029,7 +967,7 @@ static int oplus_chg_intf_usb_mod_notifier_call(struct notifier_block *nb,
 		return NOTIFY_BAD;
 	}
 
-	switch(val) {
+	switch (val) {
 	case OPLUS_CHG_EVENT_ONLINE:
 #ifdef OPLUS_CHG_OP_DEF
 		if (oplus_warp_ignore_event() == true)
@@ -1100,8 +1038,7 @@ static int oplus_chg_intf_usb_mod_notifier_call(struct notifier_block *nb,
 					oplus_chg_mod_changed(op_dev->usb_ocm);
 				}
 				op_dev->batt_update_count = 0;
-				schedule_delayed_work(&op_dev->batt_update_work,
-					msecs_to_jiffies(500));
+				schedule_delayed_work(&op_dev->batt_update_work, msecs_to_jiffies(500));
 			}
 		}
 		break;
@@ -1132,8 +1069,7 @@ static int oplus_chg_intf_usb_mod_notifier_call(struct notifier_block *nb,
 				atomic_set(&op_dev->usb_present, 0);
 				chip->charger_exist_delay = false;
 				if (op_dev->usb_ocm) {
-					oplus_chg_global_event(op_dev->usb_ocm,
-						OPLUS_CHG_EVENT_OFFLINE);
+					oplus_chg_global_event(op_dev->usb_ocm, OPLUS_CHG_EVENT_OFFLINE);
 					oplus_chg_mod_changed(op_dev->usb_ocm);
 				}
 			}
@@ -1191,18 +1127,16 @@ static void oplus_dwc3_msm_notify_event(enum oplus_dwc3_notify_event event)
 	}
 
 	switch (event) {
-		case DWC3_ENUM_DONE:
-			pr_info("chip->charger_type[%d]\n", chip->charger_type);
-			if (chip->svid_verified == true ||
-				chip->charger_type == POWER_SUPPLY_TYPE_USB_CDP ||
-				chip->charger_type == POWER_SUPPLY_TYPE_USB) {
-					chip->usb_enum_status = true;
-					pr_info("Enumeration done\n");
-			}
-			break;
-		default:
-			pr_info("other dwc3 event received\n");
-			break;
+	case DWC3_ENUM_DONE:
+		pr_info("chip->charger_type[%d]\n", chip->charger_type);
+		if (chip->svid_verified == true || chip->charger_type == POWER_SUPPLY_TYPE_USB_CDP || chip->charger_type == POWER_SUPPLY_TYPE_USB) {
+			chip->usb_enum_status = true;
+			pr_info("Enumeration done\n");
+		}
+		break;
+	default:
+		pr_info("other dwc3 event received\n");
+		break;
 	}
 }
 
@@ -1216,27 +1150,26 @@ static void oplus_subsys_msm_notify_event(enum oplus_subsys_notify_event event)
 	}
 
 	switch (event) {
-		case SUBSYS_EVENT_ADSP_CRASH:
-			pr_info("adsp crash\n");
-			schedule_work(&op_dev->adsp_crash_work);
-			break;
-		case SUBSYS_EVENT_ADSP_RECOVER:
-			pr_info("adsp recover\n");
-			schedule_work(&op_dev->adsp_recover_work);
-			break;
-		default:
-			pr_info("other subsys event received\n");
-			break;
+	case SUBSYS_EVENT_ADSP_CRASH:
+		pr_info("adsp crash\n");
+		schedule_work(&op_dev->adsp_crash_work);
+		break;
+	case SUBSYS_EVENT_ADSP_RECOVER:
+		pr_info("adsp recover\n");
+		schedule_work(&op_dev->adsp_recover_work);
+		break;
+	default:
+		pr_info("other subsys event received\n");
+		break;
 	}
 }
 
-static int oplus_chg_intf_usb_changed_notifier_call(struct notifier_block *nb,
-		unsigned long val, void *v)
+static int oplus_chg_intf_usb_changed_notifier_call(struct notifier_block *nb, unsigned long val, void *v)
 {
 	struct oplus_chg_device *op_dev = container_of(nb, struct oplus_chg_device, usb_changed_nb);
 	struct oplus_chg_mod *owner_ocm = v;
 
-	switch(val) {
+	switch (val) {
 	case OPLUS_CHG_EVENT_CHANGED:
 		if (!strcmp(owner_ocm->desc->name, "usb") && is_usb_psy_available(op_dev))
 			power_supply_changed(op_dev->usb_psy);
@@ -1253,7 +1186,7 @@ static int oplus_chg_intf_mmi_chg_enable(struct oplus_chg_chip *chip, bool en)
 	pr_info("set mmi_chg = [%d].\n", en);
 	chip->charging_suspend = !en;
 	if (!en) {
-		if(chip->unwakelock_chg == 1) {
+		if (chip->unwakelock_chg == 1) {
 			return -EINVAL;
 			pr_err("unwakelock testing , this test not allowed.\n");
 		} else {
@@ -1270,7 +1203,7 @@ static int oplus_chg_intf_mmi_chg_enable(struct oplus_chg_chip *chip, bool en)
 			pr_err("stop_voter = 0x%02x, can't enable charge\n");
 			return -EINVAL;
 		}
-		if(chip->unwakelock_chg == 1) {
+		if (chip->unwakelock_chg == 1) {
 			return -EINVAL;
 			pr_err("unwakelock testing , this test not allowed.\n");
 		} else {
@@ -1286,9 +1219,7 @@ static int oplus_chg_intf_mmi_chg_enable(struct oplus_chg_chip *chip, bool en)
 	return 0;
 }
 
-static ssize_t oplus_chg_intf_batt_voltage_now_cell_show(struct device *dev,
-					struct device_attribute *attr,
-					char *buf)
+static ssize_t oplus_chg_intf_batt_voltage_now_cell_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	int ret;
 	struct oplus_chg_chip *chip = oplus_chg_get_chg_struct();
@@ -1299,8 +1230,7 @@ static ssize_t oplus_chg_intf_batt_voltage_now_cell_show(struct device *dev,
 	}
 
 	if (chip->vbatt_num == 2)
-		ret = sprintf(buf, "%d,%d\n", chip->batt_volt_max * 1000,
-				chip->batt_volt_min * 1000);
+		ret = sprintf(buf, "%d,%d\n", chip->batt_volt_max * 1000, chip->batt_volt_min * 1000);
 	else
 		ret = sprintf(buf, "%d\n", chip->batt_volt * 1000);
 
@@ -1417,13 +1347,13 @@ static int batt_err_code_table_color_to_oos(int notify_code)
 	} else if (notify_code & (1 << NOTIFY_OVP_VOLTAGE_ABNORMAL)) {
 		ret = PROTECT_BATT_OVP_VOL_ABNORMAL;
 	} else if (notify_code & (1 << NOTIFY_CHARGER_OVER_VOL)) {
-		ret = PROTECT_CHG_OVP;/* 1: VCHG > 5.8V     */
+		ret = PROTECT_CHG_OVP; /* 1: VCHG > 5.8V     */
 	} else if (notify_code & (1 << NOTIFY_CHARGER_LOW_VOL)) {
-		ret = 0;/* VCHG < 4.3v*/
+		ret = 0; /* VCHG < 4.3v*/
 	} else if (notify_code & (1 << NOTIFY_BAT_OVER_TEMP)) {
 		ret = PROTECT_BATT_TEMP_REGION__HOT;
 	} else if (notify_code & (1 << NOTIFY_BAT_LOW_TEMP)) {
-		ret = PROTECT_BATT_TEMP_REGION_COLD;/*temp < -2 degree*/
+		ret = PROTECT_BATT_TEMP_REGION_COLD; /*temp < -2 degree*/
 	} else if (notify_code & (1 << NOTIFY_BAT_NOT_CONNECT)) {
 		ret = PROTECT_BATT_MISSING;
 	} else if (notify_code & (1 << NOTIFY_BAT_FULL_THIRD_BATTERY)) {
@@ -1445,13 +1375,13 @@ static int batt_err_code_table_color_to_oos(int notify_code)
 }
 #endif
 
-static int oplus_chg_intf_batt_get_prop(struct oplus_chg_mod *ocm,
-			enum oplus_chg_mod_property prop,
-			union oplus_chg_mod_propval *pval)
+static int oplus_chg_intf_batt_get_prop(struct oplus_chg_mod *ocm, enum oplus_chg_mod_property prop, union oplus_chg_mod_propval *pval)
 {
 	struct oplus_chg_device *oplus_dev = oplus_chg_mod_get_drvdata(ocm);
 	struct oplus_chg_chip *chip = oplus_chg_get_chg_struct();
-	union oplus_chg_mod_propval temp_val = {0, };
+	union oplus_chg_mod_propval temp_val = {
+		0,
+	};
 	int batt_health = POWER_SUPPLY_HEALTH_UNKNOWN;
 	bool wls_online = false;
 	bool usb_online = false;
@@ -1478,16 +1408,13 @@ static int oplus_chg_intf_batt_get_prop(struct oplus_chg_mod *ocm,
 			pval->intval = oplus_chg_comm_get_batt_status(oplus_dev->comm_ocm);
 		} else {
 			if (!usb_online && !wls_online) {
-#ifdef 	CONFIG_OPLUS_CHG_OOS
+#ifdef CONFIG_OPLUS_CHG_OOS
 				pval->intval = POWER_SUPPLY_STATUS_DISCHARGING;
 #else
 				pval->intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
 #endif
-			} else if ((oplus_chg_show_warp_logo_ornot() == 1) ||
-				   oplus_warp_ignore_event() ||
-				   oplus_dev->icon_debounce) {
-				if(chip->new_ui_warning_support
-					&& (chip->tbatt_status == BATTERY_STATUS__WARM_TEMP && chip->batt_full))
+			} else if ((oplus_chg_show_warp_logo_ornot() == 1) || oplus_warp_ignore_event() || oplus_dev->icon_debounce) {
+				if (chip->new_ui_warning_support && (chip->tbatt_status == BATTERY_STATUS__WARM_TEMP && chip->batt_full))
 					pval->intval = chip->prop_status;
 				else
 					pval->intval = POWER_SUPPLY_STATUS_CHARGING;
@@ -1535,9 +1462,7 @@ static int oplus_chg_intf_batt_get_prop(struct oplus_chg_mod *ocm,
 	case OPLUS_CHG_PROP_CHG_ENABLE:
 		pval->intval = chip->mmi_chg;
 		if (is_wls_ocm_available(oplus_dev)) {
-			rc = oplus_chg_mod_get_property(oplus_dev->wls_ocm,
-							OPLUS_CHG_PROP_BATT_CHG_ENABLE,
-							&temp_val);
+			rc = oplus_chg_mod_get_property(oplus_dev->wls_ocm, OPLUS_CHG_PROP_BATT_CHG_ENABLE, &temp_val);
 			if (rc < 0) {
 				pr_err("can't get wireless charge, rc=%d\n", rc);
 				break;
@@ -1582,8 +1507,7 @@ static int oplus_chg_intf_batt_get_prop(struct oplus_chg_mod *ocm,
 		}
 		if (is_comm_ocm_available(oplus_dev) && wls_online)
 			batt_health = oplus_chg_comm_get_batt_health(oplus_dev->comm_ocm);
-		if ((batt_health == POWER_SUPPLY_HEALTH_UNKNOWN) ||
-		    (batt_health == POWER_SUPPLY_HEALTH_GOOD)) {
+		if ((batt_health == POWER_SUPPLY_HEALTH_UNKNOWN) || (batt_health == POWER_SUPPLY_HEALTH_GOOD)) {
 			pval->intval = oplus_chg_get_prop_batt_health(chip);
 		} else {
 			pval->intval = batt_health;
@@ -1618,7 +1542,11 @@ static int oplus_chg_intf_batt_get_prop(struct oplus_chg_mod *ocm,
 		pval->intval = 5000;
 		break;
 	case OPLUS_CHG_PROP_TIME_TO_FULL_NOW:
-		pval->intval = 5000;
+		rc = oplus_gauge_get_batt_ttf();
+		if (rc < 0)
+			pval->intval = -1;
+		else
+			pval->intval = rc;
 		break;
 	case OPLUS_CHG_PROP_TIME_TO_EMPTY_AVG:
 		pval->intval = 5000;
@@ -1662,7 +1590,7 @@ static int oplus_chg_intf_batt_get_prop(struct oplus_chg_mod *ocm,
 #ifdef CONFIG_OPLUS_CHG_OOS
 		if (chip->abnormal_volt_detected)
 			chip->notify_code |= 1 << NOTIFY_OVP_VOLTAGE_ABNORMAL;
-		pval->intval =  batt_err_code_table_color_to_oos(chip->notify_code | oplus_dev->notify_code);
+		pval->intval = batt_err_code_table_color_to_oos(chip->notify_code | oplus_dev->notify_code);
 #else
 		pval->intval = chip->notify_code | oplus_dev->notify_code;
 #endif
@@ -1755,17 +1683,13 @@ static int oplus_chg_intf_batt_get_prop(struct oplus_chg_mod *ocm,
 		break;
 	case OPLUS_CHG_PROP_CHARGE_NOW:
 		pval->intval = chip->charger_volt;
-		if ((oplus_warp_get_fastchg_started() == true) &&
-		    (chip->vbatt_num == 2) &&
-		    (oplus_warp_get_fast_chg_type() != CHARGER_SUBTYPE_FASTCHG_WARP)) {
+		if ((oplus_warp_get_fastchg_started() == true) && (chip->vbatt_num == 2) && (oplus_warp_get_fast_chg_type() != CHARGER_SUBTYPE_FASTCHG_WARP)) {
 			pval->intval = 10000;
 		}
 		if (is_wls_ocm_available(oplus_dev)) {
-			(void)oplus_chg_mod_get_property(oplus_dev->wls_ocm,
-				OPLUS_CHG_PROP_TRX_ONLINE, &temp_val);
+			(void)oplus_chg_mod_get_property(oplus_dev->wls_ocm, OPLUS_CHG_PROP_TRX_ONLINE, &temp_val);
 			if (!!temp_val.intval) {
-				rc = oplus_chg_mod_get_property(oplus_dev->wls_ocm,
-					OPLUS_CHG_PROP_TRX_VOLTAGE_NOW, &temp_val);
+				rc = oplus_chg_mod_get_property(oplus_dev->wls_ocm, OPLUS_CHG_PROP_TRX_VOLTAGE_NOW, &temp_val);
 				pval->intval = temp_val.intval / 1000;
 			}
 		}
@@ -1782,9 +1706,7 @@ static int oplus_chg_intf_batt_get_prop(struct oplus_chg_mod *ocm,
 	return 0;
 }
 
-static int oplus_chg_intf_batt_set_prop(struct oplus_chg_mod *ocm,
-			enum oplus_chg_mod_property prop,
-			const union oplus_chg_mod_propval *pval)
+static int oplus_chg_intf_batt_set_prop(struct oplus_chg_mod *ocm, enum oplus_chg_mod_property prop, const union oplus_chg_mod_propval *pval)
 {
 	struct oplus_chg_device *oplus_dev = oplus_chg_mod_get_drvdata(ocm);
 	struct oplus_chg_chip *chip = oplus_chg_get_chg_struct();
@@ -1817,9 +1739,7 @@ static int oplus_chg_intf_batt_set_prop(struct oplus_chg_mod *ocm,
 			if (rc == 0)
 				wls_online = !!temp_val.intval;
 			if (wls_online) {
-				rc = oplus_chg_mod_set_property(oplus_dev->wls_ocm,
-								OPLUS_CHG_PROP_BATT_CHG_ENABLE,
-								pval);
+				rc = oplus_chg_mod_set_property(oplus_dev->wls_ocm, OPLUS_CHG_PROP_BATT_CHG_ENABLE, pval);
 				if (rc < 0) {
 					pr_err("can't %s wireless charge, rc=%d\n", !!pval->intval ? "enable" : "disable", rc);
 					break;
@@ -1866,8 +1786,7 @@ static int oplus_chg_intf_batt_set_prop(struct oplus_chg_mod *ocm,
 	case OPLUS_CHG_PROP_COOL_DOWN:
 		oplus_smart_charge_by_cool_down(chip, pval->intval);
 		if (is_wls_ocm_available(oplus_dev)) {
-			(void)oplus_chg_mod_set_property(oplus_dev->wls_ocm,
-							 prop, pval);
+			(void)oplus_chg_mod_set_property(oplus_dev->wls_ocm, prop, pval);
 		}
 		break;
 #endif
@@ -1909,8 +1828,7 @@ static int oplus_chg_intf_batt_set_prop(struct oplus_chg_mod *ocm,
 	return rc;
 }
 
-static int oplus_chg_intf_batt_prop_is_writeable(struct oplus_chg_mod *ocm,
-				enum oplus_chg_mod_property prop)
+static int oplus_chg_intf_batt_prop_is_writeable(struct oplus_chg_mod *ocm, enum oplus_chg_mod_property prop)
 {
 	switch (prop) {
 	case OPLUS_CHG_PROP_VOLTAGE_MAX:
@@ -1960,24 +1878,22 @@ static const struct oplus_chg_mod_desc oplus_chg_intf_batt_mod_desc = {
 	.num_exten_properties = ARRAY_SIZE(oplus_chg_intf_batt_exten_props),
 	.get_property = oplus_chg_intf_batt_get_prop,
 	.set_property = oplus_chg_intf_batt_set_prop,
-	.property_is_writeable	= oplus_chg_intf_batt_prop_is_writeable,
+	.property_is_writeable = oplus_chg_intf_batt_prop_is_writeable,
 };
 
-static int oplus_chg_intf_batt_event_notifier_call(struct notifier_block *nb,
-		unsigned long val, void *v)
+static int oplus_chg_intf_batt_event_notifier_call(struct notifier_block *nb, unsigned long val, void *v)
 {
 	struct oplus_chg_device *op_dev = container_of(nb, struct oplus_chg_device, batt_event_nb);
 	struct oplus_chg_mod *owner_ocm = v;
 	struct oplus_chg_chip *chip = oplus_chg_get_chg_struct();
 
-	switch(val) {
+	switch (val) {
 	case OPLUS_CHG_EVENT_ONLINE:
 	case OPLUS_CHG_EVENT_OFFLINE:
 	case OPLUS_CHG_EVENT_PRESENT:
 	case OPLUS_CHG_EVENT_NO_PRESENT:
 		if (owner_ocm == NULL) {
-			pr_err("This event(=%d) does not support anonymous sending\n",
-				val);
+			pr_err("This event(=%d) does not support anonymous sending\n", val);
 			return NOTIFY_BAD;
 		}
 		oplus_chg_soc_update();
@@ -2000,12 +1916,11 @@ static int oplus_chg_intf_batt_event_notifier_call(struct notifier_block *nb,
 	return NOTIFY_OK;
 }
 
-static int oplus_chg_intf_batt_mod_notifier_call(struct notifier_block *nb,
-		unsigned long val, void *v)
+static int oplus_chg_intf_batt_mod_notifier_call(struct notifier_block *nb, unsigned long val, void *v)
 {
 	// struct oplus_chg_device *op_dev = container_of(nb, struct oplus_chg_device, wls_mod_nb);
 
-	switch(val) {
+	switch (val) {
 	case OPLUS_CHG_EVENT_LCD_ON:
 		pr_info("lcd on\n");
 		break;
@@ -2025,13 +1940,12 @@ static int oplus_chg_intf_batt_mod_notifier_call(struct notifier_block *nb,
 	return NOTIFY_OK;
 }
 
-static int oplus_chg_intf_batt_changed_notifier_call(struct notifier_block *nb,
-		unsigned long val, void *v)
+static int oplus_chg_intf_batt_changed_notifier_call(struct notifier_block *nb, unsigned long val, void *v)
 {
 	struct oplus_chg_device *op_dev = container_of(nb, struct oplus_chg_device, batt_changed_nb);
 	struct oplus_chg_mod *owner_ocm = v;
 
-	switch(val) {
+	switch (val) {
 	case OPLUS_CHG_EVENT_CHANGED:
 		if (!strcmp(owner_ocm->desc->name, "battery") && is_batt_psy_available(op_dev))
 			power_supply_changed(op_dev->batt_psy);
@@ -2054,9 +1968,7 @@ static enum oplus_chg_mod_property oplus_chg_intf_ac_uevent_props[] = {
 	OPLUS_CHG_PROP_ONLINE,
 };
 
-static int oplus_chg_intf_ac_get_prop(struct oplus_chg_mod *ocm,
-			enum oplus_chg_mod_property prop,
-			union oplus_chg_mod_propval *pval)
+static int oplus_chg_intf_ac_get_prop(struct oplus_chg_mod *ocm, enum oplus_chg_mod_property prop, union oplus_chg_mod_propval *pval)
 {
 	// struct oplus_chg_device *oplus_dev = oplus_chg_mod_get_drvdata(ocm);
 	struct oplus_chg_chip *chip = oplus_chg_get_chg_struct();
@@ -2070,25 +1982,19 @@ static int oplus_chg_intf_ac_get_prop(struct oplus_chg_mod *ocm,
 	switch (prop) {
 	case OPLUS_CHG_PROP_ONLINE:
 		if (chip->charger_exist) {
-			if ((chip->charger_type == POWER_SUPPLY_TYPE_USB_DCP)
-					|| (oplus_warp_get_fastchg_started() == true)
-					|| (oplus_warp_get_fastchg_to_normal() == true)
-					|| (oplus_warp_get_fastchg_to_warm() == true)
-					|| (oplus_warp_get_fastchg_dummy_started() == true)
-					|| (oplus_warp_get_adapter_update_status() == ADAPTER_FW_NEED_UPDATE)
-					|| (oplus_warp_get_btb_temp_over() == true)) {
+			if ((chip->charger_type == POWER_SUPPLY_TYPE_USB_DCP) || (oplus_warp_get_fastchg_started() == true) ||
+			    (oplus_warp_get_fastchg_to_normal() == true) || (oplus_warp_get_fastchg_to_warm() == true) ||
+			    (oplus_warp_get_fastchg_dummy_started() == true) || (oplus_warp_get_adapter_update_status() == ADAPTER_FW_NEED_UPDATE) ||
+			    (oplus_warp_get_btb_temp_over() == true)) {
 				chip->ac_online = true;
 			} else {
 				chip->ac_online = false;
 			}
 		} else {
-			if ((oplus_warp_get_fastchg_started() == true)
-					|| (oplus_warp_get_fastchg_to_normal() == true)
-					|| (oplus_warp_get_fastchg_to_warm() == true)
-					|| (oplus_warp_get_fastchg_dummy_started() == true)
-					|| (oplus_warp_get_adapter_update_status() == ADAPTER_FW_NEED_UPDATE)
-					|| (oplus_warp_get_btb_temp_over() == true)
-					|| chip->mmi_fastchg == 0) {
+			if ((oplus_warp_get_fastchg_started() == true) || (oplus_warp_get_fastchg_to_normal() == true) ||
+			    (oplus_warp_get_fastchg_to_warm() == true) || (oplus_warp_get_fastchg_dummy_started() == true) ||
+			    (oplus_warp_get_adapter_update_status() == ADAPTER_FW_NEED_UPDATE) || (oplus_warp_get_btb_temp_over() == true) ||
+			    chip->mmi_fastchg == 0) {
 				chip->ac_online = true;
 			} else {
 				chip->ac_online = false;
@@ -2110,9 +2016,7 @@ static int oplus_chg_intf_ac_get_prop(struct oplus_chg_mod *ocm,
 	return 0;
 }
 
-static int oplus_chg_intf_ac_set_prop(struct oplus_chg_mod *ocm,
-			enum oplus_chg_mod_property prop,
-			const union oplus_chg_mod_propval *pval)
+static int oplus_chg_intf_ac_set_prop(struct oplus_chg_mod *ocm, enum oplus_chg_mod_property prop, const union oplus_chg_mod_propval *pval)
 {
 	// struct oplus_chg_device *oplus_dev = oplus_chg_mod_get_drvdata(ocm);
 	struct oplus_chg_chip *chip = oplus_chg_get_chg_struct();
@@ -2133,8 +2037,7 @@ static int oplus_chg_intf_ac_set_prop(struct oplus_chg_mod *ocm,
 	return rc;
 }
 
-static int oplus_chg_intf_ac_prop_is_writeable(struct oplus_chg_mod *ocm,
-				enum oplus_chg_mod_property prop)
+static int oplus_chg_intf_ac_prop_is_writeable(struct oplus_chg_mod *ocm, enum oplus_chg_mod_property prop)
 {
 	switch (prop) {
 	default:
@@ -2155,23 +2058,20 @@ static const struct oplus_chg_mod_desc oplus_chg_intf_ac_mod_desc = {
 	.num_exten_properties = 0,
 	.get_property = oplus_chg_intf_ac_get_prop,
 	.set_property = oplus_chg_intf_ac_set_prop,
-	.property_is_writeable	= oplus_chg_intf_ac_prop_is_writeable,
+	.property_is_writeable = oplus_chg_intf_ac_prop_is_writeable,
 };
 
-static int oplus_chg_intf_ac_event_notifier_call(struct notifier_block *nb,
-		unsigned long val, void *v)
+static int oplus_chg_intf_ac_event_notifier_call(struct notifier_block *nb, unsigned long val, void *v)
 {
 	return NOTIFY_OK;
 }
 
-static int oplus_chg_intf_ac_mod_notifier_call(struct notifier_block *nb,
-		unsigned long val, void *v)
+static int oplus_chg_intf_ac_mod_notifier_call(struct notifier_block *nb, unsigned long val, void *v)
 {
 	return NOTIFY_OK;
 }
 
-static int oplus_chg_intf_ac_changed_notifier_call(struct notifier_block *nb,
-		unsigned long val, void *v)
+static int oplus_chg_intf_ac_changed_notifier_call(struct notifier_block *nb, unsigned long val, void *v)
 {
 	return NOTIFY_OK;
 }
@@ -2186,9 +2086,7 @@ static int oplus_chg_intf_init_mod(struct oplus_chg_device *oplus_dev)
 	ocm_cfg.drv_data = oplus_dev;
 	ocm_cfg.of_node = oplus_dev->dev->of_node;
 
-	oplus_dev->usb_ocm = oplus_chg_mod_register(oplus_dev->dev,
-					   &oplus_chg_intf_usb_mod_desc,
-					   &ocm_cfg);
+	oplus_dev->usb_ocm = oplus_chg_mod_register(oplus_dev->dev, &oplus_chg_intf_usb_mod_desc, &ocm_cfg);
 	if (IS_ERR(oplus_dev->usb_ocm)) {
 		pr_err("Couldn't register usb ocm\n");
 		return PTR_ERR(oplus_dev->usb_ocm);
@@ -2213,9 +2111,7 @@ static int oplus_chg_intf_init_mod(struct oplus_chg_device *oplus_dev)
 		goto reg_usb_changed_notifier_err;
 	}
 
-	oplus_dev->batt_ocm = oplus_chg_mod_register(oplus_dev->dev,
-					   &oplus_chg_intf_batt_mod_desc,
-					   &ocm_cfg);
+	oplus_dev->batt_ocm = oplus_chg_mod_register(oplus_dev->dev, &oplus_chg_intf_batt_mod_desc, &ocm_cfg);
 	if (IS_ERR(oplus_dev->batt_ocm)) {
 		pr_err("Couldn't register batt ocm\n");
 		rc = PTR_ERR(oplus_dev->batt_ocm);
@@ -2242,9 +2138,7 @@ static int oplus_chg_intf_init_mod(struct oplus_chg_device *oplus_dev)
 	}
 
 #ifndef CONFIG_OPLUS_CHG_OOS
-	oplus_dev->ac_ocm = oplus_chg_mod_register(oplus_dev->dev,
-					   &oplus_chg_intf_ac_mod_desc,
-					   &ocm_cfg);
+	oplus_dev->ac_ocm = oplus_chg_mod_register(oplus_dev->dev, &oplus_chg_intf_ac_mod_desc, &ocm_cfg);
 	if (IS_ERR(oplus_dev->ac_ocm)) {
 		pr_err("Couldn't register ac ocm\n");
 		rc = PTR_ERR(oplus_dev->ac_ocm);

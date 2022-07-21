@@ -12,34 +12,32 @@ struct oplus_chg_module {
 	const char *name;
 	size_t magic0;
 	size_t magic1;
-	int (*chg_module_init) (void);
-	void (*chg_module_exit) (void);
+	int (*chg_module_init)(void);
+	void (*chg_module_exit)(void);
 };
 
-#define oplus_chg_module_register(__name)			\
-__attribute__((section(".oplus_chg_module.data"), used))	\
-struct oplus_chg_module __name##_module = {			\
-	.name = #__name,					\
-	.magic0 = OPLUS_CHG_MODEL_MAGIC0,			\
-	.magic1 = OPLUS_CHG_MODEL_MAGIC1,			\
-	.chg_module_init = __name##_init,			\
-	.chg_module_exit = __name##_exit,			\
-}
+#define oplus_chg_module_register(__name)                                                                    \
+	__attribute__((section(".oplus_chg_module.data"), used)) struct oplus_chg_module __name##_module = { \
+		.name = #__name,                                                                             \
+		.magic0 = OPLUS_CHG_MODEL_MAGIC0,                                                            \
+		.magic1 = OPLUS_CHG_MODEL_MAGIC1,                                                            \
+		.chg_module_init = __name##_init,                                                            \
+		.chg_module_exit = __name##_exit,                                                            \
+	}
 
-#define oplus_chg_module_register_null(__name)			\
-__attribute__((section(".oplus_chg_module.data"), used))	\
-struct oplus_chg_module __name##_module = {			\
-	.name = #__name,					\
-	.magic0 = OPLUS_CHG_MODEL_MAGIC0,			\
-	.magic1 = OPLUS_CHG_MODEL_MAGIC1,			\
-	.chg_module_init = NULL,				\
-	.chg_module_exit = NULL,				\
-}
+#define oplus_chg_module_register_null(__name)                                                               \
+	__attribute__((section(".oplus_chg_module.data"), used)) struct oplus_chg_module __name##_module = { \
+		.name = #__name,                                                                             \
+		.magic0 = OPLUS_CHG_MODEL_MAGIC0,                                                            \
+		.magic1 = OPLUS_CHG_MODEL_MAGIC1,                                                            \
+		.chg_module_init = NULL,                                                                     \
+		.chg_module_exit = NULL,                                                                     \
+	}
 
 #else /* MODULE */
 
-#define oplus_chg_module_register(__name)	\
-	late_initcall(__name##_init);		\
+#define oplus_chg_module_register(__name) \
+	late_initcall(__name##_init);     \
 	module_exit(__name##_exit)
 
 #endif /* MODULE */
