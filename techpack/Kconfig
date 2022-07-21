@@ -6,4 +6,6 @@ source "techpack/datarmnet-ext/shs/Kconfig"
 
 source "techpack/datarmnet/core/Kconfig"
 
+source "techpack/oneplus/power/oplus_chg/Kconfig"
+
 endmenu

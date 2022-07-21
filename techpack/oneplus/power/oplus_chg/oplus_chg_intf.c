@@ -22,7 +22,6 @@
 #endif
 #include "charger_ic/oplus_short_ic.h"
 #include <linux/usb/dwc3-msm.h>
-#include <linux/soc/qcom/battery_charger.h>
 
 enum capacity_level {
 	CAPACITY_LEVEL_UNKNOWN,
@@ -51,8 +50,6 @@ struct oplus_chg_device {
 	struct oplus_chg_ic_dev *typec_ic;
 	struct work_struct otg_enable_work;
 	struct work_struct otg_disable_work;
-	struct work_struct adsp_crash_work;
-	struct work_struct adsp_recover_work;
 	struct delayed_work batt_update_work;
 	struct delayed_work connect_check_work;
 	struct delayed_work charger_status_check_work;
@@ -78,7 +75,6 @@ struct oplus_chg_device {
 	bool icon_debounce;
 	int batt_update_count;
 	unsigned int sid_backup;
-	enum oplus_chg_usb_type usb_type_backup;
 	int notify_code;
 };
 
@@ -87,8 +83,6 @@ static ATOMIC_NOTIFIER_HEAD(batt_ocm_notifier);
 #ifndef CONFIG_OPLUS_CHG_OOS
 static ATOMIC_NOTIFIER_HEAD(ac_ocm_notifier);
 #endif /* CONFIG_OPLUS_CHG_OOS */
-
-struct oplus_chg_device *g_oplus_dev;
 
 __maybe_unused static bool is_usb_psy_available(struct oplus_chg_device *dev)
 {
@@ -191,7 +185,7 @@ static int oplus_get_otg_online_status(struct oplus_chg_device *dev, int *otg_on
 	} else {
 		*otg_online = 0;
 	}
-	pr_err("otg_online value is: %d\n", *otg_online);
+	pr_debug("otg_online value is: %d\n", *otg_online);
 
 	return rc;
 }
@@ -267,31 +261,6 @@ static void oplus_otg_disable_work(struct work_struct *work)
 	rc = typec_ic_ops->otg_enable(typec_ic, false);
 }
 
-static void oplus_adsp_crash_work(struct work_struct *work)
-{
-	struct oplus_chg_chip *chip = oplus_chg_get_chg_struct();
-
-	if (!chip) {
-		pr_err("chip is NULL\n");
-		return;
-	}
-
-	if (chip->otg_online)
-		chip->chg_ops->otg_disable();
-}
-
-static void oplus_adsp_recover_work(struct work_struct *work)
-{
-	struct oplus_chg_chip *chip = oplus_chg_get_chg_struct();
-
-	if (!chip) {
-		pr_err("chip is NULL\n");
-		return;
-	}
-
-	chip->chg_ops->otg_enable();
-}
-
 #ifdef OPLUS_CHG_REG_DUMP_ENABLE
 static void oplus_chg_reg_dump_work(struct work_struct *work)
 {
@@ -351,7 +320,6 @@ static void oplus_chg_connect_check_work(struct work_struct *work)
 		oplus_warp_reset_fastchg_after_usbout();
 	}
 	dev->icon_debounce = false;
-	dev->usb_type_backup = OPLUS_CHG_USB_TYPE_UNKNOWN;
 	if (dev->usb_ocm)
 		oplus_chg_mod_changed(dev->usb_ocm);
 	pr_info("icon_debounce: false");
@@ -512,7 +480,6 @@ static int oplus_chg_intf_usb_get_prop(struct oplus_chg_mod *ocm, enum oplus_chg
 	int boot_mode = get_boot_mode();
 
 	if (!chip) {
-		// pr_err("oplus chip is NULL\n");
 		return -ENODEV;
 	}
 
@@ -617,12 +584,7 @@ static int oplus_chg_intf_usb_get_prop(struct oplus_chg_mod *ocm, enum oplus_chg
 				oplus_dev->sid_backup = sid;
 			}
 			if (sid == 0) {
-				if (oplus_dev->icon_debounce) {
-					pval->intval = oplus_dev->usb_type_backup;
-				} else {
-					pval->intval = chip->oplus_usb_type;
-					oplus_dev->usb_type_backup = chip->oplus_usb_type;
-				}
+				pval->intval = chip->oplus_usb_type;
 			} else {
 				switch (sid_to_adapter_chg_type(sid)) {
 				case CHARGER_TYPE_UNKNOWN:
@@ -674,7 +636,7 @@ static int oplus_chg_intf_usb_get_prop(struct oplus_chg_mod *ocm, enum oplus_chg
 		pval->intval = chip->disconnect_vbus;
 		break;
 	case OPLUS_CHG_PROP_OTG_SWITCH:
-		pval->intval = chip->otg_online;
+		pval->intval = chip->otg_switch;
 		break;
 #ifdef OPLUS_CHG_REG_DUMP_ENABLE
 	case OPLUS_CHG_PROP_REG_DUMP:
@@ -695,7 +657,7 @@ static int oplus_chg_intf_usb_get_prop(struct oplus_chg_mod *ocm, enum oplus_chg
 			pval->intval = chip->chg_ops->get_charger_subtype();
 #ifdef OPLUS_CHG_OP_DEF
 		if (chip->is_oplus_svid) {
-			pval->intval = CHARGER_SUBTYPE_FASTCHG_SWARP;
+			pval->intval = oplus_warp_get_fast_chg_type();
 		} else if (!chip->svid_verified && (pval->intval == CHARGER_SUBTYPE_PD)) {
 			pval->intval = CHARGER_SUBTYPE_DEFAULT;
 		}
@@ -704,10 +666,14 @@ static int oplus_chg_intf_usb_get_prop(struct oplus_chg_mod *ocm, enum oplus_chg
 		if (is_wls_ocm_available(oplus_dev) && (pval->intval == 0)) {
 			rc = oplus_chg_mod_get_property(oplus_dev->wls_ocm, OPLUS_CHG_PROP_WLS_TYPE, &temp_val);
 			if (rc == 0) {
-				if ((temp_val.intval == OPLUS_CHG_WLS_WARP) || (temp_val.intval == OPLUS_CHG_WLS_SWARP)) {
+				if ((temp_val.intval == OPLUS_CHG_WLS_WARP) || (temp_val.intval == OPLUS_CHG_WLS_SWARP) ||
+				    (temp_val.intval == OPLUS_CHG_WLS_PD_65W)) {
 					rc = oplus_chg_mod_get_property(oplus_dev->wls_ocm, OPLUS_CHG_PROP_ADAPTER_TYPE, &temp_val);
-					if (rc == 0)
+					if (rc == 0) {
+						if (temp_val.intval == WLS_ADAPTER_TYPE_PD_65W)
+							temp_val.intval = WLS_ADAPTER_TYPE_SWARP;
 						pval->intval = temp_val.intval;
+					}
 				}
 			}
 		}
@@ -745,7 +711,6 @@ static int oplus_chg_intf_usb_set_prop(struct oplus_chg_mod *ocm, enum oplus_chg
 	int rc = 0;
 
 	if (!chip) {
-		// pr_err("oplus chip is NULL\n");
 		return -ENODEV;
 	}
 
@@ -806,8 +771,8 @@ static int oplus_chg_intf_usb_set_prop(struct oplus_chg_mod *ocm, enum oplus_chg
 		pr_err("%s Vbus!\n", (bool)pval->intval ? "Disconnect" : "Connect");
 		break;
 	case OPLUS_CHG_PROP_OTG_SWITCH:
-		chip->chg_ops->otg_switch((bool)pval->intval);
-		pr_err("%s otg switch!\n", (bool)pval->intval ? "Enable" : "Disable");
+		chip->otg_switch = (bool)pval->intval && chip->chg_ops->otg_set_switch((bool)pval->intval);
+		pr_err("%s set otg switch!\n", chip->otg_switch ? "Enable" : "Disable");
 		break;
 #ifndef CONFIG_OPLUS_CHG_OOS
 	case OPLUS_CHG_PROP_USB_STATUS:
@@ -963,7 +928,6 @@ static int oplus_chg_intf_usb_mod_notifier_call(struct notifier_block *nb, unsig
 	int hw_detect = 0;
 
 	if (!chip) {
-		// pr_err("oplus chip is NULL\n");
 		return NOTIFY_BAD;
 	}
 
@@ -1009,9 +973,8 @@ static int oplus_chg_intf_usb_mod_notifier_call(struct notifier_block *nb, unsig
 					chip->reconnect_count = 0;
 					chip->norchg_reconnect_count = 0;
 					op_dev->icon_debounce = false;
-					op_dev->sid_backup = 0;
-					op_dev->usb_type_backup = OPLUS_CHG_USB_TYPE_UNKNOWN;
 					pr_info("sid_backup clean\n");
+					op_dev->sid_backup = 0;
 					oplus_warp_reset_fastchg_after_usbout();
 				}
 				atomic_set(&op_dev->usb_online, 0);
@@ -1034,7 +997,6 @@ static int oplus_chg_intf_usb_mod_notifier_call(struct notifier_block *nb, unsig
 			if (atomic_read(&op_dev->usb_present) == 0) {
 				atomic_set(&op_dev->usb_present, 1);
 				if (op_dev->usb_ocm) {
-					// oplus_chg_global_event(op_dev->usb_ocm, val);
 					oplus_chg_mod_changed(op_dev->usb_ocm);
 				}
 				op_dev->batt_update_count = 0;
@@ -1058,13 +1020,12 @@ static int oplus_chg_intf_usb_mod_notifier_call(struct notifier_block *nb, unsig
 					op_dev->icon_debounce = true;
 					if (chip->reconnect_count == 0)
 						chip->norchg_reconnect_count++;
-					schedule_delayed_work(&op_dev->connect_check_work, msecs_to_jiffies(1000));
+					schedule_delayed_work(&op_dev->connect_check_work, msecs_to_jiffies(2000));
 				} else {
 					chip->reconnect_count = 0;
 					chip->norchg_reconnect_count = 0;
 					op_dev->icon_debounce = false;
 					op_dev->sid_backup = 0;
-					op_dev->usb_type_backup = OPLUS_CHG_USB_TYPE_UNKNOWN;
 				}
 				atomic_set(&op_dev->usb_present, 0);
 				chip->charger_exist_delay = false;
@@ -1131,35 +1092,12 @@ static void oplus_dwc3_msm_notify_event(enum oplus_dwc3_notify_event event)
 		pr_info("chip->charger_type[%d]\n", chip->charger_type);
 		if (chip->svid_verified == true || chip->charger_type == POWER_SUPPLY_TYPE_USB_CDP || chip->charger_type == POWER_SUPPLY_TYPE_USB) {
 			chip->usb_enum_status = true;
+			chip->chg_ops->update_usb_type();
 			pr_info("Enumeration done\n");
 		}
 		break;
 	default:
 		pr_info("other dwc3 event received\n");
-		break;
-	}
-}
-
-static void oplus_subsys_msm_notify_event(enum oplus_subsys_notify_event event)
-{
-	struct oplus_chg_device *op_dev = g_oplus_dev;
-
-	if (!op_dev) {
-		pr_err("oplus_chg_device is null\n");
-		return;
-	}
-
-	switch (event) {
-	case SUBSYS_EVENT_ADSP_CRASH:
-		pr_info("adsp crash\n");
-		schedule_work(&op_dev->adsp_crash_work);
-		break;
-	case SUBSYS_EVENT_ADSP_RECOVER:
-		pr_info("adsp recover\n");
-		schedule_work(&op_dev->adsp_recover_work);
-		break;
-	default:
-		pr_info("other subsys event received\n");
 		break;
 	}
 }
@@ -1307,7 +1245,7 @@ static enum oplus_chg_mod_property oplus_chg_intf_batt_props[] = {
 	OPLUS_CHG_PROP_SHORT_IC_VOLT_THRESH,
 	OPLUS_CHG_PROP_SHORT_IC_OTP_VALUE,
 #endif
-	OPLUS_CHG_PROP_WARPCHG_ING,
+	OPLUS_CHG_PROP_VOOCCHG_ING,
 	OPLUS_CHG_PROP_SHIP_MODE,
 	OPLUS_CHG_PROP_CHARGE_NOW,
 #endif /* CONFIG_OPLUS_CHG_OOS */
@@ -1388,7 +1326,6 @@ static int oplus_chg_intf_batt_get_prop(struct oplus_chg_mod *ocm, enum oplus_ch
 	int rc = 0;
 
 	if (!chip) {
-		// pr_err("oplus chip is NULL\n");
 		return -ENODEV;
 	}
 
@@ -1471,10 +1408,18 @@ static int oplus_chg_intf_batt_get_prop(struct oplus_chg_mod *ocm, enum oplus_ch
 		}
 		break;
 	case OPLUS_CHG_PROP_CAPACITY:
-		if (oplus_dev->soc_debug_mode)
+		if (oplus_dev->soc_debug_mode) {
 			pval->intval = oplus_dev->debug_soc;
-		else
-			pval->intval = oplus_chg_get_ui_soc();
+		} else {
+			if (chip->warp_show_ui_soc_decimal == true && chip->decimal_control) {
+				pval->intval = (chip->ui_soc_integer + chip->ui_soc_decimal) / 1000;
+			} else {
+				pval->intval = chip->ui_soc;
+			}
+			if (pval->intval > 100) {
+				pval->intval = 100;
+			}
+		}
 		break;
 	case OPLUS_CHG_PROP_REAL_CAPACITY:
 		if (oplus_dev->soc_debug_mode)
@@ -1529,8 +1474,8 @@ static int oplus_chg_intf_batt_get_prop(struct oplus_chg_mod *ocm, enum oplus_ch
 		pval->intval = 3000000;
 		break;
 	case OPLUS_CHG_PROP_CHARGE_COUNTER:
-		//pval->intval = chip->chg_ops->oplus_chg_get_charge_counter();
-		pval->intval = 2200000; //BSP,temp fix xts
+
+		pval->intval = 2200000;
 		break;
 	case OPLUS_CHG_PROP_CHARGE_FULL_DESIGN:
 		pval->intval = chip->batt_fcc * 1000;
@@ -1542,11 +1487,7 @@ static int oplus_chg_intf_batt_get_prop(struct oplus_chg_mod *ocm, enum oplus_ch
 		pval->intval = 5000;
 		break;
 	case OPLUS_CHG_PROP_TIME_TO_FULL_NOW:
-		rc = oplus_gauge_get_batt_ttf();
-		if (rc < 0)
-			pval->intval = -1;
-		else
-			pval->intval = rc;
+		pval->intval = 5000;
 		break;
 	case OPLUS_CHG_PROP_TIME_TO_EMPTY_AVG:
 		pval->intval = 5000;
@@ -1673,10 +1614,15 @@ static int oplus_chg_intf_batt_get_prop(struct oplus_chg_mod *ocm, enum oplus_ch
 		pval->intval = oplus_short_ic_get_otp_error_value(chip);
 		break;
 #endif
-	case OPLUS_CHG_PROP_WARPCHG_ING:
+	case OPLUS_CHG_PROP_VOOCCHG_ING:
 		pval->intval = oplus_warp_get_fastchg_ing();
-		if (is_wls_ocm_available(oplus_dev) && !pval->intval)
-			oplus_chg_mod_get_property(oplus_dev->wls_ocm, OPLUS_CHG_PROP_FASTCHG_STATUS, pval);
+		if (is_wls_ocm_available(oplus_dev) && !pval->intval) {
+			rc = oplus_chg_mod_get_property(oplus_dev->wls_ocm, OPLUS_CHG_PROP_FASTCHG_STATUS, pval);
+			if (rc < 0) {
+				rc = 0;
+				pval->intval = 0;
+			}
+		}
 		break;
 	case OPLUS_CHG_PROP_SHIP_MODE:
 		pval->intval = chip->enable_shipmode;
@@ -1685,13 +1631,6 @@ static int oplus_chg_intf_batt_get_prop(struct oplus_chg_mod *ocm, enum oplus_ch
 		pval->intval = chip->charger_volt;
 		if ((oplus_warp_get_fastchg_started() == true) && (chip->vbatt_num == 2) && (oplus_warp_get_fast_chg_type() != CHARGER_SUBTYPE_FASTCHG_WARP)) {
 			pval->intval = 10000;
-		}
-		if (is_wls_ocm_available(oplus_dev)) {
-			(void)oplus_chg_mod_get_property(oplus_dev->wls_ocm, OPLUS_CHG_PROP_TRX_ONLINE, &temp_val);
-			if (!!temp_val.intval) {
-				rc = oplus_chg_mod_get_property(oplus_dev->wls_ocm, OPLUS_CHG_PROP_TRX_VOLTAGE_NOW, &temp_val);
-				pval->intval = temp_val.intval / 1000;
-			}
 		}
 		break;
 #endif /* CONFIG_OPLUS_CHG_OOS */
@@ -1715,7 +1654,6 @@ static int oplus_chg_intf_batt_set_prop(struct oplus_chg_mod *ocm, enum oplus_ch
 	int rc = 0;
 
 	if (!chip) {
-		// pr_err("oplus chip is NULL\n");
 		return -ENODEV;
 	}
 
@@ -1798,7 +1736,7 @@ static int oplus_chg_intf_batt_set_prop(struct oplus_chg_mod *ocm, enum oplus_ch
 #ifdef CONFIG_OPLUS_SHORT_USERSPACE
 	case OPLUS_CHG_PROP_SHORT_C_LIMIT_CHG:
 		chip->short_c_batt.limit_chg = !!pval->intval;
-		//for userspace logic
+
 		if (!!pval->intval == false)
 			chip->short_c_batt.is_switch_on = 0;
 		break;
@@ -1918,8 +1856,6 @@ static int oplus_chg_intf_batt_event_notifier_call(struct notifier_block *nb, un
 
 static int oplus_chg_intf_batt_mod_notifier_call(struct notifier_block *nb, unsigned long val, void *v)
 {
-	// struct oplus_chg_device *op_dev = container_of(nb, struct oplus_chg_device, wls_mod_nb);
-
 	switch (val) {
 	case OPLUS_CHG_EVENT_LCD_ON:
 		pr_info("lcd on\n");
@@ -1970,22 +1906,20 @@ static enum oplus_chg_mod_property oplus_chg_intf_ac_uevent_props[] = {
 
 static int oplus_chg_intf_ac_get_prop(struct oplus_chg_mod *ocm, enum oplus_chg_mod_property prop, union oplus_chg_mod_propval *pval)
 {
-	// struct oplus_chg_device *oplus_dev = oplus_chg_mod_get_drvdata(ocm);
 	struct oplus_chg_chip *chip = oplus_chg_get_chg_struct();
 	int rc = 0;
 
 	if (!chip) {
-		// pr_err("oplus chip is NULL\n");
 		return -ENODEV;
 	}
 
 	switch (prop) {
 	case OPLUS_CHG_PROP_ONLINE:
 		if (chip->charger_exist) {
-			if ((chip->charger_type == POWER_SUPPLY_TYPE_USB_DCP) || (oplus_warp_get_fastchg_started() == true) ||
-			    (oplus_warp_get_fastchg_to_normal() == true) || (oplus_warp_get_fastchg_to_warm() == true) ||
-			    (oplus_warp_get_fastchg_dummy_started() == true) || (oplus_warp_get_adapter_update_status() == ADAPTER_FW_NEED_UPDATE) ||
-			    (oplus_warp_get_btb_temp_over() == true)) {
+			if ((chip->charger_type == POWER_SUPPLY_TYPE_USB_DCP) || (chip->charger_type == POWER_SUPPLY_TYPE_UNKNOWN) ||
+			    (oplus_warp_get_fastchg_started() == true) || (oplus_warp_get_fastchg_to_normal() == true) ||
+			    (oplus_warp_get_fastchg_to_warm() == true) || (oplus_warp_get_fastchg_dummy_started() == true) ||
+			    (oplus_warp_get_adapter_update_status() == ADAPTER_FW_NEED_UPDATE) || (oplus_warp_get_btb_temp_over() == true)) {
 				chip->ac_online = true;
 			} else {
 				chip->ac_online = false;
@@ -2018,12 +1952,10 @@ static int oplus_chg_intf_ac_get_prop(struct oplus_chg_mod *ocm, enum oplus_chg_
 
 static int oplus_chg_intf_ac_set_prop(struct oplus_chg_mod *ocm, enum oplus_chg_mod_property prop, const union oplus_chg_mod_propval *pval)
 {
-	// struct oplus_chg_device *oplus_dev = oplus_chg_mod_get_drvdata(ocm);
 	struct oplus_chg_chip *chip = oplus_chg_get_chg_struct();
 	int rc = 0;
 
 	if (!chip) {
-		// pr_err("oplus chip is NULL\n");
 		return -ENODEV;
 	}
 
@@ -2165,8 +2097,6 @@ static int oplus_chg_intf_init_mod(struct oplus_chg_device *oplus_dev)
 	}
 #endif /* CONFIG_OPLUS_CHG_OOS */
 
-	INIT_WORK(&oplus_dev->adsp_crash_work, oplus_adsp_crash_work);
-	INIT_WORK(&oplus_dev->adsp_recover_work, oplus_adsp_recover_work);
 	INIT_WORK(&oplus_dev->otg_enable_work, oplus_otg_enable_work);
 	INIT_WORK(&oplus_dev->otg_disable_work, oplus_otg_disable_work);
 	return 0;
@@ -2219,8 +2149,6 @@ static int oplus_chg_intf_probe(struct platform_device *pdev)
 
 	of_platform_populate(oplus_dev->dev->of_node, NULL, NULL, oplus_dev->dev);
 	oplus_dwc3_set_notifier(&oplus_dwc3_msm_notify_event);
-	oplus_subsys_set_notifier(&oplus_subsys_msm_notify_event);
-	g_oplus_dev = oplus_dev;
 
 	INIT_DELAYED_WORK(&oplus_dev->batt_update_work, oplus_chg_batt_update_work);
 	INIT_DELAYED_WORK(&oplus_dev->connect_check_work, oplus_chg_connect_check_work);

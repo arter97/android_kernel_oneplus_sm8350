@@ -73,7 +73,7 @@ struct oplus_chg_comm_config {
 	int32_t batt_uv_mv;
 	int32_t batt_ov_mv;
 	int32_t batt_oc_ma;
-	int32_t batt_ovd_mv; //Double cell pressure difference is too large;
+	int32_t batt_ovd_mv;
 	int32_t batt_temp_thr[BATT_TEMP_INVALID - 1];
 	int32_t vbatmax_mv[BATT_TEMP_INVALID];
 	int32_t ffc_temp_thr[FFC_TEMP_INVALID - 1];

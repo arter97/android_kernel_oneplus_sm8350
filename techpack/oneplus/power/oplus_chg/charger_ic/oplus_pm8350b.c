@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+
 /*
  * Copyright (C) 2020-2020 Oplus. All rights reserved.
  */
@@ -394,7 +394,7 @@ static int oplus_chg_typec_driver_probe(struct platform_device *pdev)
 		goto reg_ic_err;
 	}
 	chip->ic_dev = devm_oplus_chg_ic_register(chip->dev, node->name, ic_index);
-	if (rc < 0) {
+	if (chip->ic_dev == NULL) {
 		rc = -ENODEV;
 		pr_err("register %s error\n", node->name);
 		goto reg_ic_err;

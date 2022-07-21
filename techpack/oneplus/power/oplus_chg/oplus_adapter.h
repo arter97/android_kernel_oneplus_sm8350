@@ -3,9 +3,6 @@
  * Copyright (C) 2018-2020 Oplus. All rights reserved.
  */
 
-//#ifndef _OPLUS_ADAPTER_H_
-//#define _OPLUS_ADAPTER_H_
-
 #include <linux/workqueue.h>
 #include <linux/version.h>
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 0))
@@ -16,7 +13,7 @@
 #ifdef CONFIG_OPLUS_CHG_OOS
 #include <linux/oem/project_info.h>
 #else
-#include <soc/oplus/device_info.h>
+
 #endif
 #include <linux/firmware.h>
 
@@ -48,5 +45,3 @@ int oplus_warp_get_warp_switch_val(void);
 bool oplus_warp_check_chip_is_null(void);
 void oplus_adapter_init(struct oplus_adapter_chip *chip);
 bool oplus_adapter_check_chip_is_null(void);
-
-//#endif /* _OPLUS_ADAPTER_H_ */

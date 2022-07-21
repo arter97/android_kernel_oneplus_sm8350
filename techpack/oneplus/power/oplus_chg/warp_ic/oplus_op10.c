@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+
 /*
  * Copyright (C) 2018-2020 Oplus. All rights reserved.
  */
@@ -22,17 +22,13 @@
 #include <linux/platform_device.h>
 #include <asm/atomic.h>
 
-//#include <linux/xlog.h>
-//#include <upmu_common.h>
-//#include <mt-plat/mtk_gpio.h>
 #include <linux/dma-mapping.h>
 
-//#include <mt-plat/battery_meter.h>
 #include <linux/module.h>
 #ifdef CONFIG_OPLUS_CHG_OOS
 #include <linux/oem/project_info.h>
 #else
-#include <soc/oplus/device_info.h>
+
 #endif
 
 #else
@@ -55,7 +51,7 @@
 #ifdef CONFIG_OPLUS_CHG_OOS
 #include <linux/oem/project_info.h>
 #else
-#include <soc/oplus/device_info.h>
+
 #endif
 #endif
 #include "oplus_warp_fw.h"
@@ -235,8 +231,8 @@ static int check_flash_idle(struct oplus_warp_chip *chip, u32 try_count)
 			chg_debug("read CMD_DEV_STATUS error:%0x\n", rx_buf);
 			goto i2c_err;
 		}
-		//chg_debug("the rx_buf=%0x\n", rx_buf);
-		if ((rx_buf & 0x01) == 0x0) { // check OP10 flash is idle
+
+		if ((rx_buf & 0x01) == 0x0) {
 			return 0;
 		}
 		try_count--;
@@ -259,7 +255,7 @@ static int check_crc32_available(struct oplus_warp_chip *chip, u32 try_count)
 			chg_debug("read CMD_DEV_STATUS error:%0x\n", rx_buf);
 			goto i2c_err;
 		}
-		//chg_debug("the rx_buf=%0x\n", rx_buf);
+
 		if ((rx_buf & 0x02) == 0x2) {
 			return 0;
 		}
@@ -310,6 +306,7 @@ static bool op10_fw_update_check(struct oplus_warp_chip *chip)
 	if (ret == 1)
 		return false;
 
+	/* chip version */
 	ret = oplus_warp_i2c_read(chip->client, CMD_GET_VERSION, 1, rx_buf);
 	if (ret < 0) {
 		chg_err("read CMD_GET_VERSION error:%d\n", ret);
@@ -327,6 +324,7 @@ static bool op10_fw_update_check(struct oplus_warp_chip *chip)
 		}
 	}
 
+	/*read fw status*/
 	rx_buf[0] = fw_status_address & 0xFF;
 	rx_buf[1] = (fw_status_address >> 8) & 0xFF;
 	oplus_warp_i2c_write(chip->client, CMD_SET_ADDR, 2, rx_buf);
@@ -343,6 +341,7 @@ static bool op10_fw_update_check(struct oplus_warp_chip *chip)
 			return false;
 	}
 
+	/*noticefy OP10 to update the CRC32 and check it*/
 	*((u32 *)rx_buf) = chip->fw_data_count;
 	oplus_warp_i2c_write(chip->client, CMD_SET_CKSM_LEN, 4, rx_buf);
 	msleep(5);
@@ -351,6 +350,7 @@ static bool op10_fw_update_check(struct oplus_warp_chip *chip)
 		return false;
 	}
 
+	/* check crc32 is correct */
 	memset(rx_buf, 0, 4);
 	oplus_warp_i2c_read(chip->client, CMD_GET_CRC32, 4, rx_buf);
 	new_fw_crc32 = crc32_sram(chip);
@@ -360,14 +360,17 @@ static bool op10_fw_update_check(struct oplus_warp_chip *chip)
 		return false;
 	}
 
+	/* fw update success,jump to new fw */
+	/*oplus_warp_i2c_read(chip->client, CMD_USER_BOOT, 1, rx_buf);*/
+
 	return true;
 }
 
 #ifdef OPLUS_CHG_DEBUG
 static int op10_fw_update_by_buf(struct oplus_warp_chip *chip, u8 *fw_buf, u32 fw_size)
 {
-	u32 check_status_try_count = 100; //try 2s
-	u32 write_done_try_count = 500; //max try 10s
+	u32 check_status_try_count = 100;
+	u32 write_done_try_count = 500;
 	u8 rx_buf[4] = { 0 };
 	u32 fw_len = 0, fw_offset = 0;
 	u32 write_len = 0, write_len_temp = 0, chunk_index = 0, chunk_len = 0;
@@ -375,6 +378,7 @@ static int op10_fw_update_by_buf(struct oplus_warp_chip *chip, u8 *fw_buf, u32 f
 	int rc = 0;
 
 	chg_debug("start op_fw_update now, fw length is: %d\n", fw_size);
+	/* chip erase */
 	rc = oplus_warp_i2c_read(chip->client, CMD_CHIP_ERASE, 1, rx_buf);
 	if (rc < 0) {
 		chg_debug("read CMD_CHIP_ERASE error:%d\n", rc);
@@ -417,7 +421,6 @@ static int op10_fw_update_by_buf(struct oplus_warp_chip *chip, u8 *fw_buf, u32 f
 			goto update_fw_err;
 		}
 
-		//chg_debug("current write address: %d,to bw write length:%d\n", fw_offset, write_len);
 		fw_offset += write_len;
 		fw_len -= write_len;
 	}
@@ -457,8 +460,8 @@ update_fw_err:
 
 static int op10_fw_update(struct oplus_warp_chip *chip)
 {
-	u32 check_status_try_count = 100; //try 2s
-	u32 write_done_try_count = 500; //max try 10s
+	u32 check_status_try_count = 100;
+	u32 write_done_try_count = 500;
 	u8 rx_buf[4] = { 0 };
 	u32 fw_len = 0, fw_offset = 0;
 	u32 write_len = 0, write_len_temp = 0, chunk_index = 0, chunk_len = 0;
@@ -467,6 +470,7 @@ static int op10_fw_update(struct oplus_warp_chip *chip)
 
 	chg_debug("start op_fw_update now, fw length is: %d\n", chip->fw_data_count);
 
+	/* chip erase */
 	rc = oplus_warp_i2c_read(chip->client, CMD_CHIP_ERASE, 1, rx_buf);
 	if (rc < 0) {
 		chg_debug("read CMD_CHIP_ERASE error:%d\n", rc);
@@ -509,7 +513,6 @@ static int op10_fw_update(struct oplus_warp_chip *chip)
 			goto update_fw_err;
 		}
 
-		//chg_debug("current write address: %d,to bw write length:%d\n", fw_offset, write_len);
 		fw_offset += write_len;
 		fw_len -= write_len;
 	}
@@ -548,12 +551,12 @@ update_fw_err:
 
 static int op10_get_fw_old_version(struct oplus_warp_chip *chip, u8 version_info[])
 {
-	u8 rx_buf[4] = { 0 }; //i = 0;
+	u8 rx_buf[4] = { 0 };
 	u32 fw_version_address = 0;
-	u32 check_status_try_count = 100; //try 2s
+	u32 check_status_try_count = 100;
 	u32 fw_len_address = 0x4000 - 8;
 
-	memset(version_info, 0xFF, FW_VERSION_LEN); //clear version info at first
+	memset(version_info, 0xFF, FW_VERSION_LEN);
 
 	if (check_flash_idle(chip, check_status_try_count) == -1) {
 		chg_debug("cannot get the fw old version because of the device is always busy!\n");
@@ -612,7 +615,6 @@ static int op10_get_fw_verion_from_ic(struct oplus_warp_chip *chip)
 		chip->mcu_boot_by_gpio = false;
 		opchg_set_clock_sleep(chip);
 
-		//first:set address
 		rc = oplus_warp_i2c_write(chip->client, 0x01, 2, &addr_buf[0]);
 		if (rc < 0) {
 			chg_err(" i2c_write 0x01 error\n");
@@ -620,7 +622,7 @@ static int op10_get_fw_verion_from_ic(struct oplus_warp_chip *chip)
 		}
 		msleep(2);
 		oplus_warp_i2c_read(chip->client, 0x03, 4, data_buf);
-		//strcpy(ver,&data_buf[0]);
+
 		chg_err("data:%x %x %x %x, fw_ver:%x\n", data_buf[0], data_buf[1], data_buf[2], data_buf[3], data_buf[0]);
 
 		msleep(5);
@@ -667,9 +669,9 @@ static int op10_fw_check_then_recover(struct oplus_warp_chip *chip)
 				opchg_set_clock_active(chip);
 				chip->mcu_boot_by_gpio = true;
 				msleep(10);
-				//chip->mcu_update_ing = false;
+
 				opchg_set_reset_active_force(chip);
-				//chip->mcu_update_ing = true;
+
 				msleep(2500);
 				chip->mcu_boot_by_gpio = false;
 				opchg_set_clock_sleep(chip);
@@ -999,7 +1001,7 @@ static int op10_driver_probe(struct i2c_client *client, const struct i2c_device_
 		chip->firmware_data = op10_fw_data_4400_warp_ffc_15c;
 		chip->fw_data_count = sizeof(op10_fw_data_4400_warp_ffc_15c);
 		chip->fw_data_version = op10_fw_data_4400_warp_ffc_15c[chip->fw_data_count - 4];
-	} else { //default
+	} else {
 		chip->firmware_data = op10_fw_data_4400_warp_ffc_15c;
 		chip->fw_data_count = sizeof(op10_fw_data_4400_warp_ffc_15c);
 		chip->fw_data_version = op10_fw_data_4400_warp_ffc_15c[chip->fw_data_count - 4];
@@ -1137,7 +1139,7 @@ static int op10_driver_probe(struct i2c_client *client, const struct i2c_device_
 		asic->firmware_data = op10_fw_data_4400_warp_ffc_15c;
 		asic->fw_data_count = sizeof(op10_fw_data_4400_warp_ffc_15c);
 		asic->fw_data_version = op10_fw_data_4400_warp_ffc_15c[asic->fw_data_count - 4];
-	} else { //default
+	} else {
 		asic->firmware_data = op10_fw_data_4400_warp_ffc_15c;
 		asic->fw_data_count = sizeof(op10_fw_data_4400_warp_ffc_15c);
 		asic->fw_data_version = op10_fw_data_4400_warp_ffc_15c[asic->fw_data_count - 4];
@@ -1169,6 +1171,7 @@ static int op10_driver_probe(struct i2c_client *client, const struct i2c_device_
 		asic->firmware_data = op10_fw_data_4450_warp_ffc_5v6a_4bit;
 		asic->fw_data_count = sizeof(op10_fw_data_4450_warp_ffc_5v6a_4bit);
 		asic->fw_data_version = op10_fw_data_4450_warp_ffc_5v6a_4bit[asic->fw_data_count - 4];
+		break;
 	case WARP_FW_TYPE_OP10_4500_WARP_FFC_6300MA_LEMONADE:
 		asic->firmware_data = op10_fw_data_4500_swarp_ffc_6300mA_lemonade;
 		asic->fw_data_count = sizeof(op10_fw_data_4500_swarp_ffc_6300mA_lemonade);

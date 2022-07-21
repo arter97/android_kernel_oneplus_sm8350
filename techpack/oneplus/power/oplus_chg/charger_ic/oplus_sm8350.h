@@ -60,7 +60,7 @@
 
 /* Generic definitions */
 #define MAX_STR_LEN 128
-#define BC_WAIT_TIME_MS 2000 //sjc 1K->2K
+#define BC_WAIT_TIME_MS 2000
 #define WLS_FW_PREPARE_TIME_MS 300
 #define WLS_FW_WAIT_TIME_MS 500
 #define WLS_FW_BUF_SIZE 128
@@ -145,6 +145,7 @@ enum usb_property_id {
 	USB_PROP_MAX,
 };
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
 typedef enum _FASTCHG_STATUS {
 	FAST_NOTIFY_UNKNOW,
 	FAST_NOTIFY_PRESENT,
@@ -157,6 +158,7 @@ typedef enum _FASTCHG_STATUS {
 	FAST_NOTIFY_DUMMY_START,
 	FAST_NOTIFY_ADAPTER_COPYCAT,
 } FASTCHG_STATUS;
+#endif
 
 enum wireless_property_id {
 	WLS_ONLINE,
@@ -286,6 +288,7 @@ struct battery_chg_dev {
 	int num_thermal_levels;
 	atomic_t state;
 	struct work_struct subsys_up_work;
+	struct work_struct usb_type_work;
 	int fake_soc;
 	bool block_tx;
 	bool ship_mode_en;
@@ -301,12 +304,15 @@ struct battery_chg_dev {
 	struct delayed_work connector_check_work;
 	struct delayed_work connector_recovery_work;
 	struct delayed_work charge_status_check_work;
+	struct oplus_chg_iio iio;
 	struct delayed_work check_charger_type_work;
 	struct delayed_work usb_disconnect_work;
-	struct oplus_chg_iio iio;
 #ifdef OPLUS_CHG_OP_DEF
 	struct iio_channel *op_vph_vol_chan;
 	int vph_vol;
+	struct regulator *vreg_ldo;
+	int vreg_default_vol;
+	int current_uA;
 #endif
 	int connector_voltage;
 	int filter_count;
@@ -323,7 +329,6 @@ struct battery_chg_dev {
 	bool otg_prohibited;
 	bool wls_boost_soft_start;
 	int wls_set_boost_vol;
-
 	struct regmap *pm8350_regmap;
 };
 

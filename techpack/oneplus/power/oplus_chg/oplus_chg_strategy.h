@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+
 /*
  * Copyright (C) 2020-2020 Oplus. All rights reserved.
  */
@@ -10,12 +10,12 @@
 #include <linux/of.h>
 
 struct oplus_chg_strategy_data {
-	int32_t cool_temp;
-	int32_t heat_temp;
-	int32_t curr_data;
-	int32_t heat_next_index;
-	int32_t cool_next_index;
-} __attribute__((packed));
+	int cool_temp;
+	int heat_temp;
+	int curr_data;
+	int heat_next_index;
+	int cool_next_index;
+};
 
 struct oplus_chg_strategy_temp_region {
 	int index;

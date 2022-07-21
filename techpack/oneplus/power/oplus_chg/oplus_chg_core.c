@@ -82,7 +82,7 @@ static void oplus_chg_mod_changed_work(struct work_struct *work)
 		ocm->changed = false;
 		spin_unlock_irqrestore(&ocm->changed_lock, flags);
 		atomic_notifier_call_chain(&oplus_chg_changed_notifier, OPLUS_CHG_EVENT_CHANGED, ocm);
-		//kobject_uevent(&ocm->dev.kobj, KOBJ_CHANGE);
+
 		spin_lock_irqsave(&ocm->changed_lock, flags);
 	}
 
@@ -578,5 +578,5 @@ subsys_initcall(oplus_chg_class_init);
 module_exit(oplus_chg_class_exit);
 
 MODULE_DESCRIPTION("oplus charge management subsystem");
-MODULE_AUTHOR("OnePlus");
+MODULE_AUTHOR("Nick Hu <nick.hu@oneplus.com>");
 MODULE_LICENSE("GPL");

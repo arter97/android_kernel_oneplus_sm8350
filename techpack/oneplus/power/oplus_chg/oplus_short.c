@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+
 /*
  * Copyright (C) 2018-2020 Oplus. All rights reserved.
  */
@@ -585,17 +585,6 @@ static int oplus_short_c_batt_get_average_vbatt_mv(struct oplus_chg_chip *chip, 
 		}
 		valid_vbatt_count++;
 	}
-#if 0
-	if (valid_vbatt_count == ARRAY_SIZE(buf)) {
-		avg_vbatt_mv = 0;
-		sort(buf, ARRAY_SIZE(buf), sizeof(buf[0]), oplus_cmpint, NULL);
-		for (i = 3; i < ARRAY_SIZE(buf) - 3; i++)
-			avg_vbatt_mv = avg_vbatt_mv + buf[i];
-		valid_vbatt_count = 0;
-	}
-
-	return avg_vbatt_mv / 4;
-#else
 	/* 2017-12-18 use the max value instead of avg value */
 	if (valid_vbatt_count == ARRAY_SIZE(buf)) {
 		avg_vbatt_mv = 0;
@@ -605,7 +594,6 @@ static int oplus_short_c_batt_get_average_vbatt_mv(struct oplus_chg_chip *chip, 
 	}
 
 	return avg_vbatt_mv;
-#endif
 }
 
 #define D_SHORTC_HW_CNT 3
@@ -669,7 +657,7 @@ void oplus_chg_short_c_ic_check(struct oplus_chg_chip *chip)
 }
 
 #define INPUT_LIMIT_MA_THRESHOLD 900
-//#define CV_VBATT_MV_THRESHOLD	4350
+
 #define CV_IBATT_MA_THRESHOLD 300
 #define CV_PRE_CHECK_COUNT 5
 #define CV_DELTA_IBATT_COUNT 10
@@ -684,17 +672,13 @@ void oplus_chg_short_c_ic_check(struct oplus_chg_chip *chip)
 #define WARM_TEMP_THRESHOLD 430
 #define DELTA_TEMP_THRESHOLD 50
 
-//#define FULL_TIMER2_30MIN_COUNT	360 //1800/5
-//#define FULL_TIMER3_20MIN_COUNT	240 //1200/5
-//#define FULL_TIMER4_40MIN_COUNT	480 //2400/5
-
 #define INVALID_TEMP INVALID_DATA
 
 void oplus_chg_short_c_battery_check(struct oplus_chg_chip *chip)
 {
 	static int cv_pre_check_count = 0;
 	static int cv_timer1_count = 0;
-	//static int cv_timer1_count_limit = 0;
+
 	static int cv_delta_ibatt_count = 0;
 	static int cv_temp = INVALID_TEMP;
 
@@ -736,7 +720,7 @@ void oplus_chg_short_c_battery_check(struct oplus_chg_chip *chip)
 	if (chip->charger_type == POWER_SUPPLY_TYPE_USB_DCP) {
 		if (oplus_is_power_off_chg(chip) == true) {
 			data_mounted_count++;
-			if (data_mounted_count < 30 && oplus_short_c_batt_data_is_mounted() == true) { //3min
+			if (data_mounted_count < 30 && oplus_short_c_batt_data_is_mounted() == true) {
 				oplus_short_c_batt_read_file(chip);
 				data_mounted_count = 30;
 			}
@@ -795,19 +779,17 @@ void oplus_chg_short_c_battery_check(struct oplus_chg_chip *chip)
 
 	/* known the battery status, no need to check */
 	if (chip->short_c_batt.err_code == SHORT_C_BATT_STATUS__CV_ERR_CODE1 ||
-	    (chip->short_c_batt.err_code == SHORT_C_BATT_STATUS__FULL_ERR_CODE2 &&
-	     chip->batt_full != true) //set errcode2 at the 1st time, need to check errcode3
-	    || chip->short_c_batt.err_code == SHORT_C_BATT_STATUS__FULL_ERR_CODE3 ||
-	    (chip->short_c_batt.err_code == SHORT_C_BATT_STATUS__DYNAMIC_ERR_CODE4 &&
-	     chip->batt_full != true) //set errcode4 at the 1st time, need to check errcode3
-	    || chip->short_c_batt.err_code == SHORT_C_BATT_STATUS__DYNAMIC_ERR_CODE5) {
+	    (chip->short_c_batt.err_code == SHORT_C_BATT_STATUS__FULL_ERR_CODE2 && chip->batt_full != true) ||
+	    chip->short_c_batt.err_code == SHORT_C_BATT_STATUS__FULL_ERR_CODE3 ||
+	    (chip->short_c_batt.err_code == SHORT_C_BATT_STATUS__DYNAMIC_ERR_CODE4 && chip->batt_full != true) ||
+	    chip->short_c_batt.err_code == SHORT_C_BATT_STATUS__DYNAMIC_ERR_CODE5) {
 		chg_err("exit_check, errcode[%d]\n", chip->short_c_batt.err_code);
 		short_debug("exit_check, errcode[%d]\n", chip->short_c_batt.err_code);
 		exit_check_status = true;
 		return;
 	}
 
-	if (chip->temperature <= LITTLE_COLD_TEMP_THRESHOLD || chip->temperature > WARM_TEMP_THRESHOLD) { //0~45
+	if (chip->temperature <= LITTLE_COLD_TEMP_THRESHOLD || chip->temperature > WARM_TEMP_THRESHOLD) {
 		short_debug("temperature[%d]\n", chip->temperature);
 		if (oplus_short_c_batt_get_cv_status(chip) == true) {
 			oplus_short_c_batt_write_exit_code(EXIT_CODE__EX5_OUT_OF_TEMP_0_45, INVALID_CODE, chip->temperature, INVALID_CODE, INVALID_CODE);
@@ -868,7 +850,7 @@ void oplus_chg_short_c_battery_check(struct oplus_chg_chip *chip)
 		if (full_timer5_count <= chip->short_c_batt.full_timer5) {
 			short_debug("full_timer5_count[%d]\n", full_timer5_count);
 			oplus_short_c_batt_set_disable_rechg(chip, true);
-			oplus_short_c_batt_get_average_vbatt_mv(chip, true); //reset
+			oplus_short_c_batt_get_average_vbatt_mv(chip, true);
 			return;
 		}
 		/* timer5 overflow then get VBAT2 */
@@ -877,7 +859,7 @@ void oplus_chg_short_c_battery_check(struct oplus_chg_chip *chip)
 			full_vbatt_2 = oplus_short_c_batt_get_average_vbatt_mv(chip, false);
 			short_debug("full_timer5_count overflow, full_vbatt_2[%d]\n", full_vbatt_2);
 			if (full_vbatt_2 > 0 && chip->limits.iterm_ma != 0) {
-				full_timer5_count = chip->short_c_batt.full_timer5 + 2; //goto the next step
+				full_timer5_count = chip->short_c_batt.full_timer5 + 2;
 				if (cv_avg_vbatt > chip->short_c_batt.short_c_bat_cv_mv + 1000 || cv_avg_vbatt < chip->short_c_batt.short_c_bat_cv_mv - 1000) {
 					cv_avg_vbatt = -1 * chip->short_c_batt.short_c_bat_cv_mv;
 				}
@@ -886,15 +868,15 @@ void oplus_chg_short_c_battery_check(struct oplus_chg_chip *chip)
 				} else {
 					rbatt = -1;
 				}
-				if (chip->temperature <= COOL_TEMP_THRESHOLD) { //2~12
+				if (chip->temperature <= COOL_TEMP_THRESHOLD) {
 					if (rbatt > chip->short_c_batt.cool_temp_rbatt) {
 						exit_check_status = true;
 					}
-				} else if (chip->temperature <= NORMAL_TEMP_THRESHOLD) { //12~25
+				} else if (chip->temperature <= NORMAL_TEMP_THRESHOLD) {
 					if (rbatt > chip->short_c_batt.little_cool_temp_rbatt) {
 						exit_check_status = true;
 					}
-				} else { //25~43
+				} else {
 					if (rbatt > chip->short_c_batt.normal_temp_rbatt) {
 						exit_check_status = true;
 					}
@@ -919,7 +901,7 @@ void oplus_chg_short_c_battery_check(struct oplus_chg_chip *chip)
 		/* timer2 not overflow */
 		if (full_timer2_count <= chip->short_c_batt.full_timer2) {
 			short_debug("full_timer2_count[%d]\n", full_timer2_count);
-			oplus_short_c_batt_get_average_vbatt_mv(chip, true); //reset
+			oplus_short_c_batt_get_average_vbatt_mv(chip, true);
 			return;
 		}
 		/* timer2 overflow then get VBAT1 and T1 */
@@ -928,7 +910,7 @@ void oplus_chg_short_c_battery_check(struct oplus_chg_chip *chip)
 			full_vbatt_n = oplus_short_c_batt_get_average_vbatt_mv(chip, false);
 			short_debug("full_timer2_count overflow, full_vbatt_1[%d]\n", full_vbatt_n);
 			if (full_vbatt_n > 0 && full_vbatt1 == 0) {
-				full_timer2_count = chip->short_c_batt.full_timer2 + 2; //goto the next step
+				full_timer2_count = chip->short_c_batt.full_timer2 + 2;
 				full_vbatt1 = full_vbatt_n;
 				full_temp1 = chip->temperature;
 				chg_err("full_vbatt1[%d], full_temp1[%d]\n", full_vbatt1, full_temp1);
@@ -941,7 +923,7 @@ void oplus_chg_short_c_battery_check(struct oplus_chg_chip *chip)
 		/* timer3 not overflow */
 		if (full_timer3_count <= chip->short_c_batt.full_timer3) {
 			short_debug("full_timer3_count[%d]\n", full_timer3_count);
-			oplus_short_c_batt_get_average_vbatt_mv(chip, true); //reset
+			oplus_short_c_batt_get_average_vbatt_mv(chip, true);
 			if (full_temp1 != INVALID_TEMP && abs(full_temp1 - chip->temperature) > DELTA_TEMP_THRESHOLD) {
 				oplus_short_c_batt_write_exit_code(EXIT_CODE__OVER_DELTA_TEMP_IN_TIMER3, full_temp1, chip->temperature, INVALID_CODE,
 								   INVALID_CODE);
@@ -959,7 +941,6 @@ void oplus_chg_short_c_battery_check(struct oplus_chg_chip *chip)
 				if (full_timer3_count == chip->short_c_batt.full_timer3 + 1) {
 					if ((chip->short_c_batt.batt_chging_cycles < chip->short_c_batt.batt_chging_cycle_threshold) &&
 					    (full_vbatt1 - full_vbatt_n > chip->short_c_batt.full_delta_vbatt1_mv)) {
-						//set err_code2;
 						short_debug("set err_code[%d]\n", SHORT_C_BATT_STATUS__FULL_ERR_CODE2);
 						chip->short_c_batt.err_code = SHORT_C_BATT_STATUS__FULL_ERR_CODE2;
 						oplus_short_c_batt_write_err_code(chip->short_c_batt.err_code, full_temp1, chip->temperature, full_vbatt1,
@@ -968,25 +949,23 @@ void oplus_chg_short_c_battery_check(struct oplus_chg_chip *chip)
 				}
 				/* dynamic */
 				if (full_timer3_count == chip->short_c_batt.full_timer3 + 2) {
-					full_timer3_count = chip->short_c_batt.full_timer3 + 3; //goto the next step
-					if (chip->temperature <= COOL_TEMP_THRESHOLD) { //2~12
+					full_timer3_count = chip->short_c_batt.full_timer3 + 3;
+					if (chip->temperature <= COOL_TEMP_THRESHOLD) {
 						if (chip->short_c_batt.dyna1_low_avg_dv_mv != INVALID_DATA && chip->short_c_batt.dyna1_low_avg_dv_mv >= 0) {
 							if ((full_vbatt1 - full_vbatt_n - chip->short_c_batt.dyna1_low_avg_dv_mv >
 							     chip->short_c_batt.dyna1_delta_dv_mv) &&
 							    (full_vbatt1 - full_vbatt_n > chip->short_c_batt.full_delta_vbatt1_mv)) {
-								//set err_code4;
 								short_debug("set err_code[%d]\n", SHORT_C_BATT_STATUS__DYNAMIC_ERR_CODE4);
 								chip->short_c_batt.err_code = SHORT_C_BATT_STATUS__DYNAMIC_ERR_CODE4;
 								oplus_short_c_batt_write_err_code(chip->short_c_batt.err_code, full_temp1, chip->temperature,
 												  full_vbatt1, full_vbatt_n, INVALID_CODE);
 							}
 						}
-					} else { //12~43
+					} else {
 						if (chip->short_c_batt.dyna1_high_avg_dv_mv != INVALID_DATA && chip->short_c_batt.dyna1_high_avg_dv_mv >= 0) {
 							if ((full_vbatt1 - full_vbatt_n - chip->short_c_batt.dyna1_high_avg_dv_mv >
 							     chip->short_c_batt.dyna1_delta_dv_mv) &&
 							    (full_vbatt1 - full_vbatt_n > chip->short_c_batt.full_delta_vbatt1_mv)) {
-								//set err_code4;
 								short_debug("set err_code[%d]\n", SHORT_C_BATT_STATUS__DYNAMIC_ERR_CODE4);
 								chip->short_c_batt.err_code = SHORT_C_BATT_STATUS__DYNAMIC_ERR_CODE4;
 								oplus_short_c_batt_write_err_code(chip->short_c_batt.err_code, full_temp1, chip->temperature,
@@ -1011,7 +990,7 @@ void oplus_chg_short_c_battery_check(struct oplus_chg_chip *chip)
 		/* timer4 not overflow */
 		if (full_timer4_count <= chip->short_c_batt.full_timer4) {
 			short_debug("full_timer4_count[%d]\n", full_timer4_count);
-			oplus_short_c_batt_get_average_vbatt_mv(chip, true); //reset
+			oplus_short_c_batt_get_average_vbatt_mv(chip, true);
 			if (full_temp1 != INVALID_TEMP && abs(full_temp1 - chip->temperature) > DELTA_TEMP_THRESHOLD) {
 				oplus_short_c_batt_write_exit_code(EXIT_CODE__OVER_DELTA_TEMP_IN_TIMER4, full_temp1, chip->temperature, INVALID_CODE,
 								   INVALID_CODE);
@@ -1029,7 +1008,6 @@ void oplus_chg_short_c_battery_check(struct oplus_chg_chip *chip)
 				if (full_timer4_count == chip->short_c_batt.full_timer4 + 1) {
 					if ((chip->short_c_batt.batt_chging_cycles < chip->short_c_batt.batt_chging_cycle_threshold) &&
 					    (full_vbatt1 - full_vbatt_n > chip->short_c_batt.full_delta_vbatt2_mv)) {
-						//set err_code3;
 						short_debug("set err_code[%d]\n", SHORT_C_BATT_STATUS__FULL_ERR_CODE3);
 						chip->short_c_batt.err_code = SHORT_C_BATT_STATUS__FULL_ERR_CODE3;
 						oplus_short_c_batt_write_err_code(chip->short_c_batt.err_code, full_temp1, chip->temperature, full_vbatt1,
@@ -1038,25 +1016,23 @@ void oplus_chg_short_c_battery_check(struct oplus_chg_chip *chip)
 				}
 				/* dynamic */
 				if (full_timer4_count == chip->short_c_batt.full_timer4 + 2) {
-					full_timer4_count = chip->short_c_batt.full_timer4 + 3; //goto the next step
-					if (chip->temperature <= COOL_TEMP_THRESHOLD) { //2~12
+					full_timer4_count = chip->short_c_batt.full_timer4 + 3;
+					if (chip->temperature <= COOL_TEMP_THRESHOLD) {
 						if (chip->short_c_batt.dyna2_low_avg_dv_mv != INVALID_DATA && chip->short_c_batt.dyna2_low_avg_dv_mv >= 0) {
 							if ((full_vbatt1 - full_vbatt_n - chip->short_c_batt.dyna2_low_avg_dv_mv >
 							     chip->short_c_batt.dyna2_delta_dv_mv) &&
 							    (full_vbatt1 - full_vbatt_n > chip->short_c_batt.full_delta_vbatt2_mv)) {
-								//set err_code5;
 								short_debug("set err_code[%d]\n", SHORT_C_BATT_STATUS__DYNAMIC_ERR_CODE5);
 								chip->short_c_batt.err_code = SHORT_C_BATT_STATUS__DYNAMIC_ERR_CODE5;
 								oplus_short_c_batt_write_err_code(chip->short_c_batt.err_code, full_temp1, chip->temperature,
 												  full_vbatt1, full_vbatt_n, INVALID_CODE);
 							}
 						}
-					} else { //12~43
+					} else {
 						if (chip->short_c_batt.dyna2_high_avg_dv_mv != INVALID_DATA && chip->short_c_batt.dyna2_high_avg_dv_mv >= 0) {
 							if ((full_vbatt1 - full_vbatt_n - chip->short_c_batt.dyna2_high_avg_dv_mv >
 							     chip->short_c_batt.dyna2_delta_dv_mv) &&
 							    (full_vbatt1 - full_vbatt_n > chip->short_c_batt.full_delta_vbatt2_mv)) {
-								//set err_code5;
 								short_debug("set err_code[%d]\n", SHORT_C_BATT_STATUS__DYNAMIC_ERR_CODE5);
 								chip->short_c_batt.err_code = SHORT_C_BATT_STATUS__DYNAMIC_ERR_CODE5;
 								oplus_short_c_batt_write_err_code(chip->short_c_batt.err_code, full_temp1, chip->temperature,
@@ -1069,7 +1045,7 @@ void oplus_chg_short_c_battery_check(struct oplus_chg_chip *chip)
 						oplus_short_c_batt_write_exit_code(EXIT_CODE__TIMER4_OVERFLOW, full_temp1, chip->temperature, full_vbatt1,
 										   full_vbatt_n);
 					}
-					//timer4 overflow, exit check
+
 					exit_check_status = true;
 					return;
 				}
@@ -1089,7 +1065,6 @@ void oplus_chg_short_c_battery_check(struct oplus_chg_chip *chip)
 		}
 		if (cv_pre_check_count == CV_PRE_CHECK_COUNT) {
 			if (chip->short_c_batt.cv_satus == false) {
-				//reset exit code
 				oplus_short_c_batt_write_exit_code(0, 0, 0, 0, 0);
 				chip->short_c_batt.cv_satus = true;
 				cv_temp = chip->temperature;
@@ -1129,28 +1104,19 @@ void oplus_chg_short_c_battery_check(struct oplus_chg_chip *chip)
 			}
 
 			if (cv_iterm_count == CV_ITERM_COUNT && cv_vbatt_count < CV_VBATT_COUNT) {
-#if 0
-				cv_avg_vbatt = cv_avg_vbatt + chip->batt_volt;
-				cv_vbatt_count++;
-				if (cv_vbatt_count == CV_VBATT_COUNT)
-					cv_avg_vbatt = cv_avg_vbatt / CV_VBATT_COUNT;
-				short_debug("cv_vbatt_count[%d], cv_avg_vbatt[%d]\n", cv_vbatt_count, cv_avg_vbatt);
-#else
 				/* 2017-12-18 use the max value instead of avg value */
 				cv_avg_vbatt = max(cv_avg_vbatt, chip->batt_volt);
 				cv_vbatt_count++;
 				short_debug("cv_vbatt_count[%d], max cv_avg_vbatt[%d]\n", cv_vbatt_count, cv_avg_vbatt);
-#endif
 			}
 		}
 
 		if (cv_timer1_count == chip->short_c_batt.cv_timer1) {
-			//set err_code1
 			short_debug("set err_code[%d]\n", SHORT_C_BATT_STATUS__CV_ERR_CODE1);
 			chip->short_c_batt.err_code = SHORT_C_BATT_STATUS__CV_ERR_CODE1;
 			oplus_short_c_batt_write_err_code(SHORT_C_BATT_STATUS__CV_ERR_CODE1, cv_temp, chip->temperature, INVALID_CODE, INVALID_CODE,
 							  INVALID_CODE);
-			//turnoff charging
+
 			if (chip->short_c_batt.is_switch_on) {
 				chip->chg_ops->charging_disable();
 			}
@@ -1173,7 +1139,6 @@ cv_reset:
 	cv_avg_vbatt = 0;
 	cv_vbatt_count = 0;
 
-	//full_reset:
 	full_over_10ma_count = 0;
 	full_over_20ma_count = 0;
 	full_over_50ma_count = 0;

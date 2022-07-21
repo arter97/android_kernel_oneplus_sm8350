@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+
 /*
  * Copyright (C) 2020-2020 Oplus. All rights reserved.
  */
@@ -124,16 +124,19 @@ static ssize_t oplus_chg_mod_show_property(struct device *dev, struct device_att
 	enum oplus_chg_mod_property ocm_prop = attr - oplus_chg_mod_attrs;
 	union oplus_chg_mod_propval value;
 
-	if (ocm_prop == OPLUS_CHG_PROP_TYPE) {
+	if (ocm_prop == OPLUS_CHG_PROP_TYPE)
 		value.intval = ocm->desc->type;
-	} else {
+
+	else {
 		ret = oplus_chg_mod_get_property(ocm, ocm_prop, &value);
 
 		if (ret < 0) {
 			if (ret == -ENODATA)
 				pr_debug("driver has no data for `%s' property\n", attr->attr.name);
+
 			else if (ret != -ENODEV && ret != -EAGAIN)
 				dev_err_ratelimited(dev, "driver failed to report `%s' property: %zd\n", attr->attr.name, ret);
+
 			return ret;
 		}
 	}
@@ -142,39 +145,47 @@ static ssize_t oplus_chg_mod_show_property(struct device *dev, struct device_att
 	case OPLUS_CHG_PROP_TYPE:
 		ret = sprintf(buf, "%s\n", oplus_chg_mod_type_text[value.intval]);
 		break;
+
 	case OPLUS_CHG_PROP_STATUS:
 		ret = sprintf(buf, "%s\n", oplus_chg_mod_status_text[value.intval]);
 		break;
+
 	case OPLUS_CHG_PROP_CHARGE_TYPE:
 		ret = sprintf(buf, "%s\n", oplus_chg_mod_charge_type_text[value.intval]);
 		break;
+
 	case OPLUS_CHG_PROP_HEALTH:
 		ret = sprintf(buf, "%s\n", oplus_chg_mod_health_text[value.intval]);
 		break;
+
 	case OPLUS_CHG_PROP_TECHNOLOGY:
 		ret = sprintf(buf, "%s\n", oplus_chg_mod_technology_text[value.intval]);
 		break;
+
 	case OPLUS_CHG_PROP_USB_TYPE:
 		ret = sprintf(buf, "%s\n", oplus_chg_mod_usb_type_text[value.intval]);
 		break;
+
 	case OPLUS_CHG_PROP_WLS_TYPE:
-		if (value.intval == OPLUS_CHG_WLS_PD_65W)
-			ret = sprintf(buf, "%s\n", oplus_chg_mod_wls_type_text[OPLUS_CHG_WLS_SWARP]);
-		else
-			ret = sprintf(buf, "%s\n", oplus_chg_mod_wls_type_text[value.intval]);
+		ret = sprintf(buf, "%s\n", oplus_chg_mod_wls_type_text[value.intval]);
 		break;
+
 	case OPLUS_CHG_PROP_TRX_STATUS:
 		ret = sprintf(buf, "%s\n", oplus_chg_mod_trx_status_text[value.intval]);
 		break;
+
 	case OPLUS_CHG_PROP_TEMP_REGION:
 		ret = sprintf(buf, "%s\n", oplus_chg_mod_temp_region_text[value.intval]);
 		break;
+
 	case OPLUS_CHG_PROP_MODEL_NAME:
 		ret = sprintf(buf, "%s\n", value.strval);
 		break;
+
 	case OPLUS_CHG_PROP_ADAPTER_SID:
 		ret = sprintf(buf, "%u\n", (unsigned int)value.intval);
 		break;
+
 	default:
 		ret = sprintf(buf, "%d\n", value.intval);
 	}
@@ -202,6 +213,7 @@ static ssize_t oplus_chg_mod_store_property(struct device *dev, struct device_at
 		long long_val;
 
 		ret = kstrtol(buf, 10, &long_val);
+
 		if (ret < 0)
 			return ret;
 
@@ -211,6 +223,7 @@ static ssize_t oplus_chg_mod_store_property(struct device *dev, struct device_at
 	value.intval = ret;
 
 	ret = oplus_chg_mod_set_property(ocm, ocm_prop, &value);
+
 	if (ret < 0)
 		return ret;
 
@@ -270,6 +283,7 @@ static struct device_attribute oplus_chg_mod_attrs[] = {
 	OPLUS_CHG_MOD_ATTR(con_temp2),
 	OPLUS_CHG_MOD_ATTR(chg_enable),
 	OPLUS_CHG_MOD_ATTR(otg_mode),
+	OPLUS_CHG_MOD_ATTR(max_w_power),
 	OPLUS_CHG_MOD_ATTR(trx_voltage_now),
 	OPLUS_CHG_MOD_ATTR(trx_current_now),
 	OPLUS_CHG_MOD_ATTR(trx_status),
@@ -327,6 +341,7 @@ static struct device_attribute oplus_chg_mod_attrs[] = {
 #ifdef OPLUS_CHG_REG_DUMP_ENABLE
 	OPLUS_CHG_MOD_ATTR(reg_dump),
 #endif
+	OPLUS_CHG_MOD_ATTR(status_keep),
 #ifndef CONFIG_OPLUS_CHG_OOS
 	OPLUS_CHG_MOD_ATTR(authenticate),
 	OPLUS_CHG_MOD_ATTR(battery_cc),
@@ -361,7 +376,7 @@ static struct device_attribute oplus_chg_mod_attrs[] = {
 	OPLUS_CHG_MOD_ATTR(short_ic_volt_thresh),
 	OPLUS_CHG_MOD_ATTR(short_ic_otp_value),
 #endif
-	OPLUS_CHG_MOD_ATTR(warpchg_ing),
+	OPLUS_CHG_MOD_ATTR(voocchg_ing),
 	OPLUS_CHG_MOD_ATTR(otg_online),
 	OPLUS_CHG_MOD_ATTR(usb_status),
 	OPLUS_CHG_MOD_ATTR(fast_chg_type),
@@ -395,9 +410,10 @@ static umode_t oplus_chg_mod_attr_is_visible(struct kobject *kobj, struct attrib
 	umode_t mode = S_IRUSR | S_IRGRP | S_IROTH;
 	int i;
 
-	if (attrno == OPLUS_CHG_PROP_TYPE) {
+	if (attrno == OPLUS_CHG_PROP_TYPE)
 		return mode;
-	} else if (attrno < OPLUS_CHG_PROP_MAX) {
+
+	else if (attrno < OPLUS_CHG_PROP_MAX) {
 		for (i = 0; i < ocm->desc->num_properties; i++) {
 			int property = ocm->desc->properties[i];
 
@@ -408,6 +424,7 @@ static umode_t oplus_chg_mod_attr_is_visible(struct kobject *kobj, struct attrib
 				return mode;
 			}
 		}
+
 	} else {
 		for (i = 0; i < ocm->desc->num_exten_properties; i++) {
 			int property = ocm->desc->exten_properties[i].exten_prop;
@@ -457,10 +474,12 @@ int oplus_chg_uevent(struct device *dev, struct kobj_uevent_env *env)
 	}
 
 	ret = add_uevent_var(env, "OPLUS_CHG_MOD=%s", ocm->desc->name);
+
 	if (ret)
 		return ret;
 
 	prop_buf = (char *)get_zeroed_page(GFP_KERNEL);
+
 	if (!prop_buf)
 		return -ENOMEM;
 
@@ -472,6 +491,7 @@ int oplus_chg_uevent(struct device *dev, struct kobj_uevent_env *env)
 		attr = &oplus_chg_mod_attrs[ocm->desc->uevent_properties[j]];
 
 		ret = oplus_chg_mod_show_property(dev, attr, prop_buf);
+
 		if (ret == -ENODEV || ret == -ENODATA) {
 			/* When a battery is absent, we expect -ENODEV. Don't abort;
 			   send the uevent with at least the the PRESENT=0 property */
@@ -483,6 +503,7 @@ int oplus_chg_uevent(struct device *dev, struct kobj_uevent_env *env)
 			goto out;
 
 		line = strchr(prop_buf, '\n');
+
 		if (line)
 			*line = 0;
 

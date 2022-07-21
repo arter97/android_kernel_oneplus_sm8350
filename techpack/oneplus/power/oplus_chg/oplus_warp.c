@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+
 /*
  * Copyright (C) 2018-2020 Oplus. All rights reserved.
  */
@@ -68,8 +68,8 @@ static int oplus_warp_convert_fast_chg_type(int fast_chg_type);
 #endif
 
 #ifdef OPLUS_CHG_OP_DEF
-static oplus_chg_swarp_curr_table[0x07] = { 2500, 2000, 3000, 4000, 5000, 6500 };
-static oplus_chg_warp_curr_table[0x07] = { 3600, 2500, 3000, 4000, 5000, 6000 };
+static oplus_chg_swarp_curr_table[CURR_LIMIT_MAX] = { 2500, 2000, 3000, 4000, 5000, 6500 };
+static oplus_chg_warp_curr_table[CURR_LIMIT_MAX] = { 3600, 2500, 3000, 4000, 5000, 6000 };
 
 static struct oplus_adapter_struct adapter_id_table[] = {
 	{ 0x11, 0x11, 25, 50, ADAPTER_TYPE_AC, CHARGER_TYPE_SWARP },	{ 0x12, 0x12, 25, 50, ADAPTER_TYPE_AC, CHARGER_TYPE_SWARP },
@@ -818,13 +818,13 @@ static int oplus_chg_get_fast_chg_min_curr_level(int level_base, int level_new, 
 	int curr_base, curr_new;
 
 	if (fw_7bit) {
-		if (level_base >= 0x1a || level_new >= 0x1a) {
+		if (level_base >= CURR_LIMIT_7BIT_MAX || level_new >= CURR_LIMIT_7BIT_MAX) {
 			pr_err("current limit level error\n");
 			return level_base;
 		}
 		return level_new < level_base ? level_new : level_base;
 	} else {
-		if (level_base >= 0x07 || level_new >= 0x07) {
+		if (level_base >= CURR_LIMIT_MAX || level_new >= CURR_LIMIT_MAX) {
 			pr_err("current limit level error\n");
 			return level_base;
 		}
@@ -848,7 +848,7 @@ static int oplus_chg_get_fast_chg_min_curr_level(int level_base, int level_new, 
 }
 
 static int cur_max_4bit[] = { 0x06, 0x05, 0x04, 0x03 };
-static int cur_max_7bit[] = { 0x0c, 0x09, 0x07, 0x05 };
+static int cur_max_7bit[] = { CURR_LIMIT_7BIT_6_3A, CURR_LIMIT_7BIT_5_0A, CURR_LIMIT_7BIT_4_0A, CURR_LIMIT_7BIT_3_0A };
 static int oplus_get_allowed_current_max(bool fw_7bit)
 {
 	int cur_stage = 0;
@@ -954,7 +954,7 @@ static void oplus_warp_fastchg_func(struct work_struct *work)
 				} else {
 					oplus_chg_clear_chargerid_info();
 				}
-				///del_timer(&chip->watchdog);
+
 				oplus_warp_set_mcu_sleep();
 				oplus_warp_del_watchdog_timer(chip);
 			}
@@ -1034,7 +1034,7 @@ static void oplus_warp_fastchg_func(struct work_struct *work)
 			}
 		}
 #endif
-		//mod_timer(&chip->watchdog, jiffies+msecs_to_jiffies(25000));
+
 		oplus_warp_setup_watchdog_timer(chip, 25000);
 		if (!isnot_power_on) {
 			isnot_power_on = true;
@@ -1079,7 +1079,7 @@ static void oplus_warp_fastchg_func(struct work_struct *work)
 		warp_xlog_printk(CHG_LOG_CRTI, "fastchg stop unexpectly, switch off fastchg\n");
 		oplus_chg_set_chargerid_switch_val(0);
 		chip->vops->set_switch_mode(chip, NORMAL_CHARGER_MODE);
-		//del_timer(&chip->watchdog);
+
 		oplus_warp_set_mcu_sleep();
 		oplus_warp_del_watchdog_timer(chip);
 		chip->allow_reading = true;
@@ -1107,7 +1107,7 @@ static void oplus_warp_fastchg_func(struct work_struct *work)
 		ret_info = 0x2;
 	} else if (adapter_model_factory) {
 		warp_xlog_printk(CHG_LOG_CRTI, "WARP_NOTIFY_ADAPTER_MODEL_FACTORY:0x%x, \n", data);
-		//chip->fast_chg_type = data;
+
 		if (data == 0) {
 			chip->fast_chg_type = CHARGER_SUBTYPE_FASTCHG_WARP;
 		} else {
@@ -1180,7 +1180,7 @@ static void oplus_warp_fastchg_func(struct work_struct *work)
 				oplus_gauge_get_batt_qs();
 			}
 			oplus_chg_kick_wdt();
-			if (chip->support_warp_by_normal_charger_path) { //65w
+			if (chip->support_warp_by_normal_charger_path) {
 				if (!normalchg_disabled && chip->fast_chg_type != FASTCHG_CHARGER_TYPE_UNKOWN &&
 				    chip->fast_chg_type != CHARGER_SUBTYPE_FASTCHG_WARP) {
 					oplus_chg_disable_charge();
@@ -1193,12 +1193,12 @@ static void oplus_warp_fastchg_func(struct work_struct *work)
 					normalchg_disabled = true;
 				}
 			}
-			//don't read
+
 			chip->allow_reading = false;
 		}
 		warp_xlog_printk(CHG_LOG_CRTI, " volt:%d,temp:%d,soc:%d,current_now:%d,rm:%d, i2c_err:%d\n", volt, temp, soc, current_now, remain_cap,
 				 oplus_get_fg_i2c_err_occured());
-		//mod_timer(&chip->watchdog, jiffies+msecs_to_jiffies(25000));
+
 		oplus_warp_setup_watchdog_timer(chip, 25000);
 		if (chip->disable_adapter_output == true) {
 			ret_info = (chip->warp_multistep_adjust_current_support &&
@@ -1273,9 +1273,9 @@ static void oplus_warp_fastchg_func(struct work_struct *work)
 			chg_err("wkcs: general_strategy ret info=0x%02x\n", ret_info);
 		} else {
 			if (chip->warp_reply_mcu_bits == 7)
-				ret_info = 0x0c;
+				ret_info = CURR_LIMIT_7BIT_6_3A;
 			else
-				ret_info = 0x06;
+				ret_info = CURR_LIMIT_WARP_6_0A_SWARP_6_5A;
 		}
 #ifdef CONFIG_OPLUS_CHG_OOS
 		if (swarp_led_on_strategy.initialized && chg_chip && chg_chip->led_on) {
@@ -1298,9 +1298,9 @@ static void oplus_warp_fastchg_func(struct work_struct *work)
 			chg_err("skin_temp=%d, led_on=%d\n", skin_temp, chg_chip->led_on);
 		} else {
 			if (chip->warp_reply_mcu_bits == 7) {
-				ret_info = oplus_chg_get_fast_chg_min_curr_level(ret_info, 0x0c, chip->adapter_sid, true);
+				ret_info = oplus_chg_get_fast_chg_min_curr_level(ret_info, CURR_LIMIT_7BIT_6_3A, chip->adapter_sid, true);
 			} else {
-				ret_info = oplus_chg_get_fast_chg_min_curr_level(ret_info, 0x06, chip->adapter_sid, false);
+				ret_info = oplus_chg_get_fast_chg_min_curr_level(ret_info, CURR_LIMIT_WARP_6_0A_SWARP_6_5A, chip->adapter_sid, false);
 			}
 		}
 		if (chg_chip && chg_chip->chg_ctrl_by_camera && chg_chip->camera_on) {
@@ -1312,7 +1312,18 @@ static void oplus_warp_fastchg_func(struct work_struct *work)
 									 (chip->warp_reply_mcu_bits == 7));
 		}
 #else
-		if (ret_info_cool_down != -1) {
+		if (swarp_led_off_strategy.initialized && chg_chip && !chg_chip->led_on) {
+			rc = oplus_chg_get_skin_temp(chip, &skin_temp);
+			if (rc < 0) {
+				chg_err("can't get skin temp\n");
+				skin_temp = 250;
+			}
+			ret_info_temp = oplus_chg_strategy_get_data(&swarp_led_off_strategy, &swarp_led_off_strategy.temp_region, skin_temp);
+			ret_info = oplus_chg_get_fast_chg_min_curr_level(ret_info, ret_info_temp, chip->adapter_sid, (chip->warp_reply_mcu_bits == 7));
+			chg_err("skin_temp=%d, led_on=%d, ret_info=0x%02x\n", skin_temp, chg_chip->led_on, ret_info_temp);
+		}
+		if (ret_info_cool_down > 0) {
+			chg_err("cool down ret_info = 0x%02x\n", ret_info_cool_down);
 			ret_info = oplus_chg_get_fast_chg_min_curr_level(ret_info, ret_info_cool_down, chip->adapter_sid, (chip->warp_reply_mcu_bits == 7));
 		}
 #endif
@@ -1332,7 +1343,7 @@ static void oplus_warp_fastchg_func(struct work_struct *work)
 #endif
 		oplus_chg_set_chargerid_switch_val(0);
 		chip->vops->set_switch_mode(chip, NORMAL_CHARGER_MODE);
-		//del_timer(&chip->watchdog);
+
 		oplus_warp_set_mcu_sleep();
 		oplus_warp_del_watchdog_timer(chip);
 		ret_info = 0x2;
@@ -1353,7 +1364,7 @@ static void oplus_warp_fastchg_func(struct work_struct *work)
 			warp_xlog_printk(CHG_LOG_CRTI, " fastchg low temp full, switch NORMAL_CHARGER_MODE\n");
 			oplus_chg_set_chargerid_switch_val(0);
 			chip->vops->set_switch_mode(chip, NORMAL_CHARGER_MODE);
-			//del_timer(&chip->watchdog);
+
 			oplus_warp_set_mcu_sleep();
 			oplus_warp_del_watchdog_timer(chip);
 			ret_info = 0x2;
@@ -1364,7 +1375,7 @@ static void oplus_warp_fastchg_func(struct work_struct *work)
 		chip->btb_temp_over = false; /*to switch to normal mode*/
 		oplus_chg_set_chargerid_switch_val(0);
 		chip->vops->set_switch_mode(chip, NORMAL_CHARGER_MODE);
-		//del_timer(&chip->watchdog);
+
 		oplus_warp_set_mcu_sleep();
 		oplus_warp_del_watchdog_timer(chip);
 		ret_info = 0x2;
@@ -1374,7 +1385,7 @@ static void oplus_warp_fastchg_func(struct work_struct *work)
 		warp_xlog_printk(CHG_LOG_CRTI, " fastchg temp > 45 or < 20, switch NORMAL_CHARGER_MODE\n");
 		oplus_chg_set_chargerid_switch_val(0);
 		chip->vops->set_switch_mode(chip, NORMAL_CHARGER_MODE);
-		//del_timer(&chip->watchdog);
+
 		oplus_warp_set_mcu_sleep();
 		oplus_warp_del_watchdog_timer(chip);
 		ret_info = 0x2;
@@ -1392,7 +1403,7 @@ static void oplus_warp_fastchg_func(struct work_struct *work)
 		chip->fastchg_to_warm = false;
 		adapter_fw_ver_info = false;
 		adapter_model_factory = false;
-		//mod_timer(&chip->watchdog, jiffies + msecs_to_jiffies(25000));
+
 		oplus_warp_setup_watchdog_timer(chip, 25000);
 		ret_info = 0x2;
 		charger_abnormal_log = CRITICAL_LOG_WARP_BTB;
@@ -1432,7 +1443,7 @@ static void oplus_warp_fastchg_func(struct work_struct *work)
 		chip->adapter_update_report = chip->adapter_update_real;
 	}
 	adapter_fw_ver_info = false;
-	//mod_timer(&chip->watchdog, jiffies + msecs_to_jiffies(25000));
+
 	oplus_warp_setup_watchdog_timer(chip, 25000);
 }
 else if (data == WARP_NOTIFY_ADAPTER_FW_UPDATE)
@@ -1441,7 +1452,7 @@ else if (data == WARP_NOTIFY_ADAPTER_FW_UPDATE)
 	ret_info = 0x02;
 	chip->adapter_update_real = ADAPTER_FW_NEED_UPDATE;
 	chip->adapter_update_report = chip->adapter_update_real;
-	//mod_timer(&chip->watchdog,  jiffies + msecs_to_jiffies(25000));
+
 	oplus_warp_setup_watchdog_timer(chip, 25000);
 }
 else
@@ -1551,11 +1562,11 @@ if (data == WARP_NOTIFY_NORMAL_TEMP_FULL || data == WARP_NOTIFY_BAD_CONNECTED ||
 }
 if (chip->need_to_up) {
 	msleep(500);
-	//del_timer(&chip->watchdog);
+
 	chip->vops->fw_update(chip);
 	chip->need_to_up = 0;
 	phone_mcu_updated = true;
-	//mod_timer(&chip->watchdog, jiffies + msecs_to_jiffies(25000));
+
 	oplus_warp_setup_watchdog_timer(chip, 25000);
 }
 if ((data == WARP_NOTIFY_FAST_ABSENT || (data_err && !phone_mcu_updated) || data == WARP_NOTIFY_BTB_TEMP_OVER) && (chip->fastchg_dummy_started == false)) {
@@ -1586,7 +1597,7 @@ if (chip->adapter_update_real == ADAPTER_FW_NEED_UPDATE) {
 	chip->fastchg_low_temp_full = false;
 	chip->fastchg_to_warm = false;
 	chip->fastchg_ing = false;
-	//del_timer(&chip->watchdog);
+
 	oplus_warp_del_watchdog_timer(chip);
 	oplus_warp_battery_update();
 	oplus_adapter_fw_update();
@@ -1917,7 +1928,6 @@ void oplus_warp_init(struct oplus_warp_chip *chip)
 		}
 		INIT_DELAYED_WORK(&chip->fw_update_work, fw_update_thread);
 		INIT_DELAYED_WORK(&chip->fw_update_work_fix, fw_update_thread_fix);
-		//Alloc fw_name/devinfo memory space
 
 		chip->fw_path = kzalloc(MAX_FW_NAME_LENGTH, GFP_KERNEL);
 		if (chip->fw_path == NULL) {
@@ -2344,9 +2354,16 @@ static int oplus_warp_convert_fast_chg_type(int fast_chg_type)
 #endif
 {
 	struct oplus_warp_chip *chip = g_warp_chip;
+	enum e_fastchg_power fastchg_pwr_type;
 
 	if (!chip)
 		return FASTCHG_CHARGER_TYPE_UNKOWN;
+
+	if (chip->support_warp_by_normal_charger_path) {
+		fastchg_pwr_type = FASTCHG_POWER_10V6P5A_TWO_BAT_SWARP;
+	} else {
+		fastchg_pwr_type = FASTCHG_POWER_UNKOWN;
+	}
 
 	switch (fast_chg_type) {
 	case FASTCHG_CHARGER_TYPE_UNKOWN:
@@ -2358,9 +2375,8 @@ static int oplus_warp_convert_fast_chg_type(int fast_chg_type)
 	case 0x21: /*50w*/
 	case 0x31: /*50w*/
 	case 0x33: /*50w*/
-	case 0x61: /*reserve for swarp*/
 	case 0x62: /*reserve for swarp*/
-		if (chip->support_warp_by_normal_charger_path)
+		if (fastchg_pwr_type == FASTCHG_POWER_11V3A_FLASHCHARGER || fastchg_pwr_type == FASTCHG_POWER_10V6P5A_TWO_BAT_SWARP)
 			return fast_chg_type;
 		return CHARGER_SUBTYPE_FASTCHG_WARP;
 		break;
@@ -2379,7 +2395,7 @@ static int oplus_warp_convert_fast_chg_type(int fast_chg_type)
 	case 0x6C: /*reserve for swarp 2.0*/
 	case 0x6D: /*reserve for swarp 2.0*/
 	case 0x6E: /*reserve for swarp 2.0*/
-		if (chip->support_warp_by_normal_charger_path)
+		if (fastchg_pwr_type == FASTCHG_POWER_11V3A_FLASHCHARGER || fastchg_pwr_type == FASTCHG_POWER_10V6P5A_TWO_BAT_SWARP)
 			return fast_chg_type;
 		return CHARGER_SUBTYPE_FASTCHG_WARP;
 		break;
@@ -2392,14 +2408,33 @@ static int oplus_warp_convert_fast_chg_type(int fast_chg_type)
 		break;
 
 	case 0x34:
-		if (chip->support_warp_by_normal_charger_path)
+		if (fastchg_pwr_type == FASTCHG_POWER_10V6P5A_TWO_BAT_SWARP)
 			return fast_chg_type;
 		return CHARGER_SUBTYPE_FASTCHG_WARP;
-		break;
+	case 0x13:
+	case 0x19:
+	case 0x29:
+	case 0x41:
+	case 0x42:
+	case 0x43:
+	case 0x44:
+	case 0x45:
+	case 0x46:
+		return CHARGER_SUBTYPE_FASTCHG_WARP;
+	case 0x61: /* 11V3A*/
+	case 0x49: /*for 11V3A adapter temp*/
+	case 0x4A: /*for 11V3A adapter temp*/
+	case 0x4B: /*for 11V3A adapter temp*/
+	case 0x4C: /*for 11V3A adapter temp*/
+	case 0x4D: /*for 11V3A adapter temp*/
+	case 0x4E: /*for 11V3A adapter temp*/
+		fast_chg_type = 0x61;
+		if (fastchg_pwr_type == FASTCHG_POWER_11V3A_FLASHCHARGER || fastchg_pwr_type == FASTCHG_POWER_10V6P5A_TWO_BAT_SWARP)
+			return fast_chg_type;
+		return CHARGER_SUBTYPE_FASTCHG_WARP;
 
 	default:
-		return CHARGER_SUBTYPE_FASTCHG_WARP;
-		break;
+		return CHARGER_SUBTYPE_FASTCHG_SWARP;
 	}
 
 	return FASTCHG_CHARGER_TYPE_UNKOWN;
