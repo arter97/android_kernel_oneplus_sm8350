@@ -61,6 +61,16 @@ enum {
 	PORTABLE_20W_3 = 0x36,
 };
 
+enum e_fastchg_power {
+	FASTCHG_POWER_UNKOWN,
+	FASTCHG_POWER_5V4A_5V6A_WARP,
+	FASTCHG_POWER_11V3A_FLASHCHARGER,
+	FASTCHG_POWER_10V5A_SINGLE_BAT_SWARP,
+	FASTCHG_POWER_10V5A_TWO_BAT_SWARP,
+	FASTCHG_POWER_10V6P5A_TWO_BAT_SWARP,
+	FASTCHG_POWER_OTHER,
+};
+
 enum {
 	BAT_TEMP_NATURAL = 0,
 	BAT_TEMP_HIGH0,
@@ -213,6 +223,7 @@ struct oplus_warp_chip {
 	int adapter_update_report;
 	int dpdm_switch_mode;
 	bool support_warp_by_normal_charger_path;
+	/* Add for warp batt 4.40*/
 	bool batt_type_4400mv;
 	bool warp_fw_check;
 	int warp_fw_type;
@@ -244,8 +255,8 @@ struct oplus_warp_chip {
 	int warp_warm_bat_suspend_volt;
 	int warp_chg_current_now;
 	int fast_chg_type;
-	bool disable_adapter_output; // 0--warp adapter output normal,  1--disable warp adapter output
-	int set_warp_current_limit; ///0--no limit;  1--max current limit 2A
+	bool disable_adapter_output;
+	int set_warp_current_limit;
 	bool warp_multistep_adjust_current_support;
 	int warp_reply_mcu_bits;
 	int warp_multistep_initial_batt_temp;

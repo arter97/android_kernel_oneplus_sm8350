@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+
 /*
  * Copyright (C) 2018-2020 Oplus. All rights reserved.
  */
@@ -24,16 +24,14 @@
 #include <asm/atomic.h>
 
 #include <linux/xlog.h>
-//#include <upmu_common.h>
-//#include <mt-plat/mtk_gpio.h>
+
 #include <linux/dma-mapping.h>
 
-//#include <mt-plat/battery_meter.h>
 #include <linux/module.h>
 #ifdef CONFIG_OPLUS_CHG_OOS
 #include <linux/oem/project_info.h>
 #else
-#include <soc/oplus/device_info.h>
+
 #endif
 #include <mt-plat/mtk_boot_common.h>
 
@@ -58,7 +56,7 @@
 #include <linux/oem/project_info.h>
 #include <linux/oem/boot_mode.h>
 #else
-#include <soc/oplus/device_info.h>
+
 #include <soc/oplus/system/boot_mode.h>
 #endif
 #endif
@@ -69,11 +67,9 @@ extern int charger_abnormal_log;
 extern struct oplus_warp_chip *g_warp_chip;
 #endif
 
-//#ifdef CONFIG_OPLUS_CHARGER_MTK
 #define I2C_MASK_FLAG (0x00ff)
 #define I2C_ENEXT_FLAG (0x0200)
 #define I2C_DMA_FLAG (0xdead2000)
-//#endif
 
 #define GTP_DMA_MAX_TRANSACTION_LENGTH 255 /* for DMA mode */
 
@@ -243,7 +239,7 @@ static int oplus_i2c_dma_read(struct i2c_client *client, u16 addr, s32 len, u8 *
 		mutex_unlock(&dma_wr_access_rk826);
 		return -1;
 	}
-	//chg_debug("warp dma i2c read: 0x%x, %d bytes(s)\n", addr, len);
+
 	for (retry = 0; retry < 5; ++retry) {
 		ret = i2c_transfer(client->adapter, &msg[0], 2);
 		if (ret < 0) {
@@ -280,7 +276,7 @@ static int oplus_i2c_dma_write(struct i2c_client *client, u16 addr, s32 len, u8 
 		return -1;
 	}
 	memcpy(wr_buf + 2, txbuf, len);
-	//chg_debug("warp dma i2c write: 0x%x, %d bytes(s)\n", addr, len);
+
 	for (retry = 0; retry < 5; ++retry) {
 		ret = i2c_transfer(client->adapter, &msg, 1);
 		if (ret < 0) {
@@ -317,7 +313,6 @@ static int oplus_i2c_dma_read(struct i2c_client *client, u16 addr, s32 len, u8 *
 			.len = len,
 		},
 	};
-	//	chg_debug("kilody in\n");
 
 	mutex_lock(&dma_wr_access_rk826);
 	buffer[0] = (u8)(addr & 0xFF);
@@ -326,7 +321,7 @@ static int oplus_i2c_dma_read(struct i2c_client *client, u16 addr, s32 len, u8 *
 		mutex_unlock(&dma_wr_access_rk826);
 		return -1;
 	}
-	//chg_debug("warp dma i2c read: 0x%x, %d bytes(s)\n", addr, len);
+
 	for (retry = 0; retry < 5; ++retry) {
 		ret = i2c_transfer(client->adapter, &msg[0], 2);
 		if (ret < 0) {
@@ -339,7 +334,6 @@ static int oplus_i2c_dma_read(struct i2c_client *client, u16 addr, s32 len, u8 *
 	chg_err(" Error: 0x%04X, %d byte(s), err-code: %d\n", addr, len, ret);
 	mutex_unlock(&dma_wr_access_rk826);
 
-	//	chg_debug("kilody out\n");
 	return ret;
 }
 
@@ -354,7 +348,6 @@ static int oplus_i2c_dma_write(struct i2c_client *client, u16 addr, s32 len, u8 
 		.buf = (__u8 *)gpDMABuf_pa, /*modified by PengNan*/
 		.len = 2 + len,
 	};
-	//	chg_debug("kilody in\n");
 
 	mutex_lock(&dma_wr_access_rk826);
 	wr_buf[0] = (u8)(addr & 0xFF);
@@ -364,7 +357,7 @@ static int oplus_i2c_dma_write(struct i2c_client *client, u16 addr, s32 len, u8 
 		return -1;
 	}
 	memcpy(wr_buf + 2, txbuf, len);
-	//chg_debug("warp dma i2c write: 0x%x, %d bytes(s)\n", addr, len);
+
 	for (retry = 0; retry < 5; ++retry) {
 		ret = i2c_transfer(client->adapter, &msg, 1);
 		if (ret < 0) {
@@ -376,7 +369,6 @@ static int oplus_i2c_dma_write(struct i2c_client *client, u16 addr, s32 len, u8 
 	chg_err(" Error: 0x%04X, %d byte(s), err-code: %d\n", addr, len, ret);
 	mutex_unlock(&dma_wr_access_rk826);
 
-	//	chg_debug("kilody out\n");
 	return ret;
 }
 #endif /*CONFIG_OPLUS_CHARGER_MTK*/
@@ -457,9 +449,9 @@ static bool rk826_fw_update_check(struct oplus_warp_chip *chip)
 	fw_size = (fw_size_tmp[1] << 8) | fw_size_tmp[0];
 	chg_err("fw_size[%d], fw_size_tmp[1]=[%d],fw_size_tmp[0]=%d\n", fw_size, fw_size_tmp[1], fw_size_tmp[0]);
 	if ((fw_size % 128))
-		code_size = (fw_size / 128 + 1) * 128 + 128 + 64; //128 is page ,64 is extended space
+		code_size = (fw_size / 128 + 1) * 128 + 128 + 64;
 	else
-		code_size = (fw_size / 128) * 128 + 128 + 64; //128 is page ,64 is extended space
+		code_size = (fw_size / 128) * 128 + 128 + 64;
 	for (i = code_size - 11, n = chip->fw_data_count - 11; i <= code_size - 4; i++, n++) {
 		mtp_addr_flag = (MTP_ADDR_FLAG | i);
 		ret = oplus_i2c_dma_write(chip->client, REG_MTP_ADDR, 4, (u8 *)(&mtp_addr_flag));
@@ -487,8 +479,6 @@ static bool rk826_fw_update_check(struct oplus_warp_chip *chip)
 			chg_err("fw_mcu_version :0x%x,data_buf:0x%x\n", chip->fw_mcu_version, data_buf[0]);
 		}
 		if (data_buf[0] != chip->firmware_data[n]) {
-			//chg_err("rk826_fw_data check fail\n");
-			//goto fw_update_check_err;
 			fw_type_check_result = 1;
 		}
 	}
@@ -525,7 +515,6 @@ int WriteSram(struct oplus_warp_chip *chip, const u8 *buf, u32 size)
 	int try_count = 5;
 	u8 readbuf[4] = { 0 };
 	u8 tx_buff[4] = { 0 };
-	u8 TEST[72] = { 0 };
 	u32 rec_0O_flag = REC_0O_FLAG;
 	u32 rec_01_flag = REC_01_FLAG;
 
@@ -534,7 +523,6 @@ int WriteSram(struct oplus_warp_chip *chip, const u8 *buf, u32 size)
 			cur_size = TRANSFER_LIMIT;
 		} else
 			cur_size = size;
-		memcpy(TEST, buf, 72);
 		for (i = 0; i < cur_size / 4; i++) {
 			reg_addr = REG_SRAM_BEGIN + i * 4;
 			memcpy(tx_buff, buf + offset + i * 4, 4);
@@ -544,16 +532,14 @@ int WriteSram(struct oplus_warp_chip *chip, const u8 *buf, u32 size)
 				return -1;
 			}
 		}
-		//ret = oplus_i2c_dma_read(chip->client, REG_STATE, 4, readbuf);
-		//chg_err("teh REG_STATE1: %d", *(u32*)readbuf);
+
 		ret = oplus_i2c_dma_write(chip->client, REG_HOST, 4, (u8 *)(&rec_0O_flag));
-		//mdelay(3);
-		//write rec_00 into host
+
 		if (ret < 0) {
 			chg_err("write rec_00 into host");
 			return -1;
 		}
-		//read slave
+
 		do {
 			ret = oplus_i2c_dma_read(chip->client, REG_STATE, 4, readbuf);
 			chg_err(" the try_count: %d, the REG_STATE: %d", try_count, *(u32 *)readbuf);
@@ -571,15 +557,13 @@ int WriteSram(struct oplus_warp_chip *chip, const u8 *buf, u32 size)
 			return -1;
 		}
 
-		//write rec_01 into host
 		ret = oplus_i2c_dma_write(chip->client, REG_HOST, 4, (u8 *)(&rec_01_flag));
-		//write rec_00 into host
+
 		if (ret < 0) {
 			chg_err("write rec_00 into host");
 			return -1;
 		}
 
-		//msleep(50);
 		offset += cur_size;
 		size -= cur_size;
 		try_count = 5;
@@ -594,7 +578,7 @@ int Download_00_code(struct oplus_warp_chip *chip)
 	u32 index = 0;
 	u32 offset = 0;
 	int ret = 0;
-	int size = 16384; // erase 16kb
+	int size = 16384;
 
 	chg_debug("size: %d\n", size);
 	pr_err("%s: erase_rk826_00  start\n", __func__);
@@ -602,11 +586,9 @@ int Download_00_code(struct oplus_warp_chip *chip)
 		memset(transfer_buf, 0, TRANSFER_LIMIT);
 
 		if (size >= onetime_size) {
-			//memcpy(transfer_buf, buf + offset, onetime_size);
 			size -= onetime_size;
 			offset += onetime_size;
 		} else {
-			//memcpy(transfer_buf, buf + offset, size);
 			offset += size;
 			size = 0;
 		}
@@ -630,18 +612,16 @@ int Download_ff_code(struct oplus_warp_chip *chip)
 	u32 index = 0;
 	u32 offset = 0;
 	int ret = 0;
-	int size = 16384; // erase 16kb
+	int size = 16384;
 	chg_debug("size: %d\n", size);
 	pr_err("%s: erase_rk826_ff start\n", __func__);
 	do {
 		memset(transfer_buf, 0xff, TRANSFER_LIMIT);
 
 		if (size >= onetime_size) {
-			//memcpy(transfer_buf, buf + offset, onetime_size);
 			size -= onetime_size;
 			offset += onetime_size;
 		} else {
-			//memcpy(transfer_buf, buf + offset, size);
 			offset += size;
 			size = 0;
 		}
@@ -677,7 +657,7 @@ static int rk826_fw_write_00_code(struct oplus_warp_chip *chip)
 			goto update_fw_err;
 		}
 		msleep(10);
-		//2.check ~sync
+
 		ret = oplus_i2c_dma_read(chip->client, REG_HOST, 4, read_buf);
 		printk("the data: %x, %x, %x, %x\n", read_buf[0], read_buf[1], read_buf[2], read_buf[3]);
 		printk("the data: %x, %x, %x, %x\n", *(u8 *)(&sync_flag), *((u8 *)(&sync_flag) + 1), *((u8 *)(&sync_flag) + 2), *((u8 *)(&sync_flag) + 3));
@@ -700,7 +680,6 @@ static int rk826_fw_write_00_code(struct oplus_warp_chip *chip)
 		goto update_fw_err;
 	}
 
-	// write rec_01
 	ret = oplus_i2c_dma_write(chip->client, REG_HOST, 4, (u8 *)(&rec_01_flag));
 	if (ret < 0) {
 		chg_err("write rec_01 flag failed!");
@@ -708,7 +687,6 @@ static int rk826_fw_write_00_code(struct oplus_warp_chip *chip)
 	}
 	msleep(10);
 
-	// read reg_state
 	ret = oplus_i2c_dma_read(chip->client, REG_STATE, 4, read_buf);
 	if (ret < 0) {
 		chg_err("write rec_01 flag failed!");
@@ -719,12 +697,11 @@ static int rk826_fw_write_00_code(struct oplus_warp_chip *chip)
 		goto update_fw_err;
 	}
 
-	// send req
 	req.tag = 0x51455220;
 	req.ram_offset = 0;
-	req.length = 16384; //for erase
+	req.length = 16384;
 	req.timeout = 0;
-	req.fw_crc = js_hash(chip->firmware_data, chip->fw_data_count); //for crc hash
+	req.fw_crc = js_hash(chip->firmware_data, chip->fw_data_count);
 	req.header_crc = js_hash((const u8 *)&req, sizeof(req) - 4);
 	if ((ret = WriteSram(chip, (const u8 *)&req, sizeof(req))) != 0) {
 		chg_err("failed to send request!err=%d\n", ret);
@@ -732,7 +709,6 @@ static int rk826_fw_write_00_code(struct oplus_warp_chip *chip)
 	}
 	msleep(10);
 
-	// read state firwware
 	ret = oplus_i2c_dma_read(chip->client, REG_STATE, 4, read_buf);
 	printk("read state firwware: %x\n", *(u32 *)read_buf);
 	if (ret < 0) {
@@ -744,7 +720,6 @@ static int rk826_fw_write_00_code(struct oplus_warp_chip *chip)
 		goto update_fw_err;
 	}
 
-	// send fw
 	if ((ret = Download_00_code(chip)) != 0) {
 		chg_err("failed to send firmware");
 		goto update_fw_err;
@@ -788,7 +763,7 @@ static int rk826_fw_write_ff_code(struct oplus_warp_chip *chip)
 			goto update_fw_err;
 		}
 		msleep(10);
-		//2.check ~sync
+
 		ret = oplus_i2c_dma_read(chip->client, REG_HOST, 4, read_buf);
 		printk("the data: %x, %x, %x, %x\n", read_buf[0], read_buf[1], read_buf[2], read_buf[3]);
 		printk("the data: %x, %x, %x, %x\n", *(u8 *)(&sync_flag), *((u8 *)(&sync_flag) + 1), *((u8 *)(&sync_flag) + 2), *((u8 *)(&sync_flag) + 3));
@@ -811,7 +786,6 @@ static int rk826_fw_write_ff_code(struct oplus_warp_chip *chip)
 		goto update_fw_err;
 	}
 
-	// write rec_01
 	ret = oplus_i2c_dma_write(chip->client, REG_HOST, 4, (u8 *)(&rec_01_flag));
 	if (ret < 0) {
 		chg_err("write rec_01 flag failed!");
@@ -819,7 +793,6 @@ static int rk826_fw_write_ff_code(struct oplus_warp_chip *chip)
 	}
 	msleep(10);
 
-	// read reg_state
 	ret = oplus_i2c_dma_read(chip->client, REG_STATE, 4, read_buf);
 	if (ret < 0) {
 		chg_err("write rec_01 flag failed!");
@@ -830,12 +803,11 @@ static int rk826_fw_write_ff_code(struct oplus_warp_chip *chip)
 		goto update_fw_err;
 	}
 
-	// send req
 	req.tag = 0x51455220;
 	req.ram_offset = 0;
-	req.length = 16384; //for erase
+	req.length = 16384;
 	req.timeout = 0;
-	req.fw_crc = js_hash(chip->firmware_data, chip->fw_data_count); //for crc hash
+	req.fw_crc = js_hash(chip->firmware_data, chip->fw_data_count);
 	req.header_crc = js_hash((const u8 *)&req, sizeof(req) - 4);
 	if ((ret = WriteSram(chip, (const u8 *)&req, sizeof(req))) != 0) {
 		chg_err("failed to send request!err=%d\n", ret);
@@ -843,7 +815,6 @@ static int rk826_fw_write_ff_code(struct oplus_warp_chip *chip)
 	}
 	msleep(10);
 
-	// read state firwware
 	ret = oplus_i2c_dma_read(chip->client, REG_STATE, 4, read_buf);
 	printk("read state firwware: %x\n", *(u32 *)read_buf);
 	if (ret < 0) {
@@ -855,7 +826,6 @@ static int rk826_fw_write_ff_code(struct oplus_warp_chip *chip)
 		goto update_fw_err;
 	}
 
-	// send fw
 	if ((ret = Download_ff_code(chip)) != 0) {
 		chg_err("failed to send firmware");
 		goto update_fw_err;
@@ -932,7 +902,6 @@ static int rk826_fw_update_by_buf(struct oplus_warp_chip *chip, u8 *fw_buf, u32 
 			goto update_fw_err;
 		}
 
-		//2.check ~sync
 		ret = oplus_i2c_dma_read(chip->client, REG_HOST, 4, read_buf);
 		printk("the data: %x, %x, %x, %x\n", read_buf[0], read_buf[1], read_buf[2], read_buf[3]);
 		printk("the data: %x, %x, %x, %x\n", *(u8 *)(&sync_flag), *((u8 *)(&sync_flag) + 1), *((u8 *)(&sync_flag) + 2), *((u8 *)(&sync_flag) + 3));
@@ -955,7 +924,6 @@ static int rk826_fw_update_by_buf(struct oplus_warp_chip *chip, u8 *fw_buf, u32 
 		goto update_fw_err;
 	}
 
-	// write rec_01
 	ret = oplus_i2c_dma_write(chip->client, REG_HOST, 4, (u8 *)(&rec_01_flag));
 	if (ret < 0) {
 		chg_err("write rec_01 flag failed!");
@@ -963,7 +931,6 @@ static int rk826_fw_update_by_buf(struct oplus_warp_chip *chip, u8 *fw_buf, u32 
 	}
 	msleep(10);
 
-	// read reg_state
 	ret = oplus_i2c_dma_read(chip->client, REG_STATE, 4, read_buf);
 	if (ret < 0) {
 		chg_err("write rec_01 flag failed!");
@@ -974,7 +941,6 @@ static int rk826_fw_update_by_buf(struct oplus_warp_chip *chip, u8 *fw_buf, u32 
 		goto update_fw_err;
 	}
 
-	// send req
 	req.tag = 0x51455220;
 	req.ram_offset = 0;
 	req.length = fw_size;
@@ -987,7 +953,6 @@ static int rk826_fw_update_by_buf(struct oplus_warp_chip *chip, u8 *fw_buf, u32 
 	}
 	msleep(10);
 
-	// read state firwware
 	ret = oplus_i2c_dma_read(chip->client, REG_STATE, 4, read_buf);
 	printk("read state firwware: %x\n", *(u32 *)read_buf);
 	if (ret < 0) {
@@ -999,7 +964,6 @@ static int rk826_fw_update_by_buf(struct oplus_warp_chip *chip, u8 *fw_buf, u32 
 		goto update_fw_err;
 	}
 
-	// send fw
 	if ((ret = DownloadFirmware(chip, fw_buf, fw_size)) != 0) {
 		chg_err("failed to send firmware");
 		goto update_fw_err;
@@ -1047,7 +1011,7 @@ static int rk826_fw_update(struct oplus_warp_chip *chip)
 			goto update_fw_err;
 		}
 		msleep(10);
-		//2.check ~sync
+
 		ret = oplus_i2c_dma_read(chip->client, REG_HOST, 4, read_buf);
 		printk("the data: %x, %x, %x, %x\n", read_buf[0], read_buf[1], read_buf[2], read_buf[3]);
 		printk("the data: %x, %x, %x, %x\n", *(u8 *)(&sync_flag), *((u8 *)(&sync_flag) + 1), *((u8 *)(&sync_flag) + 2), *((u8 *)(&sync_flag) + 3));
@@ -1070,7 +1034,6 @@ static int rk826_fw_update(struct oplus_warp_chip *chip)
 		goto update_fw_err;
 	}
 
-	// write rec_01
 	ret = oplus_i2c_dma_write(chip->client, REG_HOST, 4, (u8 *)(&rec_01_flag));
 	if (ret < 0) {
 		chg_err("write rec_01 flag failed!");
@@ -1078,7 +1041,6 @@ static int rk826_fw_update(struct oplus_warp_chip *chip)
 	}
 	msleep(10);
 
-	// read reg_state
 	ret = oplus_i2c_dma_read(chip->client, REG_STATE, 4, read_buf);
 	if (ret < 0) {
 		chg_err("write rec_01 flag failed!");
@@ -1089,7 +1051,6 @@ static int rk826_fw_update(struct oplus_warp_chip *chip)
 		goto update_fw_err;
 	}
 
-	// send req
 	req.tag = 0x51455220;
 	req.ram_offset = 0;
 	req.length = chip->fw_data_count;
@@ -1102,7 +1063,6 @@ static int rk826_fw_update(struct oplus_warp_chip *chip)
 	}
 	msleep(10);
 
-	// read state firwware
 	ret = oplus_i2c_dma_read(chip->client, REG_STATE, 4, read_buf);
 	printk("read state firwware: %x\n", *(u32 *)read_buf);
 	if (ret < 0) {
@@ -1114,7 +1074,6 @@ static int rk826_fw_update(struct oplus_warp_chip *chip)
 		goto update_fw_err;
 	}
 
-	// send fw
 	if ((ret = DownloadFirmware(chip, chip->firmware_data, chip->fw_data_count)) != 0) {
 		chg_err("failed to send firmware");
 		goto update_fw_err;
@@ -1169,7 +1128,6 @@ static int rk826_get_fw_verion_from_ic(struct oplus_warp_chip *chip)
 		chip->mcu_boot_by_gpio = false;
 		opchg_set_clock_sleep(chip);
 
-		//first:set address
 		rc = oplus_warp_i2c_write(chip->client, 0x01, 2, &addr_buf[0]);
 		if (rc < 0) {
 			chg_err(" i2c_write 0x01 error\n");
@@ -1177,7 +1135,7 @@ static int rk826_get_fw_verion_from_ic(struct oplus_warp_chip *chip)
 		}
 		msleep(2);
 		oplus_warp_i2c_read(chip->client, 0x03, 4, data_buf);
-		//strcpy(ver,&data_buf[0]);
+
 		chg_err("data:%x %x %x %x, fw_ver:%x\n", data_buf[0], data_buf[1], data_buf[2], data_buf[3], data_buf[0]);
 
 		chip->mcu_update_ing = false;
@@ -1620,7 +1578,7 @@ static int get_hwpcb_version(void)
 
 	pcb = get_PCB_Version();
 	printk("pcb version is %d\n", pcb);
-	if (pcb > 4) //pcb version 4 is evt1
+	if (pcb > 4)
 		return 1;
 	else
 		return 0;
@@ -1742,7 +1700,7 @@ static int rk826_driver_probe(struct i2c_client *client, const struct i2c_device
 		chip->firmware_data = rk826_fw_data_4400_warp_ffc_15c;
 		chip->fw_data_count = sizeof(rk826_fw_data_4400_warp_ffc_15c);
 		chip->fw_data_version = rk826_fw_data_4400_warp_ffc_15c[chip->fw_data_count - 4];
-	} else { //default
+	} else {
 		chip->firmware_data = rk826_fw_data_4400_warp_ffc_15c;
 		chip->fw_data_count = sizeof(rk826_fw_data_4400_warp_ffc_15c);
 		chip->fw_data_version = rk826_fw_data_4400_warp_ffc_15c[chip->fw_data_count - 4];
@@ -1890,7 +1848,7 @@ static int rk826_driver_probe(struct i2c_client *client, const struct i2c_device
 		asic->firmware_data = rk826_fw_data_4400_warp_ffc_15c;
 		asic->fw_data_count = sizeof(rk826_fw_data_4400_warp_ffc_15c);
 		asic->fw_data_version = rk826_fw_data_4400_warp_ffc_15c[asic->fw_data_count - 4];
-	} else { //default
+	} else {
 		asic->firmware_data = rk826_fw_data_4400_warp_ffc_15c;
 		asic->fw_data_count = sizeof(rk826_fw_data_4400_warp_ffc_15c);
 		asic->fw_data_version = rk826_fw_data_4400_warp_ffc_15c[asic->fw_data_count - 4];

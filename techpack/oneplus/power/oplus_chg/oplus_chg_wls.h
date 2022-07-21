@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+
 /*
  * Copyright (C) 2020-2020 Oplus. All rights reserved.
  */
@@ -166,17 +166,41 @@
 #define CHARGE_FULL_FAN_THREOD_LO 350
 #define CHARGE_FULL_FAN_THREOD_HI 380
 #define QUIET_MODE_LED_BRIGHTNESS 3
+
 #define QUIET_MODE_FAN_THR_SPEED 0
 
 #define WLS_ADAPTER_MODEL_0 0x00
 #define WLS_ADAPTER_MODEL_1 0x01
 #define WLS_ADAPTER_MODEL_2 0x02
+#define WLS_ADAPTER_MODEL_3 0x03
 #define WLS_ADAPTER_MODEL_7 0x07
+#define WLS_ADAPTER_MODEL_8 0x08
 #define WLS_ADAPTER_MODEL_15 0x0F
 
 #define WLS_AUTH_RANDOM_LEN 8
 #define WLS_AUTH_ENCODE_LEN 8
 #define WLS_ENCODE_MASK 3
+
+struct wls_auth_result {
+	u8 random_num[WLS_AUTH_RANDOM_LEN];
+	u8 encode_num[WLS_AUTH_ENCODE_LEN];
+};
+
+#ifndef CONFIG_OPLUS_CHG_OOS
+#define SMEM_RESERVED_BOOT_INFO_FOR_APPS 418
+#define GAUGE_AUTH_MSG_LEN 20
+struct gauge_auth_result {
+	int result;
+	unsigned char msg[GAUGE_AUTH_MSG_LEN];
+	unsigned char rcv_msg[GAUGE_AUTH_MSG_LEN];
+};
+
+struct oplus_chg_auth_result {
+	struct gauge_auth_result rst_k0;
+	struct gauge_auth_result rst_k1;
+	struct wls_auth_result wls_auth_data;
+};
+#endif /* CONFIG_OPLUS_CHG_OOS */
 
 struct oplus_chg_wls;
 
@@ -286,6 +310,13 @@ enum oplus_chg_wls_batt_cl {
 	OPLUS_WLS_CHG_BATT_CL_MAX,
 };
 
+enum wls_status_keep_type {
+	WLS_SK_NULL,
+	WLS_SK_BY_KERNEL,
+	WLS_SK_BY_HAL,
+	WLS_SK_WAIT_TIMEOUT,
+};
+
 struct oplus_chg_rx_msg {
 	u8 msg_type;
 	u8 data;
@@ -303,11 +334,6 @@ struct wls_dev_cmd {
 	unsigned int cmd;
 	unsigned int data_size;
 	unsigned char data_buf[128];
-};
-
-struct wls_auth_result {
-	u8 random_num[WLS_AUTH_RANDOM_LEN];
-	u8 encode_num[WLS_AUTH_ENCODE_LEN];
 };
 
 struct oplus_chg_wls_status {
@@ -339,7 +365,7 @@ struct oplus_chg_wls_status {
 	int fastchg_curr_max_ma;
 	int fastchg_ibat_max_ma;
 	int fastchg_level;
-	// Record the initial temperature when switching to the next gear.
+
 	int fastchg_level_init_temp;
 	int tx_pwr_mw;
 	int rx_pwr_mw;
@@ -355,6 +381,7 @@ struct oplus_chg_wls_status {
 	int fastchg_retry_count;
 #ifndef CONFIG_OPLUS_CHG_OOS
 	int cool_down;
+	bool trx_close_delay;
 #endif
 
 	unsigned long cep_ok_wait_timeout;
@@ -384,7 +411,7 @@ struct oplus_chg_wls_status {
 	bool fastchg_restart;
 	bool ffc_done;
 	bool online_keep;
-	bool boot_online_keep; // The driver loading phase of the shutdown charging is set to true
+	bool boot_online_keep;
 	bool led_on;
 	bool rx_adc_test_enable;
 	bool rx_adc_test_pass;
@@ -496,10 +523,13 @@ struct oplus_chg_wls {
 	struct delayed_work rx_restore_work;
 	struct delayed_work rx_iic_restore_work;
 	struct delayed_work rx_restart_work;
-	struct delayed_work rx_verity_restore_work;
 	struct delayed_work online_keep_remove_work;
+	struct delayed_work rx_verity_restore_work;
 	struct delayed_work verity_state_remove_work;
 	struct delayed_work wls_verity_work;
+#ifndef CONFIG_OPLUS_CHG_OOS
+	struct delayed_work wls_clear_trx_work;
+#endif
 	struct wakeup_source *rx_wake_lock;
 	struct wakeup_source *trx_wake_lock;
 	struct mutex connect_lock;
@@ -545,6 +575,8 @@ struct oplus_chg_wls {
 	int cp_boost_en_gpio;
 	int usb_int_gpio;
 	int usb_int_irq;
+	int status_keep;
+
 	struct pinctrl *pinctrl;
 	struct pinctrl_state *wrx_en_active;
 	struct pinctrl_state *wrx_en_sleep;
@@ -562,7 +594,7 @@ struct oplus_chg_wls {
 	bool ftm_mode;
 	bool debug_mode;
 	bool factory_mode;
-	bool fod_is_cal; // fod is calibrated
+	bool fod_is_cal;
 	bool fod_cal_data_ok;
 	bool msg_callback_ok;
 	bool cmd_data_ok;
@@ -575,10 +607,11 @@ struct oplus_chg_wls {
 	int icl_max_ma[OPLUS_WLS_CHG_MODE_MAX];
 
 	const char *wls_chg_fw_name;
+	int32_t wls_power_mw;
 };
 
-#ifdef CONFIG_OPLUS_CHG_DYNAMIC_CONFIG
-int oplus_chg_wls_set_config(struct oplus_chg_mod *wls_ocm, u8 *buf);
+#ifdef OPLUS_CHG_DEBUG
+void oplus_chg_wls_set_config(struct oplus_chg_mod *wls_ocm, u8 *buf);
 #endif
 
 #endif /* __OPLUS_CHG_WLS_H__ */

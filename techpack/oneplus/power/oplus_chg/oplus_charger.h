@@ -27,7 +27,7 @@
 
 #ifdef CONFIG_OPLUS_CHARGER_MTK
 #include <linux/i2c.h>
-//#include <mt-plat/battery_meter.h>
+
 #include <mt-plat/mtk_boot.h>
 #ifdef CONFIG_OPLUS_CHARGER_MTK6779
 #include "charger_ic/oplus_battery_mtk6779.h"
@@ -457,36 +457,36 @@ struct oplus_chg_limits {
 	int ffc2_normal_fastchg_ma; /*<=35C,700ma*/
 	int ffc2_exit_step_ma; /*<=35C,700ma*/
 	int ffc2_warm_exit_step_ma;
-	int ffc1_normal_vfloat_sw_limit; //4.45V
+	int ffc1_normal_vfloat_sw_limit;
 	int ffc1_warm_vfloat_sw_limit;
 	int ffc2_normal_vfloat_sw_limit;
 	int ffc2_warm_vfloat_sw_limit;
-	int ffc_temp_normal_vfloat_mv; //4.5v
+	int ffc_temp_normal_vfloat_mv;
 	int ffc2_temp_warm_vfloat_mv;
 	int ffc_temp_warm_vfloat_mv;
-	int ffc1_temp_normal_vfloat_mv; //4.5v
-	int ffc2_temp_normal_vfloat_mv; //4.5v
-	int ffc_normal_vfloat_over_sw_limit; //4.5V
+	int ffc1_temp_normal_vfloat_mv;
+	int ffc2_temp_normal_vfloat_mv;
+	int ffc_normal_vfloat_over_sw_limit;
 	int ffc_warm_vfloat_over_sw_limit;
-	int ffc1_normal_vfloat_over_sw_limit; //4.5V
-	int ffc2_normal_vfloat_over_sw_limit; //4.5V
+	int ffc1_normal_vfloat_over_sw_limit;
+	int ffc2_normal_vfloat_over_sw_limit;
 	int ffc2_warm_vfloat_over_sw_limit;
 	int default_iterm_ma; /*16~45 default value*/
 	int default_temp_normal_fastchg_current_ma;
 	int default_normal_vfloat_sw_limit;
 	int default_temp_normal_vfloat_mv;
 	int default_normal_vfloat_over_sw_limit;
-	int default_temp_little_cool_fastchg_current_ma; //12 ~ 16
+	int default_temp_little_cool_fastchg_current_ma;
 	int default_little_cool_vfloat_sw_limit;
 	int default_temp_little_cool_vfloat_mv;
 	int default_little_cool_vfloat_over_sw_limit;
 	int default_temp_little_cool_fastchg_current_ma_high;
 	int default_temp_little_cool_fastchg_current_ma_low;
-	int default_temp_little_cold_fastchg_current_ma_high; //0 ~ 5
+	int default_temp_little_cold_fastchg_current_ma_high;
 	int default_temp_little_cold_fastchg_current_ma_low;
-	int default_temp_cool_fastchg_current_ma_high; // 5 ~ 12
+	int default_temp_cool_fastchg_current_ma_high;
 	int default_temp_cool_fastchg_current_ma_low;
-	int default_temp_warm_fastchg_current_ma; //44 ~ 53
+	int default_temp_warm_fastchg_current_ma;
 	int default_input_current_charger_ma;
 };
 
@@ -507,11 +507,11 @@ struct battery_data {
 	int BAT_BatterySenseVoltage;
 	int BAT_ISenseVoltage;
 	int BAT_ChargerVoltage;
-	int battery_request_poweroff; //low battery in sleep
+	int battery_request_poweroff;
 	int fastcharger;
 	int charge_technology;
 	/* Dual battery */
-	int BAT_MMI_CHG; //for MMI_CHG_TEST
+	int BAT_MMI_CHG;
 	int BAT_FCC;
 	int BAT_SOH;
 	int BAT_CC;
@@ -587,6 +587,44 @@ struct short_c_batt_data {
 };
 
 #ifdef OPLUS_CHG_OP_DEF
+enum oplus_chg_limit_level {
+	CURR_LIMIT_WARP_3_6A_SWARP_2_5A = 0x1,
+	CURR_LIMIT_WARP_2_5A_SWARP_2_0A,
+	CURR_LIMIT_WARP_3_0A_SWARP_3_0A,
+	CURR_LIMIT_WARP_4_0A_SWARP_4_0A,
+	CURR_LIMIT_WARP_5_0A_SWARP_5_0A,
+	CURR_LIMIT_WARP_6_0A_SWARP_6_5A,
+	CURR_LIMIT_MAX,
+};
+
+enum oplus_chg_linit_level_7bit {
+	CURR_LIMIT_7BIT_1_0A = 0x01,
+	CURR_LIMIT_7BIT_1_5A,
+	CURR_LIMIT_7BIT_2_0A,
+	CURR_LIMIT_7BIT_2_5A,
+	CURR_LIMIT_7BIT_3_0A,
+	CURR_LIMIT_7BIT_3_5A,
+	CURR_LIMIT_7BIT_4_0A,
+	CURR_LIMIT_7BIT_4_5A,
+	CURR_LIMIT_7BIT_5_0A,
+	CURR_LIMIT_7BIT_5_5A,
+	CURR_LIMIT_7BIT_6_0A,
+	CURR_LIMIT_7BIT_6_3A,
+	CURR_LIMIT_7BIT_6_5A,
+	CURR_LIMIT_7BIT_7_0A,
+	CURR_LIMIT_7BIT_7_5A,
+	CURR_LIMIT_7BIT_8_0A,
+	CURR_LIMIT_7BIT_8_5A,
+	CURR_LIMIT_7BIT_9_0A,
+	CURR_LIMIT_7BIT_9_5A,
+	CURR_LIMIT_7BIT_10_0A,
+	CURR_LIMIT_7BIT_10_5A,
+	CURR_LIMIT_7BIT_11_0A,
+	CURR_LIMIT_7BIT_11_5A,
+	CURR_LIMIT_7BIT_12_0A,
+	CURR_LIMIT_7BIT_12_5A,
+	CURR_LIMIT_7BIT_MAX,
+};
 
 struct oplus_chg_dynamic_config {
 	struct oplus_chg_strategy_data warp_chg_led_on_strategy_data[CHG_STRATEGY_DATA_TABLE_MAX];
@@ -598,7 +636,7 @@ struct oplus_chg_dynamic_config {
 	struct oplus_chg_strategy_data normal_chg_led_off_strategy_data[CHG_STRATEGY_DATA_TABLE_MAX];
 	struct oplus_chg_strategy_data swarp_general_chg_strategy_data_low[CHG_STRATEGY_DATA_TABLE_MAX];
 	struct oplus_chg_strategy_data swarp_general_chg_strategy_data_high[CHG_STRATEGY_DATA_TABLE_MAX];
-} __attribute__((packed));
+};
 
 void oplus_chg_strategy_init(struct oplus_chg_strategy *strategy, struct oplus_chg_strategy_data *data, int data_size, int temp);
 int oplus_chg_strategy_get_data(struct oplus_chg_strategy *strategy, struct oplus_chg_strategy_temp_region *temp_region, int temp);
@@ -663,10 +701,10 @@ struct oplus_chg_chip {
 	struct oplus_chg_dynamic_config dynamic_config;
 	int factory_mode;
 	int reconnect_count;
+	struct mutex update_work_lock;
 	int norchg_reconnect_count;
 	spinlock_t strategy_lock;
 	int ibat_save[10];
-	struct mutex update_work_lock;
 #ifndef CONFIG_OPLUS_CHG_OOS
 	struct delayed_work led_power_on_report_work;
 #endif
@@ -791,9 +829,9 @@ struct oplus_chg_chip {
 	bool fg_bcl_poll;
 	bool chg_powersave;
 	bool healthd_ready;
-	// #ifdef CONFIG_FB nick.hu todo
+
 	struct notifier_block chg_fb_notify;
-	// #endif
+
 	struct normalchg_gpio_pinctrl normalchg_gpio;
 	int chargerid_volt;
 	bool chargerid_volt_got;
@@ -937,15 +975,15 @@ struct oplus_chg_operations {
 #ifdef OPLUS_CHG_OP_DEF
 	void (*disconnect_vbus)(bool enable);
 	int (*oplus_chg_get_charge_counter)(void);
-	void (*otg_switch)(bool enable);
+	bool (*otg_set_switch)(bool enable);
 	int (*disconnect_pd)(bool);
 	int (*pdo_5v)(void);
+	int (*chg_lcm_en)(bool);
 	int (*get_vph_volt)(void);
 	int (*get_hw_detect)(void);
-	int (*chg_lcm_en)(bool);
-	int (*chg_direct_set_icl)(int current_ma);
 	void (*report_vol_status)(void);
 	void (*rerun_apsd)(void);
+	void (*update_usb_type)(void);
 #endif
 };
 
@@ -1059,11 +1097,6 @@ int oplus_chg_match_temp_for_chging(void);
 void oplus_chg_set_camera_status(bool val);
 void oplus_chg_update_float_voltage_by_fastchg(bool fastchg_en);
 void oplus_check_ovp_status(struct oplus_chg_chip *chg);
-#ifdef CONFIG_OPLUS_CHG_OOS
-#ifdef CONFIG_OPLUS_CHG_DYNAMIC_CONFIG
-int oplus_chg_usb_set_config(struct oplus_chg_mod *usb_ocm, u8 *buf);
-#endif
-#endif
 #endif
 
 #endif /*_OPLUS_CHARGER_H_*/

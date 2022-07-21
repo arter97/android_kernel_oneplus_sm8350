@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+
 /*
  * Copyright (C) 2018-2020 Oplus. All rights reserved.
  */
@@ -17,9 +17,9 @@
 #include <linux/platform_device.h>
 #include <asm/atomic.h>
 #include <linux/xlog.h>
-//#include <upmu_common.h>
+
 #include <linux/gpio.h>
-//#include <linux/irqchip/mtk-eic.h>
+
 #include <linux/of.h>
 #include <linux/of_irq.h>
 #include <linux/of_gpio.h>
@@ -140,13 +140,11 @@ static int opchg_bq27541_gpio_pinctrl_init(struct oplus_warp_chip *chip)
 		chip->warp_gpio.gpio_switch1_ctr1_act = pinctrl_lookup_state(chip->warp_gpio.pinctrl, "charging_switch1_ctr1_active");
 		if (IS_ERR_OR_NULL(chip->warp_gpio.gpio_switch1_ctr1_act)) {
 			chg_err(": %d Failed to get the charging_switch1_ctr1_active handle\n", __LINE__);
-			//return -EINVAL;
 		}
 
 		chip->warp_gpio.gpio_switch1_ctr1_sleep = pinctrl_lookup_state(chip->warp_gpio.pinctrl, "charging_switch1_ctr1_sleep");
 		if (IS_ERR_OR_NULL(chip->warp_gpio.gpio_switch1_ctr1_sleep)) {
 			chg_err(": %d Failed to get the charging_switch1_ctr1_sleep handle\n", __LINE__);
-			//return -EINVAL;
 		}
 	} else {
 		chip->warp_gpio.gpio_switch1_act_switch2_act = pinctrl_lookup_state(chip->warp_gpio.pinctrl, "switch1_act_switch2_act");
@@ -679,7 +677,7 @@ int oplus_warp_mcu_hwid_check(struct oplus_warp_chip *chip)
 	}
 
 #ifdef CONFIG_MACH_MT6785
-	if (is_sala_a()) { //sala_a use rk826
+	if (is_sala_a()) {
 		chg_debug("[%s]sala_a return rk826\n", __func__);
 		mcu_hwid_type = OPLUS_WARP_ASIC_HWID_RK826;
 		return OPLUS_WARP_ASIC_HWID_RK826;
@@ -1346,7 +1344,7 @@ void opchg_reply_mcu_data_4bits(struct oplus_warp_chip *chip, int ret_info, int 
 void opchg_set_switch_fast_charger(struct oplus_warp_chip *chip)
 {
 	gpio_direction_output(chip->warp_gpio.switch1_gpio, 1); /* out 1*/
-	if (chip->warp_gpio.switch1_ctr1_gpio > 0) { //asic rk826
+	if (chip->warp_gpio.switch1_ctr1_gpio > 0) {
 #ifndef OPLUS_CHG_OP_DEF
 		gpio_direction_output(chip->warp_gpio.switch1_ctr1_gpio, 0); /* out 0*/
 #else
@@ -1366,7 +1364,7 @@ void opchg_set_warp_chargerid_switch_val(struct oplus_warp_chip *chip, int value
 	else
 		return;
 	/*
-	if (chip->warp_gpio.switch1_ctr1_gpio > 0) {//asic rk826/op10
+	if (chip->warp_gpio.switch1_ctr1_gpio > 0) {
 		if (level == 1) {
 			gpio_direction_output(chip->warp_gpio.reset_gpio, 1);
 			gpio_set_value(chip->warp_gpio.reset_gpio, 1);
@@ -1388,7 +1386,7 @@ void opchg_set_switch_normal_charger(struct oplus_warp_chip *chip)
 	if (chip->warp_gpio.switch1_gpio > 0) {
 		gpio_direction_output(chip->warp_gpio.switch1_gpio, 0); /* in 0*/
 	}
-	if (chip->warp_gpio.switch1_ctr1_gpio > 0) { //asic rk826
+	if (chip->warp_gpio.switch1_ctr1_gpio > 0) {
 		gpio_direction_output(chip->warp_gpio.switch1_ctr1_gpio, 0); /* out 0*/
 		/*gpio_set_value(chip->warp_gpio.reset_gpio, 0);*/
 	}

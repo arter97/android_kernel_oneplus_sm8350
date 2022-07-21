@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+
 /*
  * Copyright (C) 2018-2020 Oplus. All rights reserved.
  */
@@ -22,7 +22,6 @@
 #include <linux/regulator/of_regulator.h>
 #include <linux/regulator/machine.h>
 #include <linux/rtc.h>
-#include <soc/oplus/device_info.h>
 
 #include "oplus_charger.h"
 #include "oplus_warp.h"
@@ -235,7 +234,6 @@ bool oplus_wpc_get_fw_updating(void)
 int oplus_wpc_get_adapter_type(void)
 {
 	if (!g_wpc_chip) {
-		//chg_err("g_wpc_chip null, return\n");
 		return -EINVAL;
 	}
 	if (g_wpc_chip->wpc_ops->wpc_get_adapter_type) {

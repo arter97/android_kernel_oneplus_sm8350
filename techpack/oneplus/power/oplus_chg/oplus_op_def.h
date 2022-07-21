@@ -73,7 +73,7 @@ enum oplus_adapter_type {
 	ADAPTER_TYPE_UNKNOWN,
 	ADAPTER_TYPE_AC,
 	ADAPTER_TYPE_CAR,
-	ADAPTER_TYPE_PB, //power bank
+	ADAPTER_TYPE_PB,
 };
 
 enum oplus_adapter_chg_type {

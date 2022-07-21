@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+
 /*
  * Copyright (C) 2018-2020 Oplus. All rights reserved.
  */
@@ -552,8 +552,6 @@ static int __init adapter_ic_init(void)
 		return -1;
 	}
 
-	//       chip->client = client;
-	//       chip->dev = &client->dev;
 	chip->vops = &oplus_adapter_ops;
 
 	oplus_adapter_init(chip);
@@ -573,7 +571,7 @@ static void __init adapter_ic_exit(void)
 
 #ifndef OPLUS_CHG_OP_DEF
 subsys_initcall(adapter_ic_init);
-//module_exit(adapter_ic_exit);
+
 #else
 oplus_chg_module_register(adapter_ic);
 #endif

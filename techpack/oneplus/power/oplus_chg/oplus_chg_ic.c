@@ -60,6 +60,7 @@ struct oplus_chg_ic_dev *oplsu_chg_ic_get_child_by_index(struct oplus_chg_ic_dev
 		pr_err("ic_dev is NULL\n");
 		return NULL;
 	}
+
 	if (c_index >= atomic_read(&ic_dev->child_num)) {
 		pr_err("no such device, index=%d\n", c_index);
 		return NULL;
@@ -91,6 +92,7 @@ struct oplus_chg_ic_dev *oplsu_chg_ic_find_by_name(const char *name)
 	list_for_each_entry(dev_temp, &ic_list, list) {
 		if (dev_temp->name == NULL)
 			continue;
+
 		if (strcmp(dev_temp->name, name) == 0) {
 			mutex_unlock(&list_lock);
 			return dev_temp;
@@ -106,6 +108,7 @@ struct oplus_chg_ic_dev *of_get_oplus_chg_ic(struct device_node *node, const cha
 	struct device_node *ic_node;
 
 	ic_node = of_parse_phandle(node, prop_name, 0);
+
 	if (!ic_node)
 		return NULL;
 
@@ -122,7 +125,9 @@ int oplus_chg_ic_reg_dump(struct oplus_chg_ic_dev *ic_dev)
 		pr_err("ic_dev is NULL\n");
 		return -ENODEV;
 	}
+
 	ic_ops = (struct oplus_chg_ic_ops *)ic_dev->dev_ops;
+
 	if (ic_ops->reg_dump == NULL) {
 		pr_err("%s not support reg dump\n", ic_dev->name);
 		return -EINVAL;
@@ -141,11 +146,14 @@ int oplus_chg_ic_reg_dump_by_name(const char *name)
 		pr_err("ic name is NULL\n");
 		return -EINVAL;
 	}
+
 	ic_dev = oplsu_chg_ic_find_by_name(name);
+
 	if (ic_dev == NULL) {
 		pr_err("%s ic not found\n", name);
 		return -ENODEV;
 	}
+
 	rc = oplus_chg_ic_reg_dump(ic_dev);
 	return rc;
 }
@@ -173,10 +181,12 @@ struct oplus_chg_ic_dev *oplus_chg_ic_register(struct device *dev, const char *n
 	}
 
 	ic_dev = kzalloc(sizeof(struct oplus_chg_ic_dev), GFP_KERNEL);
+
 	if (ic_dev == NULL) {
 		pr_err("alloc oplus_chg_ic error\n");
 		return NULL;
 	}
+
 	ic_dev->name = name;
 	ic_dev->index = index;
 	ic_dev->dev = dev;
@@ -185,6 +195,7 @@ struct oplus_chg_ic_dev *oplus_chg_ic_register(struct device *dev, const char *n
 	list_for_each_entry(dev_temp, &ic_list, list) {
 		if (dev_temp->name == NULL)
 			continue;
+
 		if (strcmp(dev_temp->name, ic_dev->name) == 0) {
 			pr_err("device with the same name already exists\n");
 			mutex_unlock(&list_lock);
@@ -246,17 +257,20 @@ struct oplus_chg_ic_dev *devm_oplus_chg_ic_register(struct device *dev, const ch
 	}
 
 	dr = devres_alloc(devm_oplus_chg_ic_release, sizeof(struct ic_devres), GFP_KERNEL);
+
 	if (!dr) {
 		pr_err("devres_alloc error\n");
 		return NULL;
 	}
 
 	ic_dev = kzalloc(sizeof(struct oplus_chg_ic_dev), GFP_KERNEL);
+
 	if (ic_dev == NULL) {
 		pr_err("alloc oplus_chg_ic error\n");
 		devres_free(dr);
 		return NULL;
 	}
+
 	ic_dev->name = name;
 	ic_dev->index = index;
 	ic_dev->dev = dev;
@@ -265,6 +279,7 @@ struct oplus_chg_ic_dev *devm_oplus_chg_ic_register(struct device *dev, const ch
 	list_for_each_entry(dev_temp, &ic_list, list) {
 		if (dev_temp->name == NULL)
 			continue;
+
 		if (strcmp(dev_temp->name, ic_dev->name) == 0) {
 			pr_err("device with the same name already exists\n");
 			mutex_unlock(&list_lock);
@@ -294,6 +309,7 @@ int devm_oplus_chg_ic_unregister(struct device *dev, struct oplus_chg_ic_dev *ic
 		pr_err("dev is NULL\n");
 		return -ENODEV;
 	}
+
 	if (ic_dev == NULL) {
 		pr_err("ic_dev is NULL\n");
 		return -ENODEV;

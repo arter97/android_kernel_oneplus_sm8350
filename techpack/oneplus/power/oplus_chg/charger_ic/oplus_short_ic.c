@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+
 /*
  * Copyright (C) 2018-2020 Oplus. All rights reserved.
  */
@@ -20,16 +20,13 @@
 
 #include <linux/xlog.h>
 
-//#include <upmu_common.h>
-//#include <mt-plat/mtk_gpio.h>
 #include <linux/dma-mapping.h>
 
-//#include <mt-plat/battery_meter.h>
 #include <linux/module.h>
 #ifdef CONFIG_OPLUS_CHG_OOS
 #include <linux/oem/project_info.h>
 #else
-#include <soc/oplus/device_info.h>
+
 #endif
 
 #else
@@ -52,7 +49,7 @@
 #ifdef CONFIG_OPLUS_CHG_OOS
 #include <linux/oem/project_info.h>
 #else
-#include <soc/oplus/device_info.h>
+
 #endif
 #endif
 #include "../oplus_charger.h"
@@ -171,7 +168,6 @@ int oplus_short_ic_set_volt_threshold(struct oplus_chg_chip *chip)
 
 	oplus_short_chip = short_ic_chip;
 	if (oplus_short_chip == NULL || chip == NULL) {
-		///chg_err("ERROR: oplus_short_ic is not ready, return\n");
 		return 0;
 	}
 
@@ -190,7 +186,6 @@ int oplus_short_ic_set_volt_threshold(struct oplus_chg_chip *chip)
 		chg_err("ERROR: oplus_short_ic OPLUS_SHORT_IC_TEMP_VOLT_DROP_THRESD write err, return\n");
 	}
 	oplus_short_chip->volt_drop_threshold = new_threshold;
-	//chg_err("oplus_short_ic new_threshold[0x%02X]\n", new_threshold);
 
 	rc = i2c_smbus_read_byte_data(oplus_short_chip->client, OPLUS_SHORT_IC_TEMP_VOLT_DROP_THRESH_REG);
 	chg_err("oplus_short_ic,0x02_reg, new_threshold value [0x%02X]\n", rc);
@@ -217,12 +212,10 @@ int oplus_short_ic_get_otp_error_value(struct oplus_chg_chip *chip)
 
 	oplus_short_chip = short_ic_chip;
 	if (oplus_short_chip == NULL) {
-		//chg_err("ERROR: oplus_short_ic is not ready, return\n");
 		return 0;
 	}
 
 	if (oplus_short_chip->b_oplus_short_ic_exist == false) {
-		///chg_err("ERROR: oplus_short_ic is not exist, return 0\n");
 		return 0;
 	}
 
@@ -236,7 +229,6 @@ int oplus_short_ic_get_otp_error_value(struct oplus_chg_chip *chip)
 		return 0;
 	}
 	oplus_short_chip->otp_error_value = rc;
-	///chg_err("oplus_short_ic OTP state rc[0x%02X]\n", rc);
 
 	return oplus_short_chip->otp_error_value;
 }
@@ -249,16 +241,13 @@ bool oplus_short_ic_otp_check(void)
 	static bool pre_otp_st = true;
 
 	if (chip == NULL) {
-		//chg_err("ERROR: oplus_short_ic is not ready, return true\n");
 		return true;
 	}
 
 	if (chip->b_oplus_short_ic_exist == false) {
-		///chg_err("ERROR: oplus_short_ic is not exist, return true\n");
 		return true;
 	}
 	if (atomic_read(&short_ic_chip->suspended) == 1) {
-		//chg_err("ERROR: oplus_short_ic is suspended, return true\n");
 		return pre_otp_st;
 	}
 
@@ -281,7 +270,6 @@ bool oplus_short_ic_otp_check(void)
 			return false;
 		}
 	} else {
-		//chg_err("oplus_short_ic OTP state rc[0x%02X]\n", rc);
 		otp_st = rc & 0xF0;
 		if (otp_st != 0x00) {
 			if (chip->otp_error_cnt < 3) {
@@ -302,7 +290,6 @@ bool oplus_short_ic_otp_check(void)
 
 static void oplus_short_ic_shutdown(struct i2c_client *client)
 {
-	//msleep(80);
 	return;
 }
 

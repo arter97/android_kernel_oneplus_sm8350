@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+
 /*
  * Copyright (C) 2018-2020 Oplus. All rights reserved.
  */
@@ -30,7 +30,7 @@
 #ifdef CONFIG_OPLUS_CHG_OOS
 #include <linux/oem/project_info.h>
 #else
-#include <soc/oplus/device_info.h>
+
 #endif
 
 extern void mt_power_off(void);
@@ -54,7 +54,7 @@ extern void mt_power_off(void);
 #ifdef CONFIG_OPLUS_CHG_OOS
 #include <linux/oem/project_info.h>
 #else
-#include <soc/oplus/device_info.h>
+
 #endif
 #endif
 #include "../oplus_warp.h"
@@ -128,14 +128,10 @@ static int chargepump_config_interface(int RegNum, int val, int MASK)
 
 	ret = __chargepump_read_reg(RegNum, &chargepump_reg);
 
-	//chg_err(" Reg[%x]=0x%x\n", RegNum, chargepump_reg);
-
 	chargepump_reg &= ~MASK;
 	chargepump_reg |= val;
 
 	ret = __chargepump_write_reg(RegNum, chargepump_reg);
-
-	//chg_err(" write Reg[%x]=0x%x\n", RegNum, chargepump_reg);
 
 	__chargepump_read_reg(RegNum, &chargepump_reg);
 
@@ -417,8 +413,6 @@ int chargepump_kick_watchdog(void)
 #else
 	int ret;
 
-	//chg_err("<~WPC~>  chargepump_kick_watchdog!\n");
-
 	ret = chargepump_config_interface(0x0A, 0x71, 0xFF);
 	if (ret) {
 		chg_err(" write reg 0x0A error!\n");
@@ -671,7 +665,6 @@ static int chargepump_gpio_init(struct chip_chargepump *chip)
 	int rc = 0;
 	struct device_node *node = chip->dev->of_node;
 
-	// Parsing gpio chargepump_en_gpio
 	chip->chargepump_en_gpio = of_get_named_gpio(node, "qcom,cp_en-gpio", 0);
 	if (chip->chargepump_en_gpio < 0) {
 		pr_err("chip->chargepump_en_gpio not specified\n");
@@ -733,7 +726,6 @@ static int chargepump_driver_remove(struct i2c_client *client)
 {
 	int ret = 0;
 
-	//ret = i2c_del_driver(&chargepump_i2c_driver);
 	chg_debug("  ret = %d\n", ret);
 	return 0;
 }

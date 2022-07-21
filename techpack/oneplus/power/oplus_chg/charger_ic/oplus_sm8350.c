@@ -42,10 +42,11 @@ static int oplus_chg_get_skin_temp(struct battery_chg_dev *bcdev, int *skin_temp
 static int oplus_chg_get_batt_current(struct battery_chg_dev *bcdev, int *batt_current);
 static int oplus_chg_get_real_soc(struct battery_chg_dev *bcdev, int *soc);
 static void oplus_disconnect_vbus(bool enable);
+static void oplus_update_usb_type(void);
 static int smbchg_usb_suspend_enable(void);
 static int smbchg_usb_suspend_disable(void);
 static int smbchg_charging_disable(void);
-static void oplus_set_otg_switch_status(bool enable);
+static bool oplus_set_otg_switch_status(bool enable);
 static int oplus_otg_ap_enable(bool enable);
 #ifndef CONFIG_OPLUS_CHG_OOS
 int oplus_get_usb_status(void);
@@ -165,6 +166,21 @@ static bool oplus_chg_is_wls_online(struct battery_chg_dev *dev)
 	return !!pval.intval;
 }
 
+static bool oplus_chg_is_usb_online(struct battery_chg_dev *dev)
+{
+	union oplus_chg_mod_propval pval;
+	int rc;
+
+	if (!is_usb_ocm_available(dev)) {
+		pr_debug("usb ocm not found\n");
+		return false;
+	}
+	rc = oplus_chg_mod_get_property(dev->ocm_list[OCM_TYPE_USB].ocm, OPLUS_CHG_PROP_ONLINE, &pval);
+	if (rc < 0)
+		return false;
+
+	return !!pval.intval;
+}
 static bool oplus_chg_is_wls_present(struct battery_chg_dev *dev)
 {
 	union oplus_chg_mod_propval pval;
@@ -212,7 +228,6 @@ static int battery_chg_write(struct battery_chg_dev *bcdev, void *data, int len)
 		rc = 0;
 	}
 	mutex_unlock(&bcdev->rw_lock);
-
 	return rc;
 }
 
@@ -282,7 +297,7 @@ static int oplus_vbus_regulator_enable(struct battery_chg_dev *bcdev, bool enabl
 	return rc;
 }
 
-static void oplus_set_otg_switch_status(bool enable)
+static bool oplus_set_otg_switch_status(bool enable)
 {
 	struct oplus_chg_chip *oplus_chip = g_oplus_chip;
 	struct battery_chg_dev *bcdev = NULL;
@@ -290,23 +305,26 @@ static void oplus_set_otg_switch_status(bool enable)
 	struct ocm_state *pst = NULL;
 
 	if (!probe_done)
-		return;
+		return false;
 
 	if (!oplus_chip) {
 		pr_err("oplus_chg_chip is NULL!\n");
-		return;
+		return false;
 	}
 	bcdev = oplus_chip->pmic_spmi.bcdev_chip;
 	if (!bcdev) {
 		pr_err("bcdev is NULL!\n");
-		return;
+		return false;
 	}
-
 	pst = &bcdev->ocm_list[OCM_TYPE_USB];
 
 	rc = write_property_id(bcdev, pst, USB_OTG_SWITCH, enable);
 	if (rc < 0) {
-		pr_err("Set otg status %s error, rc=%d\n", enable ? "enable" : "disable", rc);
+		pr_err(" Set otg status %s error rc=%d\n", enable ? "enable" : "disable", rc);
+		return false;
+	} else {
+		pr_debug("Set otg status %s ok, rc=%d\n", enable ? "enable" : "disable", rc);
+		return true;
 	}
 }
 
@@ -530,6 +548,43 @@ static int oplus_chg_get_batt_temp(struct battery_chg_dev *bcdev, int *temp)
 
 	return 0;
 }
+#ifdef OPLUS_CHG_OP_DEF
+static void msm_vreg_ldo_enable(struct battery_chg_dev *bcdev)
+{
+	const char *supply_name;
+	int ret;
+
+	supply_name = "vreg_s1c";
+	bcdev->current_uA = 50000;
+	bcdev->vreg_default_vol = 1920000;
+	if (!bcdev) {
+		pr_err("bcdev %s\n", __func__);
+		return;
+	}
+
+	bcdev->vreg_ldo = regulator_get(bcdev->dev, supply_name);
+	if (IS_ERR_OR_NULL(bcdev->vreg_ldo)) {
+		ret = PTR_ERR(bcdev->vreg_ldo);
+		pr_err("regulator_get(%s) failed for %s, ret=%d\n", supply_name, supply_name, ret);
+		return;
+	}
+
+	ret = regulator_set_voltage(bcdev->vreg_ldo, bcdev->vreg_default_vol, bcdev->vreg_default_vol);
+	if (ret) {
+		pr_err("regulator_set_voltage %s failed, ret=%d\n", supply_name, ret);
+	}
+
+	ret = regulator_set_load(bcdev->vreg_ldo, bcdev->current_uA);
+	if (ret < 0) {
+		pr_err("regulator_set_load %s failed, ret=%d\n", supply_name, ret);
+	}
+
+	ret = regulator_enable(bcdev->vreg_ldo);
+	if (ret) {
+		pr_err("regulator_enable %s failed, ret=%d\n", supply_name, ret);
+	}
+}
+#endif
 
 static int oplus_chg_hw_detect(struct battery_chg_dev *bcdev, int *hw_detect)
 {
@@ -701,8 +756,10 @@ static int get_usb_temp(struct battery_chg_dev *bcdev)
 	pr_debug("connector_voltage_01:%04dmv,connector_temp_02:%03d\n", bcdev->connector_voltage, con_temp_30k[i]);
 
 	temp_1 = con_temp_30k[i];
+	/*remove usb temp 125 degree begin*/
 	if (temp_1 == 125)
 		temp_1 = 25;
+	/*remove usb temp 125 degree end*/
 	chip->usb_temp_l = temp_1;
 
 	if (bcdev->iio.op_connector_temp_chan_sec) {
@@ -725,8 +782,10 @@ static int get_usb_temp(struct battery_chg_dev *bcdev)
 
 	pr_debug("connector_voltage_02:%04dmv,connector_temp_02:%03d\n", bcdev->connector_voltage, con_temp_30k[i]);
 	temp_2 = con_temp_30k[i];
+	/*remove usb temp 125 degree begin*/
 	if (temp_2 == 125)
 		temp_2 = 25;
+	/*remove usb temp 125 degree end*/
 	chip->usb_temp_r = temp_2;
 
 	if (temp_1 >= temp_2)
@@ -777,7 +836,7 @@ static int __oplus_connector_check_temp(struct battery_chg_dev *bcdev)
 	interval_temp = bcdev->connector_temp - batt_temp / 10;
 
 	if (!bcdev->count_run) { /*count run state keep count_total not change*/
-		if (bcdev->connector_temp >= 33) { // 33
+		if (bcdev->connector_temp >= 33) {
 			bcdev->count_total = 1500 / 50;
 		} else {
 			bcdev->count_total = 1500 / 300;
@@ -881,7 +940,7 @@ static void oplus_connector_temp_check_work(struct work_struct *work)
 	pr_info("ended normally\n");
 }
 
-#define connector_RECOVERY_CHECK_INTERVAL 3000 //ms
+#define connector_RECOVERY_CHECK_INTERVAL 3000
 static void oplus_connector_recovery_charge_work(struct work_struct *work)
 {
 	struct delayed_work *dwork = to_delayed_work(work);
@@ -956,7 +1015,7 @@ static void oplus_disconnect_vbus(bool enable)
 		oplus_chip->disconnect_vbus = false;
 		kobject_uevent_env(&bcdev->dev->kobj, KOBJ_CHANGE, recovered);
 #ifndef CONFIG_OPLUS_CHG_OOS
-		oplus_set_usb_status(USB_TEMP_HIGH);
+		oplus_clear_usb_status(USB_TEMP_HIGH);
 #endif
 		pr_info("usb connector cool(%d), Vbus connected! Sent uevent %s\n", bcdev->connector_temp, recovered[0]);
 		return;
@@ -964,7 +1023,7 @@ static void oplus_disconnect_vbus(bool enable)
 
 	kobject_uevent_env(&bcdev->dev->kobj, KOBJ_CHANGE, detected);
 #ifndef CONFIG_OPLUS_CHG_OOS
-	oplus_clear_usb_status(USB_TEMP_HIGH);
+	oplus_set_usb_status(USB_TEMP_HIGH);
 #endif
 	pr_info("usb connector hot(%d),Vbus disconnected! Sent uevent %s\n", bcdev->connector_temp, detected[0]);
 	rc = oplus_chg_get_fastchg_status(bcdev, &bcdev->fastchg_on);
@@ -990,11 +1049,49 @@ static void oplus_disconnect_vbus(bool enable)
 	oplus_chip->disconnect_vbus = true;
 
 	/* CC set sink only mode */
-	//vote(bcdev->otg_toggle_votable, HOT_PROTECT_VOTER, 0, 0);
 
 	/* Charge recovery monitor */
 
 	schedule_delayed_work(&bcdev->connector_recovery_work, msecs_to_jiffies(1000));
+}
+static int opchg_get_charger_type(void);
+
+static void oplus_update_usb_type(void)
+{
+	struct oplus_chg_chip *oplus_chip = g_oplus_chip;
+	struct battery_chg_dev *bcdev = NULL;
+
+	if (!oplus_chip) {
+		pr_err("oplus_chg_chip is NULL!\n");
+		return;
+	}
+	bcdev = oplus_chip->pmic_spmi.bcdev_chip;
+	if (!bcdev) {
+		pr_err("bcdev is NULL!\n");
+		return;
+	}
+
+	schedule_work(&bcdev->usb_type_work);
+}
+
+static void oplus_charger_type_check_work(struct work_struct *work)
+{
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct battery_chg_dev *bcdev = container_of(dwork, struct battery_chg_dev, check_charger_type_work);
+	static int count = 0;
+	int charger_type = POWER_SUPPLY_TYPE_UNKNOWN;
+
+	charger_type = opchg_get_charger_type();
+	pr_info("Recovery Charge!\n");
+
+	chg_err("chip->charger_type[%d],count:%d\n", charger_type, count);
+	if (charger_type == POWER_SUPPLY_TYPE_UNKNOWN && (count < 6)) {
+		count++;
+		schedule_delayed_work(&bcdev->check_charger_type_work, msecs_to_jiffies(500));
+	} else {
+		oplus_chg_wake_update_work();
+		count = 0;
+	}
 }
 
 static void oplus_charge_status_check_work(struct work_struct *work)
@@ -1055,27 +1152,6 @@ static bool validate_message(struct battery_charger_resp_msg *resp_msg, size_t l
 	}
 
 	return true;
-}
-static int opchg_get_charger_type(void);
-
-static void oplus_charger_type_check_work(struct work_struct *work)
-{
-	struct delayed_work *dwork = to_delayed_work(work);
-	struct battery_chg_dev *bcdev = container_of(dwork, struct battery_chg_dev, check_charger_type_work);
-	static int count = 0;
-	int charger_type = POWER_SUPPLY_TYPE_UNKNOWN;
-
-	charger_type = opchg_get_charger_type();
-	pr_info("Recovery Charge!\n");
-
-	chg_err("chip->charger_type[%d],count:%d\n", charger_type, count);
-	if (charger_type == POWER_SUPPLY_TYPE_UNKNOWN && (count < 6)) {
-		count++;
-		schedule_delayed_work(&bcdev->check_charger_type_work, msecs_to_jiffies(500));
-	} else {
-		oplus_chg_wake_update_work();
-		count = 0;
-	}
 }
 
 #define MODEL_DEBUG_BOARD "Debug_Board"
@@ -1182,6 +1258,56 @@ static void handle_message(struct battery_chg_dev *bcdev, void *data, size_t len
 		complete(&bcdev->ack);
 }
 
+extern void oplus_chg_gki_set_usb_type(enum power_supply_type type);
+
+static void battery_chg_update_usb_type_work(struct work_struct *work)
+{
+	struct battery_chg_dev *bcdev = container_of(work, struct battery_chg_dev, usb_type_work);
+	struct oplus_chg_chip *chip = g_oplus_chip;
+
+	struct ocm_state *pst = &bcdev->ocm_list[OCM_TYPE_USB];
+	int rc;
+
+	rc = read_property_id(bcdev, pst, USB_ADAP_TYPE);
+	if (rc < 0) {
+		pr_err("Failed to read USB_ADAP_TYPE rc=%d\n", rc);
+		return;
+	}
+
+	pr_debug("usb_adap_type: %u\n", pst->prop[USB_ADAP_TYPE]);
+
+	switch (pst->prop[USB_ADAP_TYPE]) {
+	case POWER_SUPPLY_USB_TYPE_SDP:
+		oplus_chg_gki_set_usb_type(POWER_SUPPLY_TYPE_USB);
+		break;
+	case POWER_SUPPLY_USB_TYPE_DCP:
+	case POWER_SUPPLY_USB_TYPE_APPLE_BRICK_ID:
+		oplus_chg_gki_set_usb_type(POWER_SUPPLY_TYPE_USB_DCP);
+		break;
+	case POWER_SUPPLY_USB_TYPE_CDP:
+		oplus_chg_gki_set_usb_type(POWER_SUPPLY_TYPE_USB_CDP);
+		break;
+	case POWER_SUPPLY_USB_TYPE_ACA:
+		oplus_chg_gki_set_usb_type(POWER_SUPPLY_TYPE_USB_ACA);
+		break;
+	case POWER_SUPPLY_USB_TYPE_C:
+		oplus_chg_gki_set_usb_type(POWER_SUPPLY_TYPE_USB_TYPE_C);
+		break;
+	case POWER_SUPPLY_USB_TYPE_PD:
+	case POWER_SUPPLY_USB_TYPE_PD_DRP:
+	case POWER_SUPPLY_USB_TYPE_PD_PPS:
+		if (chip && chip->usb_enum_status)
+			oplus_chg_gki_set_usb_type(POWER_SUPPLY_TYPE_USB);
+		else
+			oplus_chg_gki_set_usb_type(POWER_SUPPLY_TYPE_USB_PD);
+		break;
+	default:
+		if (!oplus_chg_is_usb_online(bcdev))
+			oplus_chg_gki_set_usb_type(POWER_SUPPLY_TYPE_UNKNOWN);
+		break;
+	}
+}
+
 static void handle_notification(struct battery_chg_dev *bcdev, void *data, size_t len)
 {
 	struct battery_charger_notify_msg *notify_msg = data;
@@ -1208,6 +1334,7 @@ static void handle_notification(struct battery_chg_dev *bcdev, void *data, size_
 	case BC_USB_STATUS_GET:
 		if (is_usb_ocm_available(bcdev))
 			pst = &bcdev->ocm_list[OCM_TYPE_USB];
+		schedule_work(&bcdev->usb_type_work);
 		break;
 	case BC_WLS_STATUS_GET:
 		if (is_wls_ocm_available(bcdev))
@@ -1340,37 +1467,6 @@ static int battery_chg_callback(void *priv, void *data, size_t len)
 
 	return 0;
 }
-
-#if 0
-static int battery_psy_set_charge_current(struct battery_chg_dev *bcdev,
-					int val)
-{
-	int rc;
-	u32 fcc_ua;
-
-	if (!bcdev->num_thermal_levels)
-		return 0;
-
-	if (bcdev->num_thermal_levels < 0) {
-		pr_err("Incorrect num_thermal_levels\n");
-		return -EINVAL;
-	}
-
-	if (val < 0 || val > bcdev->num_thermal_levels)
-		return -EINVAL;
-
-	fcc_ua = bcdev->thermal_levels[val];
-
-	rc = write_property_id(bcdev, &bcdev->ocm_list[OCM_TYPE_BATTERY],
-				BATT_CHG_CTRL_LIM, fcc_ua);
-	if (!rc) {
-		bcdev->curr_thermal_level = val;
-		pr_debug("Set FCC to %u uA\n", fcc_ua);
-	}
-
-	return rc;
-}
-#endif
 
 static ssize_t moisture_detection_en_store(struct class *c, struct class_attribute *attr, const char *buf, size_t count)
 {
@@ -1547,6 +1643,9 @@ static int battery_chg_ship_mode(struct notifier_block *nb, unsigned long code, 
 	return NOTIFY_DONE;
 }
 
+/**********************************************************************
+ * battery charge ops *
+ **********************************************************************/
 static void dump_regs(void)
 {
 	if (!probe_done)
@@ -1671,7 +1770,7 @@ bool qpnp_get_prop_vbus_collapse_status(void)
 	}
 	collapse_status = pst->prop[USB_VBUS_COLLAPSE_STATUS];
 	chg_err("read usb vbus_collapse_status[%d]\n", collapse_status);
-	// return collapse_status; //TODO: nick.hu
+
 	return false;
 }
 
@@ -1949,35 +2048,6 @@ aicl_return:
 	return rc;
 }
 
-static int oplus_chg_direct_set_icl(int current_ma)
-{
-	int rc = 0;
-	int prop_id = 0;
-	struct battery_chg_dev *bcdev = NULL;
-	struct ocm_state *pst = NULL;
-	struct oplus_chg_chip *chip = g_oplus_chip;
-
-	if (!probe_done)
-		return 0;
-
-	if (!chip) {
-		chg_err("chip is NULL!\n");
-		return -1;
-	}
-
-	bcdev = chip->pmic_spmi.bcdev_chip;
-	pst = &bcdev->ocm_list[OCM_TYPE_USB];
-
-	prop_id = USB_INPUT_CURR_LIMIT;
-	rc = write_property_id(bcdev, pst, prop_id, current_ma * 1000);
-	if (rc)
-		chg_err("set icl to %d mA fail, rc=%d\n", current_ma, rc);
-	else
-		chg_err("set icl to %d mA\n", current_ma);
-
-	return rc;
-}
-
 static int smbchg_float_voltage_set(int vfloat_mv)
 {
 	int rc = 0;
@@ -2012,19 +2082,6 @@ static int smbchg_term_current_set(int term_current)
 
 	if (!probe_done)
 		return 0;
-#if 0
-	u8 val_raw = 0;
-	struct oplus_chg_chip *chip = g_oplus_chip;
-
-	if (term_current < 0 || term_current > 750)
-		term_current = 150;
-
-	val_raw = term_current / 50;
-	rc = smblib_masked_write(&chip->pmic_spmi.smb5_chip->chg, TCCC_CHARGE_CURRENT_TERMINATION_CFG_REG,
-			TCCC_CHARGE_CURRENT_TERMINATION_SETTING_MASK, val_raw);
-	if (rc < 0)
-		chg_err("Couldn't write TCCC_CHARGE_CURRENT_TERMINATION_CFG_REG rc=%d\n", rc);
-#endif
 	return rc;
 }
 
@@ -2105,7 +2162,8 @@ static int smbchg_get_charge_enable(void)
 		chg_err("set disable charging fail, rc=%d\n", rc);
 		return rc;
 	}
-	chg_err("get charge enable[%d]\n", pst->prop[BATT_CHG_EN]);
+	if (pst->prop[BATT_CHG_EN])
+		chg_err("get charge enable[%d]\n", pst->prop[BATT_CHG_EN]);
 
 	return pst->prop[BATT_CHG_EN];
 }
@@ -2274,24 +2332,6 @@ static int smbchg_reset_charger(void)
 
 static int smbchg_read_full(void)
 {
-#if 0
-	int rc = 0;
-	u8 stat = 0;
-	struct oplus_chg_chip *chip = g_oplus_chip;
-
-	if (!oplus_chg_is_usb_present())
-		return 0;
-
-	rc = smblib_read(&chip->pmic_spmi.smb5_chip->chg, BATTERY_CHARGER_STATUS_1_REG, &stat);
-	if (rc < 0) {
-		chg_err("Couldn't read BATTERY_CHARGER_STATUS_1 rc=%d\n", rc);
-		return 0;
-	}
-	stat = stat & BATTERY_CHARGER_STATUS_MASK;
-
-	if (stat == TERMINATE_CHARGE || stat == INHIBIT_CHARGE)
-		return 1;
-#endif
 	return 0;
 }
 
@@ -2300,24 +2340,13 @@ static int smbchg_otg_enable(void)
 	if (!probe_done)
 		return 0;
 
-	oplus_otg_ap_enable(true);
-	pr_err("Recover otg after adsp crash!\n");
-
 	return 0;
 }
 
 static int smbchg_otg_disable(void)
 {
-	struct battery_chg_dev *bcdev = NULL;
-	struct oplus_chg_chip *chip = g_oplus_chip;
-
 	if (!probe_done)
 		return 0;
-
-	bcdev = chip->pmic_spmi.bcdev_chip;
-	schedule_work(&bcdev->otg_disable_work);
-	chip->otg_online = false;
-	pr_err("Disable otg because of adsp crash!\n");
 
 	return 0;
 }
@@ -2572,15 +2601,8 @@ static bool oplus_chg_is_usb_present(void)
 
 static int qpnp_get_battery_voltage(void)
 {
-	return 3800; //Not use anymore
+	return 3800;
 }
-
-#if 0
-static int get_boot_mode(void)
-{
-	return 0;
-}
-#endif
 
 static int smbchg_get_boot_reason(void)
 {
@@ -2653,10 +2675,7 @@ static int smbchg_get_aicl_level_ma(void)
 
 static void smbchg_rerun_aicl(void)
 {
-	//smbchg_aicl_enable(false);
 	/* Add a delay so that AICL successfully clears */
-	//msleep(50);
-	//smbchg_aicl_enable(true);
 }
 
 #ifdef CONFIG_OPLUS_RTC_DET_SUPPORT
@@ -2865,7 +2884,7 @@ static int oplus_chg_set_pd_config(void)
 			chg_err("set PDO 5V fail, rc=%d\n", rc);
 		else
 			chg_err("set PDO 5V OK\n");
-	} else if (chip->batt_volt < 5000) { //alway to 9
+	} else if (chip->batt_volt < 5000) {
 		rc = write_property_id(bcdev, pst, USB_CHG_SET_PDO, 9000);
 		if (rc)
 			chg_err("set PDO 9V fail, rc=%d\n", rc);
@@ -2906,7 +2925,7 @@ static int oplus_chg_set_qc_config(void)
 			chg_err("set QC 5V fail, rc=%d\n", rc);
 		else
 			chg_err("set QC 5V OK\n");
-	} else if (chip->batt_volt < 5000) { //alway to 9
+	} else if (chip->batt_volt < 5000) {
 		rc = write_property_id(bcdev, pst, USB_CHG_SET_QC, 9000);
 		if (rc)
 			chg_err("set QC 9V fail, rc=%d\n", rc);
@@ -2929,7 +2948,7 @@ static int smbchg_lcm_en(bool en)
 
 	if (!chip) {
 		chg_err("chip is NULL!\n");
-		return -1;
+		return -ENODEV;
 	}
 	bcdev = chip->pmic_spmi.bcdev_chip;
 	pst = &bcdev->ocm_list[OCM_TYPE_USB];
@@ -2996,39 +3015,11 @@ static int oplus_chg_enable_qc_detect(void)
 #ifndef CONFIG_OPLUS_CHG_OOS
 void oplus_turn_off_power_when_adsp_crash(void)
 {
-#if 0
-	struct oplus_chg_chip *chip = g_oplus_chip;
-	struct battery_chg_dev *bcdev = NULL;
-
-	if (!chip) {
-		printk(KERN_ERR "!!!chip null\n");
-		return;
-	}
-
-	bcdev = chip->pmic_spmi.bcdev_chip;
-	if (bcdev->otg_online == true) {
-		bcdev->otg_online = false;
-		oplus_wpc_set_booster_en_val(0);
-		oplus_wpc_set_ext1_wired_otg_en_val(0);
-	}
-#endif
 }
 EXPORT_SYMBOL(oplus_turn_off_power_when_adsp_crash);
 
 void oplus_adsp_crash_recover_work(void)
 {
-#if 0
-	struct oplus_chg_chip *chip = g_oplus_chip;
-	struct battery_chg_dev *bcdev = NULL;
-
-	if (!chip) {
-		printk(KERN_ERR "!!!chip null\n");
-		return;
-	}
-
-	bcdev = chip->pmic_spmi.bcdev_chip;
-	schedule_delayed_work(&bcdev->adsp_crash_recover_work, round_jiffies_relative(msecs_to_jiffies(1500)));
-#endif
 }
 EXPORT_SYMBOL(oplus_adsp_crash_recover_work);
 #endif
@@ -3093,6 +3084,7 @@ static void report_abnormal_vol_status(void)
 {
 	struct battery_chg_dev *bcdev = NULL;
 	struct oplus_chg_chip *chip = g_oplus_chip;
+
 	char *detected[2] = { "USB_CONTAMINANT=DETECTED", NULL };
 
 	if (!probe_done)
@@ -3205,6 +3197,47 @@ static int battery_chg_pm_suspend(struct device *dev)
 	return 0;
 }
 
+/**
+ * qti_battery_charger_get_prop() - Gets the property being requested
+ *
+ * @name: Power supply name
+ * @prop_id: Property id to be read
+ * @val: Pointer to value that needs to be updated
+ *
+ * Return: 0 if success, negative on error.
+ */
+int qti_battery_charger_get_prop(const char *name, enum battery_charger_prop prop_id, int *val)
+{
+	struct oplus_chg_chip *chip = g_oplus_chip;
+	struct battery_chg_dev *bcdev;
+	struct ocm_state *pst = NULL;
+	int rc = 0;
+
+	if (!probe_done)
+		return -ENODEV;
+
+	if (!chip) {
+		chg_err("chip is NULL!\n");
+		return -ENODEV;
+	}
+	bcdev = chip->pmic_spmi.bcdev_chip;
+	pst = &bcdev->ocm_list[OCM_TYPE_BATTERY];
+
+	switch (pst->prop[prop_id]) {
+	case BATTERY_RESISTANCE:
+		pst = &bcdev->ocm_list[OCM_TYPE_BATTERY];
+		rc = read_property_id(bcdev, pst, BATT_RESISTANCE);
+		if (!rc)
+			*val = pst->prop[BATT_RESISTANCE];
+		break;
+	default:
+		break;
+	}
+
+	return rc;
+}
+EXPORT_SYMBOL(qti_battery_charger_get_prop);
+
 static const struct dev_pm_ops battery_chg_pm_ops = {
 	.resume = battery_chg_pm_resume,
 	.suspend = battery_chg_pm_suspend,
@@ -3262,20 +3295,19 @@ struct oplus_chg_operations battery_chg_ops = {
 	.set_qc_config = oplus_chg_set_qc_config,
 	.enable_qc_detect = oplus_chg_enable_qc_detect,
 	.input_current_ctrl_by_warp_write = oplus_input_current_limit_ctrl_by_warp_write,
-	//.input_current_write_without_aicl = mp2650_input_current_limit_without_aicl,
-	//.oplus_chg_wdt_enable = mp2650_wdt_enable,
+
 	.disconnect_vbus = oplus_disconnect_vbus,
 	.oplus_chg_get_charge_counter = oplus_chg_get_charge_counter,
-	.otg_switch = oplus_set_otg_switch_status,
+	.otg_set_switch = oplus_set_otg_switch_status,
 #ifdef OPLUS_CHG_OP_DEF
 	.disconnect_pd = oplus_chg_disconnect_pd,
 	.pdo_5v = oplus_chg_set_pdo_5v,
 	.chg_lcm_en = smbchg_lcm_en,
-	.chg_direct_set_icl = oplus_chg_direct_set_icl,
 	.get_vph_volt = smbchg_get_vph_voltage,
 	.get_hw_detect = smbchg_get_hw_detect_status,
 	.report_vol_status = report_abnormal_vol_status,
 	.rerun_apsd = smbchg_apsd_rerun,
+	.update_usb_type = oplus_update_usb_type,
 #endif
 };
 
@@ -3283,7 +3315,7 @@ static int smbchg_wls_input_enable(struct oplus_chg_ic_dev *ic_dev, bool en)
 {
 	if (!probe_done)
 		return 0;
-	// todo;
+
 	return 0;
 }
 
@@ -3640,6 +3672,7 @@ static int battery_chg_probe(struct platform_device *pdev)
 	init_completion(&bcdev->fw_update_ack);
 
 	INIT_WORK(&bcdev->subsys_up_work, battery_chg_subsys_up_work);
+	INIT_WORK(&bcdev->usb_type_work, battery_chg_update_usb_type_work);
 	INIT_WORK(&bcdev->otg_enable_work, oplus_otg_enable_work);
 	INIT_WORK(&bcdev->otg_disable_work, oplus_otg_disable_work);
 	INIT_DELAYED_WORK(&bcdev->otg_init_work, oplus_otg_init_status_func);
@@ -3685,21 +3718,7 @@ static int battery_chg_probe(struct platform_device *pdev)
 		goto error;
 	}
 
-	//oplus_chg_parse_custom_dt(oplus_chip);
 	oplus_chg_parse_charger_dt(oplus_chip);
-#if 0
-	main_psy = power_supply_get_by_name("main");
-	if (main_psy) {
-		pval.intval = 1000 * oplus_chg_get_fv(oplus_chip);
-		power_supply_set_property(main_psy,
-				POWER_SUPPLY_PROP_VOLTAGE_MAX,
-				&pval);
-		pval.intval = 1000 * oplus_chg_get_charging_current(oplus_chip);
-		power_supply_set_property(main_psy,
-				POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
-				&pval);
-	}
-#endif
 	oplus_chg_wake_update_work();
 
 	battery_chg_add_debugfs(bcdev);
@@ -3745,6 +3764,9 @@ static int battery_chg_probe(struct platform_device *pdev)
 		oplus_chg_global_event(bcdev->ocm_list[OCM_TYPE_USB].ocm, OPLUS_CHG_EVENT_ADSP_STARTED);
 	else
 		pr_err("usb ocm not fount\n");
+#ifdef OPLUS_CHG_OP_DEF
+	msm_vreg_ldo_enable(bcdev);
+#endif
 	pr_err("probe success\n");
 
 	return 0;

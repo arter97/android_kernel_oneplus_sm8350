@@ -94,7 +94,7 @@
 #define BQ27411_REG_SOC 0x1c
 #define BQ27411_REG_INTTEMP 0x1e
 #define BQ27411_REG_SOH 0x20
-#define BQ27411_REG_FC 0x0e //add gauge reg print log start
+#define BQ27411_REG_FC 0x0e
 #define BQ27411_REG_QM 0x16
 #define BQ27411_REG_PD 0x1a
 #define BQ27411_REG_RCU 0x28
@@ -106,7 +106,7 @@
 #define BQ27411_REG_DOE 0x68
 #define BQ27411_REG_TRM 0x6a
 #define BQ27411_REG_PC 0x6c
-#define BQ27411_REG_QS 0x6e //add gauge reg print log end
+#define BQ27411_REG_QS 0x6e
 #define BQ27411_FLAG_DSC BIT(0)
 #define BQ27411_FLAG_FC BIT(9)
 #define BQ27411_CS_DLOGEN BIT(15)
@@ -209,7 +209,7 @@
 #define BQ28Z610_SEAL_SUBCMD 0x0030
 #define BQ28Z610_UNSEAL_SUBCMD1 0x0414
 #define BQ28Z610_UNSEAL_SUBCMD2 0x3672
-//#define BQ28Z610_SEAL_BIT		     (BIT(8) | BIT(9))
+
 #define BQ28Z610_SEAL_BIT (BIT(0) | BIT(1))
 
 #define BQ28Z610_SEAL_SHIFT 8
@@ -225,12 +225,12 @@
 #define BQ28Z610_MAC_CELL_VOLTAGE_EN_ADDR 0x3E
 #define BQ28Z610_MAC_CELL_VOLTAGE_CMD 0x0071
 #define BQ28Z610_MAC_CELL_VOLTAGE_ADDR 0x40
-#define BQ28Z610_MAC_CELL_VOLTAGE_SIZE 4 //total 34byte,only read 4byte(aaAA bbBB)
+#define BQ28Z610_MAC_CELL_VOLTAGE_SIZE 4
 
 #define BQ28Z610_MAC_CELL_BALANCE_TIME_EN_ADDR 0x3E
 #define BQ28Z610_MAC_CELL_BALANCE_TIME_CMD 0x0076
 #define BQ28Z610_MAC_CELL_BALANCE_TIME_ADDR 0x40
-#define BQ28Z610_MAC_CELL_BALANCE_TIME_SIZE 4 //total 10byte,only read 4byte(aaAA bbBB)
+#define BQ28Z610_MAC_CELL_BALANCE_TIME_SIZE 4
 
 #define BQ28Z610_OPERATION_STATUS_EN_ADDR 0x3E
 #define BQ28Z610_OPERATION_STATUS_CMD 0x0054
@@ -260,7 +260,7 @@ struct cmd_address {
 	u8 reg_soc;
 	u8 reg_inttemp;
 	u8 reg_soh;
-	u8 reg_fc; //add gauge reg print log start
+	u8 reg_fc;
 	u8 reg_qm;
 	u8 reg_pd;
 	u8 reg_rcu;
@@ -272,7 +272,7 @@ struct cmd_address {
 	u8 reg_doe;
 	u8 reg_trm;
 	u8 reg_pc;
-	u8 reg_qs; //add gauge reg print log end
+	u8 reg_qs;
 	u16 flag_dsc;
 	u16 flag_fc;
 	u16 cs_dlogen;
@@ -334,12 +334,11 @@ struct bq27541_authenticate_data {
 	uint8_t result;
 	uint8_t message_offset;
 	uint8_t message_len;
-	uint8_t message[AUTHEN_MESSAGE_MAX_COUNT]; // 25, larger than 20 bytes
+	uint8_t message[AUTHEN_MESSAGE_MAX_COUNT];
 };
 
 #define BQ27541_AUTHENTICATE_DATA_COUNT sizeof(struct bq27541_authenticate_data)
 
-//#define SMEM_CHARGER_BATTERY_INFO	81
 #define SMEM_RESERVED_BOOT_INFO_FOR_APPS 418
 #define GAUGE_AUTH_MSG_LEN 20
 typedef struct {
@@ -365,8 +364,7 @@ struct chip_bq27541 {
 	int soh_pre;
 	int fcc_pre;
 	int rm_pre;
-	int fc_pre; //add gauge reg print log start
-	int ttf_pre;
+	int fc_pre;
 	int qm_pre;
 	int pd_pre;
 	int rcu_pre;
@@ -378,7 +376,7 @@ struct chip_bq27541 {
 	int doe_pre;
 	int trm_pre;
 	int pc_pre;
-	int qs_pre; //add gauge reg print log end
+	int qs_pre;
 	int device_type;
 	int device_type_for_warp;
 	struct cmd_address cmd_addr;
@@ -412,7 +410,7 @@ struct chip_bq27541 {
 	bool modify_soc_smooth;
 	bool modify_soc_calibration;
 
-	bool battery_full_param; //only for wite battery full param in guage dirver probe on 7250 platform
+	bool battery_full_param;
 	int sha1_key_index;
 	bool batt_bq28z610;
 	bool bq28z610_need_balancing;
