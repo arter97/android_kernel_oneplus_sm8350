@@ -10,12 +10,10 @@ enum wls_path_type {
 /* wls rx */
 int oplus_chg_wls_rx_enable(struct oplus_wls_chg_rx *wls_rx, bool en);
 int oplus_chg_wls_rx_get_vout(struct oplus_wls_chg_rx *wls_rx, int *vol_mv);
-int oplus_chg_wls_get_cep_check_update(struct oplus_wls_chg_rx *wls_rx,
-					      int *cep);
+int oplus_chg_wls_get_cep_check_update(struct oplus_wls_chg_rx *wls_rx, int *cep);
 int oplus_chg_wls_get_cep(struct oplus_wls_chg_rx *wls_rx, int *cep);
 int oplus_chg_wls_rx_set_vout(struct oplus_wls_chg_rx *wls_rx, int vol_mv, int wait_time_s);
-int oplus_chg_wls_rx_set_vout_step(struct oplus_wls_chg_rx *wls_rx, int target_vol_mv,
-				   int step_mv, int wait_time_s);
+int oplus_chg_wls_rx_set_vout_step(struct oplus_wls_chg_rx *wls_rx, int target_vol_mv, int step_mv, int wait_time_s);
 int oplus_chg_wls_rx_get_vrect(struct oplus_wls_chg_rx *wls_rx, int *vol_mv);
 int oplus_chg_wls_rx_get_iout(struct oplus_wls_chg_rx *wls_rx, int *curr_ma);
 int oplus_chg_wls_rx_get_trx_vol(struct oplus_wls_chg_rx *wls_rx, int *vol_mv);
@@ -31,14 +29,10 @@ int oplus_chg_wls_rx_set_fod_parm(struct oplus_wls_chg_rx *wls_rx, u8 buf[], int
 bool oplus_chg_wls_rx_is_connected(struct oplus_wls_chg_rx *wls_rx);
 int oplus_chg_wls_rx_send_msg(struct oplus_wls_chg_rx *wls_rx, unsigned char msg, unsigned char data);
 int oplus_chg_wls_rx_send_data(struct oplus_wls_chg_rx *wls_rx, unsigned char msg, unsigned char data[], int len);
-int oplus_chg_wls_rx_register_msg_callback(struct oplus_wls_chg_rx *wls_rx,
-					   void *dev_data,
-					   void (*call_back)(void *wls_rx, u8 []));
+int oplus_chg_wls_rx_register_msg_callback(struct oplus_wls_chg_rx *wls_rx, void *dev_data, void (*call_back)(void *wls_rx, u8[]));
 int oplus_chg_wls_rx_upgrade_firmware_by_img(struct oplus_wls_chg_rx *wls_rx);
-int oplus_chg_wls_rx_upgrade_firmware_by_buf(struct oplus_wls_chg_rx *wls_rx,
-					     unsigned char *buf, int len);
-int oplus_chg_wls_rx_get_version_by_img(struct oplus_wls_chg_rx *wls_rx,
-					u32 *version);
+int oplus_chg_wls_rx_upgrade_firmware_by_buf(struct oplus_wls_chg_rx *wls_rx, unsigned char *buf, int len);
+int oplus_chg_wls_rx_get_version_by_img(struct oplus_wls_chg_rx *wls_rx, u32 *version);
 int oplus_chg_wls_rx_connect_check(struct oplus_wls_chg_rx *wls_rx);
 int oplus_chg_wls_rx_clean_source(struct oplus_wls_chg_rx *wls_rx);
 int oplus_chg_wls_rx_smt_test(struct oplus_wls_chg_rx *wls_rx);

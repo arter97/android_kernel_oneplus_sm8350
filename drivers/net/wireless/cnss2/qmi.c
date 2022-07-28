@@ -10,6 +10,10 @@
 #include <linux/oem/boot_mode.h>
 #endif
 
+#if IS_ENABLED(CONFIG_CNSS_UTILS)
+#include <net/cnss_utils.h>
+#endif
+
 #include "bus.h"
 #include "debug.h"
 #include "main.h"
@@ -1727,7 +1731,8 @@ int cnss_wlfw_wlan_mac_req_send_sync(struct cnss_plat_data *plat_priv,
 	struct wlfw_mac_addr_req_msg_v01 req;
 	struct wlfw_mac_addr_resp_msg_v01 resp = {0};
 	struct qmi_txn txn;
-	int ret;
+	char revert_mac[QMI_WLFW_MAC_ADDR_SIZE_V01];
+	int ret, i;
 
 	if (!plat_priv || !mac || mac_len != QMI_WLFW_MAC_ADDR_SIZE_V01)
 		return -EINVAL;
@@ -1743,8 +1748,22 @@ int cnss_wlfw_wlan_mac_req_send_sync(struct cnss_plat_data *plat_priv,
 
 		cnss_pr_dbg("Sending WLAN mac req [%pM], state: 0x%lx\n",
 			    mac, plat_priv->driver_state);
-	memcpy(req.mac_addr, mac, mac_len);
+
+	for (i = 0; i < QMI_WLFW_MAC_ADDR_SIZE_V01; i++) {
+		revert_mac[i] = mac[QMI_WLFW_MAC_ADDR_SIZE_V01 - i - 1];
+	}
+	cnss_pr_dbg("Sending revert WLAN MAC request [%pM], state: 0x%lx\n",
+		    revert_mac, plat_priv->driver_state);
+	memcpy(req.mac_addr, revert_mac, mac_len);
+
 	req.mac_addr_valid = 1;
+
+#if IS_ENABLED(CONFIG_CNSS_UTILS)
+	ret = cnss_utils_set_wlan_mac_address(req.mac_addr, mac_len);
+	if (ret < 0) {
+		cnss_pr_err("Failed to set cnss utils wlan mac address (non-fatal), err: %d\n", ret);
+	}
+#endif
 
 	ret = qmi_send_request(&plat_priv->qmi_wlfw, NULL, &txn,
 			       QMI_WLFW_MAC_ADDR_REQ_V01,

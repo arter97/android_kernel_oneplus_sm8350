@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+
 /*
  * Copyright (C) 2020-2020 Oplus. All rights reserved.
  */
@@ -25,37 +25,37 @@
 #include "../oplus_chg_module.h"
 #include "../oplus_chg_ic.h"
 
-#define DCDC_BASE	0X2700
-#define USBIN_BASE	0X2900
-#define TYPEC_BASE	0X2B00
+#define DCDC_BASE 0X2700
+#define USBIN_BASE 0X2900
+#define TYPEC_BASE 0X2B00
 
-#define INT_RT_STS_OFFSET	0x10
+#define INT_RT_STS_OFFSET 0x10
 
-#define USBIN_CMD_IL_REG			(USBIN_BASE + 0x54)
-#define USBIN_SUSPEND_BIT			BIT(0)
+#define USBIN_CMD_IL_REG (USBIN_BASE + 0x54)
+#define USBIN_SUSPEND_BIT BIT(0)
 
-#define DCDC_BST_EN_REG				(DCDC_BASE + 0x50)
-#define OTG_EN_BIT				BIT(0)
+#define DCDC_BST_EN_REG (DCDC_BASE + 0x50)
+#define OTG_EN_BIT BIT(0)
 
-#define USBIN_PLUGIN_RT_STS_BIT			BIT(0)
+#define USBIN_PLUGIN_RT_STS_BIT BIT(0)
 
-#define TYPE_C_MISC_STATUS_REG			(TYPEC_BASE + 0x0B)
-#define TYPEC_WATER_DETECTION_STATUS_BIT	BIT(7)
-#define SNK_SRC_MODE_BIT			BIT(6)
-#define TYPEC_VBUS_ERROR_STATUS_BIT		BIT(4)
-#define TYPEC_TCCDEBOUNCE_DONE_STATUS_BIT	BIT(3)
-#define CC_ORIENTATION_BIT			BIT(1)
-#define CC_ATTACHED_BIT				BIT(0)
+#define TYPE_C_MISC_STATUS_REG (TYPEC_BASE + 0x0B)
+#define TYPEC_WATER_DETECTION_STATUS_BIT BIT(7)
+#define SNK_SRC_MODE_BIT BIT(6)
+#define TYPEC_VBUS_ERROR_STATUS_BIT BIT(4)
+#define TYPEC_TCCDEBOUNCE_DONE_STATUS_BIT BIT(3)
+#define CC_ORIENTATION_BIT BIT(1)
+#define CC_ATTACHED_BIT BIT(0)
 
-#define TYPE_C_CID_STATUS_REG			(TYPEC_BASE + 0x81)
-#define CID_STATUS_BIT					BIT(0)
+#define TYPE_C_CID_STATUS_REG (TYPEC_BASE + 0x81)
+#define CID_STATUS_BIT BIT(0)
 
 struct pm8350b_typec_dev {
 	struct device *dev;
 	struct oplus_chg_ic_dev *ic_dev;
 	struct regmap *regmap;
-	int		ext1_en;
-	struct delayed_work	get_regmap_work;
+	int ext1_en;
+	struct delayed_work get_regmap_work;
 
 	struct oplus_chg_mod *usb_ocm;
 };
@@ -105,8 +105,7 @@ int oplus_masked_write(struct pm8350b_typec_dev *chip, u16 addr, u8 mask, u8 val
 		return -ENODEV;
 }
 
-static int oplus_get_vbus_status(struct oplus_chg_ic_dev *dev,
-					 int *vbus_rising)
+static int oplus_get_vbus_status(struct oplus_chg_ic_dev *dev, int *vbus_rising)
 {
 	u8 stat = 0;
 	struct pm8350b_typec_dev *chip;
@@ -133,8 +132,7 @@ static int oplus_get_vbus_status(struct oplus_chg_ic_dev *dev,
 	return rc;
 }
 
-static int oplus_get_prop_typec_cc_orientation(struct oplus_chg_ic_dev *dev,
-					 int *orientation)
+static int oplus_get_prop_typec_cc_orientation(struct oplus_chg_ic_dev *dev, int *orientation)
 {
 	u8 stat = 0;
 	struct pm8350b_typec_dev *chip;
@@ -178,8 +176,7 @@ static int oplus_otg_enable(struct oplus_chg_ic_dev *dev, bool enable)
 	}
 	if (enable) {
 		if (is_usb_ocm_available(chip))
-			oplus_chg_global_event(chip->usb_ocm,
-				OPLUS_CHG_EVENT_OTG_ENABLE);
+			oplus_chg_global_event(chip->usb_ocm, OPLUS_CHG_EVENT_OTG_ENABLE);
 		msleep(50);
 		gpio_set_value(chip->ext1_en, 1);
 		pr_err("%s, Enable otg switch successfully!!", __func__);
@@ -187,8 +184,7 @@ static int oplus_otg_enable(struct oplus_chg_ic_dev *dev, bool enable)
 		gpio_set_value(chip->ext1_en, 0);
 		msleep(50);
 		if (is_usb_ocm_available(chip))
-			oplus_chg_global_event(chip->usb_ocm,
-				OPLUS_CHG_EVENT_OTG_DISABLE);
+			oplus_chg_global_event(chip->usb_ocm, OPLUS_CHG_EVENT_OTG_DISABLE);
 		pr_err("%s, Disable otg switch successfully!!", __func__);
 	}
 
@@ -214,7 +210,7 @@ static int oplus_otg_gpio_request(struct pm8350b_typec_dev *chip)
 	}
 }
 
- static int oplus_get_prop_hw_detect(struct oplus_chg_ic_dev *dev, int *hw_detect)
+static int oplus_get_prop_hw_detect(struct oplus_chg_ic_dev *dev, int *hw_detect)
 {
 	u8 stat = 0;
 	struct pm8350b_typec_dev *chip;
@@ -249,8 +245,8 @@ static int pm8350b_reg_dump(struct oplus_chg_ic_dev *dev)
 	int rc = 0;
 
 #define REG_DUMP_START 0x2600
-#define REG_DUMP_END   0x2dff
-#define REG_DUMP_SIZE  (REG_DUMP_END - REG_DUMP_START + 1)
+#define REG_DUMP_END 0x2dff
+#define REG_DUMP_SIZE (REG_DUMP_END - REG_DUMP_START + 1)
 
 	if (dev == NULL) {
 		pr_err("oplus_chg_ic_dev is NULL");
@@ -271,17 +267,14 @@ static int pm8350b_reg_dump(struct oplus_chg_ic_dev *dev)
 
 	rc = regmap_bulk_read(chip->regmap, REG_DUMP_START, data_buf, REG_DUMP_SIZE);
 	if (rc < 0) {
-		pr_err("pm8350b read reg errot, addr=0x%04x, len=%d, rc=%d\n",
-			REG_DUMP_START, REG_DUMP_SIZE, rc);
+		pr_err("pm8350b read reg errot, addr=0x%04x, len=%d, rc=%d\n", REG_DUMP_START, REG_DUMP_SIZE, rc);
 		goto out;
 	}
 
 #ifdef OPLUS_CHG_REG_DUMP_ENABLE
-	print_hex_dump(KERN_ERR, "OPLUS_CHG[PM8350B]: ", DUMP_PREFIX_OFFSET,
-			32, 1, data_buf, REG_DUMP_SIZE, false);
+	print_hex_dump(KERN_ERR, "OPLUS_CHG[PM8350B]: ", DUMP_PREFIX_OFFSET, 32, 1, data_buf, REG_DUMP_SIZE, false);
 #else
-	print_hex_dump(KERN_DEBUG, "OPLUS_CHG[PM8350B]: ", DUMP_PREFIX_OFFSET,
-			32, 1, data_buf, REG_DUMP_SIZE, false);
+	print_hex_dump(KERN_DEBUG, "OPLUS_CHG[PM8350B]: ", DUMP_PREFIX_OFFSET, 32, 1, data_buf, REG_DUMP_SIZE, false);
 #endif
 out:
 	kfree(data_buf);
@@ -312,13 +305,13 @@ static int dev_is_pm8350b(struct device *dev, void *name)
 }
 struct device *soc_find_pm8350b(struct device *soc_dev)
 {
-	char *path1[] = {"qcom,spmi-debug", "qcom,spmi-debug", "qcom,pm8350b-debug"};
-	char *path2[] = {"qcom,pmic_glink_log", "qcom,spmi_glink_debug", "spmi", "qcom,pm8350b-debug"};
+	char *path1[] = { "qcom,spmi-debug", "qcom,spmi-debug", "qcom,pm8350b-debug" };
+	char *path2[] = { "qcom,pmic_glink_log", "qcom,spmi_glink_debug", "spmi", "qcom,pm8350b-debug" };
 	struct device *dev;
 	int i;
 
 	dev = soc_dev;
-	for (i = 0; i < (sizeof(path1)/sizeof(char *)); i++) {
+	for (i = 0; i < (sizeof(path1) / sizeof(char *)); i++) {
 		dev = device_find_child(dev, path1[i], dev_is_pm8350b);
 		if (dev == NULL) {
 			pr_err("dev %s not found!!", path1[i]);
@@ -330,7 +323,7 @@ struct device *soc_find_pm8350b(struct device *soc_dev)
 
 	if (dev == NULL) {
 		dev = soc_dev;
-		for (i = 0; i < (sizeof(path2)/sizeof(char *)); i++) {
+		for (i = 0; i < (sizeof(path2) / sizeof(char *)); i++) {
 			dev = device_find_child(dev, path2[i], dev_is_pm8350b);
 			if (dev == NULL) {
 				pr_err("dev %s not found!!", path2[i]);
@@ -348,8 +341,7 @@ struct device *soc_find_pm8350b(struct device *soc_dev)
 static void oplus_get_regmap_work(struct work_struct *work)
 {
 	struct delayed_work *dwork = to_delayed_work(work);
-	struct pm8350b_typec_dev *chip = container_of(dwork,
-				struct pm8350b_typec_dev, get_regmap_work);
+	struct pm8350b_typec_dev *chip = container_of(dwork, struct pm8350b_typec_dev, get_regmap_work);
 	struct device *dev;
 	struct device *soc_dev;
 	static int count = 5;
@@ -357,7 +349,7 @@ static void oplus_get_regmap_work(struct work_struct *work)
 
 	dev = soc_find_pm8350b(soc_dev);
 	if (dev == NULL) {
-		if (count --) {
+		if (count--) {
 			pr_err("qcom,pm8350b-debug not found, retry count: %d\n", count);
 			schedule_delayed_work(&chip->get_regmap_work, msecs_to_jiffies(1000));
 		} else {
@@ -402,7 +394,7 @@ static int oplus_chg_typec_driver_probe(struct platform_device *pdev)
 		goto reg_ic_err;
 	}
 	chip->ic_dev = devm_oplus_chg_ic_register(chip->dev, node->name, ic_index);
-	if (rc < 0) {
+	if (chip->ic_dev == NULL) {
 		rc = -ENODEV;
 		pr_err("register %s error\n", node->name);
 		goto reg_ic_err;
@@ -430,7 +422,7 @@ static int oplus_chg_typec_driver_probe(struct platform_device *pdev)
 gpio_err:
 	devm_oplus_chg_ic_unregister(chip->dev, chip->ic_dev);
 reg_ic_err:
-    platform_set_drvdata(pdev, NULL);
+	platform_set_drvdata(pdev, NULL);
 	devm_kfree(&pdev->dev, chip);
 	return rc;
 }

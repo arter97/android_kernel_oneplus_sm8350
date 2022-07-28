@@ -25,9 +25,7 @@ static struct oplus_wls_chg_firmware *oplus_wls_chg_find_first_firmware(void)
 	wls_firmware = &oplus_wls_firmware_start_fw;
 
 	wls_firmware--;
-	while (wls_firmware != NULL &&
-	       wls_firmware->magic0 == OPLUS_CHG_FIRMWARE_MAGIC0 &&
-	       wls_firmware->magic1 == OPLUS_CHG_FIRMWARE_MAGIC1)
+	while (wls_firmware != NULL && wls_firmware->magic0 == OPLUS_CHG_FIRMWARE_MAGIC0 && wls_firmware->magic1 == OPLUS_CHG_FIRMWARE_MAGIC1)
 		wls_firmware--;
 
 	wls_firmware++;
@@ -38,7 +36,7 @@ bool is_rx_ic_available(struct oplus_wls_chg_rx *wls_rx)
 {
 	struct device_node *node = wls_rx->dev->of_node;
 
-	if(wls_rx->rx_ic == NULL)
+	if (wls_rx->rx_ic == NULL)
 		wls_rx->rx_ic = of_get_oplus_chg_ic(node, "oplus,rx_ic");
 	return !!wls_rx->rx_ic;
 }
@@ -87,8 +85,7 @@ int oplus_chg_wls_rx_get_vout(struct oplus_wls_chg_rx *wls_rx, int *vol_mv)
 	return rc;
 }
 
-int oplus_chg_wls_get_cep_check_update(struct oplus_wls_chg_rx *wls_rx,
-					      int *cep)
+int oplus_chg_wls_get_cep_check_update(struct oplus_wls_chg_rx *wls_rx, int *cep)
 {
 	struct oplus_chg_ic_dev *rx_ic;
 	struct oplus_chg_ic_rx_ops *rx_ic_ops;
@@ -226,8 +223,7 @@ int oplus_chg_wls_rx_set_vout(struct oplus_wls_chg_rx *wls_rx, int vol_mv, int w
 	return 0;
 }
 
-int oplus_chg_wls_rx_set_vout_step(struct oplus_wls_chg_rx *wls_rx, int target_vol_mv,
-				   int step_mv, int wait_time_s)
+int oplus_chg_wls_rx_set_vout_step(struct oplus_wls_chg_rx *wls_rx, int target_vol_mv, int step_mv, int wait_time_s)
 {
 	int next_step_mv;
 	unsigned long remaining_time_ms = 500;
@@ -512,7 +508,7 @@ int oplus_chg_wls_rx_send_msg(struct oplus_wls_chg_rx *wls_rx, unsigned char msg
 {
 	struct oplus_chg_ic_dev *rx_ic;
 	struct oplus_chg_ic_rx_ops *rx_ic_ops;
-	unsigned char buf[4] = {msg, ~msg, data, ~data};
+	unsigned char buf[4] = { msg, ~msg, data, ~data };
 	int rc;
 
 	if (!is_rx_ic_available(wls_rx)) {
@@ -528,8 +524,7 @@ int oplus_chg_wls_rx_send_msg(struct oplus_wls_chg_rx *wls_rx, unsigned char msg
 	return rc;
 }
 
-int oplus_chg_wls_rx_send_data(struct oplus_wls_chg_rx *wls_rx, unsigned char msg,
-			       unsigned char data[], int len)
+int oplus_chg_wls_rx_send_data(struct oplus_wls_chg_rx *wls_rx, unsigned char msg, unsigned char data[], int len)
 {
 	struct oplus_chg_ic_dev *rx_ic;
 	struct oplus_chg_ic_rx_ops *rx_ic_ops;
@@ -555,9 +550,7 @@ int oplus_chg_wls_rx_send_data(struct oplus_wls_chg_rx *wls_rx, unsigned char ms
 	return rc;
 }
 
-int oplus_chg_wls_rx_register_msg_callback(struct oplus_wls_chg_rx *wls_rx,
-					   void *dev_data,
-					   void (*call_back)(void *, u8 []))
+int oplus_chg_wls_rx_register_msg_callback(struct oplus_wls_chg_rx *wls_rx, void *dev_data, void (*call_back)(void *, u8[]))
 {
 	struct oplus_chg_ic_dev *rx_ic;
 	struct oplus_chg_ic_rx_ops *rx_ic_ops;
@@ -597,8 +590,7 @@ int oplus_chg_wls_rx_upgrade_firmware_by_img(struct oplus_wls_chg_rx *wls_rx)
 	rx_ic_ops = rx_ic->dev_ops;
 	__pm_stay_awake(wls_rx->update_fw_wake_lock);
 	wls_rx->wls_dev->wls_status.fw_upgrading = true;
-	rc = rx_ic_ops->rx_get_fw_version_by_buf(oplus_wls_firmware->wls_chg_firmware,
-					 oplus_wls_firmware->fw_size, &new_version);
+	rc = rx_ic_ops->rx_get_fw_version_by_buf(oplus_wls_firmware->wls_chg_firmware, oplus_wls_firmware->fw_size, &new_version);
 	if (rc < 0) {
 		pr_err("can't get fw version by img, rc=%d\n", rc);
 		goto out;
@@ -610,8 +602,7 @@ int oplus_chg_wls_rx_upgrade_firmware_by_img(struct oplus_wls_chg_rx *wls_rx)
 	}
 	pr_info("rx new_version=0x%08x, old_version=0x%08x\n", new_version, old_version);
 	if (new_version != old_version) {
-		rc = rx_ic_ops->rx_upgrade_firmware_by_img(rx_ic,
-					oplus_wls_firmware->wls_chg_firmware, oplus_wls_firmware->fw_size);
+		rc = rx_ic_ops->rx_upgrade_firmware_by_img(rx_ic, oplus_wls_firmware->wls_chg_firmware, oplus_wls_firmware->fw_size);
 		if (rc < 0) {
 			pr_err("can't upgrade firmware by img, rc=%d\n", rc);
 			goto out;
@@ -629,8 +620,7 @@ out:
 	return rc;
 }
 
-int oplus_chg_wls_rx_upgrade_firmware_by_buf(struct oplus_wls_chg_rx *wls_rx,
-					     unsigned char *buf, int len)
+int oplus_chg_wls_rx_upgrade_firmware_by_buf(struct oplus_wls_chg_rx *wls_rx, unsigned char *buf, int len)
 {
 	struct oplus_chg_ic_dev *rx_ic;
 	struct oplus_chg_ic_rx_ops *rx_ic_ops;
@@ -664,8 +654,7 @@ out:
 	return rc;
 }
 
-int oplus_chg_wls_rx_get_version_by_img(struct oplus_wls_chg_rx *wls_rx,
-					u32 *version)
+int oplus_chg_wls_rx_get_version_by_img(struct oplus_wls_chg_rx *wls_rx, u32 *version)
 {
 	struct oplus_chg_ic_dev *rx_ic;
 	struct oplus_chg_ic_rx_ops *rx_ic_ops;
@@ -683,8 +672,7 @@ int oplus_chg_wls_rx_get_version_by_img(struct oplus_wls_chg_rx *wls_rx,
 	rx_ic = wls_rx->rx_ic;
 	rx_ic_ops = rx_ic->dev_ops;
 
-	rc = rx_ic_ops->rx_get_fw_version_by_buf(oplus_wls_firmware->wls_chg_firmware,
-					 oplus_wls_firmware->fw_size, version);
+	rc = rx_ic_ops->rx_get_fw_version_by_buf(oplus_wls_firmware->wls_chg_firmware, oplus_wls_firmware->fw_size, version);
 	if (rc < 0)
 		pr_err("can't get fw version by img, rc=%d\n", rc);
 
@@ -766,24 +754,20 @@ int oplus_chg_wls_rx_init(struct oplus_chg_wls *wls_dev)
 	wls_firmware = oplus_wls_chg_find_first_firmware();
 	if (wls_firmware == NULL)
 		pr_err("The wls_firmware address error!");
-	while (wls_firmware != NULL &&
-		wls_firmware->magic0 == OPLUS_CHG_FIRMWARE_MAGIC0 &&
-		wls_firmware->magic1 == OPLUS_CHG_FIRMWARE_MAGIC1) {
+	while (wls_firmware != NULL && wls_firmware->magic0 == OPLUS_CHG_FIRMWARE_MAGIC0 && wls_firmware->magic1 == OPLUS_CHG_FIRMWARE_MAGIC1) {
 		if (!strcasecmp(wls_firmware->name, wls_dev->wls_chg_fw_name)) {
 			oplus_wls_firmware = wls_firmware;
-			pr_err("The target firmware is %s, has select the wls_firmware is %s\n",
-			       wls_dev->wls_chg_fw_name, wls_firmware->name);
+			pr_err("The target firmware is %s, has select the wls_firmware is %s\n", wls_dev->wls_chg_fw_name, wls_firmware->name);
 			break;
 		}
 		wls_firmware++;
 	}
 
-	if(oplus_wls_firmware == NULL){
+	if (oplus_wls_firmware == NULL) {
 		pr_err("No wireless firmware available to match\n");
 		devm_kfree(wls_dev->dev, wls_rx);
 		return -EFAULT;
 	}
-
 
 	wls_dev->wls_rx = wls_rx;
 	wls_rx->dev = wls_dev->dev;

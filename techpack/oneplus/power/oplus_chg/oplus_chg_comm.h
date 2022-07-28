@@ -7,12 +7,12 @@
 #include <linux/oplus_chg.h>
 #endif
 
-#define CHG_TIMEOUT_COUNT		6000 /* 10hr */
-#define BATT_SOFT_OVP_MV		4500
-#define FFC_CHG_STEP_MAX		4
-#define BATT_NON_TEMP			(-400)
-#define BATT_TEMP_HYST			20
-#define HEARTBEAT_INTERVAL_MS		5000
+#define CHG_TIMEOUT_COUNT 6000 /* 10hr */
+#define BATT_SOFT_OVP_MV 4500
+#define FFC_CHG_STEP_MAX 4
+#define BATT_NON_TEMP (-400)
+#define BATT_TEMP_HYST 20
+#define HEARTBEAT_INTERVAL_MS 5000
 
 enum oplus_chg_temp_region {
 	BATT_TEMP_COLD = 0,
@@ -73,7 +73,7 @@ struct oplus_chg_comm_config {
 	int32_t batt_uv_mv;
 	int32_t batt_ov_mv;
 	int32_t batt_oc_ma;
-	int32_t batt_ovd_mv;  //Double cell pressure difference is too large;
+	int32_t batt_ovd_mv;
 	int32_t batt_temp_thr[BATT_TEMP_INVALID - 1];
 	int32_t vbatmax_mv[BATT_TEMP_INVALID];
 	int32_t ffc_temp_thr[FFC_TEMP_INVALID - 1];
@@ -96,7 +96,7 @@ struct oplus_chg_comm_config {
 	int32_t fast_vchg_min_mv;
 	int32_t fast_vchg_max_mv;
 	int32_t batt_curr_limit_thr_mv;
-} __attribute__ ((packed));
+} __attribute__((packed));
 
 void oplus_chg_comm_status_init(struct oplus_chg_mod *comm_ocm);
 enum oplus_chg_temp_region oplus_chg_comm_get_temp_region(struct oplus_chg_mod *comm_ocm);

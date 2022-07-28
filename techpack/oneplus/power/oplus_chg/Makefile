@@ -13,7 +13,7 @@ oplus_chg-obj-y += oplus_chg_ic.o
 oplus_chg-obj-y += oplus_chg_wls.o
 oplus_chg-obj-y += oplus_chg_comm.o
 oplus_chg-obj-y += oplus_chg_voter.o
-oplus_chg-obj-$(CONFIG_OPLUS_CHG_DYNAMIC_CONFIG) += oplus_chg_cfg.o
+oplus_chg-obj-y += oplus_chg_cfg.o
 oplus_chg-obj-y += oplus_chg_strategy.o
 
 oplus_chg-obj-y += adapter_ic/oplus_stm.o
@@ -35,9 +35,12 @@ oplus_chg-obj-y += wireless/wls_chg_fast.o
 oplus_chg-obj-y += wireless/wls_chg_normal.o
 oplus_chg-obj-y += wireless/wls_chg_rx.o
 
+# Undo compiler optimizations to workaround buggy code
+ccflags-remove-y := -O2 -O3 $(CC_FLAGS_LTO)
+
 oplus_chg-objs = $(oplus_chg-obj-y)
 
-ccflags-y += -DCONFIG_OPLUS_CHG_GKI_SUPPORT -DOPLUS_CHG_REG_DUMP_ENABLE
+ccflags-y += -Os -DCONFIG_OPLUS_CHG_GKI_SUPPORT -DOPLUS_CHG_REG_DUMP_ENABLE
 
 ifeq ($(strip $(BRAND_SHOW_FLAG)), oneplus)
 	ccflags-y += -DOPLUS_CHG_OP_DEF
