@@ -16392,8 +16392,10 @@ exit:
 		uint64_t interval_us =
 			hdd_ctx->config->bus_bw_compute_interval * 1000;
 		qdf_atomic_set(&hdd_ctx->num_latency_critical_clients, 0);
-		hdd_ctx->cur_vote_level = PLD_BUS_WIDTH_NONE;
 		hdd_pld_request_bus_bandwidth(hdd_ctx, 0, 0, interval_us);
+		hdd_ctx->cur_vote_level = PLD_BUS_WIDTH_NONE;
+		pld_request_bus_bandwidth(hdd_ctx->parent_dev,
+					  PLD_BUS_WIDTH_NONE);
 	}
 }
 
@@ -16804,6 +16806,36 @@ void hdd_init_start_completion(void)
 	INIT_COMPLETION(wlan_start_comp);
 }
 
+#if defined CFG80211_USER_HINT_CELL_BASE_SELF_MANAGED || \
+                    (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 18, 0))
+static void hdd_inform_wifi_on(void)
+{
+	int ret;
+	struct hdd_context *hdd_ctx = cds_get_context(QDF_MODULE_ID_HDD);
+	struct osif_psoc_sync *psoc_sync;
+
+	hdd_nofl_debug("inform regdomain for wifi on");
+	ret = wlan_hdd_validate_context(hdd_ctx);
+	if (ret)
+		return;
+	if (!wlan_hdd_validate_modules_state(hdd_ctx))
+		return;
+	if (!hdd_ctx->wiphy)
+		return;
+	ret = osif_psoc_sync_op_start(wiphy_dev(hdd_ctx->wiphy), &psoc_sync);
+	if (ret)
+		return;
+	if (hdd_ctx->wiphy->registered)
+		hdd_send_wiphy_regd_sync_event(hdd_ctx);
+
+	osif_psoc_sync_op_stop(psoc_sync);
+}
+#else
+static void hdd_inform_wifi_on(void)
+{
+}
+#endif
+
 static ssize_t wlan_hdd_state_ctrl_param_write(struct file *filp,
 						const char __user *user_buf,
 						size_t count,
@@ -16815,6 +16847,7 @@ static ssize_t wlan_hdd_state_ctrl_param_write(struct file *filp,
 	int ret;
 	unsigned long rc;
 	struct hdd_context *hdd_ctx;
+	bool turning_on = false;
 
 	if (copy_from_user(buf, user_buf, 3)) {
 		pr_err("Failed to read buffer\n");
@@ -16822,18 +16855,23 @@ static ssize_t wlan_hdd_state_ctrl_param_write(struct file *filp,
 	}
 
 	if (strncmp(buf, wlan_off_str, strlen(wlan_off_str)) == 0) {
-		pr_debug("Wifi turning off from UI\n");
+		hdd_info("Wifi turning off from UI\n");
 		hdd_inform_wifi_off();
 		goto exit;
 	}
 
-	if (strncmp(buf, wlan_on_str, strlen(wlan_on_str)) == 0)
-		pr_info("Wifi Turning On from UI\n");
+	if (strncmp(buf, wlan_on_str, strlen(wlan_on_str)) == 0) {
+		hdd_info("Wifi Turning On from UI\n");
+		turning_on = true;
+	}
 
 	if (strncmp(buf, wlan_on_str, strlen(wlan_on_str)) != 0) {
 		pr_err("Invalid value received from framework");
 		goto exit;
 	}
+
+	hdd_info("is_driver_loaded %d is_driver_recovering %d",
+		 cds_is_driver_loaded(), cds_is_driver_recovering());
 
 	if (!cds_is_driver_loaded() || cds_is_driver_recovering()) {
 		rc = wait_for_completion_timeout(&wlan_start_comp,
@@ -16852,8 +16890,10 @@ static ssize_t wlan_hdd_state_ctrl_param_write(struct file *filp,
 	hdd_ctx = cds_get_context(QDF_MODULE_ID_HDD);
 	if (hdd_ctx)
 		hdd_psoc_idle_timer_stop(hdd_ctx);
-
 exit:
+	if (turning_on)
+		hdd_inform_wifi_on();
+
 	return count;
 }
 
