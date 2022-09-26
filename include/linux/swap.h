@@ -690,7 +690,7 @@ static inline void cgroup_throttle_swaprate(struct page *page, gfp_t gfp_mask)
 }
 #endif
 
-#ifdef CONFIG_MEMCG_SWAP
+#if defined(CONFIG_MEMCG) && defined(CONFIG_SWAP)
 extern void mem_cgroup_swapout(struct page *page, swp_entry_t entry);
 extern int mem_cgroup_try_charge_swap(struct page *page, swp_entry_t entry);
 extern void mem_cgroup_uncharge_swap(swp_entry_t entry, unsigned int nr_pages);
