@@ -2342,6 +2342,11 @@ static void prepare_scan_count(pg_data_t *pgdat, struct scan_control *sc)
 	if (!sc->force_deactivate) {
 		unsigned long refaults;
 
+		/*
+		 * When refaults are being observed, it means a new
+		 * workingset is being established. Deactivate to get
+		 * rid of any stale active pages quickly.
+		 */
 		refaults = lruvec_page_state(target_lruvec,
 				WORKINGSET_ACTIVATE_ANON);
 		if (refaults != target_lruvec->refaults[0] ||
@@ -2350,11 +2355,6 @@ static void prepare_scan_count(pg_data_t *pgdat, struct scan_control *sc)
 		else
 			sc->may_deactivate &= ~DEACTIVATE_ANON;
 
-		/*
-		 * When refaults are being observed, it means a new
-		 * workingset is being established. Deactivate to get
-		 * rid of any stale active pages quickly.
-		 */
 		refaults = lruvec_page_state(target_lruvec,
 				WORKINGSET_ACTIVATE_FILE);
 		if (refaults != target_lruvec->refaults[1] ||
@@ -2949,7 +2949,7 @@ static bool should_skip_mm(struct mm_struct *mm, struct lru_gen_mm_walk *walk)
 	if (size < MIN_LRU_BATCH)
 		return true;
 
-	if (test_bit(MMF_OOM_REAP_QUEUED, &mm->flags))
+	if (mm_is_oom_victim(mm))
 		return true;
 
 	return !mmget_not_zero(mm);
@@ -3653,7 +3653,14 @@ restart:
 
 		walk_pmd_range(&val, addr, next, args);
 
-		if (walk->batched >= MAX_LRU_BATCH) {
+		if (mm_is_oom_victim(args->mm))
+			return 1;
+
+		/* a racy check to curtail the waiting time */
+		if (wq_has_sleeper(&walk->lruvec->mm_state.wait))
+			return 1;
+
+		if (need_resched() || walk->batched >= MAX_LRU_BATCH) {
 			end = (addr | ~PUD_MASK) + 1;
 			goto done;
 		}
@@ -3928,7 +3935,7 @@ static bool try_to_inc_max_seq(struct lruvec *lruvec, unsigned long max_seq,
 	} while (mm);
 done:
 	if (!success) {
-		if (!current_is_kswapd() && !sc->priority)
+		if (sc->priority < DEF_PRIORITY - 2)
 			wait_event_killable(lruvec->mm_state.wait,
 					    max_seq < READ_ONCE(lrugen->max_seq));
 
@@ -4083,28 +4090,30 @@ static void lru_gen_age_node(struct pglist_data *pgdat, struct scan_control *sc)
 
 	clear_mm_walk();
 
+	/* check the order to exclude compaction-induced reclaim */
+	if (success || !min_ttl || sc->order)
+		return;
+
 	/*
 	 * The main goal is to OOM kill if every generation from all memcgs is
-	 * younger than min_ttl. However, another theoretical possibility is all
-	 * memcgs are either below min or empty.
+	 * younger than min_ttl. However, another possibility is all memcgs are
+	 * either below min or empty.
 	 */
-	if (!success) {
-		pr_err("mglru: min_ttl unsatisfied, calling OOM killer\n");
-		lru_gen_min_ttl_unsatisfied++;
+	pr_err("mglru: min_ttl unsatisfied, calling OOM killer\n");
+	lru_gen_min_ttl_unsatisfied++;
 #ifdef CONFIG_ANDROID_SIMPLE_LMK
-		simple_lmk_trigger();
+	simple_lmk_trigger();
 #else
-		if (mutex_trylock(&oom_lock)) {
-			struct oom_control oc = {
-				.gfp_mask = sc->gfp_mask,
-			};
+	if (mutex_trylock(&oom_lock)) {
+		struct oom_control oc = {
+			.gfp_mask = sc->gfp_mask,
+		};
 
-			out_of_memory(&oc);
+		out_of_memory(&oc);
 
-			mutex_unlock(&oom_lock);
-		}
-#endif
+		mutex_unlock(&oom_lock);
 	}
+#endif
 }
 
 /*
@@ -4570,6 +4579,11 @@ static int evict_pages(struct lruvec *lruvec, struct scan_control *sc, int swapp
 	return scanned;
 }
 
+/*
+ * For future optimizations:
+ * 1. Defer try_to_inc_max_seq() to workqueues to reduce latency for memcg
+ *    reclaim.
+ */
 static unsigned long get_nr_to_scan(struct lruvec *lruvec, struct scan_control *sc,
 				    bool can_swap, unsigned long reclaimed, bool *need_aging)
 {
@@ -4578,6 +4592,11 @@ static unsigned long get_nr_to_scan(struct lruvec *lruvec, struct scan_control *
 	struct mem_cgroup *memcg = lruvec_memcg(lruvec);
 	DEFINE_MAX_SEQ(lruvec);
 	DEFINE_MIN_SEQ(lruvec);
+
+	if (fatal_signal_pending(current)) {
+		sc->nr_reclaimed += MIN_LRU_BATCH;
+		return 0;
+	}
 
 	if (mem_cgroup_below_min(memcg) ||
 	    (mem_cgroup_below_low(memcg) && !sc->memcg_low_reclaim))
@@ -5364,8 +5383,8 @@ static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 	enum lru_list lru;
 	unsigned long nr_reclaimed = 0;
 	unsigned long nr_to_reclaim = sc->nr_to_reclaim;
+	bool proportional_reclaim;
 	struct blk_plug plug;
-	bool scan_adjusted;
 
 	if (lru_gen_enabled()) {
 		lru_gen_shrink_lruvec(lruvec, sc);
@@ -5388,8 +5407,8 @@ static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 	 * abort proportional reclaim if either the file or anon lru has already
 	 * dropped to zero at the first pass.
 	 */
-	scan_adjusted = (!cgroup_reclaim(sc) && !current_is_kswapd() &&
-			 sc->priority == DEF_PRIORITY);
+	proportional_reclaim = (!cgroup_reclaim(sc) && !current_is_kswapd() &&
+				sc->priority == DEF_PRIORITY);
 
 	blk_start_plug(&plug);
 	while (nr[LRU_INACTIVE_ANON] || nr[LRU_ACTIVE_FILE] ||
@@ -5409,7 +5428,7 @@ static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 
 		cond_resched();
 
-		if (nr_reclaimed < nr_to_reclaim || scan_adjusted)
+		if (nr_reclaimed < nr_to_reclaim || proportional_reclaim)
 			continue;
 
 		/*
@@ -5460,8 +5479,6 @@ static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 		nr_scanned = targets[lru] - nr[lru];
 		nr[lru] = targets[lru] * (100 - percentage) / 100;
 		nr[lru] -= min(nr[lru], nr_scanned);
-
-		scan_adjusted = true;
 	}
 	blk_finish_plug(&plug);
 	sc->nr_reclaimed += nr_reclaimed;
