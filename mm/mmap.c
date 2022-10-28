@@ -1925,6 +1925,8 @@ unsigned long mmap_region(struct file *file, unsigned long addr,
 		error = -EINVAL;
 		if (file)
 			goto close_and_free_vma;
+		else if (vma->vm_file)
+			goto unmap_and_free_vma;
 		else
 			goto free_vma;
 	}
