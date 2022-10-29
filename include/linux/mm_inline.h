@@ -5,6 +5,18 @@
 #include <linux/huge_mm.h>
 #include <linux/swap.h>
 
+#ifndef arch_try_cmpxchg
+#define arch_try_cmpxchg(_ptr, _oldp, _new) \
+({ \
+	typeof(*(_ptr)) *___op = (_oldp), ___o = *___op, ___r; \
+	___r = arch_cmpxchg((_ptr), ___o, (_new)); \
+	if (unlikely(___r != ___o)) \
+		*___op = ___r; \
+	likely(___r == ___o); \
+})
+#define try_cmpxchg arch_try_cmpxchg
+#endif /* arch_try_cmpxchg */
+
 /**
  * page_is_file_lru - should the page be on a file LRU or anon LRU?
  * @page: the page to test
