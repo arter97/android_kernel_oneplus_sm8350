@@ -80,7 +80,7 @@ static DEFINE_MUTEX(device_list_lock);
 static struct wakeup_source fp_wakelock;
 static struct gf_dev gf;
 static struct drm_panel *gf_lcd_active_panel;
-static fp_version = 0;
+static int fp_version = 0;
 struct gf_key_map maps[] = {
 	{ EV_KEY, GF_KEY_INPUT_HOME },
 	{ EV_KEY, GF_KEY_INPUT_MENU },

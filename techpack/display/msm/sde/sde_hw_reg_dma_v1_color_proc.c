@@ -4060,7 +4060,7 @@ static void _dspp_igcv4_off(struct sde_hw_dspp *ctx, void *cfg)
 	_perform_sbdma_kickoff(ctx, hw_cfg, dma_ops, blk, IGC);
 }
 
-extern op_dither_enable;
+extern int op_dither_enable;
 extern struct dsi_display *get_main_display(void);
 void reg_dmav2_setup_dspp_igcv4(struct sde_hw_dspp *ctx, void *cfg)
 {
