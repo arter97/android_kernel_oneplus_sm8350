@@ -5,8 +5,6 @@
   add_uevent_var
   add_wait_queue
   adjust_managed_page_count
-  aes_encrypt
-  aes_expandkey
   alarm_cancel
   alarm_expires_remaining
   alarm_init
@@ -952,6 +950,7 @@
   fs_kobj
   fsl8250_handle_irq
   fsstack_copy_attr_all
+  ftrace_set_clr_event
   full_name_hash
   fwnode_connection_find_match
   fwnode_get_parent
@@ -1103,8 +1102,10 @@
   i2c_register_driver
   i2c_smbus_read_byte
   i2c_smbus_read_byte_data
+  i2c_smbus_read_byte_data
   i2c_smbus_read_i2c_block_data
   i2c_smbus_write_byte
+  i2c_smbus_write_byte_data
   i2c_smbus_write_byte_data
   i2c_smbus_write_i2c_block_data
   __i2c_smbus_xfer
@@ -1309,6 +1310,7 @@
   kfree
   kfree_skb
   kfree_skb_list
+  kill_anon_super
   kill_fasync
   kill_litter_super
   kimage_vaddr
@@ -1371,7 +1373,6 @@
   kthread_worker_fn
   ktime_get
   ktime_get_mono_fast_ns
-  ktime_get_raw_ts64
   ktime_get_real_seconds
   ktime_get_real_ts64
   ktime_get_ts64
@@ -1539,7 +1540,6 @@
   __nla_parse
   nla_put
   nla_put_64bit
-  nla_strlcpy
   __nlmsg_put
   no_llseek
   nonseekable_open
@@ -1623,7 +1623,6 @@
   of_irq_get_byname
   of_irq_parse_and_map_pci
   of_irq_parse_one
-  of_irq_to_resource
   of_machine_is_compatible
   of_match_device
   of_match_node
@@ -1633,7 +1632,6 @@
   of_n_size_cells
   of_parse_phandle
   of_parse_phandle_with_args
-  of_parse_phandle_with_fixed_args
   of_phandle_iterator_init
   of_phandle_iterator_next
   of_phy_simple_xlate
@@ -1839,6 +1837,7 @@
   __pm_runtime_use_autosuspend
   __pm_stay_awake
   pm_stay_awake
+  pm_system_cancel_wakeup
   pm_system_wakeup
   pm_wakeup_dev_event
   pm_wakeup_ws_event
@@ -1979,11 +1978,9 @@
   __regmap_init
   regmap_irq_get_virq
   regmap_mmio_detach_clk
-  regmap_multi_reg_write
   regmap_raw_read
   regmap_read
   regmap_register_patch
-  regmap_reinit_cache
   regmap_update_bits_base
   regmap_write
   regulator_bulk_disable
@@ -2297,12 +2294,10 @@
   snd_soc_dai_set_tdm_slot
   snd_soc_dapm_add_routes
   snd_soc_dapm_disable_pin
-  snd_soc_dapm_enable_pin
   snd_soc_dapm_force_enable_pin
   snd_soc_dapm_get_enum_double
   snd_soc_dapm_get_volsw
   snd_soc_dapm_ignore_suspend
-  snd_soc_dapm_kcontrol_dapm
   snd_soc_dapm_kcontrol_widget
   snd_soc_dapm_mixer_update_power
   snd_soc_dapm_mux_update_power
@@ -2366,16 +2361,12 @@
   sock_unregister
   softnet_data
   sort
-  spi_add_device
   __spi_alloc_controller
-  spi_alloc_device
-  spi_busnum_to_master
   spi_register_controller
   __spi_register_driver
   spi_setup
   spi_sync
   spi_unregister_controller
-  spi_unregister_device
   __splice_from_pipe
   split_page
   spmi_controller_add
@@ -2474,7 +2465,6 @@
   thermal_cooling_device_unregister
   thermal_of_cooling_device_register
   thermal_zone_device_register
-  thermal_zone_device_unregister
   thermal_zone_device_update
   thermal_zone_get_temp
   thermal_zone_get_zone_by_name
@@ -2484,6 +2474,8 @@
   timer_unstable_counter_workaround
   timespec64_to_jiffies
   _totalram_pages
+  trace_array_create
+  trace_array_destroy
   __trace_bprintk
   trace_define_field
   trace_event_buffer_commit
@@ -2878,6 +2870,7 @@
   vmalloc_to_page
   vmalloc_user
   vmap
+  vmemdup_user
   vmemmap
   vmf_insert_mixed
   vmf_insert_pfn

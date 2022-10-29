@@ -220,6 +220,11 @@
 #define IPA_CV2X_SUPPORT
 
 /**
+ *  Max number of delegated IDUs for prefix delegation FR
+ */
+#define IPA_PREFIX_MAPPING_MAX 16
+
+/**
  * the attributes of the rule (routing or filtering)
  */
 #define IPA_FLT_TOS			(1ul << 0)
@@ -698,7 +703,10 @@ enum ipa3_nat_mem_in {
 enum ipa_ip_type {
 	IPA_IP_v4,
 	IPA_IP_v6,
-	IPA_IP_MAX
+	IPA_IP_MAX,
+	IPA_IP_v4_VLAN = IPA_IP_MAX,
+	IPA_IP_v6_VLAN,
+	IPA_IP_MAX_WLAN
 };
 
 #define VALID_IPA_IP_TYPE(t) \
@@ -2675,6 +2683,12 @@ enum ipa_peripheral_ep_type {
 	IPA_DATA_EP_TYP_ETH,
 };
 
+enum ipa_data_ep_prot_type {
+	IPA_PROT_RMNET = 0,
+	IPA_PROT_RMNET_CV2X = 1,
+	IPA_PROT_MAX
+};
+
 struct ipa_ep_pair_info {
 	__u32 consumer_pipe_num;
 	__u32 producer_pipe_num;
@@ -2690,6 +2704,8 @@ struct ipa_ep_pair_info {
  * @num_ep_pairs: number of ep_pairs - o/p param
  * @ep_pair_size: sizeof(ipa_ep_pair_info) * max_ep_pairs
  * @info: structure contains ep pair info
+ * @teth_prot : RMNET/CV2X --i/p param
+ * @teth_prot_valid - validity of i/p param protocol
  */
 struct ipa_ioc_get_ep_info {
 	enum ipa_peripheral_ep_type ep_type;
@@ -2698,6 +2714,8 @@ struct ipa_ioc_get_ep_info {
 	__u8 num_ep_pairs;
 	__u16 padding;
 	__u64 info;
+	enum ipa_data_ep_prot_type teth_prot;
+	__u8 teth_prot_valid;
 };
 
 /**
@@ -3182,11 +3200,13 @@ enum ipa_vlan_ifaces {
 	IPA_VLAN_IF_ETH0,
 	IPA_VLAN_IF_ETH1,
 	IPA_VLAN_IF_RNDIS,
-	IPA_VLAN_IF_ECM
+	IPA_VLAN_IF_ECM,
+	IPA_VLAN_IF_WLAN
 };
 
 #define IPA_VLAN_IF_EMAC IPA_VLAN_IF_ETH
-#define IPA_VLAN_IF_MAX (IPA_VLAN_IF_ECM + 1)
+#define IPA_VLAN_IF_WLAN IPA_VLAN_IF_WLAN
+#define IPA_VLAN_IF_MAX (IPA_VLAN_IF_WLAN + 1)
 
 /**
  * struct ipa_get_vlan_mode - get vlan mode of a Lan interface
@@ -3411,14 +3431,20 @@ enum ipa_ext_router_mode {
  * struct ipa_ioc_ext_router_info - provide ext_router info
  * @ipa_ext_router_mode: prefix sharing, prefix delegation, or disabled mode
  * @pdn_name: PDN interface name
- * @ipv6_addr: the prefix addr used for dummy or delegated prefixes
+ * @ipv6_addr: the prefix addr used for the dummy prefix. (prefix sharing mode)
  * @ipv6_mask: the ipv6 mask used to mask above addr to get the correct prefix
+ * @num_of_del_prefix_mapping: number of delegated prefix to IDU IP mapping
+ * @idu_del_wan_ip: array of IDU WAN IP to be mapped to a delegated prefix
+ * @idu_del_client_prefix: Array of delegated prefixes
  */
 struct ipa_ioc_ext_router_info {
 	enum ipa_ext_router_mode mode;
 	char pdn_name[IPA_RESOURCE_NAME_MAX];
 	uint32_t ipv6_addr[4];
 	uint32_t ipv6_mask[4];
+	int num_of_idu_prefix_mapping;
+	uint32_t idu_wan_ip[IPA_PREFIX_MAPPING_MAX][4];
+	uint32_t idu_client_prefix[IPA_PREFIX_MAPPING_MAX][4];
 };
 
 /**
