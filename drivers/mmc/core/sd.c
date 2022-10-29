@@ -857,7 +857,7 @@ try_again:
 #if defined(CONFIG_SDC_QTI)
 	   (ocr & SD_OCR_S18R) &&
 #endif
-	   (*rocr & 0x01000000)) {
+	   (*rocr & SD_ROCR_S18A)) {
 		err = mmc_set_uhs_voltage(host, pocr);
 		if (err == -EAGAIN) {
 			retries--;
