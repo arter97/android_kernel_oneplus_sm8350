@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2019, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/module.h>
 #include <linux/thermal.h>
@@ -321,12 +320,6 @@ static int cpu_isolate_probe(struct platform_device *pdev)
 				break;
 			}
 		}
-
-		if (cpu_isolate_cdev->cpu_id == -1) {
-			dev_err(&pdev->dev, "Invalid CPU phandle\n");
-			continue;
-		}
-
 		INIT_WORK(&cpu_isolate_cdev->reg_work,
 				cpu_isolate_register_cdev);
 		list_add(&cpu_isolate_cdev->node, &cpu_isolate_cdev_list);
