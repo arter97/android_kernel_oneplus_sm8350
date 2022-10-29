@@ -5028,10 +5028,16 @@ QDF_STATUS csr_roam_stop_network(struct mac_context *mac, uint32_t sessionId,
 				ssid_match = csr_is_ssid_equal(
 						mac, pSession->pConnectBssDesc,
 						bss_desc, pIes);
-			if (bss_desc && !ssid_match)
-				status = csr_roam_issue_disassociate(mac,
-						sessionId, substate, false);
-			else if (bss_desc)
+			if (bss_desc && !ssid_match) {
+				csr_roam_issue_disassociate(mac,
+							    sessionId, substate,
+							    false);
+				status = QDF_STATUS_E_FAILURE;
+				qdf_mem_free(pBssConfig);
+
+				return status;
+
+			} else if (bss_desc) {
 				/*
 				 * In an infra & going to an infra network with
 				 * the same SSID.  This calls for a reassoc seq.
@@ -5042,6 +5048,7 @@ QDF_STATUS csr_roam_stop_network(struct mac_context *mac, uint32_t sessionId,
 						mac, sessionId, roam_profile,
 						bss_desc, pBssConfig, pIes,
 						false);
+			}
 		} else if (bss_desc || CSR_IS_INFRA_AP(roam_profile)) {
 			/*
 			 * Not in Infra. We can go ahead and set
@@ -15710,6 +15717,17 @@ QDF_STATUS csr_send_join_req_msg(struct mac_context *mac, uint32_t sessionId,
 					       bss_freq,
 					       mac->mlme_cfg->ht_caps.
 					       ht_cap_info.adv_coding_cap);
+
+		if (pProfile->csrPersona == QDF_STA_MODE) {
+			if (pSession->ht_config.ht_sgi20)
+				pSession->ht_config.ht_sgi20 =
+					pIes->HTCaps.shortGI20MHz;
+
+			if (pSession->ht_config.ht_sgi40)
+				pSession->ht_config.ht_sgi40 =
+					pIes->HTCaps.shortGI40MHz;
+		}
+
 		csr_join_req->ht_config = pSession->ht_config;
 		csr_join_req->vht_config = pSession->vht_config;
 		sme_debug("ht capability 0x%x VHT capability 0x%x",
