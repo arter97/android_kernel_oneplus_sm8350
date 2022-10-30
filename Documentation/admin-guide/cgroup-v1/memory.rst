@@ -300,7 +300,7 @@ When oom event notifier is registered, event will be delivered.
   per-zone-per-cgroup LRU (cgroup's private LRU) is just guarded by
   pgdat->lru_lock, it has no lock of its own.
 
-2.7 Kernel Memory Extension (CONFIG_MEMCG_KMEM)
+2.7 Kernel Memory Extension
 -----------------------------------------------
 
 With the Kernel memory extension, the Memory Controller is able to limit
@@ -387,8 +387,6 @@ U != 0, K >= U:
 
 a. Enable CONFIG_CGROUPS
 b. Enable CONFIG_MEMCG
-c. Enable CONFIG_MEMCG_SWAP (to use swap extension)
-d. Enable CONFIG_MEMCG_KMEM (to use kmem extension)
 
 3.1. Prepare the cgroups (see cgroups.txt, Why are cgroups needed?)
 -------------------------------------------------------------------

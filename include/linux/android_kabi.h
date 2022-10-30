@@ -59,11 +59,17 @@
 #else
 
 #define _ANDROID_KABI_REPLACE(_orig, _new)			\
-	_new
+	union {							\
+		_new;						\
+		struct {					\
+			_orig;					\
+		};						\
+		__ANDROID_KABI_CHECK_SIZE_ALIGN(_orig, _new);	\
+	}
 
 #endif /* __GENKSYMS__ */
 
-#define _ANDROID_KABI_RESERVE(n)
+#define _ANDROID_KABI_RESERVE(n)		u64 android_kabi_reserved##n
 
 
 /*
@@ -77,7 +83,11 @@
  *   number: the "number" of the padding variable in the structure.  Start with
  *   1 and go up.
  */
+#ifdef CONFIG_ANDROID_KABI_RESERVE
 #define ANDROID_KABI_RESERVE(number)	_ANDROID_KABI_RESERVE(number)
+#else
+#define ANDROID_KABI_RESERVE(number)
+#endif
 
 
 /*

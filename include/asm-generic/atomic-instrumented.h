@@ -18,9 +18,10 @@
 #define _ASM_GENERIC_ATOMIC_INSTRUMENTED_H
 
 #include <linux/build_bug.h>
+#include <linux/compiler.h>
 #include <linux/kasan-checks.h>
 
-static inline int
+static __always_inline int
 atomic_read(const atomic_t *v)
 {
 	kasan_check_read(v, sizeof(*v));
@@ -29,7 +30,7 @@ atomic_read(const atomic_t *v)
 #define atomic_read atomic_read
 
 #if defined(arch_atomic_read_acquire)
-static inline int
+static __always_inline int
 atomic_read_acquire(const atomic_t *v)
 {
 	kasan_check_read(v, sizeof(*v));
@@ -38,7 +39,7 @@ atomic_read_acquire(const atomic_t *v)
 #define atomic_read_acquire atomic_read_acquire
 #endif
 
-static inline void
+static __always_inline void
 atomic_set(atomic_t *v, int i)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -47,7 +48,7 @@ atomic_set(atomic_t *v, int i)
 #define atomic_set atomic_set
 
 #if defined(arch_atomic_set_release)
-static inline void
+static __always_inline void
 atomic_set_release(atomic_t *v, int i)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -56,7 +57,7 @@ atomic_set_release(atomic_t *v, int i)
 #define atomic_set_release atomic_set_release
 #endif
 
-static inline void
+static __always_inline void
 atomic_add(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -65,7 +66,7 @@ atomic_add(int i, atomic_t *v)
 #define atomic_add atomic_add
 
 #if !defined(arch_atomic_add_return_relaxed) || defined(arch_atomic_add_return)
-static inline int
+static __always_inline int
 atomic_add_return(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -75,7 +76,7 @@ atomic_add_return(int i, atomic_t *v)
 #endif
 
 #if defined(arch_atomic_add_return_acquire)
-static inline int
+static __always_inline int
 atomic_add_return_acquire(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -85,7 +86,7 @@ atomic_add_return_acquire(int i, atomic_t *v)
 #endif
 
 #if defined(arch_atomic_add_return_release)
-static inline int
+static __always_inline int
 atomic_add_return_release(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -95,7 +96,7 @@ atomic_add_return_release(int i, atomic_t *v)
 #endif
 
 #if defined(arch_atomic_add_return_relaxed)
-static inline int
+static __always_inline int
 atomic_add_return_relaxed(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -105,7 +106,7 @@ atomic_add_return_relaxed(int i, atomic_t *v)
 #endif
 
 #if !defined(arch_atomic_fetch_add_relaxed) || defined(arch_atomic_fetch_add)
-static inline int
+static __always_inline int
 atomic_fetch_add(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -115,7 +116,7 @@ atomic_fetch_add(int i, atomic_t *v)
 #endif
 
 #if defined(arch_atomic_fetch_add_acquire)
-static inline int
+static __always_inline int
 atomic_fetch_add_acquire(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -125,7 +126,7 @@ atomic_fetch_add_acquire(int i, atomic_t *v)
 #endif
 
 #if defined(arch_atomic_fetch_add_release)
-static inline int
+static __always_inline int
 atomic_fetch_add_release(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -135,7 +136,7 @@ atomic_fetch_add_release(int i, atomic_t *v)
 #endif
 
 #if defined(arch_atomic_fetch_add_relaxed)
-static inline int
+static __always_inline int
 atomic_fetch_add_relaxed(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -144,7 +145,7 @@ atomic_fetch_add_relaxed(int i, atomic_t *v)
 #define atomic_fetch_add_relaxed atomic_fetch_add_relaxed
 #endif
 
-static inline void
+static __always_inline void
 atomic_sub(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -153,7 +154,7 @@ atomic_sub(int i, atomic_t *v)
 #define atomic_sub atomic_sub
 
 #if !defined(arch_atomic_sub_return_relaxed) || defined(arch_atomic_sub_return)
-static inline int
+static __always_inline int
 atomic_sub_return(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -163,7 +164,7 @@ atomic_sub_return(int i, atomic_t *v)
 #endif
 
 #if defined(arch_atomic_sub_return_acquire)
-static inline int
+static __always_inline int
 atomic_sub_return_acquire(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -173,7 +174,7 @@ atomic_sub_return_acquire(int i, atomic_t *v)
 #endif
 
 #if defined(arch_atomic_sub_return_release)
-static inline int
+static __always_inline int
 atomic_sub_return_release(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -183,7 +184,7 @@ atomic_sub_return_release(int i, atomic_t *v)
 #endif
 
 #if defined(arch_atomic_sub_return_relaxed)
-static inline int
+static __always_inline int
 atomic_sub_return_relaxed(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -193,7 +194,7 @@ atomic_sub_return_relaxed(int i, atomic_t *v)
 #endif
 
 #if !defined(arch_atomic_fetch_sub_relaxed) || defined(arch_atomic_fetch_sub)
-static inline int
+static __always_inline int
 atomic_fetch_sub(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -203,7 +204,7 @@ atomic_fetch_sub(int i, atomic_t *v)
 #endif
 
 #if defined(arch_atomic_fetch_sub_acquire)
-static inline int
+static __always_inline int
 atomic_fetch_sub_acquire(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -213,7 +214,7 @@ atomic_fetch_sub_acquire(int i, atomic_t *v)
 #endif
 
 #if defined(arch_atomic_fetch_sub_release)
-static inline int
+static __always_inline int
 atomic_fetch_sub_release(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -223,7 +224,7 @@ atomic_fetch_sub_release(int i, atomic_t *v)
 #endif
 
 #if defined(arch_atomic_fetch_sub_relaxed)
-static inline int
+static __always_inline int
 atomic_fetch_sub_relaxed(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -233,7 +234,7 @@ atomic_fetch_sub_relaxed(int i, atomic_t *v)
 #endif
 
 #if defined(arch_atomic_inc)
-static inline void
+static __always_inline void
 atomic_inc(atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -243,7 +244,7 @@ atomic_inc(atomic_t *v)
 #endif
 
 #if defined(arch_atomic_inc_return)
-static inline int
+static __always_inline int
 atomic_inc_return(atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -253,7 +254,7 @@ atomic_inc_return(atomic_t *v)
 #endif
 
 #if defined(arch_atomic_inc_return_acquire)
-static inline int
+static __always_inline int
 atomic_inc_return_acquire(atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -263,7 +264,7 @@ atomic_inc_return_acquire(atomic_t *v)
 #endif
 
 #if defined(arch_atomic_inc_return_release)
-static inline int
+static __always_inline int
 atomic_inc_return_release(atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -273,7 +274,7 @@ atomic_inc_return_release(atomic_t *v)
 #endif
 
 #if defined(arch_atomic_inc_return_relaxed)
-static inline int
+static __always_inline int
 atomic_inc_return_relaxed(atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -283,7 +284,7 @@ atomic_inc_return_relaxed(atomic_t *v)
 #endif
 
 #if defined(arch_atomic_fetch_inc)
-static inline int
+static __always_inline int
 atomic_fetch_inc(atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -293,7 +294,7 @@ atomic_fetch_inc(atomic_t *v)
 #endif
 
 #if defined(arch_atomic_fetch_inc_acquire)
-static inline int
+static __always_inline int
 atomic_fetch_inc_acquire(atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -303,7 +304,7 @@ atomic_fetch_inc_acquire(atomic_t *v)
 #endif
 
 #if defined(arch_atomic_fetch_inc_release)
-static inline int
+static __always_inline int
 atomic_fetch_inc_release(atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -313,7 +314,7 @@ atomic_fetch_inc_release(atomic_t *v)
 #endif
 
 #if defined(arch_atomic_fetch_inc_relaxed)
-static inline int
+static __always_inline int
 atomic_fetch_inc_relaxed(atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -323,7 +324,7 @@ atomic_fetch_inc_relaxed(atomic_t *v)
 #endif
 
 #if defined(arch_atomic_dec)
-static inline void
+static __always_inline void
 atomic_dec(atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -333,7 +334,7 @@ atomic_dec(atomic_t *v)
 #endif
 
 #if defined(arch_atomic_dec_return)
-static inline int
+static __always_inline int
 atomic_dec_return(atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -343,7 +344,7 @@ atomic_dec_return(atomic_t *v)
 #endif
 
 #if defined(arch_atomic_dec_return_acquire)
-static inline int
+static __always_inline int
 atomic_dec_return_acquire(atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -353,7 +354,7 @@ atomic_dec_return_acquire(atomic_t *v)
 #endif
 
 #if defined(arch_atomic_dec_return_release)
-static inline int
+static __always_inline int
 atomic_dec_return_release(atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -363,7 +364,7 @@ atomic_dec_return_release(atomic_t *v)
 #endif
 
 #if defined(arch_atomic_dec_return_relaxed)
-static inline int
+static __always_inline int
 atomic_dec_return_relaxed(atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -373,7 +374,7 @@ atomic_dec_return_relaxed(atomic_t *v)
 #endif
 
 #if defined(arch_atomic_fetch_dec)
-static inline int
+static __always_inline int
 atomic_fetch_dec(atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -383,7 +384,7 @@ atomic_fetch_dec(atomic_t *v)
 #endif
 
 #if defined(arch_atomic_fetch_dec_acquire)
-static inline int
+static __always_inline int
 atomic_fetch_dec_acquire(atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -393,7 +394,7 @@ atomic_fetch_dec_acquire(atomic_t *v)
 #endif
 
 #if defined(arch_atomic_fetch_dec_release)
-static inline int
+static __always_inline int
 atomic_fetch_dec_release(atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -403,7 +404,7 @@ atomic_fetch_dec_release(atomic_t *v)
 #endif
 
 #if defined(arch_atomic_fetch_dec_relaxed)
-static inline int
+static __always_inline int
 atomic_fetch_dec_relaxed(atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -412,7 +413,7 @@ atomic_fetch_dec_relaxed(atomic_t *v)
 #define atomic_fetch_dec_relaxed atomic_fetch_dec_relaxed
 #endif
 
-static inline void
+static __always_inline void
 atomic_and(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -421,7 +422,7 @@ atomic_and(int i, atomic_t *v)
 #define atomic_and atomic_and
 
 #if !defined(arch_atomic_fetch_and_relaxed) || defined(arch_atomic_fetch_and)
-static inline int
+static __always_inline int
 atomic_fetch_and(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -431,7 +432,7 @@ atomic_fetch_and(int i, atomic_t *v)
 #endif
 
 #if defined(arch_atomic_fetch_and_acquire)
-static inline int
+static __always_inline int
 atomic_fetch_and_acquire(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -441,7 +442,7 @@ atomic_fetch_and_acquire(int i, atomic_t *v)
 #endif
 
 #if defined(arch_atomic_fetch_and_release)
-static inline int
+static __always_inline int
 atomic_fetch_and_release(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -451,7 +452,7 @@ atomic_fetch_and_release(int i, atomic_t *v)
 #endif
 
 #if defined(arch_atomic_fetch_and_relaxed)
-static inline int
+static __always_inline int
 atomic_fetch_and_relaxed(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -461,7 +462,7 @@ atomic_fetch_and_relaxed(int i, atomic_t *v)
 #endif
 
 #if defined(arch_atomic_andnot)
-static inline void
+static __always_inline void
 atomic_andnot(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -471,7 +472,7 @@ atomic_andnot(int i, atomic_t *v)
 #endif
 
 #if defined(arch_atomic_fetch_andnot)
-static inline int
+static __always_inline int
 atomic_fetch_andnot(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -481,7 +482,7 @@ atomic_fetch_andnot(int i, atomic_t *v)
 #endif
 
 #if defined(arch_atomic_fetch_andnot_acquire)
-static inline int
+static __always_inline int
 atomic_fetch_andnot_acquire(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -491,7 +492,7 @@ atomic_fetch_andnot_acquire(int i, atomic_t *v)
 #endif
 
 #if defined(arch_atomic_fetch_andnot_release)
-static inline int
+static __always_inline int
 atomic_fetch_andnot_release(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -501,7 +502,7 @@ atomic_fetch_andnot_release(int i, atomic_t *v)
 #endif
 
 #if defined(arch_atomic_fetch_andnot_relaxed)
-static inline int
+static __always_inline int
 atomic_fetch_andnot_relaxed(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -510,7 +511,7 @@ atomic_fetch_andnot_relaxed(int i, atomic_t *v)
 #define atomic_fetch_andnot_relaxed atomic_fetch_andnot_relaxed
 #endif
 
-static inline void
+static __always_inline void
 atomic_or(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -519,7 +520,7 @@ atomic_or(int i, atomic_t *v)
 #define atomic_or atomic_or
 
 #if !defined(arch_atomic_fetch_or_relaxed) || defined(arch_atomic_fetch_or)
-static inline int
+static __always_inline int
 atomic_fetch_or(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -529,7 +530,7 @@ atomic_fetch_or(int i, atomic_t *v)
 #endif
 
 #if defined(arch_atomic_fetch_or_acquire)
-static inline int
+static __always_inline int
 atomic_fetch_or_acquire(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -539,7 +540,7 @@ atomic_fetch_or_acquire(int i, atomic_t *v)
 #endif
 
 #if defined(arch_atomic_fetch_or_release)
-static inline int
+static __always_inline int
 atomic_fetch_or_release(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -549,7 +550,7 @@ atomic_fetch_or_release(int i, atomic_t *v)
 #endif
 
 #if defined(arch_atomic_fetch_or_relaxed)
-static inline int
+static __always_inline int
 atomic_fetch_or_relaxed(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -558,7 +559,7 @@ atomic_fetch_or_relaxed(int i, atomic_t *v)
 #define atomic_fetch_or_relaxed atomic_fetch_or_relaxed
 #endif
 
-static inline void
+static __always_inline void
 atomic_xor(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -567,7 +568,7 @@ atomic_xor(int i, atomic_t *v)
 #define atomic_xor atomic_xor
 
 #if !defined(arch_atomic_fetch_xor_relaxed) || defined(arch_atomic_fetch_xor)
-static inline int
+static __always_inline int
 atomic_fetch_xor(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -577,7 +578,7 @@ atomic_fetch_xor(int i, atomic_t *v)
 #endif
 
 #if defined(arch_atomic_fetch_xor_acquire)
-static inline int
+static __always_inline int
 atomic_fetch_xor_acquire(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -587,7 +588,7 @@ atomic_fetch_xor_acquire(int i, atomic_t *v)
 #endif
 
 #if defined(arch_atomic_fetch_xor_release)
-static inline int
+static __always_inline int
 atomic_fetch_xor_release(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -597,7 +598,7 @@ atomic_fetch_xor_release(int i, atomic_t *v)
 #endif
 
 #if defined(arch_atomic_fetch_xor_relaxed)
-static inline int
+static __always_inline int
 atomic_fetch_xor_relaxed(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -607,7 +608,7 @@ atomic_fetch_xor_relaxed(int i, atomic_t *v)
 #endif
 
 #if !defined(arch_atomic_xchg_relaxed) || defined(arch_atomic_xchg)
-static inline int
+static __always_inline int
 atomic_xchg(atomic_t *v, int i)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -617,7 +618,7 @@ atomic_xchg(atomic_t *v, int i)
 #endif
 
 #if defined(arch_atomic_xchg_acquire)
-static inline int
+static __always_inline int
 atomic_xchg_acquire(atomic_t *v, int i)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -627,7 +628,7 @@ atomic_xchg_acquire(atomic_t *v, int i)
 #endif
 
 #if defined(arch_atomic_xchg_release)
-static inline int
+static __always_inline int
 atomic_xchg_release(atomic_t *v, int i)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -637,7 +638,7 @@ atomic_xchg_release(atomic_t *v, int i)
 #endif
 
 #if defined(arch_atomic_xchg_relaxed)
-static inline int
+static __always_inline int
 atomic_xchg_relaxed(atomic_t *v, int i)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -647,7 +648,7 @@ atomic_xchg_relaxed(atomic_t *v, int i)
 #endif
 
 #if !defined(arch_atomic_cmpxchg_relaxed) || defined(arch_atomic_cmpxchg)
-static inline int
+static __always_inline int
 atomic_cmpxchg(atomic_t *v, int old, int new)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -657,7 +658,7 @@ atomic_cmpxchg(atomic_t *v, int old, int new)
 #endif
 
 #if defined(arch_atomic_cmpxchg_acquire)
-static inline int
+static __always_inline int
 atomic_cmpxchg_acquire(atomic_t *v, int old, int new)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -667,7 +668,7 @@ atomic_cmpxchg_acquire(atomic_t *v, int old, int new)
 #endif
 
 #if defined(arch_atomic_cmpxchg_release)
-static inline int
+static __always_inline int
 atomic_cmpxchg_release(atomic_t *v, int old, int new)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -677,7 +678,7 @@ atomic_cmpxchg_release(atomic_t *v, int old, int new)
 #endif
 
 #if defined(arch_atomic_cmpxchg_relaxed)
-static inline int
+static __always_inline int
 atomic_cmpxchg_relaxed(atomic_t *v, int old, int new)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -687,7 +688,7 @@ atomic_cmpxchg_relaxed(atomic_t *v, int old, int new)
 #endif
 
 #if defined(arch_atomic_try_cmpxchg)
-static inline bool
+static __always_inline bool
 atomic_try_cmpxchg(atomic_t *v, int *old, int new)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -698,7 +699,7 @@ atomic_try_cmpxchg(atomic_t *v, int *old, int new)
 #endif
 
 #if defined(arch_atomic_try_cmpxchg_acquire)
-static inline bool
+static __always_inline bool
 atomic_try_cmpxchg_acquire(atomic_t *v, int *old, int new)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -709,7 +710,7 @@ atomic_try_cmpxchg_acquire(atomic_t *v, int *old, int new)
 #endif
 
 #if defined(arch_atomic_try_cmpxchg_release)
-static inline bool
+static __always_inline bool
 atomic_try_cmpxchg_release(atomic_t *v, int *old, int new)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -720,7 +721,7 @@ atomic_try_cmpxchg_release(atomic_t *v, int *old, int new)
 #endif
 
 #if defined(arch_atomic_try_cmpxchg_relaxed)
-static inline bool
+static __always_inline bool
 atomic_try_cmpxchg_relaxed(atomic_t *v, int *old, int new)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -731,7 +732,7 @@ atomic_try_cmpxchg_relaxed(atomic_t *v, int *old, int new)
 #endif
 
 #if defined(arch_atomic_sub_and_test)
-static inline bool
+static __always_inline bool
 atomic_sub_and_test(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -741,7 +742,7 @@ atomic_sub_and_test(int i, atomic_t *v)
 #endif
 
 #if defined(arch_atomic_dec_and_test)
-static inline bool
+static __always_inline bool
 atomic_dec_and_test(atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -751,7 +752,7 @@ atomic_dec_and_test(atomic_t *v)
 #endif
 
 #if defined(arch_atomic_inc_and_test)
-static inline bool
+static __always_inline bool
 atomic_inc_and_test(atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -761,7 +762,7 @@ atomic_inc_and_test(atomic_t *v)
 #endif
 
 #if defined(arch_atomic_add_negative)
-static inline bool
+static __always_inline bool
 atomic_add_negative(int i, atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -771,7 +772,7 @@ atomic_add_negative(int i, atomic_t *v)
 #endif
 
 #if defined(arch_atomic_fetch_add_unless)
-static inline int
+static __always_inline int
 atomic_fetch_add_unless(atomic_t *v, int a, int u)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -781,7 +782,7 @@ atomic_fetch_add_unless(atomic_t *v, int a, int u)
 #endif
 
 #if defined(arch_atomic_add_unless)
-static inline bool
+static __always_inline bool
 atomic_add_unless(atomic_t *v, int a, int u)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -791,7 +792,7 @@ atomic_add_unless(atomic_t *v, int a, int u)
 #endif
 
 #if defined(arch_atomic_inc_not_zero)
-static inline bool
+static __always_inline bool
 atomic_inc_not_zero(atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -801,7 +802,7 @@ atomic_inc_not_zero(atomic_t *v)
 #endif
 
 #if defined(arch_atomic_inc_unless_negative)
-static inline bool
+static __always_inline bool
 atomic_inc_unless_negative(atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -811,7 +812,7 @@ atomic_inc_unless_negative(atomic_t *v)
 #endif
 
 #if defined(arch_atomic_dec_unless_positive)
-static inline bool
+static __always_inline bool
 atomic_dec_unless_positive(atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -821,7 +822,7 @@ atomic_dec_unless_positive(atomic_t *v)
 #endif
 
 #if defined(arch_atomic_dec_if_positive)
-static inline int
+static __always_inline int
 atomic_dec_if_positive(atomic_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -830,7 +831,7 @@ atomic_dec_if_positive(atomic_t *v)
 #define atomic_dec_if_positive atomic_dec_if_positive
 #endif
 
-static inline s64
+static __always_inline s64
 atomic64_read(const atomic64_t *v)
 {
 	kasan_check_read(v, sizeof(*v));
@@ -839,7 +840,7 @@ atomic64_read(const atomic64_t *v)
 #define atomic64_read atomic64_read
 
 #if defined(arch_atomic64_read_acquire)
-static inline s64
+static __always_inline s64
 atomic64_read_acquire(const atomic64_t *v)
 {
 	kasan_check_read(v, sizeof(*v));
@@ -848,7 +849,7 @@ atomic64_read_acquire(const atomic64_t *v)
 #define atomic64_read_acquire atomic64_read_acquire
 #endif
 
-static inline void
+static __always_inline void
 atomic64_set(atomic64_t *v, s64 i)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -857,7 +858,7 @@ atomic64_set(atomic64_t *v, s64 i)
 #define atomic64_set atomic64_set
 
 #if defined(arch_atomic64_set_release)
-static inline void
+static __always_inline void
 atomic64_set_release(atomic64_t *v, s64 i)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -866,7 +867,7 @@ atomic64_set_release(atomic64_t *v, s64 i)
 #define atomic64_set_release atomic64_set_release
 #endif
 
-static inline void
+static __always_inline void
 atomic64_add(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -875,7 +876,7 @@ atomic64_add(s64 i, atomic64_t *v)
 #define atomic64_add atomic64_add
 
 #if !defined(arch_atomic64_add_return_relaxed) || defined(arch_atomic64_add_return)
-static inline s64
+static __always_inline s64
 atomic64_add_return(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -885,7 +886,7 @@ atomic64_add_return(s64 i, atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_add_return_acquire)
-static inline s64
+static __always_inline s64
 atomic64_add_return_acquire(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -895,7 +896,7 @@ atomic64_add_return_acquire(s64 i, atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_add_return_release)
-static inline s64
+static __always_inline s64
 atomic64_add_return_release(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -905,7 +906,7 @@ atomic64_add_return_release(s64 i, atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_add_return_relaxed)
-static inline s64
+static __always_inline s64
 atomic64_add_return_relaxed(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -915,7 +916,7 @@ atomic64_add_return_relaxed(s64 i, atomic64_t *v)
 #endif
 
 #if !defined(arch_atomic64_fetch_add_relaxed) || defined(arch_atomic64_fetch_add)
-static inline s64
+static __always_inline s64
 atomic64_fetch_add(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -925,7 +926,7 @@ atomic64_fetch_add(s64 i, atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_fetch_add_acquire)
-static inline s64
+static __always_inline s64
 atomic64_fetch_add_acquire(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -935,7 +936,7 @@ atomic64_fetch_add_acquire(s64 i, atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_fetch_add_release)
-static inline s64
+static __always_inline s64
 atomic64_fetch_add_release(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -945,7 +946,7 @@ atomic64_fetch_add_release(s64 i, atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_fetch_add_relaxed)
-static inline s64
+static __always_inline s64
 atomic64_fetch_add_relaxed(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -954,7 +955,7 @@ atomic64_fetch_add_relaxed(s64 i, atomic64_t *v)
 #define atomic64_fetch_add_relaxed atomic64_fetch_add_relaxed
 #endif
 
-static inline void
+static __always_inline void
 atomic64_sub(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -963,7 +964,7 @@ atomic64_sub(s64 i, atomic64_t *v)
 #define atomic64_sub atomic64_sub
 
 #if !defined(arch_atomic64_sub_return_relaxed) || defined(arch_atomic64_sub_return)
-static inline s64
+static __always_inline s64
 atomic64_sub_return(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -973,7 +974,7 @@ atomic64_sub_return(s64 i, atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_sub_return_acquire)
-static inline s64
+static __always_inline s64
 atomic64_sub_return_acquire(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -983,7 +984,7 @@ atomic64_sub_return_acquire(s64 i, atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_sub_return_release)
-static inline s64
+static __always_inline s64
 atomic64_sub_return_release(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -993,7 +994,7 @@ atomic64_sub_return_release(s64 i, atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_sub_return_relaxed)
-static inline s64
+static __always_inline s64
 atomic64_sub_return_relaxed(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1003,7 +1004,7 @@ atomic64_sub_return_relaxed(s64 i, atomic64_t *v)
 #endif
 
 #if !defined(arch_atomic64_fetch_sub_relaxed) || defined(arch_atomic64_fetch_sub)
-static inline s64
+static __always_inline s64
 atomic64_fetch_sub(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1013,7 +1014,7 @@ atomic64_fetch_sub(s64 i, atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_fetch_sub_acquire)
-static inline s64
+static __always_inline s64
 atomic64_fetch_sub_acquire(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1023,7 +1024,7 @@ atomic64_fetch_sub_acquire(s64 i, atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_fetch_sub_release)
-static inline s64
+static __always_inline s64
 atomic64_fetch_sub_release(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1033,7 +1034,7 @@ atomic64_fetch_sub_release(s64 i, atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_fetch_sub_relaxed)
-static inline s64
+static __always_inline s64
 atomic64_fetch_sub_relaxed(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1043,7 +1044,7 @@ atomic64_fetch_sub_relaxed(s64 i, atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_inc)
-static inline void
+static __always_inline void
 atomic64_inc(atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1053,7 +1054,7 @@ atomic64_inc(atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_inc_return)
-static inline s64
+static __always_inline s64
 atomic64_inc_return(atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1063,7 +1064,7 @@ atomic64_inc_return(atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_inc_return_acquire)
-static inline s64
+static __always_inline s64
 atomic64_inc_return_acquire(atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1073,7 +1074,7 @@ atomic64_inc_return_acquire(atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_inc_return_release)
-static inline s64
+static __always_inline s64
 atomic64_inc_return_release(atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1083,7 +1084,7 @@ atomic64_inc_return_release(atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_inc_return_relaxed)
-static inline s64
+static __always_inline s64
 atomic64_inc_return_relaxed(atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1093,7 +1094,7 @@ atomic64_inc_return_relaxed(atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_fetch_inc)
-static inline s64
+static __always_inline s64
 atomic64_fetch_inc(atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1103,7 +1104,7 @@ atomic64_fetch_inc(atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_fetch_inc_acquire)
-static inline s64
+static __always_inline s64
 atomic64_fetch_inc_acquire(atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1113,7 +1114,7 @@ atomic64_fetch_inc_acquire(atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_fetch_inc_release)
-static inline s64
+static __always_inline s64
 atomic64_fetch_inc_release(atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1123,7 +1124,7 @@ atomic64_fetch_inc_release(atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_fetch_inc_relaxed)
-static inline s64
+static __always_inline s64
 atomic64_fetch_inc_relaxed(atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1133,7 +1134,7 @@ atomic64_fetch_inc_relaxed(atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_dec)
-static inline void
+static __always_inline void
 atomic64_dec(atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1143,7 +1144,7 @@ atomic64_dec(atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_dec_return)
-static inline s64
+static __always_inline s64
 atomic64_dec_return(atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1153,7 +1154,7 @@ atomic64_dec_return(atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_dec_return_acquire)
-static inline s64
+static __always_inline s64
 atomic64_dec_return_acquire(atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1163,7 +1164,7 @@ atomic64_dec_return_acquire(atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_dec_return_release)
-static inline s64
+static __always_inline s64
 atomic64_dec_return_release(atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1173,7 +1174,7 @@ atomic64_dec_return_release(atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_dec_return_relaxed)
-static inline s64
+static __always_inline s64
 atomic64_dec_return_relaxed(atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1183,7 +1184,7 @@ atomic64_dec_return_relaxed(atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_fetch_dec)
-static inline s64
+static __always_inline s64
 atomic64_fetch_dec(atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1193,7 +1194,7 @@ atomic64_fetch_dec(atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_fetch_dec_acquire)
-static inline s64
+static __always_inline s64
 atomic64_fetch_dec_acquire(atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1203,7 +1204,7 @@ atomic64_fetch_dec_acquire(atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_fetch_dec_release)
-static inline s64
+static __always_inline s64
 atomic64_fetch_dec_release(atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1213,7 +1214,7 @@ atomic64_fetch_dec_release(atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_fetch_dec_relaxed)
-static inline s64
+static __always_inline s64
 atomic64_fetch_dec_relaxed(atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1222,7 +1223,7 @@ atomic64_fetch_dec_relaxed(atomic64_t *v)
 #define atomic64_fetch_dec_relaxed atomic64_fetch_dec_relaxed
 #endif
 
-static inline void
+static __always_inline void
 atomic64_and(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1231,7 +1232,7 @@ atomic64_and(s64 i, atomic64_t *v)
 #define atomic64_and atomic64_and
 
 #if !defined(arch_atomic64_fetch_and_relaxed) || defined(arch_atomic64_fetch_and)
-static inline s64
+static __always_inline s64
 atomic64_fetch_and(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1241,7 +1242,7 @@ atomic64_fetch_and(s64 i, atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_fetch_and_acquire)
-static inline s64
+static __always_inline s64
 atomic64_fetch_and_acquire(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1251,7 +1252,7 @@ atomic64_fetch_and_acquire(s64 i, atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_fetch_and_release)
-static inline s64
+static __always_inline s64
 atomic64_fetch_and_release(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1261,7 +1262,7 @@ atomic64_fetch_and_release(s64 i, atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_fetch_and_relaxed)
-static inline s64
+static __always_inline s64
 atomic64_fetch_and_relaxed(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1271,7 +1272,7 @@ atomic64_fetch_and_relaxed(s64 i, atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_andnot)
-static inline void
+static __always_inline void
 atomic64_andnot(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1281,7 +1282,7 @@ atomic64_andnot(s64 i, atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_fetch_andnot)
-static inline s64
+static __always_inline s64
 atomic64_fetch_andnot(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1291,7 +1292,7 @@ atomic64_fetch_andnot(s64 i, atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_fetch_andnot_acquire)
-static inline s64
+static __always_inline s64
 atomic64_fetch_andnot_acquire(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1301,7 +1302,7 @@ atomic64_fetch_andnot_acquire(s64 i, atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_fetch_andnot_release)
-static inline s64
+static __always_inline s64
 atomic64_fetch_andnot_release(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1311,7 +1312,7 @@ atomic64_fetch_andnot_release(s64 i, atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_fetch_andnot_relaxed)
-static inline s64
+static __always_inline s64
 atomic64_fetch_andnot_relaxed(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1320,7 +1321,7 @@ atomic64_fetch_andnot_relaxed(s64 i, atomic64_t *v)
 #define atomic64_fetch_andnot_relaxed atomic64_fetch_andnot_relaxed
 #endif
 
-static inline void
+static __always_inline void
 atomic64_or(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1329,7 +1330,7 @@ atomic64_or(s64 i, atomic64_t *v)
 #define atomic64_or atomic64_or
 
 #if !defined(arch_atomic64_fetch_or_relaxed) || defined(arch_atomic64_fetch_or)
-static inline s64
+static __always_inline s64
 atomic64_fetch_or(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1339,7 +1340,7 @@ atomic64_fetch_or(s64 i, atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_fetch_or_acquire)
-static inline s64
+static __always_inline s64
 atomic64_fetch_or_acquire(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1349,7 +1350,7 @@ atomic64_fetch_or_acquire(s64 i, atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_fetch_or_release)
-static inline s64
+static __always_inline s64
 atomic64_fetch_or_release(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1359,7 +1360,7 @@ atomic64_fetch_or_release(s64 i, atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_fetch_or_relaxed)
-static inline s64
+static __always_inline s64
 atomic64_fetch_or_relaxed(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1368,7 +1369,7 @@ atomic64_fetch_or_relaxed(s64 i, atomic64_t *v)
 #define atomic64_fetch_or_relaxed atomic64_fetch_or_relaxed
 #endif
 
-static inline void
+static __always_inline void
 atomic64_xor(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1377,7 +1378,7 @@ atomic64_xor(s64 i, atomic64_t *v)
 #define atomic64_xor atomic64_xor
 
 #if !defined(arch_atomic64_fetch_xor_relaxed) || defined(arch_atomic64_fetch_xor)
-static inline s64
+static __always_inline s64
 atomic64_fetch_xor(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1387,7 +1388,7 @@ atomic64_fetch_xor(s64 i, atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_fetch_xor_acquire)
-static inline s64
+static __always_inline s64
 atomic64_fetch_xor_acquire(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1397,7 +1398,7 @@ atomic64_fetch_xor_acquire(s64 i, atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_fetch_xor_release)
-static inline s64
+static __always_inline s64
 atomic64_fetch_xor_release(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1407,7 +1408,7 @@ atomic64_fetch_xor_release(s64 i, atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_fetch_xor_relaxed)
-static inline s64
+static __always_inline s64
 atomic64_fetch_xor_relaxed(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1417,7 +1418,7 @@ atomic64_fetch_xor_relaxed(s64 i, atomic64_t *v)
 #endif
 
 #if !defined(arch_atomic64_xchg_relaxed) || defined(arch_atomic64_xchg)
-static inline s64
+static __always_inline s64
 atomic64_xchg(atomic64_t *v, s64 i)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1427,7 +1428,7 @@ atomic64_xchg(atomic64_t *v, s64 i)
 #endif
 
 #if defined(arch_atomic64_xchg_acquire)
-static inline s64
+static __always_inline s64
 atomic64_xchg_acquire(atomic64_t *v, s64 i)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1437,7 +1438,7 @@ atomic64_xchg_acquire(atomic64_t *v, s64 i)
 #endif
 
 #if defined(arch_atomic64_xchg_release)
-static inline s64
+static __always_inline s64
 atomic64_xchg_release(atomic64_t *v, s64 i)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1447,7 +1448,7 @@ atomic64_xchg_release(atomic64_t *v, s64 i)
 #endif
 
 #if defined(arch_atomic64_xchg_relaxed)
-static inline s64
+static __always_inline s64
 atomic64_xchg_relaxed(atomic64_t *v, s64 i)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1457,7 +1458,7 @@ atomic64_xchg_relaxed(atomic64_t *v, s64 i)
 #endif
 
 #if !defined(arch_atomic64_cmpxchg_relaxed) || defined(arch_atomic64_cmpxchg)
-static inline s64
+static __always_inline s64
 atomic64_cmpxchg(atomic64_t *v, s64 old, s64 new)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1467,7 +1468,7 @@ atomic64_cmpxchg(atomic64_t *v, s64 old, s64 new)
 #endif
 
 #if defined(arch_atomic64_cmpxchg_acquire)
-static inline s64
+static __always_inline s64
 atomic64_cmpxchg_acquire(atomic64_t *v, s64 old, s64 new)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1477,7 +1478,7 @@ atomic64_cmpxchg_acquire(atomic64_t *v, s64 old, s64 new)
 #endif
 
 #if defined(arch_atomic64_cmpxchg_release)
-static inline s64
+static __always_inline s64
 atomic64_cmpxchg_release(atomic64_t *v, s64 old, s64 new)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1487,7 +1488,7 @@ atomic64_cmpxchg_release(atomic64_t *v, s64 old, s64 new)
 #endif
 
 #if defined(arch_atomic64_cmpxchg_relaxed)
-static inline s64
+static __always_inline s64
 atomic64_cmpxchg_relaxed(atomic64_t *v, s64 old, s64 new)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1497,7 +1498,7 @@ atomic64_cmpxchg_relaxed(atomic64_t *v, s64 old, s64 new)
 #endif
 
 #if defined(arch_atomic64_try_cmpxchg)
-static inline bool
+static __always_inline bool
 atomic64_try_cmpxchg(atomic64_t *v, s64 *old, s64 new)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1508,7 +1509,7 @@ atomic64_try_cmpxchg(atomic64_t *v, s64 *old, s64 new)
 #endif
 
 #if defined(arch_atomic64_try_cmpxchg_acquire)
-static inline bool
+static __always_inline bool
 atomic64_try_cmpxchg_acquire(atomic64_t *v, s64 *old, s64 new)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1519,7 +1520,7 @@ atomic64_try_cmpxchg_acquire(atomic64_t *v, s64 *old, s64 new)
 #endif
 
 #if defined(arch_atomic64_try_cmpxchg_release)
-static inline bool
+static __always_inline bool
 atomic64_try_cmpxchg_release(atomic64_t *v, s64 *old, s64 new)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1530,7 +1531,7 @@ atomic64_try_cmpxchg_release(atomic64_t *v, s64 *old, s64 new)
 #endif
 
 #if defined(arch_atomic64_try_cmpxchg_relaxed)
-static inline bool
+static __always_inline bool
 atomic64_try_cmpxchg_relaxed(atomic64_t *v, s64 *old, s64 new)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1541,7 +1542,7 @@ atomic64_try_cmpxchg_relaxed(atomic64_t *v, s64 *old, s64 new)
 #endif
 
 #if defined(arch_atomic64_sub_and_test)
-static inline bool
+static __always_inline bool
 atomic64_sub_and_test(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1551,7 +1552,7 @@ atomic64_sub_and_test(s64 i, atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_dec_and_test)
-static inline bool
+static __always_inline bool
 atomic64_dec_and_test(atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1561,7 +1562,7 @@ atomic64_dec_and_test(atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_inc_and_test)
-static inline bool
+static __always_inline bool
 atomic64_inc_and_test(atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1571,7 +1572,7 @@ atomic64_inc_and_test(atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_add_negative)
-static inline bool
+static __always_inline bool
 atomic64_add_negative(s64 i, atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1581,7 +1582,7 @@ atomic64_add_negative(s64 i, atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_fetch_add_unless)
-static inline s64
+static __always_inline s64
 atomic64_fetch_add_unless(atomic64_t *v, s64 a, s64 u)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1591,7 +1592,7 @@ atomic64_fetch_add_unless(atomic64_t *v, s64 a, s64 u)
 #endif
 
 #if defined(arch_atomic64_add_unless)
-static inline bool
+static __always_inline bool
 atomic64_add_unless(atomic64_t *v, s64 a, s64 u)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1601,7 +1602,7 @@ atomic64_add_unless(atomic64_t *v, s64 a, s64 u)
 #endif
 
 #if defined(arch_atomic64_inc_not_zero)
-static inline bool
+static __always_inline bool
 atomic64_inc_not_zero(atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1611,7 +1612,7 @@ atomic64_inc_not_zero(atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_inc_unless_negative)
-static inline bool
+static __always_inline bool
 atomic64_inc_unless_negative(atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1621,7 +1622,7 @@ atomic64_inc_unless_negative(atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_dec_unless_positive)
-static inline bool
+static __always_inline bool
 atomic64_dec_unless_positive(atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1631,7 +1632,7 @@ atomic64_dec_unless_positive(atomic64_t *v)
 #endif
 
 #if defined(arch_atomic64_dec_if_positive)
-static inline s64
+static __always_inline s64
 atomic64_dec_if_positive(atomic64_t *v)
 {
 	kasan_check_write(v, sizeof(*v));
@@ -1785,4 +1786,4 @@ atomic64_dec_if_positive(atomic64_t *v)
 })
 
 #endif /* _ASM_GENERIC_ATOMIC_INSTRUMENTED_H */
-// b29b625d5de9280f680e42c7be859b55b15e5f6a
+// d45effa5dc572c67dc67f68bb1781d3ecaf8a14a

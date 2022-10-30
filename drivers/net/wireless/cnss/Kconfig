@@ -89,19 +89,6 @@ config CLD_HL_SDIO_CORE
 	depends on ARCH_QCOM
 	depends on MMC
 
-config CLD_LL_CORE
-	tristate "Qualcomm Technologies Inc. Core wlan driver"
-	select NL80211_TESTMODE
-	select WEXT_CORE
-	select WEXT_PRIV
-	select WEXT_SPY
-	select WIRELESS_EXT
-	help
-	  This section contains the necessary modules needed to enable the
-	  core WLAN driver for Qualcomm Technologies Inc QCA6174 chipset.
-	  Select Y to compile the driver in order to have WLAN functionality
-	  support.
-
 config CNSS_SECURE_FW
 	bool "Enable/Disable Memory Allocation for Secure Firmware Feature"
 	depends on CNSS

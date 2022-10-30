@@ -8671,7 +8671,7 @@ void sme_get_command_q_status(mac_handle_t mac_handle)
  * @timestamp_offset: return for the offset of the timestamp field
  * @time_value_offset: return for the time_value field in the TA IE
  *
- * Return: the length of the buffer.
+ * Return: the length of the buffer on success and error code on failure.
  */
 int sme_ocb_gen_timing_advert_frame(mac_handle_t mac_handle,
 				    tSirMacAddr self_addr, uint8_t **buf,
@@ -14383,11 +14383,9 @@ QDF_STATUS sme_get_beacon_frm(mac_handle_t mac_handle,
 		status = QDF_STATUS_E_NOMEM;
 		goto exit;
 	}
-	status = csr_roam_get_scan_filter_from_profile(mac_ctx,
-						       profile, scan_filter,
-						       false, vdev_id);
-	if (QDF_IS_STATUS_ERROR(status)) {
-		sme_err("prepare_filter failed");
+
+	if (!*ch_freq || qdf_is_macaddr_zero((struct qdf_mac_addr *)&bssid)) {
+		sme_err("Invalid roaming parameter");
 		status = QDF_STATUS_E_FAULT;
 		qdf_mem_free(scan_filter);
 		goto exit;
@@ -14397,6 +14395,9 @@ QDF_STATUS sme_get_beacon_frm(mac_handle_t mac_handle,
 	scan_filter->num_of_bssid = 1;
 	qdf_mem_copy(scan_filter->bssid_list[0].bytes,
 		     bssid, sizeof(struct qdf_mac_addr));
+
+	scan_filter->num_of_channels = 1;
+	scan_filter->chan_freq_list[0] = *ch_freq;
 
 	status = csr_scan_get_result(mac_ctx, scan_filter, &result_handle,
 				     false);

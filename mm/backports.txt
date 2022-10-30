@@ -1,3 +1,12 @@
+9282012fc0aa page_alloc: fix invalid watermark check on a negative value
+3a9bb7b1879b mm/page_io: count submission time as thrashing delay for delayacct
+aa1cf99b87e9 delayacct: support re-entrance detection of thrashing accounting
+f347c9d2697f filemap: make the accounting of thrashing more consistent
+02e458d8d04e mm/vmscan: remove obsolete comment in get_scan_count
+c91bdc935899 mm: memcontrol: don't allocate cgroup swap arrays when memcg is disabled
+e55b9f96860f mm: memcontrol: drop dead CONFIG_MEMCG_SWAP config symbol
+deb0f6562884 mm/mmap: undo ->mmap() when arch_validate_flags() fails
+
 ca2864e52d39 mm: compaction: make sure highest is above the min_pfn
 65d759c8f9f5 mm: compaction: support triggering of proactive compaction by user
 e1e92bfa3825 mm: compaction: optimize proactive compaction deferrals
