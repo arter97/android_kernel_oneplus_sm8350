@@ -15,6 +15,7 @@ void icnss_put_resources(struct icnss_priv *priv);
 void icnss_put_vreg(struct icnss_priv *priv);
 void icnss_put_clk(struct icnss_priv *priv);
 int icnss_vreg_unvote(struct icnss_priv *priv);
+int icnss_get_psf_info(struct icnss_priv *priv);
 void icnss_enable_regulator(struct icnss_priv *priv);
 
 #endif

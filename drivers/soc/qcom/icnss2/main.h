@@ -13,6 +13,7 @@
 #include <linux/kobject.h>
 #include <linux/platform_device.h>
 #include <linux/ipc_logging.h>
+#include <linux/power_supply.h>
 #include <dt-bindings/iio/qcom,spmi-vadc.h>
 #include <soc/qcom/icnss2.h>
 #include <soc/qcom/service-locator.h>
@@ -170,6 +171,11 @@ struct icnss_clk_cfg {
 	const char *name;
 	u32 freq;
 	u32 required;
+};
+
+struct icnss_battery_level {
+	int lower_battery_threshold;
+	int ldo_voltage;
 };
 
 struct icnss_clk_info {
@@ -480,6 +486,12 @@ struct icnss_priv {
 	u32 rf_subtype;
 
 	u32 wlan_en_delay_ms;
+	bool psf_supported;
+	struct notifier_block psf_nb;
+	struct power_supply *batt_psy;
+	int last_updated_voltage;
+	struct work_struct soc_update_work;
+	struct workqueue_struct *soc_update_wq;
 	unsigned long device_config;
 	struct timer_list recovery_timer;
 };
