@@ -958,11 +958,10 @@ static int __remove_mapping(struct address_space *mapping, struct page *page,
 	if (PageSwapCache(page)) {
 		swp_entry_t swap = { .val = page_private(page) };
 
-		/* get a shadow entry before mem_cgroup_swapout() clears page_memcg() */
 		if (reclaimed && !mapping_exiting(mapping))
 			shadow = workingset_eviction(page, target_memcg);
-		mem_cgroup_swapout(page, swap);
 		__delete_from_swap_cache(page, swap, shadow);
+		mem_cgroup_swapout(page, swap);
 		xa_unlock_irqrestore(&mapping->i_pages, flags);
 		put_swap_page(page, swap);
 	} else {
