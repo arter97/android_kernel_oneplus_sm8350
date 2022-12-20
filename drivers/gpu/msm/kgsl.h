@@ -256,7 +256,7 @@ struct kgsl_global_memdesc {
  *  are still references to it.
  * @dev_priv: back pointer to the device file that created this entry.
  * @metadata: String containing user specified metadata for the entry
- * @work: Work struct used to schedule a kgsl_mem_entry_put in atomic contexts
+ * @work: Work struct used to schedule kgsl_mem_entry_destroy()
  */
 struct kgsl_mem_entry {
 	struct kref refcount;
@@ -405,6 +405,7 @@ long kgsl_ioctl_drawctxt_set_shadow_mem(struct kgsl_device_private *dev_priv,
 		unsigned int cmd, void *data);
 
 void kgsl_mem_entry_destroy(struct kref *kref);
+void kgsl_mem_entry_destroy_deferred(struct kref *kref);
 
 void kgsl_get_egl_counts(struct kgsl_mem_entry *entry,
 			int *egl_surface_count, int *egl_image_count);
@@ -520,6 +521,20 @@ kgsl_mem_entry_put(struct kgsl_mem_entry *entry)
 {
 	if (entry)
 		kref_put(&entry->refcount, kgsl_mem_entry_destroy);
+}
+
+/*
+ * kgsl_mem_entry_put_deferred() - Puts refcount and triggers deferred
+ * mem_entry destroy when refcount is the last refcount.
+ * @entry: memory entry to be put.
+ *
+ * Use this to put a memory entry when we don't want to block
+ * the caller while destroying memory entry.
+ */
+static inline void kgsl_mem_entry_put_deferred(struct kgsl_mem_entry *entry)
+{
+	if (entry)
+		kref_put(&entry->refcount, kgsl_mem_entry_destroy_deferred);
 }
 
 /*
