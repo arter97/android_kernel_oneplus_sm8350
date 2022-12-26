@@ -1,3 +1,22 @@
+359a5e1416ca mm: multi-gen LRU: retry folios written back while isolated
+dda1c41a07b4 mm: multi-gen LRU: move lru_gen_add_mm() out of IRQ-off region
+8be976a0937a mm: multi-gen LRU: design doc
+07017acb0601 mm: multi-gen LRU: admin guide
+d6c3af7d8a2b mm: multi-gen LRU: debugfs interface
+1332a809d95a mm: multi-gen LRU: thrashing prevention
+354ed5974429 mm: multi-gen LRU: kill switch
+f76c83378851 mm: multi-gen LRU: optimize multiple memcgs
+bd74fdaea146 mm: multi-gen LRU: support page table walks
+018ee47f1489 mm: multi-gen LRU: exploit locality in rmap
+ac35a4902374 mm: multi-gen LRU: minimal implementation
+ec1c86b25f4b mm: multi-gen LRU: groundwork
+
+adb8213014b2 mm: memcg: fix stale protection of reclaim target memcg
+0538a82c39e9 mm: vmscan: make rotations a secondary factor in balancing anon vs file
+cc674ab3c018 mm/mmap: fix memory leak in mmap_region()
+
+6d4675e60135 mm: don't be stuck to rmap lock on reclaim path
+
 9282012fc0aa page_alloc: fix invalid watermark check on a negative value
 3a9bb7b1879b mm/page_io: count submission time as thrashing delay for delayacct
 aa1cf99b87e9 delayacct: support re-entrance detection of thrashing accounting
