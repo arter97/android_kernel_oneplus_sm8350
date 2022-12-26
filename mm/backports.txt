@@ -1,3 +1,5 @@
+6d4675e60135 mm: don't be stuck to rmap lock on reclaim path
+
 9282012fc0aa page_alloc: fix invalid watermark check on a negative value
 3a9bb7b1879b mm/page_io: count submission time as thrashing delay for delayacct
 aa1cf99b87e9 delayacct: support re-entrance detection of thrashing accounting
