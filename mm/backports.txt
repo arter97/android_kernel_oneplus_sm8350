@@ -1,3 +1,7 @@
+adb8213014b2 mm: memcg: fix stale protection of reclaim target memcg
+0538a82c39e9 mm: vmscan: make rotations a secondary factor in balancing anon vs file
+cc674ab3c018 mm/mmap: fix memory leak in mmap_region()
+
 6d4675e60135 mm: don't be stuck to rmap lock on reclaim path
 
 9282012fc0aa page_alloc: fix invalid watermark check on a negative value
