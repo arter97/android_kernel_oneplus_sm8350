@@ -647,14 +647,14 @@ unlock:
 static int exfat_find(struct inode *dir, struct qstr *qname,
 		struct exfat_dir_entry *info)
 {
-	int ret, dentry, num_entries, count;
+	int ret, dentry, count;
 	struct exfat_chain cdir;
 	struct exfat_uni_name uni_name;
 	struct super_block *sb = dir->i_sb;
 	struct exfat_sb_info *sbi = EXFAT_SB(sb);
 	struct exfat_inode_info *ei = EXFAT_I(dir);
 	struct exfat_dentry *ep, *ep2;
-	struct exfat_entry_set_cache *es;
+	struct exfat_entry_set_cache es;
 	/* for optimized dir & entry to prevent long traverse of cluster chain */
 	struct exfat_hint hint_opt;
 
@@ -665,10 +665,6 @@ static int exfat_find(struct inode *dir, struct qstr *qname,
 	ret = exfat_resolve_path_for_lookup(dir, qname->name, &cdir, &uni_name);
 	if (ret)
 		return ret;
-
-	num_entries = exfat_calc_num_entries(&uni_name);
-	if (num_entries < 0)
-		return num_entries;
 
 	/* check the validation of hint_stat and initialize it if required */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 16, 0)
@@ -687,9 +683,7 @@ static int exfat_find(struct inode *dir, struct qstr *qname,
 	}
 
 	/* search the file name for directories */
-	dentry = exfat_find_dir_entry(sb, ei, &cdir, &uni_name,
-			num_entries, TYPE_ALL, &hint_opt);
-
+	dentry = exfat_find_dir_entry(sb, ei, &cdir, &uni_name, &hint_opt);
 	if (dentry < 0)
 		return dentry; /* -error value */
 
@@ -702,11 +696,10 @@ static int exfat_find(struct inode *dir, struct qstr *qname,
 	if (cdir.flags & ALLOC_NO_FAT_CHAIN)
 		cdir.size -= dentry / sbi->dentries_per_clu;
 	dentry = hint_opt.eidx;
-	es = exfat_get_dentry_set(sb, &cdir, dentry, ES_2_ENTRIES);
-	if (!es)
+	if (exfat_get_dentry_set(&es, sb, &cdir, dentry, ES_2_ENTRIES))
 		return -EIO;
-	ep = exfat_get_dentry_cached(es, 0);
-	ep2 = exfat_get_dentry_cached(es, 1);
+	ep = exfat_get_dentry_cached(&es, ES_IDX_FILE);
+	ep2 = exfat_get_dentry_cached(&es, ES_IDX_STREAM);
 
 	info->type = exfat_get_entry_type(ep);
 	info->attr = le16_to_cpu(ep->dentry.file.attr);
@@ -735,7 +728,7 @@ static int exfat_find(struct inode *dir, struct qstr *qname,
 			     ep->dentry.file.access_time,
 			     ep->dentry.file.access_date,
 			     0);
-	exfat_free_dentry_set(es, false);
+	exfat_put_dentry_set(&es, false);
 
 	if (ei->start_clu == EXFAT_FREE_CLUSTER) {
 		exfat_fs_error(sb,
@@ -1292,7 +1285,7 @@ static int __exfat_rename(struct inode *old_parent_inode,
 	struct exfat_inode_info *new_ei = NULL;
 	unsigned int new_entry_type = TYPE_UNUSED;
 	int new_entry = 0;
-	struct buffer_head *old_bh, *new_bh = NULL;
+	struct buffer_head *new_bh = NULL;
 
 	/* check the validity of pointer parameters */
 	if (new_path == NULL || strlen(new_path) == 0)
@@ -1307,13 +1300,6 @@ static int __exfat_rename(struct inode *old_parent_inode,
 		EXFAT_B_TO_CLU_ROUND_UP(i_size_read(old_parent_inode), sbi),
 		EXFAT_I(old_parent_inode)->flags);
 	dentry = ei->entry;
-
-	ep = exfat_get_dentry(sb, &olddir, dentry, &old_bh);
-	if (!ep) {
-		ret = -EIO;
-		goto out;
-	}
-	brelse(old_bh);
 
 	/* check whether new dir is existing directory and empty */
 	if (new_inode) {
