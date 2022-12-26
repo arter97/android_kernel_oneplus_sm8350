@@ -229,6 +229,7 @@ void update_rq_clock(struct rq *rq)
 	rq->clock += delta;
 	update_rq_clock_task(rq, delta);
 }
+EXPORT_SYMBOL_GPL(update_rq_clock);
 
 
 #ifdef CONFIG_SCHED_HRTICK
@@ -1051,6 +1052,7 @@ unsigned long uclamp_eff_value(struct task_struct *p, enum uclamp_id clamp_id)
 
 	return (unsigned long)uc_eff.value;
 }
+EXPORT_SYMBOL_GPL(uclamp_eff_value);
 
 /*
  * When a task is enqueued on a rq, the clamp bucket currently defined by the
@@ -2134,6 +2136,7 @@ int migrate_swap(struct task_struct *cur, struct task_struct *p,
 out:
 	return ret;
 }
+EXPORT_SYMBOL_GPL(migrate_swap);
 
 /*
  * wait_task_inactive - wait for a thread to unschedule.
@@ -3937,6 +3940,7 @@ unsigned long long task_sched_runtime(struct task_struct *p)
 
 	return ns;
 }
+EXPORT_SYMBOL_GPL(task_sched_runtime);
 
 unsigned int capacity_margin_freq = 1280; /* ~20% margin */
 
@@ -5042,6 +5046,7 @@ int idle_cpu(int cpu)
 
 	return 1;
 }
+EXPORT_SYMBOL_GPL(idle_cpu);
 
 /**
  * available_idle_cpu - is a given CPU idle for enqueuing work.
@@ -6664,6 +6669,7 @@ void sched_setnuma(struct task_struct *p, int nid)
 		set_next_task(rq, p);
 	task_rq_unlock(rq, p, &rf);
 }
+EXPORT_SYMBOL_GPL(migrate_swap);
 #endif /* CONFIG_NUMA_BALANCING */
 
 #ifdef CONFIG_HOTPLUG_CPU
@@ -8408,6 +8414,7 @@ static int cpu_extra_stat_show(struct seq_file *sf,
 #endif
 	return 0;
 }
+EXPORT_SYMBOL_GPL(task_sched_runtime);
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
 static u64 cpu_weight_read_u64(struct cgroup_subsys_state *css,
@@ -8665,6 +8672,7 @@ void dequeue_task_core(struct rq *rq, struct task_struct *p, int flags)
 {
 	dequeue_task(rq, p, 0);
 }
+EXPORT_SYMBOL_GPL(idle_cpu);
 
 #ifdef CONFIG_SCHED_WALT
 /*

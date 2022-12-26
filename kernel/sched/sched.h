@@ -1460,6 +1460,8 @@ extern int migrate_swap(struct task_struct *p, struct task_struct *t,
 
 #ifdef CONFIG_SMP
 
+extern int migrate_swap(struct task_struct *p, struct task_struct *t,
+			int cpu, int scpu);
 static inline void
 queue_balance_callback(struct rq *rq,
 		       struct callback_head *head,
