@@ -4645,6 +4645,9 @@ roam_control_policy[QCA_ATTR_ROAM_CONTROL_MAX + 1] = {
 			.type = NLA_U32},
 	[QCA_ATTR_ROAM_CONTROL_USER_REASON] = {.type = NLA_U32},
 	[QCA_ATTR_ROAM_CONTROL_SCAN_SCHEME_TRIGGERS] = {.type = NLA_U32},
+	[QCA_ATTR_ROAM_CONTROL_HO_DELAY_FOR_RX] = {.type = NLA_U16},
+	[QCA_ATTR_ROAM_CONTROL_FULL_SCAN_NO_REUSE_PARTIAL_SCAN_FREQ] = {
+			.type = NLA_U8},
 };
 
 /**
@@ -5036,6 +5039,14 @@ hdd_send_roam_scan_period_to_sme(struct hdd_context *hdd_ctx,
 	return status;
 }
 
+/* Roam Hand-off delay range is 20 to 1000 msec */
+#define MIN_ROAM_HO_DELAY 20
+#define MAX_ROAM_HO_DELAY 1000
+
+/* Include/Exclude roam partial scan channels in full scan */
+#define INCLUDE_ROAM_PARTIAL_SCAN_FREQ 0
+#define EXCLUDE_ROAM_PARTIAL_SCAN_FREQ 1
+
 /**
  * hdd_set_roam_with_control_config() - Set roam control configuration
  * @hdd_ctx: HDD context
@@ -5227,6 +5238,41 @@ hdd_set_roam_with_control_config(struct hdd_context *hdd_ctx,
 		wlan_cm_roam_set_vendor_btm_params(hdd_ctx->psoc, &param);
 		/* Sends RSO update */
 		sme_send_vendor_btm_params(hdd_ctx->mac_handle, vdev_id);
+	}
+
+	attr = tb2[QCA_ATTR_ROAM_CONTROL_HO_DELAY_FOR_RX];
+	if (attr) {
+		value = nla_get_u16(attr);
+		if (value < MIN_ROAM_HO_DELAY || value > MAX_ROAM_HO_DELAY) {
+			hdd_err("Invalid roam HO delay value: %d", value);
+			return -EINVAL;
+		}
+
+		hdd_debug("Received roam HO delay value: %d", value);
+
+		status = ucfg_cm_roam_send_ho_delay_config(hdd_ctx->pdev,
+							   vdev_id, value);
+		if (QDF_IS_STATUS_ERROR(status))
+			hdd_err("failed to set hand-off delay");
+	}
+
+	attr = tb2[QCA_ATTR_ROAM_CONTROL_FULL_SCAN_NO_REUSE_PARTIAL_SCAN_FREQ];
+	if (attr) {
+		value = nla_get_u8(attr);
+		if (value < INCLUDE_ROAM_PARTIAL_SCAN_FREQ ||
+		    value > EXCLUDE_ROAM_PARTIAL_SCAN_FREQ) {
+			hdd_err("Invalid value %d to exclude partial scan freq",
+				value);
+			return -EINVAL;
+		}
+
+		hdd_debug("%s partial scan channels in roam full scan",
+			  value ? "Exclude" : "Include");
+
+		status = ucfg_cm_exclude_rm_partial_scan_freq(hdd_ctx->pdev,
+							      vdev_id, value);
+		if (QDF_IS_STATUS_ERROR(status))
+			hdd_err("Fail to exclude roam partial scan channels");
 	}
 
 	return qdf_status_to_os_return(status);

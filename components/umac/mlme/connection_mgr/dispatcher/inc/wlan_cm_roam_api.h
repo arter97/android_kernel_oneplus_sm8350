@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -158,6 +159,29 @@ wlan_cm_roam_neighbor_proceed_with_handoff_req(uint8_t vdev_id);
  * Return: bool
  */
 bool wlan_cm_is_sta_connected(uint8_t vdev_id);
+
+/**
+ * wlan_cm_set_exclude_rm_partial_scan_freq() - set value to include/exclude
+ * the partial scan channels in roam full scan.
+ * @psoc: PSOC pointer
+ * @exclude_rm_partial_scan_freq: Include/exclude the channels in roam full scan
+ * that are already scanned as part of partial scan.
+ *
+ * Return: none
+ */
+void
+wlan_cm_set_exclude_rm_partial_scan_freq(struct wlan_objmgr_psoc *psoc,
+					 uint8_t exclude_rm_partial_scan_freq);
+
+/**
+ * wlan_cm_get_exclude_rm_partial_scan_freq() - Get value to include/exclude
+ * the partial scan channels in roam full scan.
+ * @psoc: PSOC pointer
+ *
+ * Return: value to include/exclude the partial scan channels in roam full scan
+ */
+uint8_t
+wlan_cm_get_exclude_rm_partial_scan_freq(struct wlan_objmgr_psoc *psoc);
 
 #else
 static inline QDF_STATUS
@@ -621,6 +645,26 @@ wlan_cm_update_roam_rt_stats(struct wlan_objmgr_psoc *psoc,
 uint8_t
 wlan_cm_get_roam_rt_stats(struct wlan_objmgr_psoc *psoc,
 			  enum roam_rt_stats_params stats);
+
+/**
+ * wlan_cm_roam_set_ho_delay_config() - Set roam hand-off delay
+ * @psoc: PSOC pointer
+ * @roam_ho_delay: vendor configured roam HO delay value
+ *
+ * Return: none
+ */
+void
+wlan_cm_roam_set_ho_delay_config(struct wlan_objmgr_psoc *psoc,
+				 uint16_t roam_ho_delay);
+
+/**
+ * wlan_cm_roam_get_ho_delay_config() - Get roam hand-off delay
+ * @psoc: PSOC pointer
+ *
+ * Return: Roam HO delay value
+ */
+uint16_t
+wlan_cm_roam_get_ho_delay_config(struct wlan_objmgr_psoc *psoc);
 #else
 static inline
 void wlan_cm_roam_activate_pcl_per_vdev(struct wlan_objmgr_psoc *psoc,
@@ -734,6 +778,18 @@ wlan_cm_update_roam_rt_stats(struct wlan_objmgr_psoc *psoc,
 static inline uint8_t
 wlan_cm_get_roam_rt_stats(struct wlan_objmgr_psoc *psoc,
 			  enum roam_rt_stats_params stats)
+{
+	return 0;
+}
+
+static inline uint16_t
+wlan_cm_roam_get_ho_delay_config(struct wlan_objmgr_psoc *psoc)
+{
+	return 0;
+}
+
+static inline uint8_t
+wlan_cm_get_exclude_rm_partial_scan_freq(struct wlan_objmgr_psoc *psoc)
 {
 	return 0;
 }
