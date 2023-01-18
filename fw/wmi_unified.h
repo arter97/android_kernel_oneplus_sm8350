@@ -35737,57 +35737,6 @@ typedef enum {
      */
     WMI_ROAM_PARAM_ROAM_SCAN_DFS_CONFIG_BITMAP = 3,
 
-    /*
-     * roam param to configure HO_DELAY_RX value at runtime
-     * The configured value of ho_delay_rx will be in milliseconds
-     * Maximum value which user can configure using this Param ID is 1000 msec.
-     *
-     * If any value beyond this Maximum value is provided by user, FW will
-     * configure the ho_delay_rx value to Maximum allowed value i.e. 1000 msec.
-     */
-    WMI_ROAM_PARAM_ROAM_HO_DELAY_RUNTIME_CONFIG = 4,
-
-    /*
-     * Roam param to enable/disable full scan channel optimization
-     * As per current implementation of roam scan, if there are no APs found
-     * during partial scan, immediately a full scan will be initiated as a
-     * fallback. This includes all channels that were already scanned as part
-     * of partial scan.
-     * This flag controls the optimization, to exclude all channels, which are
-     * already scanned as part of partial scan.
-     */
-    WMI_ROAM_PARAM_ROAM_CONTROL_FULL_SCAN_CHANNEL_OPTIMIZATION = 5,
-
-    /*
-     * Roam param to enable/disable scanning of 6GHz psc channels
-     * As per current implementation, Wi-Fi STA scans on all 6GHz PSC channels
-     * as part of full scan during a roam scan irrespective of whether APs are
-     * present in 6GHz or not.
-     * This flag controls the optimization to do the scan in 6GHz PSC channels
-     * only if channel map or newly received RNR indicates 6GHz APs during
-     * current 2.4GHz or 5GHz scanning of Roam Full scan.
-     */
-    WMI_ROAM_PARAM_ROAM_CONTROL_FULL_SCAN_6GHZ_PSC_ONLY_WITH_RNR = 6,
-
-    /*
-     * Flag to tell whether MCC is disallowed or not in sta + sta currrent case.
-     * If flag is unset, then no limitation for channels which sta can roam to.
-     * If flag is set, then the channels which one of STA roam to cause MCC with other STA, it will be disallowed.
-     */
-     WMI_ROAM_PARAM_ROAM_MCC_DISALLOW = 7,
-
-    /*
-     * Roam param to provide additional RSSI Boost for 6 GHz Candidate AP
-     * during Roam Scan in case any 6 GHz candidate has better Roam score
-     * but fails RSSI Delta Check.
-     * This configurable RSSI Boost value for 6GHz Candidate AP will be
-     * configured via ini RoamRssiDiff6GHz
-     * This configured RSSI boost value will only be applicable for 6GHz
-     * Candidate AP when the STA is connected to 2.4/5 GHz Band AP and will
-     * not impact if STA is connected to 6GHz Band AP
-     */
-    WMI_ROAM_PARAM_ROAM_RSSI_BOOST_FOR_6GHZ_CAND_AP = 8,
-
 
     /*=== END ROAM_PARAM_PROTOTYPE SECTION ===*/
 } WMI_ROAM_PARAM;
