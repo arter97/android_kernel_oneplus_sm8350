@@ -148,6 +148,9 @@ static void haven_rx_peak(struct haven_pipe *pipe, void *data,
 	if (tail >= pipe->length)
 		tail -= pipe->length;
 
+	if (WARN_ON_ONCE(tail > pipe->length))
+		return;
+
 	len = min_t(size_t, count, pipe->length - tail);
 	if (len)
 		memcpy_fromio(data, pipe->fifo + tail, len);
@@ -609,7 +612,7 @@ static int qrtr_haven_probe(struct platform_device *pdev)
 	INIT_WORK(&qdev->work, qrtr_haven_retry_work);
 
 	qdev->ep.xmit = qrtr_haven_send;
-	ret = qrtr_endpoint_register(&qdev->ep, QRTR_EP_NET_ID_AUTO, false);
+	ret = qrtr_endpoint_register(&qdev->ep, QRTR_EP_NET_ID_AUTO, false, NULL);
 	if (ret)
 		goto register_fail;
 
