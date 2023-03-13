@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2010-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -1329,6 +1329,13 @@ typedef enum {
     WMITLV_TAG_STRUC_wmi_tas_power_history_event_fixed_param,
     WMITLV_TAG_STRUC_wmi_ctrl_path_pmlo_stats_struct,
     WMITLV_TAG_STRUC_wmi_ctrl_path_cfr_stats_struct,
+    WMITLV_TAG_STRUC_WMI_COEX_FIX_CHANNEL_CAPABILITIES,
+    WMITLV_TAG_STRUC_wmi_peer_sched_mode_disable_fixed_param,
+    WMITLV_TAG_STRUC_wmi_per_peer_sched_mode_disable,
+    WMITLV_TAG_STRUC_wmi_esl_egid_cmd_fixed_param,
+    WMITLV_TAG_STRUC_wmi_tdma_schedule_request_cmd_fixed_param,
+    WMITLV_TAG_STRUC_wmi_hpa_cmd_fixed_param,
+    WMITLV_TAG_STRUC_wmi_hpa_evt_fixed_param,
 } WMITLV_TAG_ID;
 
 /*
@@ -1843,6 +1850,10 @@ typedef enum {
     OP(WMI_MLO_AP_VDEV_TID_TO_LINK_MAP_CMDID) \
     OP(WMI_VDEV_SET_TWT_EDCA_PARAMS_CMDID) \
     OP(WMI_TAS_POWER_HISTORY_CMDID) \
+    OP(WMI_PEER_SCHED_MODE_DISABLE_CMDID) \
+    OP(WMI_ESL_EGID_CMDID) \
+    OP(WMI_TDMA_SCHEDULE_REQUEST_CMDID) \
+    OP(WMI_HPA_CMDID) \
     /* add new CMD_LIST elements above this line */
 
 
@@ -2141,6 +2152,7 @@ typedef enum {
     OP(WMI_MLO_LINK_REMOVAL_EVENTID) \
     OP(WMI_MLO_AP_VDEV_TID_TO_LINK_MAP_EVENTID) \
     OP(WMI_TAS_POWER_HISTORY_EVENTID) \
+    OP(WMI_HPA_EVENTID) \
     /* add new EVT_LIST elements above this line */
 
 
@@ -4346,6 +4358,10 @@ WMITLV_CREATE_PARAM_STRUC(WMI_PEER_TX_FILTER_CMDID);
     WMITLV_ELEM(id,op,buf,len, WMITLV_TAG_STRUC_wmi_vdev_pn_mgmt_rx_filter_cmd_fixed_param, wmi_vdev_pn_mgmt_rx_filter_cmd_fixed_param, fixed_param, WMITLV_SIZE_FIX)
 WMITLV_CREATE_PARAM_STRUC(WMI_VDEV_PN_MGMT_RX_FILTER_CMDID);
 
+#define WMITLV_TABLE_WMI_ESL_EGID_CMDID(id,op,buf,len) \
+    WMITLV_ELEM(id,op,buf,len, WMITLV_TAG_STRUC_wmi_esl_egid_cmd_fixed_param, wmi_esl_egid_cmd_fixed_param, fixed_param, WMITLV_SIZE_FIX)
+WMITLV_CREATE_PARAM_STRUC(WMI_ESL_EGID_CMDID);
+
 /* update a wds (4 address) entry */
 #define WMITLV_TABLE_WMI_PEER_UPDATE_WDS_ENTRY_CMDID(id,op,buf,len) \
     WMITLV_ELEM(id,op,buf,len, WMITLV_TAG_STRUC_wmi_peer_update_wds_entry_cmd_fixed_param, wmi_peer_update_wds_entry_cmd_fixed_param, fixed_param, WMITLV_SIZE_FIX)
@@ -5239,6 +5255,21 @@ WMITLV_CREATE_PARAM_STRUC(WMI_XGAP_ENABLE_CMDID);
     WMITLV_ELEM(id,op,buf,len, WMITLV_TAG_ARRAY_UINT32, A_UINT32, odd_livedump_id_list, WMITLV_SIZE_VAR)
 WMITLV_CREATE_PARAM_STRUC(WMI_ODD_LIVEDUMP_REQUEST_CMDID);
 
+#define WMITLV_TABLE_WMI_PEER_SCHED_MODE_DISABLE_CMDID(id,op,buf,len) \
+    WMITLV_ELEM(id,op,buf,len, WMITLV_TAG_STRUC_wmi_peer_sched_mode_disable_fixed_param, wmi_peer_sched_mode_disable_fixed_param, fixed_param, WMITLV_SIZE_FIX) \
+    WMITLV_ELEM(id,op,buf,len, WMITLV_TAG_ARRAY_STRUC, wmi_per_peer_sched_mode_disable, peer_info, WMITLV_SIZE_VAR)
+WMITLV_CREATE_PARAM_STRUC(WMI_PEER_SCHED_MODE_DISABLE_CMDID);
+
+#define WMITLV_TABLE_WMI_TDMA_SCHEDULE_REQUEST_CMDID(id,op,buf,len) \
+    WMITLV_ELEM(id,op,buf,len, WMITLV_TAG_STRUC_wmi_tdma_schedule_request_cmd_fixed_param, wmi_tdma_schedule_request_cmd_fixed_param, fixed_param, WMITLV_SIZE_FIX)
+WMITLV_CREATE_PARAM_STRUC(WMI_TDMA_SCHEDULE_REQUEST_CMDID);
+
+/* HPA cmd */
+#define WMITLV_TABLE_WMI_HPA_CMDID(id,op,buf,len) \
+    WMITLV_ELEM(id,op,buf,len, WMITLV_TAG_STRUC_wmi_hpa_cmd_fixed_param, wmi_hpa_cmd_fixed_param, fixed_param, WMITLV_SIZE_FIX) \
+    WMITLV_ELEM(id,op,buf,len, WMITLV_TAG_ARRAY_UINT32, A_UINT32, data, WMITLV_SIZE_VAR)
+WMITLV_CREATE_PARAM_STRUC(WMI_HPA_CMDID);
+
 
 
 /************************** TLV definitions of WMI events *******************************/
@@ -5293,7 +5324,8 @@ WMITLV_CREATE_PARAM_STRUC(WMI_SERVICE_READY_EXT_EVENTID);
     WMITLV_ELEM(id,op,buf,len, WMITLV_TAG_ARRAY_STRUC, wmi_dbs_or_sbs_cap_ext, dbs_or_sbs_cap_ext, WMITLV_SIZE_VAR) \
     WMITLV_ELEM(id,op,buf,len, WMITLV_TAG_ARRAY_STRUC, wmi_cust_bdf_version_capabilities, cust_bdf_version_capabilities, WMITLV_SIZE_VAR) \
     WMITLV_ELEM(id,op,buf,len, WMITLV_TAG_ARRAY_STRUC, wmi_sw_cal_ver_cap, sw_cal_ver_cap, WMITLV_SIZE_VAR) \
-    WMITLV_FXAR(id,op,buf,len, WMITLV_TAG_ARRAY_INT32, A_INT32, hw_tx_power_signed, WMITLV_SIZE_FIX, WMI_HW_TX_POWER_CAPS_MAX)
+    WMITLV_FXAR(id,op,buf,len, WMITLV_TAG_ARRAY_INT32, A_INT32, hw_tx_power_signed, WMITLV_SIZE_FIX, WMI_HW_TX_POWER_CAPS_MAX) \
+    WMITLV_ELEM(id,op,buf,len, WMITLV_TAG_ARRAY_STRUC, WMI_COEX_FIX_CHANNEL_CAPABILITIES, coex_fix_channel_caps, WMITLV_SIZE_VAR)
 WMITLV_CREATE_PARAM_STRUC(WMI_SERVICE_READY_EXT2_EVENTID);
 
 #define WMITLV_TABLE_WMI_SPECTRAL_CAPABILITIES_EVENTID(id,op,buf,len) \
@@ -7109,6 +7141,11 @@ WMITLV_CREATE_PARAM_STRUC(WMI_MLO_LINK_REMOVAL_EVENTID);
 #define WMITLV_TABLE_WMI_MLO_AP_VDEV_TID_TO_LINK_MAP_EVENTID(id,op,buf,len) \
     WMITLV_ELEM(id,op,buf,len, WMITLV_TAG_STRUC_wmi_mlo_ap_vdev_tid_to_link_map_evt_fixed_param, wmi_mlo_ap_vdev_tid_to_link_map_evt_fixed_param, fixed_param, WMITLV_SIZE_FIX)
 WMITLV_CREATE_PARAM_STRUC(WMI_MLO_AP_VDEV_TID_TO_LINK_MAP_EVENTID);
+
+/* HPA Event */
+#define WMITLV_TABLE_WMI_HPA_EVENTID(id,op,buf,len) \
+    WMITLV_ELEM(id,op,buf,len, WMITLV_TAG_STRUC_wmi_hpa_evt_fixed_param, wmi_hpa_evt_fixed_param, fixed_param, WMITLV_SIZE_FIX)
+WMITLV_CREATE_PARAM_STRUC(WMI_HPA_EVENTID);
 
 
 

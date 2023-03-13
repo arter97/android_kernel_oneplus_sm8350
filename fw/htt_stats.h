@@ -511,6 +511,14 @@ enum htt_dbg_ext_stats_type {
      */
     HTT_DBG_EXT_STATS_PDEV_BW_MGR = 53,
 
+    /** HTT_DBG_PDEV_MBSSID_CTRL_FRAME_STATS
+     * PARAMS:
+     *   - No Params
+     * RESP MSG:
+     *   - htt_pdev_mbssid_ctrl_frame_stats
+     */
+    HTT_DBG_PDEV_MBSSID_CTRL_FRAME_STATS = 54,
+
 
     /* keep this last */
     HTT_DBG_NUM_EXT_STATS = 256,
@@ -919,6 +927,20 @@ typedef struct {
     htt_tlv_hdr_t tlv_hdr;
     A_UINT32      flush_errs[1]; /* HTT_TX_PDEV_MAX_FLUSH_REASON_STATS */
 } htt_tx_pdev_stats_flush_tlv_v;
+
+#define HTT_TX_PDEV_STATS_MLO_ABORT_TLV_SZ(_num_elems) (sizeof(A_UINT32) * (_num_elems))
+/* NOTE: Variable length TLV, use length spec to infer array size */
+typedef struct {
+    htt_tlv_hdr_t tlv_hdr;
+    A_UINT32      mlo_abort_cnt[]; /* HTT_TX_PDEV_MAX_MLO_ABORT_REASON_STATS */
+} htt_tx_pdev_stats_mlo_abort_tlv_v;
+
+#define HTT_TX_PDEV_STATS_MLO_TXOP_ABORT_TLV_SZ(_num_elems) (sizeof(A_UINT32) * (_num_elems))
+/* NOTE: Variable length TLV, use length spec to infer array size */
+typedef struct {
+    htt_tlv_hdr_t tlv_hdr;
+    A_UINT32      mlo_txop_abort_cnt[]; /* HTT_TX_PDEV_MAX_MLO_ABORT_REASON_STATS */
+} htt_tx_pdev_stats_mlo_txop_abort_tlv_v;
 
 #define HTT_TX_PDEV_STATS_SIFS_TLV_SZ(_num_elems) (sizeof(A_UINT32) * (_num_elems))
 /* NOTE: Variable length TLV, use length spec to infer array size */
@@ -3877,6 +3899,7 @@ typedef struct {
     A_UINT32 total_get_mpdu_head_info_cmds_by_sched_algo_la_query;
     A_UINT32 total_get_mpdu_head_info_cmds_by_tac;
     A_UINT32 total_gen_mpdu_cmds_by_sched_algo_la_query;
+    A_UINT32 high_prio_q_not_empty;
 } htt_tx_tqm_cmn_stats_tlv;
 
 typedef struct {
@@ -7352,6 +7375,11 @@ typedef struct {
 #define HTT_MAX_RX_PKT_CRC_PASS_CNT 8
 #define HTT_MAX_PER_BLK_ERR_CNT 20
 #define HTT_MAX_RX_OTA_ERR_CNT 14
+#define HTT_MAX_RX_PKT_CNT_EXT 4
+#define HTT_MAX_RX_PKT_CRC_PASS_CNT_EXT 4
+#define HTT_MAX_RX_PKT_MU_CNT 14
+#define HTT_MAX_TX_PKT_CNT 10
+#define HTT_MAX_PHY_TX_ABORT_CNT 10
 
 typedef enum {
     HTT_STATS_CHANNEL_HALF_RATE          = 0x0001,   /* Half rate */
@@ -7492,6 +7520,38 @@ typedef struct {
      * [9-13]=RSVD
      */
     A_UINT32 rx_ota_err_cnt[HTT_MAX_RX_OTA_ERR_CNT];
+    /** rx_pkt_cnt_ext -
+     * Received EOP (end-of-packet) count per packet type for BE;
+     * [0] = EHT; [1] = WUR; [2] = AZ; [3]=RVSD
+     */
+    A_UINT32 rx_pkt_cnt_ext[HTT_MAX_RX_PKT_CNT_EXT];
+    /** rx_pkt_crc_pass_cnt_ext -
+     * Received EOP (end-of-packet) count per packet type for BE;
+     * [0] = EHT; [1] = WUR; [2] = AZ; [3]=RVSD
+     */
+    A_UINT32 rx_pkt_crc_pass_cnt_ext[HTT_MAX_RX_PKT_CRC_PASS_CNT_EXT];
+    /** rx_pkt_mu_cnt -
+     * RX MU MIMO+OFDMA packet count per packet type for BE;
+     * [0] = 11ax OFDMA; [1] = 11ax OFDMA+MUMIMO; [2] = 11be OFDMA;
+     * [3] = 11be OFDMA+MUMIMO; [4] = 11ax MIMO; [5] = 11be MIMO;
+     * [6] = 11ax OFDMA; [7] = 11ax OFDMA+MUMIMO; [8] = 11be OFDMA;
+     * [9] = 11be OFDMA+MUMIMO; [10] = 11ax MIMO; [11] = 11be MIMO;
+     * [12-13]=RSVD
+     */
+    A_UINT32 rx_pkt_mu_cnt[HTT_MAX_RX_PKT_MU_CNT];
+    /** tx_pkt_cnt -
+     * num of transfered packet count per packet type;
+     * [0] = 11a; [1] = 11b; [2] = 11n; [3] = 11ac; [4] = 11ax; [5] = GF;
+     * [6]= EHT; [7] = WUR; [8] = AZ; [9]=RSVD; [6-8] = Applicable only for BE
+     */
+    A_UINT32 tx_pkt_cnt[HTT_MAX_TX_PKT_CNT];
+    /** phy_tx_abort_cnt -
+     * phy tx abort after each tlv;
+     * [0] = PRE-PHY desc tlv; [1] = PHY desc tlv; [2] = LSIGA tlv;
+     * [3] = LSIGB tlv; [4] = Per User tlv; [5] = HESIGB tlv;
+     * [6] = Service tlv; [7] = Tx Packet End tlv; [8-9]=RSVD;
+     */
+    A_UINT32 phy_tx_abort_cnt[HTT_MAX_PHY_TX_ABORT_CNT];
 } htt_phy_counters_tlv;
 
 typedef struct {
@@ -8593,6 +8653,25 @@ typedef struct {
     /** Num of instances where dl ofdma is disabled because there are consecutive mpdu failure */
     A_UINT32 dlofdma_disabled_consec_no_mpdus_success[HTT_NUM_AC_WMM];
 } htt_pdev_sched_algo_ofdma_stats_tlv;
+
+typedef struct {
+    htt_tlv_hdr_t tlv_hdr;
+    /** mac_id__word:
+     * BIT [ 7 :  0]   :- mac_id
+     *                    Use the HTT_STATS_CMN_MAC_ID_GET,_SET macros to
+     *                    read/write this bitfield.
+     * BIT [31 :  8]   :- reserved
+     */
+    A_UINT32 mac_id__word;
+    A_UINT32 basic_trigger_across_bss;
+    A_UINT32 basic_trigger_within_bss;
+    A_UINT32 bsr_trigger_across_bss;
+    A_UINT32 bsr_trigger_within_bss;
+    A_UINT32 mu_rts_across_bss;
+    A_UINT32 mu_rts_within_bss;
+    A_UINT32 ul_mumimo_trigger_across_bss;
+    A_UINT32 ul_mumimo_trigger_within_bss;
+} htt_pdev_mbssid_ctrl_frame_stats_tlv;
 
 /*======= Bandwidth Manager stats ====================*/
 
