@@ -1,3 +1,8 @@
+abf086721a2f mm: multi-gen LRU: simplify lru_gen_look_around()
+b5ff4133617d mm: multi-gen LRU: improve walk_pmd_range()
+37cc99979d04 mm: multi-gen LRU: improve lru_gen_exit_memcg()
+de08eaa61564 mm: multi-gen LRU: fix crash during cgroup migration
+
 fd3b1bc3c86e mm/madvise: fix madvise_pageout for private file mappings
 
 359a5e1416ca mm: multi-gen LRU: retry folios written back while isolated
