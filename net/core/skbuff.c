@@ -982,7 +982,15 @@ static void __copy_skb_header(struct sk_buff *new, const struct sk_buff *old)
 #ifdef CONFIG_NET_SCHED
 	CHECK_SKB_FIELD(tc_index);
 #endif
-
+	/* ANDROID:
+	 * Due to attempts to keep the ABI stable for struct sk_buff, the new
+	 * fields were incorrectly added _AFTER_ the headers_end field, which
+	 * requires that we manually copy the fields here from the old to the
+	 * new one.
+	 * Be sure to add any new field that is added in the
+	 * ANDROID_KABI_REPLACE() macros below here as well.
+	 */
+	new->scm_io_uring = old->scm_io_uring;
 }
 
 /*
@@ -2117,6 +2125,9 @@ void *__pskb_pull_tail(struct sk_buff *skb, int delta)
 				insp = list;
 			} else {
 				/* Eaten partially. */
+				if (skb_is_gso(skb) && !list->head_frag &&
+				    skb_headlen(list))
+					skb_shinfo(skb)->gso_type |= SKB_GSO_DODGY;
 
 				if (skb_shared(list)) {
 					/* Sucks! We need to fork list. :-( */

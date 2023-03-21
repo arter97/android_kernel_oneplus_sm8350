@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0
 VERSION = 5
 PATCHLEVEL = 4
-SUBLEVEL = 228
+SUBLEVEL = 237
 EXTRAVERSION =
 NAME = Kleptomaniac Octopus
 
@@ -93,9 +93,16 @@ endif
 
 # If the user is running make -s (silent mode), suppress echoing of
 # commands
+# make-4.0 (and later) keep single letter options in the 1st word of MAKEFLAGS.
 
-ifneq ($(findstring s,$(filter-out --%,$(MAKEFLAGS))),)
-  quiet=silent_
+ifeq ($(filter 3.%,$(MAKE_VERSION)),)
+silence:=$(findstring s,$(firstword -$(MAKEFLAGS)))
+else
+silence:=$(findstring s,$(filter-out --%,$(MAKEFLAGS)))
+endif
+
+ifeq ($(silence),s)
+quiet=silent_
 endif
 
 export quiet Q KBUILD_VERBOSE
@@ -367,7 +374,7 @@ override CROSS_COMPILE_ARM32	:= /home/arter97/arm32-gcc/bin/arm-eabi-
 override LLVM := 1
 override LLVM_IAS := 1
 override CLANG_TRIPLE := aarch64-linux-gnu
-override LLVM_PATH := /home/arter97/android/clang/clang-r468909b/bin/
+override LLVM_PATH := /home/arter97/android/nathan/llvm-16.0.0/bin/
 
 # Architecture as present in compile.h
 UTS_MACHINE 	:= $(ARCH)

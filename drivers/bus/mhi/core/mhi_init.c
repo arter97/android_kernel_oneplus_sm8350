@@ -435,8 +435,11 @@ int mhi_init_irq_setup(struct mhi_controller *mhi_cntrl)
 				   mhi_intvec_threaded_handlr,
 				   IRQF_ONESHOT | IRQF_NO_SUSPEND,
 				   "mhi", mhi_cntrl);
-	if (ret)
+	if (ret) {
+		MHI_CNTRL_ERR("Error in requesting threaded irq:%d, ret=%d\n",
+				mhi_cntrl->irq[0], ret);
 		return ret;
+	}
 
 	for (i = 0; i < mhi_cntrl->total_ev_rings; i++, mhi_event++) {
 		if (!mhi_event->request_irq)
@@ -1742,6 +1745,8 @@ void mhi_unregister_mhi_controller(struct mhi_controller *mhi_cntrl)
 {
 	struct mhi_device *mhi_dev = mhi_cntrl->mhi_dev;
 	struct mhi_sfr_info *sfr_info = mhi_cntrl->mhi_sfr;
+
+	destroy_workqueue(mhi_cntrl->wq);
 
 	kfree(mhi_cntrl->mhi_cmd);
 	kfree(mhi_cntrl->mhi_event);
