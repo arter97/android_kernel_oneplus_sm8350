@@ -181,8 +181,6 @@ static int nfs4_map_errors(int err)
 		return -EPROTONOSUPPORT;
 	case -NFS4ERR_FILE_OPEN:
 		return -EBUSY;
-	case -NFS4ERR_NOT_SAME:
-		return -ENOTSYNC;
 	default:
 		dprintk("%s could not handle NFSv4 error %d\n",
 				__func__, -err);
@@ -1767,7 +1765,7 @@ static int update_open_stateid(struct nfs4_state *state,
 		ret = 1;
 	}
 
-	deleg_cur = rcu_dereference(nfsi->delegation);
+	deleg_cur = nfs4_get_valid_delegation(state->inode);
 	if (deleg_cur == NULL)
 		goto no_delegation;
 
@@ -1779,7 +1777,7 @@ static int update_open_stateid(struct nfs4_state *state,
 
 	if (delegation == NULL)
 		delegation = &deleg_cur->stateid;
-	else if (!nfs4_stateid_match(&deleg_cur->stateid, delegation))
+	else if (!nfs4_stateid_match_other(&deleg_cur->stateid, delegation))
 		goto no_delegation_unlock;
 
 	nfs_mark_delegation_referenced(deleg_cur);
@@ -1826,7 +1824,7 @@ static void nfs4_return_incompatible_delegation(struct inode *inode, fmode_t fmo
 
 	fmode &= FMODE_READ|FMODE_WRITE;
 	rcu_read_lock();
-	delegation = rcu_dereference(NFS_I(inode)->delegation);
+	delegation = nfs4_get_valid_delegation(inode);
 	if (delegation == NULL || (delegation->type & fmode) == fmode) {
 		rcu_read_unlock();
 		return;
@@ -1936,7 +1934,8 @@ _nfs4_opendata_reclaim_to_nfs4_state(struct nfs4_opendata *data)
 	if (!data->rpc_done) {
 		if (data->rpc_status)
 			return ERR_PTR(data->rpc_status);
-		return nfs4_try_open_cached(data);
+		/* cached opens have already been processed */
+		goto update;
 	}
 
 	ret = nfs_refresh_inode(inode, &data->f_attr);
@@ -1945,7 +1944,7 @@ _nfs4_opendata_reclaim_to_nfs4_state(struct nfs4_opendata *data)
 
 	if (data->o_res.delegation_type != 0)
 		nfs4_opendata_check_deleg(data, state);
-
+update:
 	if (!update_open_stateid(state, &data->o_res.stateid,
 				NULL, data->o_arg.fmode))
 		return ERR_PTR(-EAGAIN);
@@ -4920,40 +4919,41 @@ static int nfs4_proc_mkdir(struct inode *dir, struct dentry *dentry,
 	return err;
 }
 
-static int _nfs4_proc_readdir(struct nfs_readdir_arg *nr_arg,
-			      struct nfs_readdir_res *nr_res)
+static int _nfs4_proc_readdir(struct dentry *dentry, const struct cred *cred,
+		u64 cookie, struct page **pages, unsigned int count, bool plus)
 {
-	struct inode		*dir = d_inode(nr_arg->dentry);
+	struct inode		*dir = d_inode(dentry);
 	struct nfs_server	*server = NFS_SERVER(dir);
 	struct nfs4_readdir_arg args = {
 		.fh = NFS_FH(dir),
-		.pages = nr_arg->pages,
+		.pages = pages,
 		.pgbase = 0,
-		.count = nr_arg->page_len,
-		.plus = nr_arg->plus,
+		.count = count,
+		.plus = plus,
 	};
 	struct nfs4_readdir_res res;
 	struct rpc_message msg = {
 		.rpc_proc = &nfs4_procedures[NFSPROC4_CLNT_READDIR],
 		.rpc_argp = &args,
 		.rpc_resp = &res,
-		.rpc_cred = nr_arg->cred,
+		.rpc_cred = cred,
 	};
 	int			status;
 
-	dprintk("%s: dentry = %pd2, cookie = %llu\n", __func__,
-		nr_arg->dentry, (unsigned long long)nr_arg->cookie);
+	dprintk("%s: dentry = %pd2, cookie = %Lu\n", __func__,
+			dentry,
+			(unsigned long long)cookie);
 	if (!(server->caps & NFS_CAP_SECURITY_LABEL))
 		args.bitmask = server->attr_bitmask_nl;
 	else
 		args.bitmask = server->attr_bitmask;
 
-	nfs4_setup_readdir(nr_arg->cookie, nr_arg->verf, nr_arg->dentry, &args);
+	nfs4_setup_readdir(cookie, NFS_I(dir)->cookieverf, dentry, &args);
 	res.pgbase = args.pgbase;
 	status = nfs4_call_sync(server->client, server, &msg, &args.seq_args,
 			&res.seq_res, 0);
 	if (status >= 0) {
-		memcpy(nr_res->verf, res.verifier.data, NFS4_VERIFIER_SIZE);
+		memcpy(NFS_I(dir)->cookieverf, res.verifier.data, NFS4_VERIFIER_SIZE);
 		status += args.pgbase;
 	}
 
@@ -4963,18 +4963,19 @@ static int _nfs4_proc_readdir(struct nfs_readdir_arg *nr_arg,
 	return status;
 }
 
-static int nfs4_proc_readdir(struct nfs_readdir_arg *arg,
-			     struct nfs_readdir_res *res)
+static int nfs4_proc_readdir(struct dentry *dentry, const struct cred *cred,
+		u64 cookie, struct page **pages, unsigned int count, bool plus)
 {
 	struct nfs4_exception exception = {
 		.interruptible = true,
 	};
 	int err;
 	do {
-		err = _nfs4_proc_readdir(arg, res);
-		trace_nfs4_readdir(d_inode(arg->dentry), err);
-		err = nfs4_handle_exception(NFS_SERVER(d_inode(arg->dentry)),
-					    err, &exception);
+		err = _nfs4_proc_readdir(dentry, cred, cookie,
+				pages, count, plus);
+		trace_nfs4_readdir(d_inode(dentry), err);
+		err = nfs4_handle_exception(NFS_SERVER(d_inode(dentry)), err,
+				&exception);
 	} while (exception.retry);
 	return err;
 }
@@ -5581,7 +5582,7 @@ unwind:
 struct nfs4_cached_acl {
 	int cached;
 	size_t len;
-	char data[];
+	char data[0];
 };
 
 static void nfs4_set_cached_acl(struct inode *inode, struct nfs4_cached_acl *acl)
@@ -6293,10 +6294,13 @@ static void nfs4_delegreturn_done(struct rpc_task *task, void *calldata)
 		task->tk_status = 0;
 		break;
 	case -NFS4ERR_OLD_STATEID:
-		if (nfs4_refresh_delegation_stateid(&data->stateid, data->inode))
-			goto out_restart;
-		task->tk_status = 0;
-		break;
+		if (!nfs4_refresh_delegation_stateid(&data->stateid, data->inode))
+			nfs4_stateid_seqid_inc(&data->stateid);
+		if (data->args.bitmask) {
+			data->args.bitmask = NULL;
+			data->res.fattr = NULL;
+		}
+		goto out_restart;
 	case -NFS4ERR_ACCESS:
 		if (data->args.bitmask) {
 			data->args.bitmask = NULL;
@@ -6311,6 +6315,7 @@ static void nfs4_delegreturn_done(struct rpc_task *task, void *calldata)
 		if (exception.retry)
 			goto out_restart;
 	}
+	nfs_delegation_mark_returned(data->inode, data->args.stateid);
 	data->rpc_status = task->tk_status;
 	return;
 out_restart:

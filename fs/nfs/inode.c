@@ -228,6 +228,7 @@ static void nfs_zap_caches_locked(struct inode *inode)
 	nfsi->attrtimeo = NFS_MINATTRTIMEO(inode);
 	nfsi->attrtimeo_timestamp = jiffies;
 
+	memset(NFS_I(inode)->cookieverf, 0, sizeof(NFS_I(inode)->cookieverf));
 	if (S_ISREG(mode) || S_ISDIR(mode) || S_ISLNK(mode)) {
 		nfs_set_cache_invalid(inode, NFS_INO_INVALID_ATTR
 					| NFS_INO_INVALID_DATA
@@ -967,7 +968,7 @@ struct nfs_open_context *alloc_nfs_open_context(struct dentry *dentry,
 		ctx->cred = get_cred(filp->f_cred);
 	else
 		ctx->cred = get_current_cred();
-	ctx->ll_cred = NULL;
+	rcu_assign_pointer(ctx->ll_cred, NULL);
 	ctx->state = NULL;
 	ctx->mode = f_mode;
 	ctx->flags = 0;
@@ -1006,7 +1007,7 @@ static void __put_nfs_open_context(struct nfs_open_context *ctx, int is_sync)
 	put_cred(ctx->cred);
 	dput(ctx->dentry);
 	nfs_sb_deactive(sb);
-	put_rpccred(ctx->ll_cred);
+	put_rpccred(rcu_dereference_protected(ctx->ll_cred, 1));
 	kfree(ctx->mdsthreshold);
 	kfree_rcu(ctx, rcu_head);
 }
@@ -1215,6 +1216,7 @@ EXPORT_SYMBOL_GPL(nfs_revalidate_inode);
 
 static int nfs_invalidate_mapping(struct inode *inode, struct address_space *mapping)
 {
+	struct nfs_inode *nfsi = NFS_I(inode);
 	int ret;
 
 	if (mapping->nrpages != 0) {
@@ -1226,6 +1228,11 @@ static int nfs_invalidate_mapping(struct inode *inode, struct address_space *map
 		ret = invalidate_inode_pages2(mapping);
 		if (ret < 0)
 			return ret;
+	}
+	if (S_ISDIR(inode->i_mode)) {
+		spin_lock(&inode->i_lock);
+		memset(nfsi->cookieverf, 0, sizeof(nfsi->cookieverf));
+		spin_unlock(&inode->i_lock);
 	}
 	nfs_inc_stats(inode, NFSIOS_DATAINVALIDATE);
 	nfs_fscache_wait_on_invalidate(inode);
