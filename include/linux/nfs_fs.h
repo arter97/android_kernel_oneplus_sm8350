@@ -46,17 +46,13 @@
 #define NFS_RPC_SWAPFLAGS		(RPC_TASK_SWAPPER|RPC_TASK_ROOTCREDS)
 
 /*
- * Size of the NFS directory verifier
- */
-#define NFS_DIR_VERIFIER_SIZE		2
-
-/*
  * NFSv3/v4 Access mode cache entry
  */
 struct nfs_access_entry {
 	struct rb_node		rb_node;
 	struct list_head	lru;
 	const struct cred *	cred;
+	u64			timestamp;
 	__u32			mask;
 	struct rcu_head		rcu_head;
 };
@@ -76,7 +72,7 @@ struct nfs_open_context {
 	fl_owner_t flock_owner;
 	struct dentry *dentry;
 	const struct cred *cred;
-	struct rpc_cred *ll_cred;	/* low-level cred - use to check for expiry */
+	struct rpc_cred __rcu *ll_cred;	/* low-level cred - use to check for expiry */
 	struct nfs4_state *state;
 	fmode_t mode;
 
@@ -94,8 +90,8 @@ struct nfs_open_context {
 
 struct nfs_open_dir_context {
 	struct list_head list;
+	const struct cred *cred;
 	unsigned long attr_gencount;
-	__be32	verf[NFS_DIR_VERIFIER_SIZE];
 	__u64 dir_cookie;
 	__u64 dup_cookie;
 	signed char duped;
@@ -161,7 +157,7 @@ struct nfs_inode {
 	 * This is the cookie verifier used for NFSv3 readdir
 	 * operations
 	 */
-	__be32			cookieverf[NFS_DIR_VERIFIER_SIZE];
+	__be32			cookieverf[2];
 
 	atomic_long_t		nrequests;
 	struct nfs_mds_commit_info commit_info;
@@ -173,9 +169,6 @@ struct nfs_inode {
 	/* Writers: rmdir */
 	struct rw_semaphore	rmdir_sem;
 	struct mutex		commit_mutex;
-
-	/* track last access to cached pages */
-	unsigned long		page_index;
 
 #if IS_ENABLED(CONFIG_NFS_V4)
 	struct nfs4_cached_acl	*nfs4_acl;
