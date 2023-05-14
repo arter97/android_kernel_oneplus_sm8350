@@ -1377,11 +1377,6 @@ static ssize_t iris_recovery_mode_check_show(struct device *dev,
 {
 	int ret = 0;
 	int result = 0;
-#if defined(CONFIG_PXLW_IRIS)
-	struct drm_connector *connector = to_drm_connector(dev);
-
-	result = iris_loop_back_test(connector);
-#endif
 	pr_err("iris_loop_back_test result = %d", result);
 	ret = scnprintf(buf, PAGE_SIZE, "%d\n", (result == 0) ? 1 : 0);
 
@@ -1458,10 +1453,6 @@ static DEVICE_ATTR_RW(dp_en);
 static DEVICE_ATTR_RW(dither_en);
 static DEVICE_ATTR_RW(panel_dither_en);
 static DEVICE_ATTR_RW(seed_lp);
-#ifdef CONFIG_PXLW_IRIS
-static DEVICE_ATTR(adfr_debug, S_IRUGO|S_IWUSR, oplus_adfr_get_debug, oplus_adfr_set_debug);
-static DEVICE_ATTR(vsync_switch, S_IRUGO|S_IWUSR, oplus_get_vsync_switch, oplus_set_vsync_switch);
-#endif
 static DEVICE_ATTR_RW(auth_status);
 static DEVICE_ATTR_RW(power_status);
 
@@ -1504,10 +1495,6 @@ static struct attribute *connector_dev_attrs[] = {
 	&dev_attr_dither_en.attr,
 	&dev_attr_panel_dither_en.attr,
 	&dev_attr_seed_lp.attr,
-#ifdef CONFIG_PXLW_IRIS
-	&dev_attr_adfr_debug.attr,
-	&dev_attr_vsync_switch.attr,
-#endif
 	&dev_attr_auth_status.attr,
 	&dev_attr_power_status.attr,
 	NULL

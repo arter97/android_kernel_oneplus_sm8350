@@ -29,19 +29,12 @@
 #include "sde_crtc.h"
 #include "sde_rm.h"
 #include "sde_trace.h"
-#if defined(CONFIG_PXLW_IRIS)
-#include "iris/dsi_iris5_api.h"
-#include "iris/dsi_iris5_gpio.h"
-#endif
 #include <linux/pm_wakeup.h>
 #include "project_info.h"
 #include "oplus_display_node.h"
 #include "oplus_display_private_api.h"
 #include "oplus_onscreenfingerprint.h"
 #include "oplus_bl.h"
-#ifdef CONFIG_PXLW_IRIS
-#include "oplus_adfr.h"
-#endif
 #include "oplus_msd_aod.h"
 //#endif
 
@@ -284,13 +277,6 @@ static int dsi_panel_gpio_request(struct dsi_panel *panel)
 		rc = gpio_request(r_config->reset_gpio, "reset_gpio");
 		if (rc) {
 			DSI_ERR("request for reset_gpio failed, rc=%d\n", rc);
-#if defined(CONFIG_PXLW_IRIS)
-			if (iris_is_chip_supported()) {
-				if (!strcmp(panel->type, "primary"))
-					goto error;
-				rc = 0;
-			} else
-#endif
 			goto error;
 		}
 	}
@@ -362,23 +348,8 @@ static int dsi_panel_gpio_request(struct dsi_panel *panel)
 		}
 	}
 
-#ifdef CONFIG_PXLW_IRIS
-	if (iris_is_chip_supported()) {
-		if (gpio_is_valid(panel->vsync_switch_gpio)) {
-			rc = gpio_request(panel->vsync_switch_gpio, "vsync_switch_gpio");
-			if (rc) {
-				DSI_ERR("adfr request for vsync_switch_gpio failed, rc=%d\n", rc);
-				goto error_release_test_gpio;
-			}
-		}
-	}
-#endif /*(CONFIG_PXLW_IRIS)*/
-
 	goto error;
 
-error_release_test_gpio:
-	if (gpio_is_valid(panel->panel_test_gpio))
-		gpio_free(panel->panel_test_gpio);
 error_release_tp1v8_gpio:
 	if (gpio_is_valid(panel->tp1v8_gpio))
 		gpio_free(panel->tp1v8_gpio);
@@ -439,13 +410,6 @@ static int dsi_panel_gpio_release(struct dsi_panel *panel)
 	if (gpio_is_valid(panel->panel_test_gpio))
 		gpio_free(panel->panel_test_gpio);
 
-#ifdef CONFIG_PXLW_IRIS
-	if (iris_is_chip_supported()) {
-		if (gpio_is_valid(panel->vsync_switch_gpio))
-			gpio_free(panel->vsync_switch_gpio);
-	}
-#endif /*(CONFIG_PXLW_IRIS)*/
-
 	return rc;
 }
 
@@ -502,12 +466,6 @@ static int dsi_panel_reset(struct dsi_panel *panel)
 	int rc = 0;
 	struct dsi_panel_reset_config *r_config = &panel->reset_config;
 	int i;
-#if defined(CONFIG_PXLW_IRIS)
-	if (iris_is_dual_supported() && panel->is_secondary)
-		return rc;
-
-	iris_reset();
-#endif
 
 	if (gpio_is_valid(panel->reset_config.disp_en_gpio)) {
 		rc = gpio_direction_output(panel->reset_config.disp_en_gpio, 1);
@@ -697,9 +655,6 @@ static int dsi_panel_power_off(struct dsi_panel *panel)
 		gpio_set_value(panel->reset_config.reset_gpio, 0);
 		DSI_ERR("disable reset gpio\n");
 	}
-#if defined(CONFIG_PXLW_IRIS)
-	iris_power_off(panel);
-#endif
 	if (gpio_is_valid(panel->reset_config.lcd_mode_sel_gpio))
 		gpio_set_value(panel->reset_config.lcd_mode_sel_gpio, 0);
 
@@ -777,14 +732,6 @@ int dsi_panel_tx_cmd_set(struct dsi_panel *panel,
 		goto error;
 	}
 
-#if defined(CONFIG_PXLW_IRIS)
-	if (iris_is_chip_supported() && iris_is_pt_mode(panel)) {
-		rc = iris_pt_send_panel_cmd(panel, &(mode->priv_info->cmd_sets[type]));
-		if (rc)
-			DSI_ERR("iris_pt_send_panel_cmd failed\n");
-		return rc;
-	}
-#endif
 	for (i = 0; i < count; i++) {
 		if (state == DSI_CMD_SET_STATE_LP)
 			cmds->msg.flags |= MIPI_DSI_MSG_USE_LPM;
@@ -976,11 +923,6 @@ static int dsi_panel_update_backlight(struct dsi_panel *panel,
 			bl_lvl = backlight_buf[bl_lvl];
 		}
 
-#if defined(CONFIG_PXLW_IRIS)
-	if (iris_is_chip_supported() && iris_is_pt_mode(panel))
-		rc = iris_update_backlight(1, bl_lvl);
-	else
-#endif
 		rc = mipi_dsi_dcs_set_display_brightness_samsung(get_main_display(), bl_lvl);
 		cur_backlight = bl_lvl;
 		cur_fps = mode_fps;
@@ -991,11 +933,6 @@ static int dsi_panel_update_backlight(struct dsi_panel *panel,
 	if (panel->bl_config.bl_inverted_dbv)
 		bl_lvl = (((bl_lvl & 0xff) << 8) | (bl_lvl >> 8));
 
-#if defined(CONFIG_PXLW_IRIS)
-		if (iris_is_chip_supported() && iris_is_pt_mode(panel))
-			rc = iris_update_backlight(1, bl_lvl);
-		else
-#endif
 			rc = mipi_dsi_dcs_set_display_brightness(dsi, bl_lvl);
 	}
 	if (rc < 0)
@@ -2339,23 +2276,6 @@ const char *cmd_set_prop_map[DSI_CMD_SET_MAX] = {
 	"qcom,mdss-dsi-loading-effect-off-command-o",
 	"qcom,mdss-dsi-panel-gamma-change-write-command",
 	"qcom,mdss-dsi-panel-register-read-command",
-#if defined(CONFIG_PXLW_IRIS)
-	"iris,abyp-panel-command",
-#endif
-#ifdef CONFIG_PXLW_IRIS
-	"qcom,mdss-dsi-qsync-min-fps-0-command",
-	"qcom,mdss-dsi-qsync-min-fps-1-command",
-	"qcom,mdss-dsi-qsync-min-fps-2-command",
-	"qcom,mdss-dsi-qsync-min-fps-3-command",
-	"qcom,mdss-dsi-qsync-min-fps-4-command",
-	"qcom,mdss-dsi-qsync-min-fps-5-command",
-	"qcom,mdss-dsi-qsync-min-fps-6-command",
-	"qcom,mdss-dsi-qsync-min-fps-7-command",
-	"qcom,mdss-dsi-qsync-min-fps-8-command",
-	"qcom,mdss-dsi-qsync-min-fps-9-command",
-	"qcom,mdss-dsi-fakeframe-command",
-	"qcom,mdss-dsi-adfr-pre-switch-command",
-#endif
 };
 
 const char *cmd_set_state_map[DSI_CMD_SET_MAX] = {
@@ -2474,23 +2394,6 @@ const char *cmd_set_state_map[DSI_CMD_SET_MAX] = {
 	"qcom,mdss-dsi-loading-effect-off-command-o-state",
 	"qcom,mdss-dsi-panel-gamma-change-write-command-state",
 	"qcom,mdss-dsi-panel-register-read-command-state",
-#if defined(CONFIG_PXLW_IRIS)
-	"iris,abyp-panel-command-state",
-#endif
-#ifdef CONFIG_PXLW_IRIS
-	"qcom,mdss-dsi-qsync-min-fps-0-command-state",
-	"qcom,mdss-dsi-qsync-min-fps-1-command-state",
-	"qcom,mdss-dsi-qsync-min-fps-2-command-state",
-	"qcom,mdss-dsi-qsync-min-fps-3-command-state",
-	"qcom,mdss-dsi-qsync-min-fps-4-command-state",
-	"qcom,mdss-dsi-qsync-min-fps-5-command-state",
-	"qcom,mdss-dsi-qsync-min-fps-6-command-state",
-	"qcom,mdss-dsi-qsync-min-fps-7-command-state",
-	"qcom,mdss-dsi-qsync-min-fps-8-command-state",
-	"qcom,mdss-dsi-qsync-min-fps-9-command-state",
-	"qcom,mdss-dsi-fakeframe-command-state",
-	"qcom,mdss-dsi-adfr-pre-switch-command-state",
-#endif
 };
 
 int dsi_panel_get_cmd_pkt_count(const char *data, u32 length, u32 *cnt)
@@ -2681,10 +2584,6 @@ static int dsi_panel_parse_cmd_sets(
 				DSI_ERR("failed to allocate cmd set %d, rc = %d\n",
 					i, rc);
 			set->state = DSI_CMD_SET_STATE_LP;
-#if defined(CONFIG_PXLW_IRIS)
-			if (iris_is_chip_supported())
-				set->state = DSI_CMD_SET_STATE_HS;
-#endif
 		} else {
 			rc = dsi_panel_parse_cmd_sets_sub(set, i, utils);
 			if (rc)
@@ -2935,17 +2834,10 @@ static int dsi_panel_parse_gpios(struct dsi_panel *panel)
 	const char *data;
 	struct dsi_parser_utils *utils = &panel->utils;
 	char *reset_gpio_name, *mode_set_gpio_name;
-#if defined(CONFIG_PXLW_IRIS)
-	bool is_primary = false;
-#endif
 
 	if (!strcmp(panel->type, "primary")) {
 		reset_gpio_name = "qcom,platform-reset-gpio";
 		mode_set_gpio_name = "qcom,panel-mode-gpio";
-#if defined(CONFIG_PXLW_IRIS)
-		if (iris_is_chip_supported())
-			is_primary = true;
-#endif
 	} else {
 		reset_gpio_name = "qcom,platform-sec-reset-gpio";
 		mode_set_gpio_name = "qcom,panel-sec-mode-gpio";
@@ -2955,21 +2847,9 @@ static int dsi_panel_parse_gpios(struct dsi_panel *panel)
 					      reset_gpio_name, 0);
 	if (!gpio_is_valid(panel->reset_config.reset_gpio) &&
 		!panel->host_config.ext_bridge_mode) {
-#if defined(CONFIG_PXLW_IRIS)
-		if (iris_is_chip_supported()) {
-			if (is_primary) {
-				rc = panel->reset_config.reset_gpio;
-				DSI_ERR("[%s] failed get primary reset gpio, rc=%d\n", panel->name, rc);
-				goto error;
-			}
-		} else {
-#endif
 		rc = panel->reset_config.reset_gpio;
 		DSI_ERR("[%s] failed get reset gpio, rc=%d\n", panel->name, rc);
 		goto error;
-#if defined(CONFIG_PXLW_IRIS)
-		}
-#endif
 	}
 
 	panel->reset_config.disp_en_gpio = utils->get_named_gpio(utils->data,
@@ -3016,15 +2896,6 @@ static int dsi_panel_parse_gpios(struct dsi_panel *panel)
 		DSI_DEBUG("[%s] err_flag_gpio is not set, rc=%d\n",
 			 panel->name, rc);
 	}
-
-#ifdef CONFIG_PXLW_IRIS
-	if (iris_is_chip_supported()) {
-		panel->vsync_switch_gpio = utils->get_named_gpio(utils->data, "qcom,vsync-switch-gpio", 0);
-		if (!gpio_is_valid(panel->vsync_switch_gpio)) {
-			DSI_DEBUG("[%s] vsync_switch_gpio is not set, rc=%d\n", panel->name, rc);
-		}
-	}
-#endif /*(CONFIG_PXLW_IRIS)*/
 
 	panel->reset_config.lcd_mode_sel_gpio = utils->get_named_gpio(
 		utils->data, mode_set_gpio_name, 0);
@@ -4037,13 +3908,6 @@ static int dsi_panel_parse_oem_config(struct dsi_panel *panel,
 	panel->panel_mismatch_check =
 		of_property_read_bool(of_node, "qcom,mdss-panel-mismatch-check");
 
-#ifdef CONFIG_PXLW_IRIS
-	if (iris_is_chip_supported()) {
-		panel->vsync_switch_gpio_level = 1;
-		panel->cur_h_active = 1080;
-	}
-#endif /* (CONFIG_PXLW_IRIS) */
-
 	DSI_DEBUG("%s end\n", __func__);
 	return 0;
 }
@@ -4411,10 +4275,6 @@ struct dsi_panel *dsi_panel_get(struct device *parent,
 
 	mb();
 
-#if defined(CONFIG_PXLW_IRIS)
-	iris_query_capability(panel);
-#endif
-
 	if (parse_count == 0) {
 		rc = oplus_panel_parse_msd_aod_config(panel);
 		parse_count = 1;
@@ -4589,13 +4449,6 @@ int dsi_panel_drv_init(struct dsi_panel *panel,
 	if (rc) {
 		DSI_ERR("[%s] failed to request gpios, rc=%d\n", panel->name,
 		       rc);
-#if defined(CONFIG_PXLW_IRIS)
-		if (iris_is_chip_supported()) {
-			if (!strcmp(panel->type, "primary"))
-				goto error_pinctrl_deinit;
-			rc = 0;
-		} else
-#endif
 		goto error_pinctrl_deinit;
 	}
 
@@ -5070,12 +4923,6 @@ int dsi_panel_get_mode(struct dsi_panel *panel,
 
 		mode->splash_dms = of_property_read_bool(child_np,
 				"qcom,mdss-dsi-splash-dms-switch-to-this-timing");
-
-#ifdef CONFIG_PXLW_IRIS
-		if (iris_is_chip_supported()) {
-			dsi_panel_parse_adfr(mode, utils);
-		}
-#endif
 	}
 	goto done;
 
@@ -5151,9 +4998,6 @@ int dsi_panel_pre_prepare(struct dsi_panel *panel)
 
 	mutex_lock(&panel->panel_lock);
 
-#if defined(CONFIG_PXLW_IRIS)
-	iris_power_on(panel);
-#endif
 	/* If LP11_INIT is set, panel will be powered up during prepare() */
 	if (panel->lp11_init)
 		goto error;
@@ -5170,14 +5014,6 @@ int dsi_panel_pre_prepare(struct dsi_panel *panel)
 		DSI_ERR("[%s] panel power on failed, rc=%d\n", panel->name, rc);
 		if (gpio_is_valid(panel->tp1v8_gpio))
 			gpio_set_value(panel->tp1v8_gpio, 0);
-#if defined(CONFIG_PXLW_IRIS)
-		if (iris_is_chip_supported()) {
-			if (iris_vdd_valid())
-				iris_disable_vdd();
-			else
-				iris_control_pwr_regulator(false);
-		}
-#endif
 		goto error;
 	}
 
@@ -5197,10 +5033,6 @@ int dsi_panel_update_pps(struct dsi_panel *panel)
 		return -EINVAL;
 	}
 
-#if defined(CONFIG_PXLW_IRIS)
-	if (iris_is_dual_supported() && panel->is_secondary)
-		return rc;
-#endif
 	mutex_lock(&panel->panel_lock);
 
 	priv_info = panel->cur_mode->priv_info;
@@ -5224,11 +5056,6 @@ int dsi_panel_update_pps(struct dsi_panel *panel)
 			goto error;
 		}
 	}
-#if defined(CONFIG_PXLW_IRIS)
-	if (iris_is_chip_supported() && iris_is_pt_mode(panel))
-		rc = iris_pt_send_panel_cmd(panel, &(panel->cur_mode->priv_info->cmd_sets[DSI_CMD_SET_PPS]));
-	else
-#endif
 	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_PPS);
 	if (rc) {
 		DSI_ERR("[%s] failed to send DSI_CMD_SET_PPS cmds, rc=%d\n",
@@ -5458,12 +5285,7 @@ int dsi_panel_send_qsync_on_dcs(struct dsi_panel *panel,
 
 	mutex_lock(&panel->panel_lock);
 
-#ifdef CONFIG_PXLW_IRIS
-	DSI_INFO("ctrl:%d qsync on\n", ctrl_idx);
-	SDE_ATRACE_INT("qsync_mode_cmd", 1);
-#else
 	DSI_DEBUG("ctrl:%d qsync on\n", ctrl_idx);
-#endif
 	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_QSYNC_ON);
 	if (rc)
 		DSI_ERR("[%s] failed to send DSI_CMD_SET_QSYNC_ON cmds rc=%d\n",
@@ -5478,24 +5300,14 @@ int dsi_panel_send_qsync_off_dcs(struct dsi_panel *panel,
 {
 	int rc = 0;
 
-#ifdef CONFIG_PXLW_IRIS
-	if (!panel || !panel->cur_mode) {
-#else
 	if (!panel) {
-#endif
 		DSI_ERR("invalid params\n");
 		return -EINVAL;
 	}
 
 	mutex_lock(&panel->panel_lock);
 
-#ifdef CONFIG_PXLW_IRIS
-	DSI_INFO("ctrl:%d qsync off\n", ctrl_idx);
-	SDE_ATRACE_INT("qsync_mode_cmd", 0);
-	SDE_ATRACE_INT("oplus_adfr_qsync_mode_minfps_cmd", panel->cur_mode->timing.refresh_rate);
-#else
 	DSI_DEBUG("ctrl:%d qsync off\n", ctrl_idx);
-#endif
 	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_QSYNC_OFF);
 	if (rc)
 		DSI_ERR("[%s] failed to send DSI_CMD_SET_QSYNC_OFF cmds rc=%d\n",
@@ -5635,10 +5447,6 @@ int dsi_panel_switch(struct dsi_panel *panel)
 		return -EINVAL;
 	}
 
-#if defined(CONFIG_PXLW_IRIS)
-	if (iris_is_dual_supported() && panel->is_secondary)
-		return rc;
-#endif
 	if (cur_h_active != panel->cur_mode->timing.h_active) {
 		udelay(2000);
 		cur_h_active = panel->cur_mode->timing.h_active;
@@ -5646,25 +5454,11 @@ int dsi_panel_switch(struct dsi_panel *panel)
 
 	mutex_lock(&panel->panel_lock);
 
-#if defined(CONFIG_PXLW_IRIS)
-	if (iris_is_chip_supported()) {
-		rc = iris_switch(panel,
-				&(panel->cur_mode->priv_info->cmd_sets[DSI_CMD_SET_TIMING_SWITCH]),
-				&panel->cur_mode->timing);
-	} else
-#endif
 	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_TIMING_SWITCH);
 	DSI_ERR("Send DSI_CMD_SET_TIMING_SWITCH cmds\n");
 	if (rc)
 		DSI_ERR("[%s] failed to send DSI_CMD_SET_TIMING_SWITCH cmds, rc=%d\n",
 		       panel->name, rc);
-
-#ifdef CONFIG_PXLW_IRIS
-	if (iris_is_chip_supported()) {
-		dsi_panel_adfr_status_reset(panel);
-		oplus_adfr_resolution_vsync_switch(panel);
-	}
-#endif
 
 	if((dsi_panel_name == DSI_PANEL_SAMSUNG_S6E3HC2) && (gamma_read_flag == GAMMA_READ_SUCCESS)) {
 		if (mode_fps == 90) {
@@ -5697,20 +5491,9 @@ int dsi_panel_post_switch(struct dsi_panel *panel)
 		return -EINVAL;
 	}
 
-#if defined(CONFIG_PXLW_IRIS)
-	if (iris_is_dual_supported() && panel->is_secondary)
-		return rc;
-#endif
 	panel->panel_switch_status = true;
 	mutex_lock(&panel->panel_lock);
 
-#if defined(CONFIG_PXLW_IRIS)
-	if (iris_is_chip_supported()) {
-		rc = iris_post_switch(panel,
-				&(panel->cur_mode->priv_info->cmd_sets[DSI_CMD_SET_POST_TIMING_SWITCH]),
-				&panel->cur_mode->timing);
-	} else
-#endif
 	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_POST_TIMING_SWITCH);
 	DSI_ERR("Send DSI_CMD_SET_POST_TIMING_SWITCH cmds\n");
 	if (rc)
@@ -5750,12 +5533,6 @@ int dsi_panel_enable(struct dsi_panel *panel)
 		panel->aod_status = 1;
 	}
 
-#ifdef CONFIG_PXLW_IRIS
-	if (iris_is_chip_supported()) {
-		oplus_adfr_vsync_switch_reset(panel);
-		}
-#endif
-
 	if (dsi_panel_name == DSI_PANEL_SAMSUNG_S6E3HC2) {
 		if ((panel->panel_stage_info == EVT2_113MHZ_OSC) || (panel->panel_stage_info == PVT_113MHZ_OSC)
 			|| (panel->panel_stage_info == PVT_113MHZ_OSC_XTALK) || (panel->panel_code_info == 0xEE)) {
@@ -5766,11 +5543,6 @@ int dsi_panel_enable(struct dsi_panel *panel)
 			DSI_ERR("Send DSI_CMD_SET_ON cmds\n");
 		}
 	} else {
-#if defined(CONFIG_PXLW_IRIS)
-	if (iris_is_chip_supported())
-		rc = iris_enable(panel, &(panel->cur_mode->priv_info->cmd_sets[DSI_CMD_SET_ON]));
-	else
-#endif
 		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_ON);
 		DSI_ERR("Send DSI_CMD_SET_ON cmds\n");
 	}
@@ -5781,12 +5553,6 @@ int dsi_panel_enable(struct dsi_panel *panel)
 		panel->panel_initialized = true;
 
 	oplus_dsi_panel_enable(panel);
-
-#ifdef CONFIG_PXLW_IRIS
-	if (iris_is_chip_supported()) {
-		dsi_panel_adfr_status_reset(panel);
-	}
-#endif
 
 	if (dsi_panel_name == DSI_PANEL_SAMSUNG_AMB655XL) {
 		rc = dsi_panel_dimming_gamma_write(panel);
@@ -5828,17 +5594,8 @@ int dsi_panel_enable(struct dsi_panel *panel)
 		panel->aod_status = 0;
 	}
 
-#if defined(CONFIG_PXLW_IRIS)
-	if (panel->is_secondary) {
-		mutex_unlock(&panel->panel_lock);
-		return rc;
-	}
-#endif
 	mutex_unlock(&panel->panel_lock);
 	DSI_ERR("end\n");
-	#if 0
-	pm_print_active_wakeup_sources_queue(false);
-	#endif
 	return rc;
 }
 
@@ -5905,10 +5662,6 @@ int dsi_panel_disable(struct dsi_panel *panel)
 	}
 
 	DSI_ERR("start\n");
-#if defined(CONFIG_PXLW_IRIS)
-	if (iris_is_dual_supported() && panel->is_secondary)
-		return rc;
-#endif
 	mutex_lock(&panel->panel_lock);
 
 	/* Avoid sending panel off commands when ESD recovery is underway */
@@ -5928,10 +5681,6 @@ int dsi_panel_disable(struct dsi_panel *panel)
 			dsi_pwr_panel_regulator_mode_set(&panel->power_info,
 				"ibb", REGULATOR_MODE_STANDBY);
 		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_OFF);
-#if defined(CONFIG_PXLW_IRIS)
-		if (iris_is_chip_supported())
-			iris_disable(panel, NULL);
-#endif
 		if (rc) {
 			/*
 			 * Sending panel off commands may fail when  DSI
@@ -6253,15 +6002,7 @@ int dsi_panel_set_hbm_brightness(struct dsi_panel *panel, int level)
 			level = HBM_BASE_600NIT_800NIT-1;
 		level = backlight_600_800nit_buf[level];
 	}
-
-#if defined(CONFIG_PXLW_IRIS)
-	if (iris_is_chip_supported() && iris_is_pt_mode(panel))
-		rc = iris_update_backlight(1, level);
-	else
-		rc = mipi_dsi_dcs_set_display_brightness_samsung(get_main_display(), level);
-#else
 	rc = mipi_dsi_dcs_set_display_brightness_samsung(get_main_display(), level);
-#endif
 
 error:
 	mutex_unlock(&panel->panel_lock);
@@ -6632,11 +6373,6 @@ int dsi_panel_set_aod_mode(struct dsi_panel *panel, int level)
 					DSI_ERR("Real aod mode send DSI_CMD_SET_AOD_OFF cmds\n");
 				}
 				mutex_unlock(&panel->panel_lock);
-#ifdef CONFIG_PXLW_IRIS
-				if (iris_is_chip_supported()) {
-					oplus_adfr_aod_fod_vsync_switch(panel, false);
-				}
-#endif
 			} else {
 				DSI_ERR("real_aod_mode is %d, aod_fod_flag is %d\n",
 						real_aod_mode, aod_fod_flag);

@@ -38,10 +38,6 @@ msm_drm-$(CONFIG_DRM_MSM_OPLUS) += oplus/oplus_display_node.o \
 	oplus/oplus_msd_aod.o \
 	oplus/oplus_onscreenfingerprint.o
 
-ccflags-y += -DOPLUS_FEATURE_ADFR
-msm_drm-$(CONFIG_DRM_MSM_OPLUS) += oplus/oplus_adfr.o
-
-
 msm_drm-$(CONFIG_DRM_MSM_SDE) += sde/sde_crtc.o \
 	sde/sde_encoder.o \
 	sde/sde_encoder_dce.o \
@@ -133,35 +129,6 @@ msm_drm-$(CONFIG_DRM_MSM_DSI) += dsi/dsi_phy.o \
 	dsi/dsi_clk_manager.o \
 	dsi/dsi_display_test.o
 
-#ifeq ($(CONFIG_PXLW_IRIS),y)
-msm_drm-$(CONFIG_DRM_MSM_DSI) += dsi/iris/dsi_iris5_ioctl.o \
-                               dsi/iris/dsi_iris5_lightup.o \
-                               dsi/iris/dsi_iris5_lightup_ocp.o \
-                               dsi/iris/dsi_iris5_lp.o \
-                               dsi/iris/dsi_iris5_lut.o \
-                               dsi/iris/dsi_iris5_pq.o \
-                               dsi/iris/dsi_iris5_mode_switch.o \
-                               dsi/iris/dsi_iris5_cmds.o \
-                               dsi/iris/dsi_iris5_i3c.o \
-                               dsi/iris/dsi_iris5_i2c.o \
-                               dsi/iris/dsi_iris5_loop_back.o \
-                               dsi/iris/dsi_iris5_gpio.o \
-                               dsi/iris/dsi_iris5_frc.o \
-                               dsi/iris/dsi_iris5_timing_switch.o \
-                               dsi/iris/dsi_iris5_dbg.o \
-                               dsi/iris/msm_iris5_extended.o \
-                               dsi/iris/sde_iris5_extended.o \
-                               dsi/iris/dsi_iris5_extended.o
-$(warning "Defined CONFIG_PXLW_IRIS and PXLW_IRIS_DUAL in makefile")
-ccflags-y += -DCONFIG_PXLW_IRIS
-ccflags-y += -DPXLW_IRIS_DUAL
-#endif
-
-#ifeq ($(CONFIG_PXLW_SOFT_IRIS), y)
-#msm_drm-$(CONFIG_DRM_MSM_DSI) += dsi/iris/dsi_irissoft_ioctl.o
-#ccflags-y += -DCONFIG_PXLW_SOFT_IRIS
-#$(warning "Defined CONFIG_PXLW_SOFT_IRIS in makefile")
-#endif
 msm_drm-$(CONFIG_DSI_PARSER) += dsi/dsi_parser.o
 
 msm_drm-$(CONFIG_DRM_MSM) += \

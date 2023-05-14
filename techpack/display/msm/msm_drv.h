@@ -50,9 +50,6 @@
 #include <drm/drm_dsc.h>
 
 #include "sde_power_handle.h"
-#if defined(CONFIG_PXLW_IRIS) || defined(CONFIG_PXLW_SOFT_IRIS)
-#include <drm/msm_drm_iris.h>
-#endif
 #define GET_MAJOR_REV(rev)		((rev) >> 28)
 #define GET_MINOR_REV(rev)		(((rev) >> 16) & 0xFFF)
 #define GET_STEP_REV(rev)		((rev) & 0xFFFF)
@@ -219,9 +216,6 @@ enum msm_mdp_conn_property {
 	CONNECTOR_PROP_QSYNC_MODE,
 	CONNECTOR_PROP_CMD_FRAME_TRIGGER_MODE,
 	CONNECTOR_PROP_CUSTOM,
-#ifdef CONFIG_PXLW_IRIS
-	CONNECTOR_PROP_QSYNC_MIN_FPS,
-#endif
 
 	/* total # of properties */
 	CONNECTOR_PROP_COUNT
@@ -814,9 +808,6 @@ struct msm_display_kickoff_params {
 struct msm_display_conn_params {
 	uint32_t qsync_mode;
 	bool qsync_update;
-#ifdef CONFIG_PXLW_IRIS
-	uint32_t qsync_dynamic_min_fps;
-#endif
 };
 
 /**
@@ -893,10 +884,6 @@ struct msm_drm_private {
 
 	struct msm_drm_thread disp_thread[MAX_CRTCS];
 	struct msm_drm_thread event_thread[MAX_CRTCS];
-
-#ifdef CONFIG_PXLW_IRIS
-	struct msm_drm_thread adfr_thread[MAX_CRTCS];
-#endif
 
 	struct task_struct *pp_event_thread;
 	struct kthread_worker pp_event_worker;

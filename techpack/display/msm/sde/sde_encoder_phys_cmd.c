@@ -10,13 +10,7 @@
 #include "sde_core_irq.h"
 #include "sde_formats.h"
 #include "sde_trace.h"
-#if defined(CONFIG_PXLW_IRIS)
-#include "iris/dsi_iris5_api.h"
-#endif
 #include "dsi_display.h"
-#ifdef CONFIG_PXLW_IRIS
-#include "oplus_adfr.h"
-#endif
 
 #define SDE_DEBUG_CMDENC(e, fmt, ...) SDE_DEBUG("enc%d intf%d " fmt, \
 		(e) && (e)->base.parent ? \
@@ -40,13 +34,8 @@
 #define DEFAULT_TEARCHECK_SYNC_THRESH_CONTINUE	4
 
 #define SDE_ENC_WR_PTR_START_TIMEOUT_US 20000
-#if defined(PXLW_IRIS_DUAL)
-#define AUTOREFRESH_SEQ1_POLL_TIME      (iris_is_dual_supported() ? 1000 : 2000)
-#define AUTOREFRESH_SEQ2_POLL_TIME      (iris_is_dual_supported() ? 2000 : 25000)
-#else
 #define AUTOREFRESH_SEQ1_POLL_TIME      2000
 #define AUTOREFRESH_SEQ2_POLL_TIME      25000
-#endif
 #define AUTOREFRESH_SEQ2_POLL_TIMEOUT	1000000
 
 static int ppdone_timeout_count;
@@ -81,12 +70,6 @@ static uint64_t _sde_encoder_phys_cmd_get_autorefresh_property(
 
 	if (!conn || !conn->state)
 		return 0;
-#if defined(CONFIG_PXLW_IRIS)
-	if (iris_is_chip_supported()) {
-		if (iris_secondary_display_autorefresh(phys_enc))
-			return 1;
-	}
-#endif
 
 	return sde_connector_get_property(conn->state,
 				CONNECTOR_PROP_AUTOREFRESH);
@@ -222,13 +205,6 @@ static void sde_encoder_phys_cmd_pp_tx_done_irq(void *arg, int irq_idx)
 	SDE_EVT32_IRQ(DRMID(phys_enc->parent),
 			phys_enc->hw_pp->idx - PINGPONG_0, event, scheduler_status);
 
-#ifdef CONFIG_PXLW_IRIS
-	if (iris_is_chip_supported()) {
-		atomic_set(&phys_enc->frame_state, 1);
-		SDE_DEBUG("frame_state = %d\n", atomic_read(&phys_enc->frame_state));
-	}
-#endif
-
 	/* Signal any waiting atomic commit thread */
 	wake_up_all(&phys_enc->pending_kickoff_wq);
 	SDE_ATRACE_END("pp_done_irq");
@@ -269,19 +245,9 @@ static void sde_encoder_phys_cmd_te_rd_ptr_irq(void *arg, int irq_idx)
 	struct sde_encoder_phys_cmd_te_timestamp *te_timestamp;
 	unsigned long lock_flags;
 	struct drm_display_mode *mode;
-#ifdef CONFIG_PXLW_IRIS
-	static unsigned long now;
-#endif
 
 	if (!phys_enc || !phys_enc->hw_pp || !phys_enc->hw_intf)
 		return;
-
-#ifdef CONFIG_PXLW_IRIS
-	if (iris_is_chip_supported()) {
-		SDE_DEBUG("rd_ptr_irq interval: %lu\n", ((unsigned long)ktime_to_us(ktime_get()) - now));
-		now = (unsigned long)ktime_to_us(ktime_get());
-	}
-#endif
 
 	SDE_ATRACE_BEGIN("rd_ptr_irq");
 	cmd_enc = to_sde_encoder_phys_cmd(phys_enc);
@@ -317,19 +283,6 @@ static void sde_encoder_phys_cmd_te_rd_ptr_irq(void *arg, int irq_idx)
 		phys_enc->parent_ops.handle_vblank_virt(phys_enc->parent,
 			phys_enc);
 
-#ifdef CONFIG_PXLW_IRIS
-	if (iris_is_chip_supported()) {
-		if(atomic_read(&phys_enc->frame_state) == 1) {
-			atomic_set(&phys_enc->frame_state, 0);
-		}
-		SDE_DEBUG("frame_state = %d\n", atomic_read(&phys_enc->frame_state));
-
-		if (oplus_adfr_auto_on_cmd_filter_get()) {
-			oplus_adfr_auto_on_cmd_filter_set(false);
-		}
-	}
-#endif
-
 	atomic_add_unless(&cmd_enc->pending_vblank_cnt, -1, 0);
 	wake_up_all(&cmd_enc->pending_vblank_wq);
 	SDE_ATRACE_END("rd_ptr_irq");
@@ -342,10 +295,6 @@ static void sde_encoder_phys_cmd_wr_ptr_irq(void *arg, int irq_idx)
 	u32 event = 0;
 	struct sde_hw_pp_vsync_info info[MAX_CHANNELS_PER_ENC] = {{0}};
 	struct sde_encoder_phys_cmd *cmd_enc;
-#ifdef CONFIG_PXLW_IRIS
-	static u64 now;
-	u64 interval;
-#endif
 
 	if (!phys_enc || !phys_enc->hw_ctl)
 		return;
@@ -371,20 +320,6 @@ static void sde_encoder_phys_cmd_wr_ptr_irq(void *arg, int irq_idx)
 		ctl->idx - CTL_0, event,
 		info[0].pp_idx, info[0].intf_idx, info[0].wr_ptr_line_count,
 		info[1].pp_idx, info[1].intf_idx, info[1].wr_ptr_line_count);
-
-#ifdef CONFIG_PXLW_IRIS
-	if (iris_is_chip_supported()) {
-		atomic_set(&phys_enc->frame_state, 2);
-		SDE_DEBUG("frame_state = %d\n", atomic_read(&phys_enc->frame_state));
-
-		interval = (u64)ktime_to_us(ktime_get()) - now;
-		SDE_DEBUG("wr_ptr_irq interval: %llu\n", interval);
-		if (interval < 13600) {
-			SDE_DEBUG("kVRR wr_ptr_irq is too close, interval: %llu\n", interval);
-		}
-		now = (u64)ktime_to_us(ktime_get());
-	}
-#endif
 
 	/* Signal any waiting wr_ptr start interrupt */
 	wake_up_all(&phys_enc->pending_kickoff_wq);
@@ -966,14 +901,6 @@ static int _get_tearcheck_threshold(struct sde_encoder_phys *phys_enc)
 	mode = &phys_enc->cached_mode;
 	qsync_mode = sde_connector_get_qsync_mode(conn);
 
-#ifdef CONFIG_PXLW_IRIS
-	if (iris_is_chip_supported()) {
-		SDE_ATRACE_BEGIN("get_tearcheck_threshold");
-		SDE_ATRACE_INT("qsync_mode", qsync_mode);
-		SDE_ATRACE_INT("qsync_minfps", sde_connector_get_qsync_dynamic_min_fps(conn));
-	}
-#endif
-
 	if (mode && (qsync_mode == SDE_RM_QSYNC_CONTINUOUS_MODE)) {
 		u32 qsync_min_fps = 0;
 		u32 default_fps = mode->vrefresh;
@@ -988,17 +915,6 @@ static int _get_tearcheck_threshold(struct sde_encoder_phys *phys_enc)
 		if (phys_enc->parent_ops.get_qsync_fps)
 			phys_enc->parent_ops.get_qsync_fps(
 				phys_enc->parent, &qsync_min_fps, 0);
-
-#ifdef CONFIG_PXLW_IRIS
-		if (iris_is_chip_supported()) {
-			qsync_min_fps = sde_connector_get_qsync_dynamic_min_fps(conn);
-			SDE_DEBUG_CMDENC(cmd_enc,
-				"qsync updated: %u, mode: %u, min fps:%u, default:%u\n",
-				sde_connector_is_qsync_updated(conn),
-				qsync_mode,
-				qsync_min_fps, default_fps);
-		}
-#endif
 
 		if (!qsync_min_fps || !default_fps || !yres) {
 			SDE_ERROR_CMDENC(cmd_enc,
@@ -1019,11 +935,6 @@ static int _get_tearcheck_threshold(struct sde_encoder_phys *phys_enc)
 		default_time_ns = (1 * 1000000000) / default_fps;
 		sde_encoder_helper_get_transfer_time(phys_enc->parent,
 				&transfer_time_us);
-#ifdef CONFIG_PXLW_IRIS
-		if (iris_is_chip_supported()) {
-			transfer_time_us = 0;
-		}
-#endif
 		if (transfer_time_us)
 			idle_time_ns = default_time_ns -
 					(1000 * transfer_time_us);
@@ -1032,24 +943,6 @@ static int _get_tearcheck_threshold(struct sde_encoder_phys *phys_enc)
 		default_line_time_ns = (1 * 1000000000) / (default_fps * yres);
 
 		threshold_lines = extra_time_ns / default_line_time_ns;
-
-#ifdef CONFIG_PXLW_IRIS
-		if (iris_is_chip_supported()) {
-			if (qsync_min_fps == 51) {
-				if (yres > 3216) {
-					threshold_lines = threshold_lines - 39 - 47 - 58;
-				} else {
-					threshold_lines = threshold_lines - 29 - 35 - 43;
-				}
-			} else {
-				if (yres > 3216) {
-					threshold_lines = threshold_lines - 47 - 58;
-				} else {
-					threshold_lines = threshold_lines - 35 - 43;
-				}
-			}
-		}
-#endif
 
 		SDE_DEBUG_CMDENC(cmd_enc, "slow:%d default:%d extra:%d(ns)\n",
 			slow_time_ns, default_time_ns, extra_time_ns);
@@ -1063,15 +956,6 @@ static int _get_tearcheck_threshold(struct sde_encoder_phys *phys_enc)
 	}
 
 exit:
-
-#ifdef CONFIG_PXLW_IRIS
-	if (iris_is_chip_supported()) {
-		SDE_DEBUG_CMDENC(cmd_enc, "kVRR : qsync_mode %d, qsync_minfps %d, threshold_lines %d\n",
-			qsync_mode, sde_connector_get_qsync_dynamic_min_fps(conn), threshold_lines);
-		SDE_ATRACE_END("get_tearcheck_threshold");
-		SDE_ATRACE_INT("threshold_lines", threshold_lines);
-	}
-#endif
 
 	return threshold_lines;
 }
@@ -1475,9 +1359,6 @@ static int sde_encoder_phys_cmd_prepare_for_kickoff(
 			to_sde_encoder_phys_cmd(phys_enc);
 	int ret = 0;
 	bool recovery_events;
-#ifdef CONFIG_PXLW_IRIS
-	struct sde_connector *c_conn = NULL;
-#endif
 	if (!phys_enc || !phys_enc->hw_pp) {
 		SDE_ERROR("invalid encoder\n");
 		return -EINVAL;
@@ -1518,34 +1399,6 @@ static int sde_encoder_phys_cmd_prepare_for_kickoff(
 		phys_enc->recovered = false;
 	}
 
-#ifdef CONFIG_PXLW_IRIS
-	if (iris_is_chip_supported()) {
-		c_conn = to_sde_connector(phys_enc->connector);
-		oplus_adfr_force_qsync_mode_off(phys_enc->connector);
-		if (c_conn->qsync_deferred_window_status == DEFERRED_WINDOW_START) {
-			c_conn->qsync_deferred_window_status = DEFERRED_WINDOW_NEXT_FRAME;
-		} else if (c_conn->qsync_deferred_window_status == DEFERRED_WINDOW_NEXT_FRAME ||
-					c_conn->qsync_deferred_window_status == SET_WINDOW_IMMEDIATELY) {
-			SDE_ATRACE_BEGIN("update_qsync");
-			c_conn->qsync_dynamic_min_fps = c_conn->qsync_curr_dynamic_min_fps;
-			tc_cfg.sync_threshold_start = _get_tearcheck_threshold(
-					phys_enc);
-			if (phys_enc->has_intf_te &&
-					phys_enc->hw_intf->ops.update_tearcheck)
-				phys_enc->hw_intf->ops.update_tearcheck(
-						phys_enc->hw_intf, &tc_cfg);
-			else if (phys_enc->hw_pp->ops.update_tearcheck)
-				phys_enc->hw_pp->ops.update_tearcheck(
-						phys_enc->hw_pp, &tc_cfg);
-			SDE_EVT32(DRMID(phys_enc->parent), tc_cfg.sync_threshold_start);
-			c_conn->qsync_updated = true;
-			phys_enc->qsync_sync_threshold_start = tc_cfg.sync_threshold_start;
-			phys_enc->current_sync_threshold_start = phys_enc->qsync_sync_threshold_start;
-			c_conn->qsync_deferred_window_status = DEFERRED_WINDOW_END;
-			SDE_ATRACE_END("update_qsync");
-		}
-	} else {
-#endif
 	if (sde_connector_is_qsync_updated(phys_enc->connector)) {
 		tc_cfg.sync_threshold_start = _get_tearcheck_threshold(
 				phys_enc);
@@ -1558,13 +1411,6 @@ static int sde_encoder_phys_cmd_prepare_for_kickoff(
 					phys_enc->hw_pp, &tc_cfg);
 		SDE_EVT32(DRMID(phys_enc->parent), tc_cfg.sync_threshold_start);
 	}
-
-#ifdef CONFIG_PXLW_IRIS
-	}
-	if (iris_is_chip_supported()) {
-		oplus_adfr_adjust_tearcheck_for_dynamic_qsync(phys_enc);
-	}
-#endif
 
 	SDE_DEBUG_CMDENC(cmd_enc, "pp:%d pending_cnt %d\n",
 			phys_enc->hw_pp->idx - PINGPONG_0,
@@ -1919,15 +1765,7 @@ static void _sde_encoder_autorefresh_disable_seq1(
 	_sde_encoder_phys_cmd_config_autorefresh(phys_enc, 0);
 
 	do {
-#if defined(PXLW_IRIS_DUAL)
-		if (iris_is_dual_supported())
-			usleep_range(AUTOREFRESH_SEQ1_POLL_TIME,
-				AUTOREFRESH_SEQ1_POLL_TIME + 1);
-		else
-			udelay(AUTOREFRESH_SEQ1_POLL_TIME);
-#else
 		udelay(AUTOREFRESH_SEQ1_POLL_TIME);
-#endif
 		if ((trial * AUTOREFRESH_SEQ1_POLL_TIME)
 				> (KICKOFF_TIMEOUT_MS * USEC_PER_MSEC)) {
 			SDE_ERROR_CMDENC(cmd_enc,
@@ -2259,14 +2097,6 @@ struct sde_encoder_phys *sde_encoder_phys_cmd_init(
 	for (i = 0; i < MAX_TE_PROFILE_COUNT; i++)
 		list_add(&cmd_enc->te_timestamp[i].list,
 				&cmd_enc->te_timestamp_list);
-
-#ifdef CONFIG_PXLW_IRIS
-	if (iris_is_chip_supported()) {
-		atomic_set(&phys_enc->frame_state, 0);
-		phys_enc->current_sync_threshold_start = 0;
-		phys_enc->qsync_sync_threshold_start = 0;
-	}
-#endif
 
 	SDE_DEBUG_CMDENC(cmd_enc, "created\n");
 

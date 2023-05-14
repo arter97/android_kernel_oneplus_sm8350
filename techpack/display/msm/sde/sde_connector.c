@@ -21,18 +21,6 @@
 #include "sde_vm.h"
 #include <drm/drm_probe_helper.h>
 #include "sde_trace.h"
-#ifdef CONFIG_PXLW_IRIS
-#include <linux/list.h>
-#include <linux/list_sort.h>
-#include <drm/drm_modes.h>
-#include "oplus_adfr.h"
-#endif
-#if defined(CONFIG_PXLW_IRIS)
-#include "iris/dsi_iris5_api.h"
-#elif defined(CONFIG_PXLW_SOFT_IRIS)
-#include "iris/dsi_iris5_api.h"
-#include "iris/dsi_iris5.h"
-#endif
 
 #define BL_NODE_NAME_SIZE 32
 #define HDR10_PLUS_VSIF_TYPE_CODE      0x81
@@ -890,11 +878,6 @@ static int _sde_connector_update_hbm(struct sde_connector *c_conn)
 					rc = dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_SET_AOD_OFF);
 					DSI_ERR("Real aod mode send DSI_CMD_SET_AOD_OFF cmds\n");
 				}
-#ifdef CONFIG_PXLW_IRIS
-				if (iris_is_chip_supported()) {
-					oplus_adfr_aod_fod_vsync_switch(dsi_display->panel, false);
-				}
-#endif
 				pr_err("qdt aod off\n");
 			}
 			else {
@@ -918,11 +901,6 @@ static int _sde_connector_update_hbm(struct sde_connector *c_conn)
 				if(oneplus_dim_status == 5){
 					rc = dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_SET_HBM_OFF);
 					pr_err("Send DSI_CMD_SET_HBM_OFF cmds\n");
-#ifdef CONFIG_PXLW_IRIS
-					if (iris_is_chip_supported()) {
-						oplus_adfr_aod_fod_vsync_switch(dsi_display->panel, false);
-					}
-#endif
 					aod_fod_flag = true;
 					dsi_display->panel->aod_status = 0;
 					oneplus_dim_status = 0;
@@ -993,11 +971,6 @@ static int _sde_connector_update_hbm(struct sde_connector *c_conn)
 				//sde_encoder_poll_line_counts(drm_enc);
 				rc = dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_SET_HBM_OFF);
 				pr_err("Send DSI_CMD_SET_HBM_OFF cmds\n");
-#ifdef CONFIG_PXLW_IRIS
-				if (iris_is_chip_supported()) {
-					oplus_adfr_aod_fod_vsync_switch(dsi_display->panel, false);
-				}
-#endif
 			}
 			SDE_ATRACE_END("set_hbm_off");
 			mutex_unlock(&dsi_display->panel->panel_lock);
@@ -1049,51 +1022,8 @@ void sde_connector_set_qsync_params(struct drm_connector *connector)
 					c_conn->qsync_mode, qsync_propval);
 			c_conn->qsync_updated = true;
 			c_conn->qsync_mode = qsync_propval;
-#ifdef CONFIG_PXLW_IRIS
-			if (iris_is_chip_supported()) {
-				if (c_conn->qsync_mode == SDE_RM_QSYNC_DISABLED) {
-					c_conn->qsync_curr_dynamic_min_fps = 0;
-					c_conn->qsync_deferred_window_status = SET_WINDOW_IMMEDIATELY;
-				} else {
-					c_conn->qsync_dynamic_min_fps = 0;
-				}
-			}
-#endif
 		}
 	}
-
-#ifdef CONFIG_PXLW_IRIS
-	if (iris_is_chip_supported()) {
-		/*
-		prop_dirty = msm_property_is_dirty(&c_conn->property_info,
-						&c_state->property_state,
-						CONNECTOR_PROP_QSYNC_MIN_FPS);
-		*/
-		prop_dirty = oplus_adfr_qsync_mode_minfps_is_updated();
-		if (prop_dirty) {
-			/*
-			qsync_propval = sde_connector_get_property(c_conn->base.state,
-							CONNECTOR_PROP_QSYNC_MIN_FPS);
-			*/
-			qsync_propval = oplus_adfr_get_qsync_mode_minfps();
-			if (oplus_adfr_has_auto_mode(qsync_propval)) {
-				SDE_DEBUG("kVRR updated for auto mode %08X\n", qsync_propval);
-			} else {
-				if (qsync_propval != c_conn->qsync_dynamic_min_fps) {
-					SDE_INFO("kVRR updated qsync min fps %d -> %d\n",
-							c_conn->qsync_dynamic_min_fps, qsync_propval);
-					c_conn->qsync_updated = true;
-					c_conn->qsync_curr_dynamic_min_fps = qsync_propval;
-					if (qsync_propval == 0) {
-						c_conn->qsync_deferred_window_status = SET_WINDOW_IMMEDIATELY;
-					} else {
-						c_conn->qsync_deferred_window_status = DEFERRED_WINDOW_START;
-					}
-				}
-			}
-		}
-	}
-#endif
 }
 
 void sde_connector_complete_qsync_commit(struct drm_connector *conn,
@@ -1280,11 +1210,6 @@ int sde_connector_prepare_commit(struct drm_connector *connector)
 	if (c_conn->qsync_updated) {
 		params.qsync_mode = c_conn->qsync_mode;
 		params.qsync_update = true;
-#ifdef CONFIG_PXLW_IRIS
-		if (iris_is_chip_supported()) {
-			params.qsync_dynamic_min_fps = c_conn->qsync_curr_dynamic_min_fps;
-		}
-#endif
 	}
 
 	rc = c_conn->ops.prepare_commit(c_conn->display, &params);
@@ -1921,23 +1846,6 @@ static int sde_connector_atomic_set_property(struct drm_connector *connector,
 		msm_property_set_dirty(&c_conn->property_info,
 				&c_state->property_state, idx);
 		break;
-#ifdef CONFIG_PXLW_IRIS
-	case CONNECTOR_PROP_QSYNC_MIN_FPS:
-		if (iris_is_chip_supported()) {
-			SDE_INFO("kVRR set qsync minfps dirty with %llu[%08X]\n", val, val);
-
-			if (oplus_adfr_handle_auto_mode(val)) {
-				SDE_DEBUG("kVRR updated auto mode %08X\n", val);
-			} else {
-				oplus_adfr_handle_qsync_mode_minfps(val);
-				SDE_DEBUG("kVRR updated qsync mode minfps %08X\n", val);
-			}
-
-			msm_property_set_dirty(&c_conn->property_info,
-					&c_state->property_state, idx);
-		}
-		break;
-#endif
 	default:
 		break;
 	}
@@ -2646,35 +2554,6 @@ static void sde_connector_early_unregister(struct drm_connector *connector)
 	/* debugfs under connector->debugfs are deleted by drm_debugfs */
 }
 
-#ifdef CONFIG_PXLW_IRIS
-static int drm_mode_compare_for_adfr(void *priv, struct list_head *lh_a, struct list_head *lh_b)
-{
-	struct drm_display_mode *a = list_entry(lh_a, struct drm_display_mode, head);
-	struct drm_display_mode *b = list_entry(lh_b, struct drm_display_mode, head);
-	int diff;
-
-	diff = ((b->type & DRM_MODE_TYPE_PREFERRED) != 0) -
-		((a->type & DRM_MODE_TYPE_PREFERRED) != 0);
-	if (diff)
-		return diff;
-	diff = a->hdisplay * a->vdisplay - b->hdisplay * b->vdisplay;
-	if (diff)
-		return diff;
-
-	diff = a->vrefresh - b->vrefresh;
-	if (diff)
-		return diff;
-
-	diff = b->clock - a->clock;
-	return diff;
-}
-
-static void drm_mode_sort_for_adfr(struct list_head *mode_list)
-{
-	list_sort(NULL, mode_list, drm_mode_compare_for_adfr);
-}
-#endif
-
 static int sde_connector_fill_modes(struct drm_connector *connector,
 		uint32_t max_width, uint32_t max_height)
 {
@@ -2689,9 +2568,6 @@ static int sde_connector_fill_modes(struct drm_connector *connector,
 
 	mode_count = drm_helper_probe_single_connector_modes(connector,
 			max_width, max_height);
-    #ifdef CONFIG_PXLW_IRIS
-    drm_mode_sort_for_adfr(&connector->modes);
-    #endif
 
 	if (sde_conn->ops.set_allowed_mode_switch)
 		sde_conn->ops.set_allowed_mode_switch(connector,
@@ -3226,13 +3102,6 @@ static int _sde_connector_install_properties(struct drm_device *dev,
 					"qsync_mode", 0, 0, e_qsync_mode,
 					ARRAY_SIZE(e_qsync_mode), 0,
 					CONNECTOR_PROP_QSYNC_MODE);
-
-#ifdef CONFIG_PXLW_IRIS
-		if (sde_kms->catalog->has_qsync && iris_is_chip_supported()) {
-			msm_property_install_range(&c_conn->property_info, "qsync_min_fps",
-					0x0, 0, ~0, 0, CONNECTOR_PROP_QSYNC_MIN_FPS);
-		}
-#endif
 
 		if (display_info->capabilities & MSM_DISPLAY_CAP_CMD_MODE)
 			msm_property_install_enum(&c_conn->property_info,
