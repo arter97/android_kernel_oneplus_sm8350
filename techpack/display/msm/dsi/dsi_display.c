@@ -1563,6 +1563,46 @@ static void _dsi_display_setup_misr(struct dsi_display *display)
 
 extern int dsi_panel_set_aod_mode(struct dsi_panel *panel, int level);
 
+static u32 interpolate(uint32_t x, uint32_t xa, uint32_t xb,
+		uint32_t ya, uint32_t yb)
+{
+	return ya - (ya - yb) * (x - xa) / (xb - xa);
+}
+
+struct blbl {
+        u32 bl;
+        u32 aod_bl;
+};
+
+struct blbl aod_bl_lut[] = {
+	{0, 1},
+	{10, 1},
+	{40, 9},
+	{90, 30},
+	{120, 40},
+};
+
+u32 dsi_panel_get_aod_bl(struct dsi_display *display)
+{
+        u32 cur_bl = display->panel->bl_config.bl_level;
+	int i;
+
+	for (i = 0; i < 5; i++)
+                if (aod_bl_lut[i].bl >= cur_bl)
+                        break;
+        if (i == 0)
+                return aod_bl_lut[i].aod_bl;
+
+        if (i == 4)
+                return aod_bl_lut[i - 1].aod_bl;
+
+        return interpolate(cur_bl,
+                           aod_bl_lut[i - 1].bl,
+                           aod_bl_lut[i].bl,
+                           aod_bl_lut[i - 1].aod_bl,
+                           aod_bl_lut[i].aod_bl);
+}
+
 extern void zram_set_screen_state(bool on);
 
 bool dsi_screen_on __read_mostly = false;
@@ -1616,6 +1656,8 @@ int dsi_display_set_power(struct drm_connector *connector,
 		drm_panel_notifier_call_chain(&display->panel->drm_panel, DRM_PANEL_EARLY_EVENT_BLANK, &notifier_data);
 	case SDE_MODE_DPMS_LP2:
 		DSI_ERR("SDE_MODE_DPMS_LP2\n");
+		dsi_panel_set_backlight(display->panel, dsi_panel_get_aod_bl(display));
+		usleep_range(20000, 30000);
 		rc = dsi_panel_set_lp2(display->panel);
 		if (dsi_display_set_ulp_load(display, true) < 0)
 			DSI_WARN("failed to set load for lp2 state\n");
