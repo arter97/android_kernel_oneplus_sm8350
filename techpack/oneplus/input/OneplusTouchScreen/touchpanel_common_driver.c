@@ -6001,7 +6001,8 @@ static int tp_suspend(struct device *dev)
 			if (ts->int_mode == UNBANNABLE) {	//workaroud for config fail when suspend for 19805
 				msleep(20);
 			}
-			ts->ts_ops->mode_switch(ts->chip_data, MODE_TOUCH_HOLD, false);	//suspend, close touchhold function.
+			// Leave MODE_TOUCH_HOLD enabled during suspend for Always on Fingerprint
+			// ts->ts_ops->mode_switch(ts->chip_data, MODE_TOUCH_HOLD, false);	//suspend, close touchhold function.
 			ts->ts_ops->mode_switch(ts->chip_data, MODE_GESTURE, true);
 			goto EXIT;
 		}
