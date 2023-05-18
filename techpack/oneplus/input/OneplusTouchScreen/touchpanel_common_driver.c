@@ -555,7 +555,6 @@ static void tp_touch_handle(struct touchpanel_data *ts)
 	struct point_info points[10] = { 0, };
 	struct corner_info corner[4] = { 0, };
 	static bool up_status = false;
-	static struct point_info last_point = {.x = 0,.y = 0 };
 	static int touch_report_num = 0;
 
 	if ((ts->is_suspended) || !(ts->suspend_state == TP_SPEEDUP_RESUME_COMPLETE)) {
@@ -613,8 +612,6 @@ static void tp_touch_handle(struct touchpanel_data *ts)
 				} else {
 					touch_near_edge++;
 				}
-				/*strore  the last point data */
-				memcpy(&last_point, &points[i], sizeof(struct point_info));
 			}
 #ifdef TYPE_B_PROTOCOL
 			else {
@@ -655,7 +652,6 @@ static void tp_touch_handle(struct touchpanel_data *ts)
 		ts->corner_delay_up = -1;
 		up_status = true;
 		TPD_DETAIL("all touch up,view_area_touched=%d finger_num=%d\n", ts->view_area_touched, finger_num);
-		TPD_INFO("last point x:%d y:%d\n", last_point.x, last_point.y);
 		if (ts->edge_limit_support)
 			ts->edge_limit.in_which_area = AREA_NOTOUCH;
 	}
