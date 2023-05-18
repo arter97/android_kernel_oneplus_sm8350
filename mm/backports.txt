@@ -1,3 +1,6 @@
+c449deb2b99f mm: memcg: fix swapcached stat accounting
+7f63cf2d9b9b mm: Multi-gen LRU: remove wait_event_killable()
+
 abf086721a2f mm: multi-gen LRU: simplify lru_gen_look_around()
 b5ff4133617d mm: multi-gen LRU: improve walk_pmd_range()
 37cc99979d04 mm: multi-gen LRU: improve lru_gen_exit_memcg()
