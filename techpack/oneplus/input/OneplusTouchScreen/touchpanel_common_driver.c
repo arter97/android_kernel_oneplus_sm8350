@@ -356,6 +356,26 @@ int sec_double_tap(struct gesture_info *gesture)
 
 }
 
+static ssize_t tp_get_single_tap_pressed(struct device *device,
+				struct device_attribute *attribute,
+				char *buffer)
+{
+	struct touchpanel_data *ts = dev_get_drvdata(device);
+	return scnprintf(buffer, PAGE_SIZE, "%d\n", ts->gesture.gesture_type == SingleTap);
+}
+
+static DEVICE_ATTR(single_tap_pressed, 0444, tp_get_single_tap_pressed, NULL);
+
+static ssize_t tp_get_double_tap_pressed(struct device *device,
+				struct device_attribute *attribute,
+				char *buffer)
+{
+	struct touchpanel_data *ts = dev_get_drvdata(device);
+	return scnprintf(buffer, PAGE_SIZE, "%d\n", ts->gesture.gesture_type == DouTap);
+}
+
+static DEVICE_ATTR(double_tap_pressed, 0444, tp_get_double_tap_pressed, NULL);
+
 static void tp_report_key(struct touchpanel_data *ts, unsigned int key)
 {
 	input_report_key(ts->input_dev, key, 1);
@@ -368,7 +388,7 @@ static void tp_gesture_report_single_tap(struct work_struct *work)
 {
 	struct touchpanel_data *ts = container_of(work, struct touchpanel_data, report_single_tap_work.work);
 
-	tp_report_key(ts, KEY_GESTURE_SINGLE_TAP);
+	sysfs_notify(&ts->client->dev.kobj, NULL, "single_tap_pressed");
 	__pm_relax(&ts->single_tap_pm);
 }
 
@@ -480,7 +500,10 @@ static void tp_gesture_handle(struct touchpanel_data *ts)
 		} else {
 			cancel_delayed_work(&ts->report_single_tap_work);
 			__pm_relax(&ts->single_tap_pm);
-			tp_report_key(ts, key);
+			if (key == KEY_DOUBLE_TAP)
+				sysfs_notify(&ts->client->dev.kobj, NULL, "double_tap_pressed");
+			else
+				tp_report_key(ts, key);
 		}
 	}
 }
@@ -2455,8 +2478,6 @@ static const struct file_operations proc_incell_panel_fops = {
 	    .owner = THIS_MODULE, \
 	};
 
-GESTURE_ATTR(single_tap, SingleTap_enable);
-GESTURE_ATTR(double_tap, DouTap_enable);
 GESTURE_ATTR(up_arrow, UpVee_enable);
 GESTURE_ATTR(down_arrow, DownVee_enable);
 GESTURE_ATTR(left_arrow, LeftVee_enable);
@@ -3099,8 +3120,6 @@ static int init_touchpanel_proc(struct touchpanel_data *ts)
 	}
 	//proc files-step2-4:/proc/touchpanel/double_tap_enable (black gesture related interface)
 	if (ts->black_gesture_support) {
-		CREATE_GESTURE_NODE(single_tap);
-		CREATE_GESTURE_NODE(double_tap);
 		CREATE_GESTURE_NODE(up_arrow);
 		CREATE_GESTURE_NODE(down_arrow);
 		CREATE_GESTURE_NODE(left_arrow);
@@ -3239,6 +3258,12 @@ static int init_touchpanel_proc(struct touchpanel_data *ts)
 
 	//create debug_info node
 	init_debug_info_proc(ts);
+
+	// Create sensor nodes
+	if (device_create_file(&ts->client->dev, &dev_attr_single_tap_pressed))
+		TPD_INFO("%s: Couldn't create dev_attr_single_tap_pressed, %d\n", __func__, __LINE__);
+	if (device_create_file(&ts->client->dev, &dev_attr_double_tap_pressed))
+		TPD_INFO("%s: Couldn't create dev_attr_double_tap_pressed, %d\n", __func__, __LINE__);
 
 	// Create a symlink of /sys i2c path to procfs for easy lookup
 	__sysfs_path = kobject_get_path(&ts->client->dev.kobj, GFP_KERNEL);
@@ -4708,7 +4733,6 @@ static int init_input_device(struct touchpanel_data *ts)
 		set_bit(KEY_GESTURE_W, ts->input_dev->keybit);
 		set_bit(KEY_GESTURE_M, ts->input_dev->keybit);
 		set_bit(KEY_GESTURE_S, ts->input_dev->keybit);
-		set_bit(KEY_DOUBLE_TAP, ts->input_dev->keybit);
 		set_bit(KEY_GESTURE_CIRCLE, ts->input_dev->keybit);
 		set_bit(KEY_GESTURE_TWO_SWIPE, ts->input_dev->keybit);
 		set_bit(KEY_GESTURE_UP_ARROW, ts->input_dev->keybit);
@@ -4719,7 +4743,6 @@ static int init_input_device(struct touchpanel_data *ts)
 		set_bit(KEY_GESTURE_SWIPE_DOWN, ts->input_dev->keybit);
 		set_bit(KEY_GESTURE_SWIPE_RIGHT, ts->input_dev->keybit);
 		set_bit(KEY_GESTURE_SWIPE_UP, ts->input_dev->keybit);
-		set_bit(KEY_GESTURE_SINGLE_TAP, ts->input_dev->keybit);
 	}
 
 	ts->kpd_input_dev->name = TPD_DEVICE "_kpd";
