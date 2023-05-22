@@ -354,14 +354,13 @@ int sec_double_tap(struct gesture_info *gesture)
 
 static void tp_gesture_handle(struct touchpanel_data *ts)
 {
-	struct gesture_info gesture_info_temp;
+	struct gesture_info gesture_info_temp = { 0, };
 
 	if (!ts->ts_ops->get_gesture_info) {
 		TPD_INFO("not support ts->ts_ops->get_gesture_info callback\n");
 		return;
 	}
 
-	memset(&gesture_info_temp, 0, sizeof(struct gesture_info));
 	ts->ts_ops->get_gesture_info(ts->chip_data, &gesture_info_temp);
 	tp_geture_info_transform(&gesture_info_temp, &ts->resolution_info);
 	if (DouTap_enable) {
