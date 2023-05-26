@@ -51,6 +51,9 @@ ifeq ($(CONFIG_CNSS_QCA6490), y)
 	CONFIG_WLAN_TWT_SAP_STA_COUNT := y
 	CONFIG_WLAN_TWT_SAP_PDEV_COUNT := y
 	CONFIG_DUMP_REO_QUEUE_INFO_IN_DDR :=y
+	ifeq ($(CONFIG_ARCH_LAHAINA), y)
+		CONFIG_WLAN_TSF_UPLINK_DELAY := y
+	endif
 endif
 
 ifeq ($(CONFIG_CNSS_QCA6750), y)
@@ -189,6 +192,7 @@ ifeq ($(CONFIG_ARCH_QCS40X), y)
 	CONFIG_WLAN_CLD_PM_QOS := y
 endif
 CONFIG_WLAN_FEATURE_MBSSID := y
+CONFIG_WLAN_FEATURE_P2P_P2P_STA := y
 
 #Flag to enable Legacy Fast Roaming3(LFR3)
 ifeq (y,$(findstring y,$(CONFIG_HELIUMPLUS) $(CONFIG_LITHIUM)))
@@ -951,8 +955,6 @@ CONFIG_FEATURE_INTEROP_ISSUES_AP := y
 
 CONFIG_FEATURE_WLAN_WAPI := y
 
-CONFIG_AGEIE_ON_SCAN_RESULTS := y
-
 #Flag to enable FW log parsing support feature
 CONFIG_FEATURE_FW_LOG_PARSING := n
 
@@ -1174,6 +1176,12 @@ ifeq ($(CONFIG_ARCH_QCS405), y)
 CONFIG_FEATURE_WLAN_TIME_SYNC_FTM := y
 endif
 
+ifeq ($(CONFIG_CNSS_QCA6490), y)
+ifeq ($(CONFIG_ARCH_LAHAINA), y)
+CONFIG_DP_RX_UDP_OVER_PEER_ROAM := y
+endif
+endif
+
 #Flag to enable interface manager
 CONFIG_INTERFACE_MGR := y
 
@@ -1198,3 +1206,10 @@ endif
 endif
 
 CONFIG_WLAN_FEATURE_CAL_FAILURE_TRIGGER := y
+
+ifeq ($(CONFIG_CNSS_SM6150), y)
+CONFIG_ENABLE_LOW_POWER_MODE := y
+endif
+
+# Disable DFS channels on AP mode to avoid DFS CAC
+CONFIG_FEATURE_WLAN_STA_AP_MODE_DFS_DISABLE := y

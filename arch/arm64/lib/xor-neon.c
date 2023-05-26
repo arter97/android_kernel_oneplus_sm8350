@@ -185,7 +185,7 @@ static inline uint64x2_t eor3(uint64x2_t p, uint64x2_t q, uint64x2_t r)
 {
 	uint64x2_t res;
 
-	asm(ARM64_ASM_PREAMBLE ".arch_extension sha3\n"
+	asm(".arch_extension sha3\n"
 	    "eor3 %0.16b, %1.16b, %2.16b, %3.16b"
 	    : "=w"(res) : "w"(p), "w"(q), "w"(r));
 	return res;

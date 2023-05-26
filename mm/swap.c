@@ -261,16 +261,28 @@ void rotate_reclaimable_page(struct page *page)
 	}
 }
 
-void lru_note_cost(struct lruvec *lruvec, bool file, unsigned int nr_pages)
+void lru_note_cost(struct lruvec *lruvec, bool file,
+		   unsigned int nr_io, unsigned int nr_rotated)
 {
+	unsigned long cost;
+
+	/*
+	 * Reflect the relative cost of incurring IO and spending CPU
+	 * time on rotations. This doesn't attempt to make a precise
+	 * comparison, it just says: if reloads are about comparable
+	 * between the LRU lists, or rotations are overwhelmingly
+	 * different between them, adjust scan balance for CPU work.
+	 */
+	cost = nr_io * SWAP_CLUSTER_MAX + nr_rotated;
+
 	do {
 		unsigned long lrusize;
 
 		/* Record cost event */
 		if (file)
-			lruvec->file_cost += nr_pages;
+			lruvec->file_cost += cost;
 		else
-			lruvec->anon_cost += nr_pages;
+			lruvec->anon_cost += cost;
 
 		/*
 		 * Decay previous events
@@ -292,10 +304,10 @@ void lru_note_cost(struct lruvec *lruvec, bool file, unsigned int nr_pages)
 	} while ((lruvec = parent_lruvec(lruvec)));
 }
 
-void lru_note_cost_page(struct page *page)
+void lru_note_cost_refault(struct page *page)
 {
 	lru_note_cost(mem_cgroup_page_lruvec(page, page_pgdat(page)),
-		      page_is_file_lru(page), hpage_nr_pages(page));
+		      page_is_file_lru(page), hpage_nr_pages(page), 0);
 }
 
 static void __activate_page(struct page *page, struct lruvec *lruvec,
@@ -384,33 +396,30 @@ static void __lru_cache_activate_page(struct page *page)
 #ifdef CONFIG_LRU_GEN
 static void page_inc_refs(struct page *page)
 {
-	unsigned long refs;
-	unsigned long old_flags, new_flags;
+	unsigned long new_flags, old_flags = READ_ONCE(page->flags);
 
 	if (PageUnevictable(page))
 		return;
 
+	if (!PageReferenced(page)) {
+		SetPageReferenced(page);
+		return;
+	}
+
+	if (!PageWorkingset(page)) {
+		SetPageWorkingset(page);
+		return;
+	}
+
 	/* see the comment on MAX_NR_TIERS */
 	do {
-		new_flags = old_flags = READ_ONCE(page->flags);
+		new_flags = old_flags & LRU_REFS_MASK;
+		if (new_flags == LRU_REFS_MASK)
+			break;
 
-		if (!(new_flags & BIT(PG_referenced))) {
-			new_flags |= BIT(PG_referenced);
-			continue;
-		}
-
-		if (!(new_flags & BIT(PG_workingset))) {
-			new_flags |= BIT(PG_workingset);
-			continue;
-		}
-
-		refs = new_flags & LRU_REFS_MASK;
-		refs = min(refs + BIT(LRU_REFS_PGOFF), LRU_REFS_MASK);
-
-		new_flags &= ~LRU_REFS_MASK;
-		new_flags |= refs;
-	} while (new_flags != old_flags &&
-		 cmpxchg(&page->flags, old_flags, new_flags) != old_flags);
+		new_flags += BIT(LRU_REFS_PGOFF);
+		new_flags |= old_flags & ~LRU_REFS_MASK;
+	} while (!try_cmpxchg(&page->flags, &old_flags, new_flags));
 }
 #else
 static void page_inc_refs(struct page *page)
@@ -687,7 +696,8 @@ void deactivate_file_page(struct page *page)
  */
 void deactivate_page(struct page *page)
 {
-	if (PageLRU(page) && !PageUnevictable(page) && (PageActive(page) || lru_gen_enabled())) {
+	if (PageLRU(page) && !PageUnevictable(page) &&
+	    (PageActive(page) || lru_gen_enabled())) {
 		struct pagevec *pvec = &get_cpu_var(lru_deactivate_pvecs);
 
 		get_page(page);

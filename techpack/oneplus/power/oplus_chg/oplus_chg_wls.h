@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+
 /*
  * Copyright (C) 2020-2020 Oplus. All rights reserved.
  */
@@ -19,164 +19,188 @@
 #include "oplus_chg_comm.h"
 #include "oplus_chg_strategy.h"
 
-#define JEITA_VOTER		"JEITA_VOTER"
-#define STEP_VOTER		"STEP_VOTER"
-#define USER_VOTER		"USER_VOTER"
-#define DEF_VOTER		"DEF_VOTER"
-#define MAX_VOTER		"MAX_VOTER"
-#define BASE_MAX_VOTER		"BASE_MAX_VOTER"
-#define RX_MAX_VOTER		"RX_MAX_VOTER"
-#define EXIT_VOTER		"EXIT_VOTER"
-#define FCC_VOTER		"FCC_VOTER"
-#define CEP_VOTER		"CEP_VOTER"
-#define QUIET_VOTER		"QUIET_VOTER"
-#define BATT_VOL_VOTER		"BATT_VOL_VOTER"
-#define BATT_CURR_VOTER		"BATT_CURR_VOTER"
-#define IOUT_CURR_VOTER		"IOUT_CURR_VOTER"
-#define SKIN_VOTER		"SKIN_VOTER"
-#define STARTUP_CEP_VOTER	"STARTUP_CEP_VOTER"
-#define HW_ERR_VOTER		"HW_ERR_VOTER"
-#define CURR_ERR_VOTER		"CURR_ERR_VOTER"
-#define OTG_EN_VOTER		"OTG_EN_VOTER"
-#define TRX_EN_VOTER		"TRX_EN_VOTER"
-#define UPGRADE_FW_VOTER	"UPGRADE_FW_VOTER"
-#define DEBUG_VOTER		"DEBUG_VOTER"
-#define FFC_VOTER		"FFC_VOTER"
-#define USB_VOTER		"USB_VOTER"
-#define UPGRADE_VOTER		"UPGRADE_VOTER"
-#define CONNECT_VOTER		"CONNECT_VOTER"
-#define UOVP_VOTER		"UOVP_VOTER"
-#define STOP_VOTER		"STOP_VOTER"
-#define FTM_TEST_VOTER		"FTM_TEST_VOTER"
-#define CAMERA_VOTER		"CAMERA_VOTER"
-#define CALL_VOTER		"CALL_VOTER"
-#define COOL_DOWN_VOTER		"COOL_DOWN_VOTER"
-#define RX_IIC_VOTER		"RX_IIC_VOTER"
-#define TIMEOUT_VOTER		"TIMEOUT_VOTER"
-#define CHG_DONE_VOTER		"CHG_DONE_VOTER"
-#define VERITY_VOTER		"VERITY_VOTER"
+#define JEITA_VOTER "JEITA_VOTER"
+#define STEP_VOTER "STEP_VOTER"
+#define USER_VOTER "USER_VOTER"
+#define DEF_VOTER "DEF_VOTER"
+#define MAX_VOTER "MAX_VOTER"
+#define BASE_MAX_VOTER "BASE_MAX_VOTER"
+#define RX_MAX_VOTER "RX_MAX_VOTER"
+#define EXIT_VOTER "EXIT_VOTER"
+#define FCC_VOTER "FCC_VOTER"
+#define CEP_VOTER "CEP_VOTER"
+#define QUIET_VOTER "QUIET_VOTER"
+#define BATT_VOL_VOTER "BATT_VOL_VOTER"
+#define BATT_CURR_VOTER "BATT_CURR_VOTER"
+#define IOUT_CURR_VOTER "IOUT_CURR_VOTER"
+#define SKIN_VOTER "SKIN_VOTER"
+#define STARTUP_CEP_VOTER "STARTUP_CEP_VOTER"
+#define HW_ERR_VOTER "HW_ERR_VOTER"
+#define CURR_ERR_VOTER "CURR_ERR_VOTER"
+#define OTG_EN_VOTER "OTG_EN_VOTER"
+#define TRX_EN_VOTER "TRX_EN_VOTER"
+#define UPGRADE_FW_VOTER "UPGRADE_FW_VOTER"
+#define DEBUG_VOTER "DEBUG_VOTER"
+#define FFC_VOTER "FFC_VOTER"
+#define USB_VOTER "USB_VOTER"
+#define UPGRADE_VOTER "UPGRADE_VOTER"
+#define CONNECT_VOTER "CONNECT_VOTER"
+#define UOVP_VOTER "UOVP_VOTER"
+#define STOP_VOTER "STOP_VOTER"
+#define FTM_TEST_VOTER "FTM_TEST_VOTER"
+#define CAMERA_VOTER "CAMERA_VOTER"
+#define CALL_VOTER "CALL_VOTER"
+#define COOL_DOWN_VOTER "COOL_DOWN_VOTER"
+#define RX_IIC_VOTER "RX_IIC_VOTER"
+#define TIMEOUT_VOTER "TIMEOUT_VOTER"
+#define CHG_DONE_VOTER "CHG_DONE_VOTER"
+#define VERITY_VOTER "VERITY_VOTER"
 
 #define WLS_SUPPORT_OPLUS_CHG
 
-#define WLS_TRX_STATUS_READY		BIT(0)
-#define WLS_TRX_STATUS_DIGITALPING	BIT(1)
-#define WLS_TRX_STATUS_ANALOGPING	BIT(2)
-#define WLS_TRX_STATUS_TRANSFER		BIT(3)
+#define WLS_TRX_STATUS_READY BIT(0)
+#define WLS_TRX_STATUS_DIGITALPING BIT(1)
+#define WLS_TRX_STATUS_ANALOGPING BIT(2)
+#define WLS_TRX_STATUS_TRANSFER BIT(3)
 
-#define WLS_TRX_ERR_RXAC		BIT(0)
-#define WLS_TRX_ERR_OCP			BIT(1)
-#define WLS_TRX_ERR_OVP			BIT(2)
-#define WLS_TRX_ERR_LVP			BIT(3)
-#define WLS_TRX_ERR_FOD			BIT(4)
-#define WLS_TRX_ERR_OTP			BIT(5)
-#define WLS_TRX_ERR_CEPTIMEOUT		BIT(6)
-#define WLS_TRX_ERR_RXEPT		BIT(7)
+#define WLS_TRX_ERR_RXAC BIT(0)
+#define WLS_TRX_ERR_OCP BIT(1)
+#define WLS_TRX_ERR_OVP BIT(2)
+#define WLS_TRX_ERR_LVP BIT(3)
+#define WLS_TRX_ERR_FOD BIT(4)
+#define WLS_TRX_ERR_OTP BIT(5)
+#define WLS_TRX_ERR_CEPTIMEOUT BIT(6)
+#define WLS_TRX_ERR_RXEPT BIT(7)
 
-#define WLS_CMD_INDENTIFY_ADAPTER	0xA1
-#define WLS_CMD_INTO_FASTCHAGE		0xA2
-#define WLS_CMD_INTO_USB_CHARGE		0xA3
-#define WLS_CMD_INTO_NORMAL_CHARGE	0xA4
-#define WLS_CMD_SET_NORMAL_MODE		0xA5
-#define WLS_CMD_SET_QUIET_MODE		0xA6
-#define WLS_CMD_SET_LED_BRIGHTNESS	0xAC
-#define WLS_CMD_SET_CEP_TIMEOUT		0xAD
-#define WLS_CMD_SET_FAN_SPEED		0xAE
-#define WLS_CMD_GET_ENCRYPT_DATA1	0xB1
-#define WLS_CMD_GET_ENCRYPT_DATA2	0xB2
-#define WLS_CMD_GET_ENCRYPT_DATA3	0xB3
-#define WLS_CMD_GET_ENCRYPT_DATA4	0xB4
-#define WLS_CMD_GET_ENCRYPT_DATA5	0xB5
-#define WLS_CMD_GET_ENCRYPT_DATA6	0xB6
+#define WLS_CMD_INDENTIFY_ADAPTER 0xA1
+#define WLS_CMD_INTO_FASTCHAGE 0xA2
+#define WLS_CMD_INTO_USB_CHARGE 0xA3
+#define WLS_CMD_INTO_NORMAL_CHARGE 0xA4
+#define WLS_CMD_SET_NORMAL_MODE 0xA5
+#define WLS_CMD_SET_QUIET_MODE 0xA6
+#define WLS_CMD_SET_LED_BRIGHTNESS 0xAC
+#define WLS_CMD_SET_CEP_TIMEOUT 0xAD
+#define WLS_CMD_SET_FAN_SPEED 0xAE
+#define WLS_CMD_GET_ENCRYPT_DATA1 0xB1
+#define WLS_CMD_GET_ENCRYPT_DATA2 0xB2
+#define WLS_CMD_GET_ENCRYPT_DATA3 0xB3
+#define WLS_CMD_GET_ENCRYPT_DATA4 0xB4
+#define WLS_CMD_GET_ENCRYPT_DATA5 0xB5
+#define WLS_CMD_GET_ENCRYPT_DATA6 0xB6
 
-#define WLS_CMD_GET_TX_ID		0x05
-#define WLS_CMD_GET_TX_PWR		0x4A
+#define WLS_CMD_GET_TX_ID 0x05
+#define WLS_CMD_GET_TX_PWR 0x4A
 
-#define WLS_MSG_TYPE_EXTENDED_MSG	0x5F
-#define WLS_MSG_TYPE_STANDARD_MSG	0x4F
+#define WLS_MSG_TYPE_EXTENDED_MSG 0x5F
+#define WLS_MSG_TYPE_STANDARD_MSG 0x4F
 
-#define WLS_RESPONE_ADAPTER_TYPE	0xF1
-#define WLS_RESPONE_INTO_FASTCHAGE	0xF2
-#define WLS_RESPONE_INTO_USB_CHARGE	0xF3
-#define WLS_RESPONE_INTO_NORMAL_CHARGER	0xF4
-#define WLS_RESPONE_INTO_NORMAL_MODE	0xF5
-#define WLS_RESPONE_INTO_QUIET_MODE	0xF6
-#define WLS_RESPONE_LED_BRIGHTNESS	0xFC
-#define WLS_RESPONE_CEP_TIMEOUT		0xFD
-#define WLS_RESPONE_FAN_SPEED		0xFE
-#define WLS_RESPONE_READY_FOR_EPP	0xFA
-#define WLS_RESPONE_WORKING_IN_EPP	0xFB
-#define WLS_RESPONE_ENCRYPT_DATA1	0xE1
-#define WLS_RESPONE_ENCRYPT_DATA2	0xE2
-#define WLS_RESPONE_ENCRYPT_DATA3	0xE3
-#define WLS_RESPONE_ENCRYPT_DATA4	0xE4
-#define WLS_RESPONE_ENCRYPT_DATA5	0xE5
-#define WLS_RESPONE_ENCRYPT_DATA6	0xE6
+#define WLS_RESPONE_ADAPTER_TYPE 0xF1
+#define WLS_RESPONE_INTO_FASTCHAGE 0xF2
+#define WLS_RESPONE_INTO_USB_CHARGE 0xF3
+#define WLS_RESPONE_INTO_NORMAL_CHARGER 0xF4
+#define WLS_RESPONE_INTO_NORMAL_MODE 0xF5
+#define WLS_RESPONE_INTO_QUIET_MODE 0xF6
+#define WLS_RESPONE_LED_BRIGHTNESS 0xFC
+#define WLS_RESPONE_CEP_TIMEOUT 0xFD
+#define WLS_RESPONE_FAN_SPEED 0xFE
+#define WLS_RESPONE_READY_FOR_EPP 0xFA
+#define WLS_RESPONE_WORKING_IN_EPP 0xFB
+#define WLS_RESPONE_ENCRYPT_DATA1 0xE1
+#define WLS_RESPONE_ENCRYPT_DATA2 0xE2
+#define WLS_RESPONE_ENCRYPT_DATA3 0xE3
+#define WLS_RESPONE_ENCRYPT_DATA4 0xE4
+#define WLS_RESPONE_ENCRYPT_DATA5 0xE5
+#define WLS_RESPONE_ENCRYPT_DATA6 0xE6
 
-#define WLS_ADAPTER_TYPE_MASK		0x07
-#define WLS_ADAPTER_ID_MASK		0xF8
-#define WLS_ADAPTER_POWER_MASK		0xF5
-#define WLS_ADAPTER_TYPE_UNKNOWN	0x00
-#define WLS_ADAPTER_TYPE_WARP		0x01
-#define WLS_ADAPTER_TYPE_SWARP		0x02
-#define WLS_ADAPTER_TYPE_USB		0x03
-#define WLS_ADAPTER_TYPE_NORMAL		0x04
-#define WLS_ADAPTER_TYPE_EPP		0x05
-#define WLS_ADAPTER_TYPE_PD_65W		0x07
+#define WLS_ADAPTER_TYPE_MASK 0x07
+#define WLS_ADAPTER_ID_MASK 0xF8
+#define WLS_ADAPTER_POWER_MASK 0xF5
+#define WLS_ADAPTER_TYPE_UNKNOWN 0x00
+#define WLS_ADAPTER_TYPE_WARP 0x01
+#define WLS_ADAPTER_TYPE_SWARP 0x02
+#define WLS_ADAPTER_TYPE_USB 0x03
+#define WLS_ADAPTER_TYPE_NORMAL 0x04
+#define WLS_ADAPTER_TYPE_EPP 0x05
+#define WLS_ADAPTER_TYPE_PD_65W 0x07
 
-#define WLS_CHARGE_TYPE_DEFAULT		0x00
-#define WLS_CHARGE_TYPE_FAST		0x01
-#define WLS_CHARGE_TYPE_USB		0x02
-#define WLS_CHARGE_TYPE_NORMAL		0x03
-#define WLS_CHARGE_TYPE_EPP		0x04
+#define WLS_CHARGE_TYPE_DEFAULT 0x00
+#define WLS_CHARGE_TYPE_FAST 0x01
+#define WLS_CHARGE_TYPE_USB 0x02
+#define WLS_CHARGE_TYPE_NORMAL 0x03
+#define WLS_CHARGE_TYPE_EPP 0x04
 
-#define WLS_TRX_MODE_VOL_MV		5500
+#define WLS_TRX_MODE_VOL_MV 5500
 
-#define WLS_CEP_ERR_MAX			3
-#define WLS_RX_VOL_MAX_MV		20000
-#define WLS_VOL_ADJUST_MAX		150
-#define WLS_IBAT_MAX_MA			6000
-#define WLS_CURR_ERR_MIN_MA		50
+#define WLS_CEP_ERR_MAX 3
+#define WLS_RX_VOL_MAX_MV 20000
+#define WLS_VOL_ADJUST_MAX 150
+#define WLS_IBAT_MAX_MA 6000
+#define WLS_CURR_ERR_MIN_MA 50
 
-#define WLS_VOUT_DEFAULT_MV		5000
-#define WLS_VOUT_EPP_MV			10000
-#define WLS_VOUT_EPP_PLUS_MV		WLS_VOUT_EPP_MV
-#define WLS_FASTCHG_MODE_VOL_MIN_MV	WLS_VOUT_EPP_MV
-#define WLS_VOUT_FTM_MV			17000
-#define WLS_VOUT_FASTCHG_INIT_MV	12000
+#define WLS_VOUT_DEFAULT_MV 5000
+#define WLS_VOUT_EPP_MV 10000
+#define WLS_VOUT_EPP_PLUS_MV WLS_VOUT_EPP_MV
+#define WLS_FASTCHG_MODE_VOL_MIN_MV WLS_VOUT_EPP_MV
+#define WLS_VOUT_FTM_MV 17000
+#define WLS_VOUT_FASTCHG_INIT_MV 12000
 
-#define WLS_CURR_WAIT_FAST_MA		300
-#define WLS_CURR_STOP_CHG_MA		300
-#define WLS_FASTCHG_CURR_45W_MAX_MA	2250
-#define WLS_FASTCHG_CURR_40W_MAX_MA	2000
-#define WLS_FASTCHG_CURR_30W_MAX_MA	1500
-#define WLS_FASTCHG_CURR_20W_MAX_MA	1000
-#define WLS_FASTCHG_CURR_15W_MAX_MA	800
-#define WLS_FASTCHG_CURR_EXIT_MA	500
-#define WLS_FASTCHG_CURR_ERR_MA		50
-#define WLS_FASTCHG_CURR_MIN_MA		600
-#define WLS_FASTCHG_CURR_DISCHG_MAX_MA	1000
-#define WLS_FASTCHG_IOUT_CURR_MIN_MA	450
+#define WLS_CURR_WAIT_FAST_MA 300
+#define WLS_CURR_STOP_CHG_MA 300
+#define WLS_FASTCHG_CURR_45W_MAX_MA 2250
+#define WLS_FASTCHG_CURR_40W_MAX_MA 2000
+#define WLS_FASTCHG_CURR_30W_MAX_MA 1500
+#define WLS_FASTCHG_CURR_20W_MAX_MA 1000
+#define WLS_FASTCHG_CURR_15W_MAX_MA 800
+#define WLS_FASTCHG_CURR_EXIT_MA 500
+#define WLS_FASTCHG_CURR_ERR_MA 50
+#define WLS_FASTCHG_CURR_MIN_MA 600
+#define WLS_FASTCHG_CURR_DISCHG_MAX_MA 1000
+#define WLS_FASTCHG_IOUT_CURR_MIN_MA 450
 
-#define WLS_WARP_PWR_MAX_MW		15000
+#define WLS_WARP_PWR_MAX_MW 15000
 
-#define WLS_MAX_STEP_CHG_ENTRIES	8
+#define WLS_MAX_STEP_CHG_ENTRIES 8
 
-#define WLS_SKIN_TEMP_MAX		500
+#define WLS_SKIN_TEMP_MAX 500
 
-#define CHARGE_FULL_FAN_THREOD_LO	350
-#define CHARGE_FULL_FAN_THREOD_HI	380
-#define QUIET_MODE_LED_BRIGHTNESS	3
-#define QUIET_MODE_FAN_THR_SPEED	0
+#define CHARGE_FULL_FAN_THREOD_LO 350
+#define CHARGE_FULL_FAN_THREOD_HI 380
+#define QUIET_MODE_LED_BRIGHTNESS 3
 
-#define WLS_ADAPTER_MODEL_0		0x00
-#define WLS_ADAPTER_MODEL_1		0x01
-#define WLS_ADAPTER_MODEL_2		0x02
-#define WLS_ADAPTER_MODEL_7		0x07
-#define WLS_ADAPTER_MODEL_15		0x0F
+#define QUIET_MODE_FAN_THR_SPEED 0
 
-#define WLS_AUTH_RANDOM_LEN		8
-#define WLS_AUTH_ENCODE_LEN		8
-#define WLS_ENCODE_MASK			3
+#define WLS_ADAPTER_MODEL_0 0x00
+#define WLS_ADAPTER_MODEL_1 0x01
+#define WLS_ADAPTER_MODEL_2 0x02
+#define WLS_ADAPTER_MODEL_3 0x03
+#define WLS_ADAPTER_MODEL_7 0x07
+#define WLS_ADAPTER_MODEL_8 0x08
+#define WLS_ADAPTER_MODEL_15 0x0F
+
+#define WLS_AUTH_RANDOM_LEN 8
+#define WLS_AUTH_ENCODE_LEN 8
+#define WLS_ENCODE_MASK 3
+
+struct wls_auth_result {
+	u8 random_num[WLS_AUTH_RANDOM_LEN];
+	u8 encode_num[WLS_AUTH_ENCODE_LEN];
+};
+
+#ifndef CONFIG_OPLUS_CHG_OOS
+#define SMEM_RESERVED_BOOT_INFO_FOR_APPS 418
+#define GAUGE_AUTH_MSG_LEN 20
+struct gauge_auth_result {
+	int result;
+	unsigned char msg[GAUGE_AUTH_MSG_LEN];
+	unsigned char rcv_msg[GAUGE_AUTH_MSG_LEN];
+};
+
+struct oplus_chg_auth_result {
+	struct gauge_auth_result rst_k0;
+	struct gauge_auth_result rst_k1;
+	struct wls_auth_result wls_auth_data;
+};
+#endif /* CONFIG_OPLUS_CHG_OOS */
 
 struct oplus_chg_wls;
 
@@ -286,6 +310,13 @@ enum oplus_chg_wls_batt_cl {
 	OPLUS_WLS_CHG_BATT_CL_MAX,
 };
 
+enum wls_status_keep_type {
+	WLS_SK_NULL,
+	WLS_SK_BY_KERNEL,
+	WLS_SK_BY_HAL,
+	WLS_SK_WAIT_TIMEOUT,
+};
+
 struct oplus_chg_rx_msg {
 	u8 msg_type;
 	u8 data;
@@ -303,11 +334,6 @@ struct wls_dev_cmd {
 	unsigned int cmd;
 	unsigned int data_size;
 	unsigned char data_buf[128];
-};
-
-struct wls_auth_result {
-	u8 random_num[WLS_AUTH_RANDOM_LEN];
-	u8 encode_num[WLS_AUTH_ENCODE_LEN];
 };
 
 struct oplus_chg_wls_status {
@@ -339,7 +365,7 @@ struct oplus_chg_wls_status {
 	int fastchg_curr_max_ma;
 	int fastchg_ibat_max_ma;
 	int fastchg_level;
-	// Record the initial temperature when switching to the next gear.
+
 	int fastchg_level_init_temp;
 	int tx_pwr_mw;
 	int rx_pwr_mw;
@@ -355,6 +381,7 @@ struct oplus_chg_wls_status {
 	int fastchg_retry_count;
 #ifndef CONFIG_OPLUS_CHG_OOS
 	int cool_down;
+	bool trx_close_delay;
 #endif
 
 	unsigned long cep_ok_wait_timeout;
@@ -384,7 +411,7 @@ struct oplus_chg_wls_status {
 	bool fastchg_restart;
 	bool ffc_done;
 	bool online_keep;
-	bool boot_online_keep; // The driver loading phase of the shutdown charging is set to true
+	bool boot_online_keep;
 	bool led_on;
 	bool rx_adc_test_enable;
 	bool rx_adc_test_pass;
@@ -401,8 +428,8 @@ struct oplus_chg_wls_status {
 	struct wls_auth_result verfity_data;
 };
 
-#define WLS_MAX_STEP_CHG_ENTRIES	8
-#define WLS_FOD_PARM_LENGTH		12
+#define WLS_MAX_STEP_CHG_ENTRIES 8
+#define WLS_FOD_PARM_LENGTH 12
 struct oplus_chg_wls_range_data {
 	int32_t low_threshold;
 	int32_t high_threshold;
@@ -410,20 +437,20 @@ struct oplus_chg_wls_range_data {
 	uint32_t vol_max_mv;
 	int32_t need_wait;
 	int32_t max_soc;
-} __attribute__ ((packed));
+} __attribute__((packed));
 
 struct oplus_chg_wls_skin_range_data {
 	int32_t low_threshold;
 	int32_t high_threshold;
 	uint32_t curr_ma;
-} __attribute__ ((packed));
+} __attribute__((packed));
 
 struct oplus_chg_wls_fcc_step {
 	int max_step;
 	struct oplus_chg_wls_range_data *fcc_step;
 	bool allow_fallback[WLS_MAX_STEP_CHG_ENTRIES];
 	unsigned long fcc_wait_timeout;
-} __attribute__ ((packed));
+} __attribute__((packed));
 
 struct oplus_chg_wls_skin_step {
 	int max_step;
@@ -457,7 +484,7 @@ struct oplus_chg_wls_dynamic_config {
 	int32_t epp_plus_vol_mv;
 	int32_t warp_vol_mv;
 	int32_t swarp_vol_mv;
-} __attribute__ ((packed));
+} __attribute__((packed));
 
 struct oplus_chg_wls_fod_cal_data {
 	int fod_bpp;
@@ -482,7 +509,7 @@ struct oplus_chg_wls {
 	struct notifier_block wls_changed_nb;
 	struct notifier_block wls_event_nb;
 	struct notifier_block wls_mod_nb;
-	struct workqueue_struct	*wls_wq;
+	struct workqueue_struct *wls_wq;
 	struct delayed_work wls_rx_sm_work;
 	struct delayed_work wls_trx_sm_work;
 	struct delayed_work wls_connect_work;
@@ -496,10 +523,13 @@ struct oplus_chg_wls {
 	struct delayed_work rx_restore_work;
 	struct delayed_work rx_iic_restore_work;
 	struct delayed_work rx_restart_work;
-	struct delayed_work rx_verity_restore_work;
 	struct delayed_work online_keep_remove_work;
+	struct delayed_work rx_verity_restore_work;
 	struct delayed_work verity_state_remove_work;
 	struct delayed_work wls_verity_work;
+#ifndef CONFIG_OPLUS_CHG_OOS
+	struct delayed_work wls_clear_trx_work;
+#endif
 	struct wakeup_source *rx_wake_lock;
 	struct wakeup_source *trx_wake_lock;
 	struct mutex connect_lock;
@@ -545,6 +575,8 @@ struct oplus_chg_wls {
 	int cp_boost_en_gpio;
 	int usb_int_gpio;
 	int usb_int_irq;
+	int status_keep;
+
 	struct pinctrl *pinctrl;
 	struct pinctrl_state *wrx_en_active;
 	struct pinctrl_state *wrx_en_sleep;
@@ -562,7 +594,7 @@ struct oplus_chg_wls {
 	bool ftm_mode;
 	bool debug_mode;
 	bool factory_mode;
-	bool fod_is_cal;  // fod is calibrated
+	bool fod_is_cal;
 	bool fod_cal_data_ok;
 	bool msg_callback_ok;
 	bool cmd_data_ok;
@@ -575,10 +607,11 @@ struct oplus_chg_wls {
 	int icl_max_ma[OPLUS_WLS_CHG_MODE_MAX];
 
 	const char *wls_chg_fw_name;
+	int32_t wls_power_mw;
 };
 
-#ifdef CONFIG_OPLUS_CHG_DYNAMIC_CONFIG
-int oplus_chg_wls_set_config(struct oplus_chg_mod *wls_ocm, u8 *buf);
+#ifdef OPLUS_CHG_DEBUG
+void oplus_chg_wls_set_config(struct oplus_chg_mod *wls_ocm, u8 *buf);
 #endif
 
 #endif /* __OPLUS_CHG_WLS_H__ */

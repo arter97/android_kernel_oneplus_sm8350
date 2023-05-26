@@ -771,7 +771,8 @@ emit_cond_jmp:
 			emit(A64_ADD(1, tmp, tmp, dst), ctx);
 			reg = tmp;
 		}
-		if (cpus_have_cap(ARM64_HAS_LSE_ATOMICS)) {
+		if (IS_ENABLED(CONFIG_AS_LSE) &&
+		    IS_ENABLED(CONFIG_ARM64_LSE_ATOMICS)) {
 			emit(A64_STADD(isdw, reg, src), ctx);
 		} else {
 			emit(A64_LDXR(isdw, tmp2, reg), ctx);
@@ -973,6 +974,7 @@ skip_init_ctx:
 			bpf_jit_binary_free(header);
 			prog->bpf_func = NULL;
 			prog->jited = 0;
+			prog->jited_len = 0;
 			goto out_off;
 		}
 		bpf_jit_binary_lock_ro(header);

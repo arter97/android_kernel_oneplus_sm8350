@@ -51,16 +51,15 @@ struct oplus_hl7227 {
 };
 
 static struct regmap_config hl7227_regmap_config = {
-	.reg_bits	= 8,
-	.val_bits	= 8,
-	.max_register	= 0x10,
+	.reg_bits = 8,
+	.val_bits = 8,
+	.max_register = 0x10,
 };
 
 static __inline__ void hl7227_i2c_err_inc(void)
 {
 	if (atomic_inc_return(&i2c_err_count) > I2C_ERR_MAX) {
 		atomic_set(&i2c_err_count, 0);
-		// todo, add i2c error callback
 	}
 }
 
@@ -98,8 +97,7 @@ error:
 	return rc;
 }
 
-__maybe_unused static int hl7227_read_data(struct oplus_hl7227 *chip, u8 addr,
-			   u8 *buf, int len) 
+__maybe_unused static int hl7227_read_data(struct oplus_hl7227 *chip, u8 addr, u8 *buf, int len)
 {
 	int rc;
 
@@ -148,8 +146,7 @@ static int hl7227_write_byte(struct oplus_hl7227 *chip, u8 addr, u8 data)
 	return 0;
 }
 
-__maybe_unused static int hl7227_write_data(struct oplus_hl7227 *chip, u8 addr,
-			   u8 *buf, int len)
+__maybe_unused static int hl7227_write_data(struct oplus_hl7227 *chip, u8 addr, u8 *buf, int len)
 {
 	u8 *buf_temp;
 	int i;
@@ -180,8 +177,7 @@ __maybe_unused static int hl7227_write_data(struct oplus_hl7227 *chip, u8 addr,
 	return 0;
 }
 
-__maybe_unused static int hl7227_read_byte_mask(struct oplus_hl7227 *chip, u8 addr,
-				u8 mask, u8 *data)
+__maybe_unused static int hl7227_read_byte_mask(struct oplus_hl7227 *chip, u8 addr, u8 mask, u8 *data)
 {
 	u8 temp;
 	int rc;
@@ -195,8 +191,7 @@ __maybe_unused static int hl7227_read_byte_mask(struct oplus_hl7227 *chip, u8 ad
 	return 0;
 }
 
-__maybe_unused static int hl7227_write_byte_mask(struct oplus_hl7227 *chip, u8 addr,
-				 u8 mask, u8 data)
+__maybe_unused static int hl7227_write_byte_mask(struct oplus_hl7227 *chip, u8 addr, u8 mask, u8 data)
 {
 	u8 temp;
 	int rc;
@@ -230,32 +225,32 @@ static int hl7227_hardware_init(struct oplus_hl7227 *chip)
 	pr_info("hl7227 version is 0x%02x\n", version);
 
 	if (version == 0xa0) {
-		rc = hl7227_write_byte(chip, 0xA7, 0xF9);  //# Passwd
+		rc = hl7227_write_byte(chip, 0xA7, 0xF9);
 		if (rc < 0) {
 			pr_err("write 0x%02x error, rc=%d", 0xA7, rc);
 			return rc;
 		}
-		rc = hl7227_write_byte(chip, 0x0D, 0x9D);  //#QRB disable ILIM
+		rc = hl7227_write_byte(chip, 0x0D, 0x9D);
 		if (rc < 0) {
 			pr_err("write 0x%02x error, rc=%d", 0x0D, rc);
 			return rc;
 		}
-		rc = hl7227_write_byte(chip, 0x01, 0x04);  //#UV/OV->standby
+		rc = hl7227_write_byte(chip, 0x01, 0x04);
 		if (rc < 0) {
 			pr_err("write 0x%02x error, rc=%d", 0x01, rc);
 			return rc;
 		}
-		rc = hl7227_write_byte(chip, 0x02, 0xFE);  //#600mV->UV/OV;
+		rc = hl7227_write_byte(chip, 0x02, 0xFE);
 		if (rc < 0) {
 			pr_err("write 0x%02x error, rc=%d", 0x02, rc);
 			return rc;
 		}
-		rc = hl7227_write_byte(chip, 0x03, 0xFE);  //#disable PMID_OV
+		rc = hl7227_write_byte(chip, 0x03, 0xFE);
 		if (rc < 0) {
 			pr_err("write 0x%02x error, rc=%d", 0x03, rc);
 			return rc;
 		}
-		rc = hl7227_write_byte(chip, 0x04, 0x17);     //#500khz
+		rc = hl7227_write_byte(chip, 0x04, 0x17);
 		if (rc < 0) {
 			pr_err("write 0x%02x error, rc=%d", 0x04, rc);
 			return rc;
@@ -265,7 +260,7 @@ static int hl7227_hardware_init(struct oplus_hl7227 *chip)
 			pr_err("write 0x%02x error, rc=%d", 0x58, rc);
 			return rc;
 		}
-		rc = hl7227_write_byte(chip, 0x0F, 0xC0);  //#set thermal alarm to 135d
+		rc = hl7227_write_byte(chip, 0x0F, 0xC0);
 		if (rc < 0) {
 			pr_err("write 0x%02x error, rc=%d", 0x0F, rc);
 			return rc;
@@ -301,7 +296,7 @@ static int hl7227_hardware_init(struct oplus_hl7227 *chip)
 			pr_err("write 0x%02x error, rc=%d", 0x03, rc);
 			return rc;
 		}
-		rc = hl7227_write_byte(chip, 0x04, 0x17); //#500khz
+		rc = hl7227_write_byte(chip, 0x04, 0x17);
 		if (rc < 0) {
 			pr_err("write 0x%02x error, rc=%d", 0x04, rc);
 			return rc;
@@ -316,7 +311,7 @@ static int hl7227_hardware_init(struct oplus_hl7227 *chip)
 			pr_err("write 0x%02x error, rc=%d", 0x58, rc);
 			return rc;
 		}
-		rc = hl7227_write_byte(chip, 0x0F, 0xC0);  //#set thermal alarm to 135d
+		rc = hl7227_write_byte(chip, 0x0F, 0xC0);
 		if (rc < 0) {
 			pr_err("write 0x%02x error, rc=%d", 0x0F, rc);
 			return rc;
@@ -355,23 +350,23 @@ static int hl7227_start_chg(struct oplus_chg_ic_dev *dev)
 		pr_err("write 0x%02x error, rc=%d", 0x00, rc);
 		return rc;
 	}
-	rc = hl7227_write_byte(chip, 0x02, 0xFE);  //#600mV->UV/OV;
+	rc = hl7227_write_byte(chip, 0x02, 0xFE);
 	if (rc < 0) {
 		pr_err("write 0x%02x error, rc=%d", 0x02, rc);
 		return rc;
 	}
 	msleep(20);
-	rc = hl7227_write_byte(chip, 0x03, 0xFF);  //#disable PMID_OV
+	rc = hl7227_write_byte(chip, 0x03, 0xFF);
 	if (rc < 0) {
 		pr_err("write 0x%02x error, rc=%d", 0x03, rc);
 		return rc;
 	}
-	rc = hl7227_write_byte(chip, 0x01, 0x04);  //#disable PMID_OV
+	rc = hl7227_write_byte(chip, 0x01, 0x04);
 	if (rc < 0) {
 		pr_err("write 0x%02x error, rc=%d", 0x03, rc);
 		return rc;
 	}
-	
+
 	return 0;
 }
 
@@ -379,15 +374,12 @@ static int hl7227_set_gpio_enable(struct oplus_hl7227 *chip, bool en)
 {
 	int rc;
 
-	if (IS_ERR_OR_NULL(chip->pinctrl) ||
-	    IS_ERR_OR_NULL(chip->cp_en_active) ||
-	    IS_ERR_OR_NULL(chip->cp_en_sleep)) {
+	if (IS_ERR_OR_NULL(chip->pinctrl) || IS_ERR_OR_NULL(chip->cp_en_active) || IS_ERR_OR_NULL(chip->cp_en_sleep)) {
 		pr_err("cp_en pinctrl error\n");
 		return -ENODEV;
 	}
 
-	rc = pinctrl_select_state(chip->pinctrl,
-		en ? chip->cp_en_active : chip->cp_en_sleep);
+	rc = pinctrl_select_state(chip->pinctrl, en ? chip->cp_en_active : chip->cp_en_sleep);
 	if (rc < 0)
 		pr_err("can't %s cp\n", en ? "enable" : "disable");
 	else
@@ -459,8 +451,6 @@ static struct oplus_chg_ic_cp_ops hl7227_dev_ops = {
 
 static irqreturn_t hl7227_int_handler(int irq, void *dev_id)
 {
-	//struct oplus_hl7227 *chip = dev_id;
-
 	pr_debug("hl7227 int irq\n");
 	return IRQ_HANDLED;
 }
@@ -494,8 +484,7 @@ static int hl7227_gpio_init(struct oplus_hl7227 *chip)
 	gpio_direction_input(chip->cp_int_gpio);
 	pinctrl_select_state(chip->pinctrl, chip->cp_int_default);
 	chip->cp_int_irq = gpio_to_irq(chip->cp_int_gpio);
-	rc = devm_request_irq(chip->dev, chip->cp_int_irq, hl7227_int_handler,
-			IRQF_TRIGGER_FALLING, "cp_int_irq", chip);
+	rc = devm_request_irq(chip->dev, chip->cp_int_irq, hl7227_int_handler, IRQF_TRIGGER_FALLING, "cp_int_irq", chip);
 	if (rc < 0) {
 		pr_err("cp_int_irq request error, rc=%d\n", rc);
 		goto free_int_gpio;
@@ -552,30 +541,15 @@ static int hl7227_driver_probe(struct i2c_client *client, const struct i2c_devic
 		return -ENOMEM;
 	}
 
- 	chip->regmap = devm_regmap_init_i2c(client, &hl7227_regmap_config);
+	chip->regmap = devm_regmap_init_i2c(client, &hl7227_regmap_config);
 	if (!chip->regmap) {
 		rc = -ENODEV;
 		goto regmap_init_err;
- 	}
+	}
 
 	chip->dev = &client->dev;
 	chip->client = client;
 	i2c_set_clientdata(client, chip);
-
-	rc = hl7227_gpio_init(chip);
-	if (rc < 0) {
-		pr_err("gpio init error, rc=%d\n", rc);
-		goto gpio_init_err;
-	}
-
-	mutex_init(&chip->i2c_lock);
-
-	msleep(10);
-	rc = hl7227_hardware_init(chip);
-	if (rc < 0) {
-		pr_err("hardware init error, rc=%d\n", rc);
-		goto hw_init_err;
-	}
 
 	rc = of_property_read_u32(node, "oplus,ic_type", &ic_type);
 	if (rc < 0) {
@@ -596,9 +570,23 @@ static int hl7227_driver_probe(struct i2c_client *client, const struct i2c_devic
 	chip->ic_dev->dev_ops = &hl7227_dev_ops;
 	chip->ic_dev->type = ic_type;
 
+	rc = hl7227_gpio_init(chip);
+	if (rc < 0) {
+		pr_err("gpio init error, rc=%d\n", rc);
+		goto gpio_init_err;
+	}
+
+	mutex_init(&chip->i2c_lock);
+
+	msleep(10);
+	rc = hl7227_hardware_init(chip);
+	if (rc < 0) {
+		pr_err("hardware init error, rc=%d\n", rc);
+		goto hw_init_err;
+	}
+
 	return 0;
 
-reg_ic_err:
 hw_init_err:
 	if (!gpio_is_valid(chip->cp_en_gpio))
 		gpio_free(chip->cp_en_gpio);
@@ -606,6 +594,8 @@ hw_init_err:
 	if (!gpio_is_valid(chip->cp_int_gpio))
 		gpio_free(chip->cp_int_gpio);
 gpio_init_err:
+	devm_oplus_chg_ic_unregister(chip->dev, chip->ic_dev);
+reg_ic_err:
 regmap_init_err:
 	devm_kfree(&client->dev, chip);
 	return rc;
@@ -613,48 +603,48 @@ regmap_init_err:
 
 static int hl7227_pm_resume(struct device *dev_chip)
 {
-	struct i2c_client *client  = container_of(dev_chip, struct i2c_client, dev);
+	struct i2c_client *client = container_of(dev_chip, struct i2c_client, dev);
 	struct oplus_hl7227 *chip = i2c_get_clientdata(client);
 
-	if(chip == NULL)
+	if (chip == NULL)
 		return 0;
 
-        atomic_set(&chip->suspended, 0);
+	atomic_set(&chip->suspended, 0);
 
-        return 0;
+	return 0;
 }
 
 static int hl7227_pm_suspend(struct device *dev_chip)
 {
-	struct i2c_client *client  = container_of(dev_chip, struct i2c_client, dev);
+	struct i2c_client *client = container_of(dev_chip, struct i2c_client, dev);
 	struct oplus_hl7227 *chip = i2c_get_clientdata(client);
 
-	if(chip == NULL)
+	if (chip == NULL)
 		return 0;
 
-        atomic_set(&chip->suspended, 1);
+	atomic_set(&chip->suspended, 1);
 
-        return 0;
+	return 0;
 }
 
 static const struct dev_pm_ops hl7227_pm_ops = {
-        .resume = hl7227_pm_resume,
-        .suspend = hl7227_pm_suspend,
+	.resume = hl7227_pm_resume,
+	.suspend = hl7227_pm_suspend,
 };
 
 static int hl7227_driver_remove(struct i2c_client *client)
 {
 	struct oplus_hl7227 *chip = i2c_get_clientdata(client);
 
-	if(chip == NULL)
+	if (chip == NULL)
 		return -ENODEV;
 
-	devm_oplus_chg_ic_unregister(chip->dev, chip->ic_dev);
 	if (!gpio_is_valid(chip->cp_en_gpio))
 		gpio_free(chip->cp_en_gpio);
 	disable_irq(chip->cp_int_irq);
 	if (!gpio_is_valid(chip->cp_int_gpio))
 		gpio_free(chip->cp_int_gpio);
+	devm_oplus_chg_ic_unregister(chip->dev, chip->ic_dev);
 	devm_kfree(&client->dev, chip);
 
 	return 0;
@@ -665,16 +655,15 @@ static void hl7227_shutdown(struct i2c_client *chip_client)
 }
 
 static const struct of_device_id hl7227_match[] = {
-    { .compatible = "oplus,hl7227-cp"},
-    { },
+	{ .compatible = "oplus,hl7227-cp" },
+	{},
 };
 
 static const struct i2c_device_id hl7227_id[] = {
-    {"oplus,hl7227-cp", 0},
-    {},
+	{ "oplus,hl7227-cp", 0 },
+	{},
 };
 MODULE_DEVICE_TABLE(i2c, hl7227_id);
-
 
 static struct i2c_driver hl7227_i2c_driver = {
 	.driver		= {

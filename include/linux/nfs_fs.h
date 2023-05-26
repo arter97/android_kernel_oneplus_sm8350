@@ -52,6 +52,7 @@ struct nfs_access_entry {
 	struct rb_node		rb_node;
 	struct list_head	lru;
 	const struct cred *	cred;
+	u64			timestamp;
 	__u32			mask;
 	struct rcu_head		rcu_head;
 };
@@ -71,7 +72,7 @@ struct nfs_open_context {
 	fl_owner_t flock_owner;
 	struct dentry *dentry;
 	const struct cred *cred;
-	struct rpc_cred *ll_cred;	/* low-level cred - use to check for expiry */
+	struct rpc_cred __rcu *ll_cred;	/* low-level cred - use to check for expiry */
 	struct nfs4_state *state;
 	fmode_t mode;
 

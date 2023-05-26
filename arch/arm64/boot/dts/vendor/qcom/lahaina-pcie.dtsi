@@ -114,8 +114,8 @@
 		qcom,l1ss-sleep-disable = <0x1>;
 		qcom,drv-l1ss-timeout-us = <5000>;
 		qcom,no-l0s-supported;
-		qcom,tpwr-on-scale = <1>;
-		qcom,tpwr-on-value = <9>;
+		qcom,l1-2-th-scale = <2>;
+		qcom,l1-2-th-value = <70>;
 		qcom,slv-addr-space-size = <0x4000000>;
 		qcom,ep-latency = <10>;
 		qcom,num-parf-testbus-sel = <0xb9>;

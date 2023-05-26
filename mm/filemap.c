@@ -1170,16 +1170,13 @@ static inline int wait_on_page_bit_common(wait_queue_head_t *q,
 	wait_queue_entry_t *wait = &wait_page.wait;
 	bool bit_is_set;
 	bool thrashing = false;
-	bool delayacct = false;
 	unsigned long pflags;
+	bool in_thrashing;
 	int ret = 0;
 
 	if (bit_nr == PG_locked &&
 	    !PageUptodate(page) && PageWorkingset(page)) {
-		if (!PageSwapBacked(page)) {
-			delayacct_thrashing_start();
-			delayacct = true;
-		}
+		delayacct_thrashing_start(&in_thrashing);
 		psi_memstall_enter(&pflags);
 		thrashing = true;
 	}
@@ -1237,8 +1234,7 @@ static inline int wait_on_page_bit_common(wait_queue_head_t *q,
 	finish_wait(q, wait);
 
 	if (thrashing) {
-		if (delayacct)
-			delayacct_thrashing_end();
+		delayacct_thrashing_end(&in_thrashing);
 		psi_memstall_leave(&pflags);
 	}
 
@@ -2496,7 +2492,9 @@ static struct file *do_async_mmap_readahead(struct vm_fault *vmf,
  * it in the page cache, and handles the special cases reasonably without
  * having a lot of duplicated code.
  *
- * vma->vm_mm->mmap_sem must be held on entry (except FAULT_FLAG_SPECULATIVE).
+ * If FAULT_FLAG_SPECULATIVE is set, this function runs with elevated vma
+ * refcount and with mmap lock not held.
+ * Otherwise, vma->vm_mm->mmap_sem must be held on entry.
  *
  * If our return value has VM_FAULT_RETRY set, it's because the mmap_sem
  * may be dropped before doing I/O or by lock_page_maybe_drop_mmap().
@@ -2520,6 +2518,52 @@ vm_fault_t filemap_fault(struct vm_fault *vmf)
 	pgoff_t max_off;
 	struct page *page;
 	vm_fault_t ret = 0;
+
+	if (vmf->flags & FAULT_FLAG_SPECULATIVE) {
+		page = find_get_page(mapping, offset);
+		if (unlikely(!page))
+			return VM_FAULT_RETRY;
+
+		if (unlikely(PageReadahead(page)))
+			goto page_put;
+
+		if (!trylock_page(page))
+			goto page_put;
+
+		if (unlikely(compound_head(page)->mapping != mapping))
+			goto page_unlock;
+		VM_BUG_ON_PAGE(page_to_pgoff(page) != offset, page);
+		if (unlikely(!PageUptodate(page)))
+			goto page_unlock;
+
+		max_off = DIV_ROUND_UP(i_size_read(inode), PAGE_SIZE);
+		if (unlikely(offset >= max_off))
+			goto page_unlock;
+
+		/*
+		 * Update readahead mmap_miss statistic.
+		 *
+		 * Note that we are not sure if finish_fault() will
+		 * manage to complete the transaction. If it fails,
+		 * we'll come back to filemap_fault() non-speculative
+		 * case which will update mmap_miss a second time.
+		 * This is not ideal, we would prefer to guarantee the
+		 * update will happen exactly once.
+		 */
+		if (!(vmf->vma->vm_flags & VM_RAND_READ) && ra->ra_pages) {
+			unsigned int mmap_miss = READ_ONCE(ra->mmap_miss);
+			if (mmap_miss)
+				WRITE_ONCE(ra->mmap_miss, --mmap_miss);
+		}
+
+		vmf->page = page;
+		return VM_FAULT_LOCKED;
+page_unlock:
+		unlock_page(page);
+page_put:
+		put_page(page);
+		return VM_FAULT_RETRY;
+	}
 
 	max_off = DIV_ROUND_UP(i_size_read(inode), PAGE_SIZE);
 	if (unlikely(offset >= max_off))
@@ -3305,7 +3349,7 @@ ssize_t generic_perform_write(struct file *file,
 		unsigned long offset;	/* Offset into pagecache page */
 		unsigned long bytes;	/* Bytes to write to page */
 		size_t copied;		/* Bytes copied from user */
-		void *fsdata;
+		void *fsdata = NULL;
 
 		offset = (pos & (PAGE_SIZE - 1));
 		bytes = min_t(unsigned long, PAGE_SIZE - offset,

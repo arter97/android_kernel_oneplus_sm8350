@@ -895,12 +895,6 @@ static inline void update_mmu_cache(struct vm_area_struct *vma,
 #define phys_to_ttbr(addr)	(addr)
 #endif
 
-/*
- * On arm64 without hardware Access Flag, copying from user will fail because
- * the pte is old and cannot be marked young. So we always end up with zeroed
- * page after fork() + CoW for pfn mappings. We don't always have a
- * hardware-managed access flag on arm64.
- */
 #define arch_has_hw_pte_young		cpu_has_hw_af
 
 #endif /* !__ASSEMBLY__ */

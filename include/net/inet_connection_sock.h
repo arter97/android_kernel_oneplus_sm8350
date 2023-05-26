@@ -123,7 +123,6 @@ struct inet_connection_sock {
 		__u16		  last_seg_size; /* Size of last incoming segment	   */
 		__u16		  rcv_mss;	 /* MSS used for delayed ACK decisions	   */
 	} icsk_ack;
-#ifdef __GENKSYMS__
 	struct {
 		int		  enabled;
 
@@ -136,20 +135,7 @@ struct inet_connection_sock {
 
 		u32		  probe_timestamp;
 	} icsk_mtup;
-#else
-	struct {
-		/* Range of MTUs to search */
-		int		  search_high;
-		int		  search_low;
-
-		/* Information on the current probe. */
-		int		  enabled:1;
-		int		  probe_size:31;
-
-		u32		  probe_timestamp;
-	} icsk_mtup;
 	u32			  icsk_probes_tstamp;
-#endif
 	u32			  icsk_user_timeout;
 
 	u64			  icsk_ca_priv[104 / sizeof(u64)];
@@ -332,7 +318,7 @@ void inet_csk_update_fastreuse(struct inet_bind_bucket *tb,
 
 struct dst_entry *inet_csk_update_pmtu(struct sock *sk, u32 mtu);
 
-#define TCP_PINGPONG_THRESH	3
+#define TCP_PINGPONG_THRESH	1
 
 static inline void inet_csk_enter_pingpong_mode(struct sock *sk)
 {
@@ -347,13 +333,5 @@ static inline void inet_csk_exit_pingpong_mode(struct sock *sk)
 static inline bool inet_csk_in_pingpong_mode(struct sock *sk)
 {
 	return inet_csk(sk)->icsk_ack.pingpong >= TCP_PINGPONG_THRESH;
-}
-
-static inline void inet_csk_inc_pingpong_cnt(struct sock *sk)
-{
-	struct inet_connection_sock *icsk = inet_csk(sk);
-
-	if (icsk->icsk_ack.pingpong < U8_MAX)
-		icsk->icsk_ack.pingpong++;
 }
 #endif /* _INET_CONNECTION_SOCK_H */

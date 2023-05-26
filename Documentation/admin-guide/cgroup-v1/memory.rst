@@ -82,6 +82,8 @@ Brief summary of control files.
  memory.swappiness		     set/show swappiness parameter of vmscan
 				     (See sysctl's vm.swappiness)
  memory.move_charge_at_immigrate     set/show controls of moving charges
+                                     This knob is deprecated and shouldn't be
+                                     used.
  memory.oom_control		     set/show oom controls.
  memory.numa_stat		     show the number of memory usage per numa
 				     node
@@ -300,7 +302,7 @@ When oom event notifier is registered, event will be delivered.
   per-zone-per-cgroup LRU (cgroup's private LRU) is just guarded by
   pgdat->lru_lock, it has no lock of its own.
 
-2.7 Kernel Memory Extension (CONFIG_MEMCG_KMEM)
+2.7 Kernel Memory Extension
 -----------------------------------------------
 
 With the Kernel memory extension, the Memory Controller is able to limit
@@ -387,8 +389,6 @@ U != 0, K >= U:
 
 a. Enable CONFIG_CGROUPS
 b. Enable CONFIG_MEMCG
-c. Enable CONFIG_MEMCG_SWAP (to use swap extension)
-d. Enable CONFIG_MEMCG_KMEM (to use kmem extension)
 
 3.1. Prepare the cgroups (see cgroups.txt, Why are cgroups needed?)
 -------------------------------------------------------------------
@@ -740,8 +740,15 @@ NOTE2:
        It is recommended to set the soft limit always below the hard limit,
        otherwise the hard limit will take precedence.
 
-8. Move charges at task migration
-=================================
+8. Move charges at task migration (DEPRECATED!)
+===============================================
+
+THIS IS DEPRECATED!
+
+It's expensive and unreliable! It's better practice to launch workload
+tasks directly from inside their target cgroup. Use dedicated workload
+cgroups to allow fine-grained policy adjustments without having to
+move physical pages between control domains.
 
 Users can move charges associated with a task along with task migration, that
 is, uncharge task's pages from the old cgroup and charge them to the new cgroup.

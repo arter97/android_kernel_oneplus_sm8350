@@ -58,7 +58,6 @@ Currently, these files are in /proc/sys/vm:
 - nr_trim_pages         (only if CONFIG_MMU=n)
 - numa_zonelist_order
 - oom_dump_tasks
-- reap_mem_on_sigkill
 - oom_kill_allocating_task
 - overcommit_kbytes
 - overcommit_memory
@@ -122,6 +121,22 @@ all zones are compacted such that free memory is available in contiguous
 blocks where possible. This can be important for example in the allocation of
 huge pages although processes will also directly compact memory as required.
 
+compaction_proactiveness
+========================
+
+This tunable takes a value in the range [0, 100] with a default value of
+20. This tunable determines how aggressively compaction is done in the
+background. Write of a non zero value to this tunable will immediately
+trigger the proactive compaction. Setting it to 0 disables proactive compaction.
+
+Note that compaction has a non-trivial system-wide impact as pages
+belonging to different processes are moved around, which could also lead
+to latency spikes in unsuspecting applications. The kernel employs
+various heuristics to avoid wasting CPU cycles if it detects that
+proactive compaction is not being effective.
+
+Be careful when setting it to extreme values like 100, as that may
+cause excessive background compaction activity.
 
 compact_unevictable_allowed
 ===========================
@@ -690,22 +705,6 @@ OOM killer actually kills a memory-hogging task.
 
 The default value is 1 (enabled).
 
-reap_mem_on_sigkill
-===================
-
-This enables or disables the memory reaping for a SIGKILL received
-process and that the sending process must have the CAP_KILL capabilities.
-
-If this is set to 1, when a process receives SIGKILL from a process
-that has the capability, CAP_KILL, the process is added into the oom_reaper
-queue which can be picked up by the oom_reaper thread to reap the memory of
-that process. This reaps for the process which received SIGKILL through
-either sys_kill from user or kill_pid from kernel.
-
-If this is set to 0, we are not reaping memory of a SIGKILL, sent through
-either sys_kill from user or kill_pid from kernel, received process.
-
-The default value is 0 (disabled).
 
 oom_kill_allocating_task
 ========================

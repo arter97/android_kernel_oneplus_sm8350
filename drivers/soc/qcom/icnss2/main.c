@@ -779,6 +779,9 @@ static int icnss_driver_event_server_arrive(struct icnss_priv *priv,
 	if (priv->vbatt_supported)
 		icnss_init_vph_monitor(priv);
 
+	if (priv->psf_supported)
+		queue_work(priv->soc_update_wq, &priv->soc_update_work);
+
 	return ret;
 
 device_info_failure:
@@ -801,6 +804,9 @@ static int icnss_driver_event_server_exit(struct icnss_priv *priv)
 	if (priv->adc_tm_dev && priv->vbatt_supported)
 		adc_tm_disable_chan_meas(priv->adc_tm_dev,
 					  &priv->vph_monitor_params);
+
+	if (priv->psf_supported)
+		priv->last_updated_voltage = 0;
 
 	return 0;
 }
@@ -1965,8 +1971,9 @@ static int icnss_modem_notifier_nb(struct notifier_block *nb,
 	icnss_driver_event_post(priv, ICNSS_DRIVER_EVENT_PD_SERVICE_DOWN,
 				ICNSS_EVENT_SYNC, event_data);
 
-	mod_timer(&priv->recovery_timer,
-		  jiffies + msecs_to_jiffies(ICNSS_RECOVERY_TIMEOUT));
+	if (notif->crashed)
+		mod_timer(&priv->recovery_timer,
+			  jiffies + msecs_to_jiffies(ICNSS_RECOVERY_TIMEOUT));
 out:
 	icnss_pr_vdbg("Exit %s,state: 0x%lx\n", __func__, priv->state);
 	return NOTIFY_OK;
@@ -2201,11 +2208,13 @@ event_post:
 	}
 
 	clear_bit(ICNSS_HOST_TRIGGERED_PDR, &priv->state);
+
+	if (event_data->crashed)
+		mod_timer(&priv->recovery_timer,
+			  jiffies + msecs_to_jiffies(ICNSS_RECOVERY_TIMEOUT));
+
 	icnss_driver_event_post(priv, ICNSS_DRIVER_EVENT_PD_SERVICE_DOWN,
 				ICNSS_EVENT_SYNC, event_data);
-
-	mod_timer(&priv->recovery_timer,
-		  jiffies + msecs_to_jiffies(ICNSS_RECOVERY_TIMEOUT));
 done:
 	if (notification == SERVREG_NOTIF_SERVICE_STATE_UP_V01)
 		clear_bit(ICNSS_FW_DOWN, &priv->state);
@@ -3823,6 +3832,13 @@ static int icnss_resource_parse(struct icnss_priv *priv)
 		goto put_vreg;
 	}
 
+	if (of_property_read_bool(pdev->dev.of_node, "qcom,psf-supported")) {
+		ret = icnss_get_psf_info(priv);
+		if (ret < 0)
+			goto out;
+		priv->psf_supported = true;
+	}
+
 	if (priv->device_id == ADRASTEA_DEVICE_ID) {
 		res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
 						   "membase");
@@ -4382,6 +4398,18 @@ out_reset_drvdata:
 	return ret;
 }
 
+static void icnss_unregister_power_supply_notifier(struct icnss_priv *priv)
+{
+	if (priv->batt_psy)
+		power_supply_put(penv->batt_psy);
+
+	if (priv->psf_supported) {
+		flush_workqueue(priv->soc_update_wq);
+		destroy_workqueue(priv->soc_update_wq);
+		power_supply_unreg_notifier(&priv->psf_nb);
+	}
+}
+
 static int icnss_remove(struct platform_device *pdev)
 {
 	struct icnss_priv *priv = dev_get_drvdata(&pdev->dev);
@@ -4400,6 +4428,8 @@ static int icnss_remove(struct platform_device *pdev)
 	device_init_wakeup(&priv->pdev->dev, false);
 
 	icnss_debugfs_destroy(priv);
+
+	icnss_unregister_power_supply_notifier(penv);
 
 	icnss_sysfs_destroy(priv);
 

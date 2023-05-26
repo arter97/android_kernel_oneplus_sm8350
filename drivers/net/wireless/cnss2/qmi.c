@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/firmware.h>
@@ -8,6 +8,10 @@
 #include <linux/soc/qcom/qmi.h>
 #if IS_ENABLED(CONFIG_OEM_BOOT_MODE)
 #include <linux/oem/boot_mode.h>
+#endif
+
+#if IS_ENABLED(CONFIG_CNSS_UTILS)
+#include <net/cnss_utils.h>
 #endif
 
 #include "bus.h"
@@ -1727,7 +1731,8 @@ int cnss_wlfw_wlan_mac_req_send_sync(struct cnss_plat_data *plat_priv,
 	struct wlfw_mac_addr_req_msg_v01 req;
 	struct wlfw_mac_addr_resp_msg_v01 resp = {0};
 	struct qmi_txn txn;
-	int ret;
+	char revert_mac[QMI_WLFW_MAC_ADDR_SIZE_V01];
+	int ret, i;
 
 	if (!plat_priv || !mac || mac_len != QMI_WLFW_MAC_ADDR_SIZE_V01)
 		return -EINVAL;
@@ -1743,8 +1748,22 @@ int cnss_wlfw_wlan_mac_req_send_sync(struct cnss_plat_data *plat_priv,
 
 		cnss_pr_dbg("Sending WLAN mac req [%pM], state: 0x%lx\n",
 			    mac, plat_priv->driver_state);
-	memcpy(req.mac_addr, mac, mac_len);
+
+	for (i = 0; i < QMI_WLFW_MAC_ADDR_SIZE_V01; i++) {
+		revert_mac[i] = mac[QMI_WLFW_MAC_ADDR_SIZE_V01 - i - 1];
+	}
+	cnss_pr_dbg("Sending revert WLAN MAC request [%pM], state: 0x%lx\n",
+		    revert_mac, plat_priv->driver_state);
+	memcpy(req.mac_addr, revert_mac, mac_len);
+
 	req.mac_addr_valid = 1;
+
+#if IS_ENABLED(CONFIG_CNSS_UTILS)
+	ret = cnss_utils_set_wlan_mac_address(req.mac_addr, mac_len);
+	if (ret < 0) {
+		cnss_pr_err("Failed to set cnss utils wlan mac address (non-fatal), err: %d\n", ret);
+	}
+#endif
 
 	ret = qmi_send_request(&plat_priv->qmi_wlfw, NULL, &txn,
 			       QMI_WLFW_MAC_ADDR_REQ_V01,
@@ -1849,7 +1868,8 @@ int cnss_wlfw_qdss_data_send_sync(struct cnss_plat_data *plat_priv, char *file_n
 		     resp->total_size == total_size) &&
 		   (resp->seg_id_valid == 1 && resp->seg_id == req->seg_id) &&
 		   (resp->data_valid == 1 &&
-		    resp->data_len <= QMI_WLFW_MAX_DATA_SIZE_V01)) {
+		    resp->data_len <= QMI_WLFW_MAX_DATA_SIZE_V01) &&
+		   resp->data_len <= remaining) {
 			memcpy(p_qdss_trace_data_temp,
 			       resp->data, resp->data_len);
 		} else {
@@ -2875,6 +2895,72 @@ out:
 	return ret;
 }
 
+int cnss_wlfw_send_host_wfc_call_status(struct cnss_plat_data *plat_priv,
+					struct cnss_wfc_cfg cfg)
+{
+	struct wlfw_wfc_call_status_req_msg_v01 *req;
+	struct wlfw_wfc_call_status_resp_msg_v01 *resp;
+	struct qmi_txn txn;
+	int ret = 0;
+
+	if (!test_bit(CNSS_FW_READY, &plat_priv->driver_state)) {
+		cnss_pr_err("Drop host WFC indication as FW not initialized\n");
+		return -EINVAL;
+	}
+	req = kzalloc(sizeof(*req), GFP_KERNEL);
+	if (!req)
+		return -ENOMEM;
+
+	resp = kzalloc(sizeof(*resp), GFP_KERNEL);
+	if (!resp) {
+		kfree(req);
+		return -ENOMEM;
+	}
+
+	req->wfc_call_active_valid = 1;
+	req->wfc_call_active = cfg.mode;
+	cnss_pr_dbg("CNSS->FW: WFC_CALL_REQ: state: 0x%lx\n",
+		    plat_priv->driver_state);
+	ret = qmi_txn_init(&plat_priv->qmi_wlfw, &txn,
+			   wlfw_wfc_call_status_resp_msg_v01_ei, resp);
+	if (ret < 0) {
+		cnss_pr_err("CNSS->FW: WFC_CALL_REQ: QMI Txn Init: Err %d\n",
+			    ret);
+		goto out;
+	}
+
+	cnss_pr_dbg("Send WFC Mode: %d\n", cfg.mode);
+	ret = qmi_send_request(&plat_priv->qmi_wlfw, NULL, &txn,
+			       QMI_WLFW_WFC_CALL_STATUS_REQ_V01,
+			       WLFW_WFC_CALL_STATUS_REQ_MSG_V01_MAX_MSG_LEN,
+			       wlfw_wfc_call_status_req_msg_v01_ei, req);
+	if (ret < 0) {
+		qmi_txn_cancel(&txn);
+		cnss_pr_err("CNSS->FW: WFC_CALL_REQ: QMI Send Err: %d\n",
+			    ret);
+		goto out;
+	}
+
+	ret = qmi_txn_wait(&txn, QMI_WLFW_TIMEOUT_JF);
+	if (ret < 0) {
+		cnss_pr_err("FW->CNSS: WFC_CALL_RSP: QMI Wait Err: %d\n",
+			    ret);
+		goto out;
+	}
+
+	if (resp->resp.result != QMI_RESULT_SUCCESS_V01) {
+		cnss_pr_err("FW->CNSS: WFC_CALL_RSP: Result: %d Err: %d\n",
+			    resp->resp.result, resp->resp.error);
+		ret = -EINVAL;
+		goto out;
+	}
+	ret = 0;
+out:
+	kfree(req);
+	kfree(resp);
+	return ret;
+}
+
 static int cnss_wlfw_wfc_call_status_send_sync
 	(struct cnss_plat_data *plat_priv,
 	 const struct ims_private_service_wfc_call_status_ind_msg_v01 *ind_msg)
@@ -3127,7 +3213,8 @@ static void cnss_wlfw_request_mem_ind_cb(struct qmi_handle *qmi_wlfw,
 			    ind_msg->mem_seg[i].size, ind_msg->mem_seg[i].type);
 		plat_priv->fw_mem[i].type = ind_msg->mem_seg[i].type;
 		plat_priv->fw_mem[i].size = ind_msg->mem_seg[i].size;
-		if (plat_priv->fw_mem[i].type == CNSS_MEM_TYPE_DDR)
+		if (!plat_priv->fw_mem[i].va &&
+		    plat_priv->fw_mem[i].type == CNSS_MEM_TYPE_DDR)
 			plat_priv->fw_mem[i].attrs |=
 				DMA_ATTR_FORCE_CONTIGUOUS;
 	}

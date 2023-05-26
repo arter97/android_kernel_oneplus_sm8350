@@ -21,8 +21,8 @@ static int fetch_cdev(struct thermal_zone_device *tz, char *dev_token,
 		char *upper_lim_token, char *lower_lim_token, int trip)
 {
 	unsigned long upper_limit, lower_limit;
-	char cdev_name[THERMAL_NAME_LENGTH] = "";
-	char limit_str[THERMAL_NAME_LENGTH] = "";
+	char cdev_name[THERMAL_NAME_LENGTH + 1] = "";
+	char limit_str[THERMAL_NAME_LENGTH + 1] = "";
 	struct thermal_instance *instance;
 	bool match_found = false;
 
@@ -329,7 +329,7 @@ static ssize_t thermal_dbgfs_config_write(struct file *file,
 		const char __user *user_buf, size_t count, loff_t *ppos)
 {
 	struct thermal_zone_device *tz = NULL;
-	char *sensor_buf = NULL, sensor_name[THERMAL_NAME_LENGTH] = "", *buf;
+	char *sensor_buf = NULL, sensor_name[THERMAL_NAME_LENGTH + 1] = "", *buf;
 	int ret = -EINVAL;
 
 	buf = kzalloc(sizeof(char) * (count + 1), GFP_KERNEL);

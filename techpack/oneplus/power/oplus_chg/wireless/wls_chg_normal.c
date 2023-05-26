@@ -18,7 +18,7 @@ static bool is_nor_ic_available(struct oplus_wls_chg_normal *wls_nor)
 {
 	struct device_node *node = wls_nor->dev->of_node;
 
-	if(wls_nor->nor_ic == NULL)
+	if (wls_nor->nor_ic == NULL)
 		wls_nor->nor_ic = of_get_oplus_chg_ic(node, "oplus,normal_ic");
 	return !!wls_nor->nor_ic;
 }
@@ -29,6 +29,7 @@ static bool is_batt_ocm_available(struct oplus_wls_chg_normal *wls_nor)
 		wls_nor->batt_ocm = oplus_chg_mod_get_by_name("battery");
 	return !!wls_nor->batt_ocm;
 }
+
 __maybe_unused static bool is_usb_ocm_available(struct oplus_wls_chg_normal *wls_nor)
 {
 	struct oplus_chg_wls *wls_dev = wls_nor->wls_dev;
@@ -57,6 +58,7 @@ __maybe_unused static bool oplus_chg_is_usb_present(struct oplus_wls_chg_normal 
 
 	return present;
 }
+
 static int get_batt_cell_num(struct oplus_wls_chg_normal *wls_nor)
 {
 	int rc;
@@ -146,7 +148,7 @@ int oplus_chg_wls_nor_set_icl(struct oplus_wls_chg_normal *wls_nor, int icl_ma)
 		mutex_unlock(&wls_nor->icl_lock);
 		return rc;
 	}
-	
+
 	wls_nor->icl_set_ma = icl_ma;
 	mutex_unlock(&wls_nor->icl_lock);
 

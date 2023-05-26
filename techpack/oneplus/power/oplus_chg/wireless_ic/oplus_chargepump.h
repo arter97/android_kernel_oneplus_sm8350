@@ -3,22 +3,21 @@
  * Copyright (C) 2018-2020 Oplus. All rights reserved.
  */
 
-
 #ifndef __OPLUS_CHARGEPUMP_H__
 #define __OPLUS_CHARGEPUMP_H__
 
 #define OP20A
 
 struct chip_chargepump {
-	struct i2c_client		*client;
-	struct device			*dev;
-	struct pinctrl			*pinctrl;   
-	int						chargepump_en_gpio;
-	struct pinctrl_state	*chargepump_en_active;
-	struct pinctrl_state	*chargepump_en_sleep;
-	struct pinctrl_state	*chargepump_en_default;
-	atomic_t				chargepump_suspended;
-	bool					is_chargepump_enable;
+	struct i2c_client *client;
+	struct device *dev;
+	struct pinctrl *pinctrl;
+	int chargepump_en_gpio;
+	struct pinctrl_state *chargepump_en_active;
+	struct pinctrl_state *chargepump_en_sleep;
+	struct pinctrl_state *chargepump_en_default;
+	atomic_t chargepump_suspended;
+	bool is_chargepump_enable;
 };
 
 extern int chargepump_set_for_EPP(void);

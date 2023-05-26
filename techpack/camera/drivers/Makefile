@@ -23,7 +23,6 @@ camera-y := \
 	cam_utils/cam_soc_util.o \
 	cam_utils/cam_io_util.o \
 	cam_utils/cam_packet_util.o \
-	cam_utils/cam_debug_util.o \
 	cam_utils/cam_trace.o \
 	cam_utils/cam_common_util.o \
 	cam_utils/cam_compat.o \

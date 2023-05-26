@@ -534,9 +534,7 @@ extern size_t iommu_unmap_fast(struct iommu_domain *domain,
 			       struct iommu_iotlb_gather *iotlb_gather);
 extern size_t iommu_map_sg(struct iommu_domain *domain, unsigned long iova,
 			   struct scatterlist *sg,unsigned int nents, int prot);
-extern size_t iommu_map_sg_atomic(struct iommu_domain *domain,
-				  unsigned long iova, struct scatterlist *sg,
-				  unsigned int nents, int prot);
+#define iommu_map_sg_atomic iommu_map_sg
 extern size_t default_iommu_map_sg(struct iommu_domain *domain,
 				   unsigned long iova, struct scatterlist *sg,
 				   unsigned int nents, int prot, gfp_t gfp);

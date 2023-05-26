@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2012-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -1347,6 +1348,10 @@ static int calcuate_max_phy_rate(int mode, int nss, int ch_width,
 	if (mode == SIR_SME_PHY_MODE_HT) {
 		/* check for HT Mode */
 		maxidx = ht_mcs_idx;
+		if (maxidx > 7) {
+			hdd_err("ht_mcs_idx %d is incorrect", ht_mcs_idx);
+			return maxrate;
+		}
 		if (nss == 1) {
 			supported_mcs_rate = supported_mcs_rate_nss1;
 		} else if (nss == 2) {
@@ -2961,6 +2966,7 @@ int hdd_softap_set_channel_change(struct net_device *dev, int target_chan_freq,
 	struct wlan_objmgr_vdev *vdev;
 	bool strict;
 	uint32_t sta_cnt = 0;
+	struct ch_params ch_params = {0};
 
 	hdd_ctx = WLAN_HDD_GET_CTX(adapter);
 	ret = wlan_hdd_validate_context(hdd_ctx);
@@ -3041,7 +3047,10 @@ int hdd_softap_set_channel_change(struct net_device *dev, int target_chan_freq,
 		hdd_err("Channel switch in progress!!");
 		return -EBUSY;
 	}
-
+	ch_params.ch_width = target_bw;
+	target_bw = wlansap_get_csa_chanwidth_from_phymode(sap_ctx,
+							   target_chan_freq,
+							   &ch_params);
 	/*
 	 * Do SAP concurrency check to cover channel switch case as following:
 	 * There is already existing SAP+GO combination but due to upper layer
@@ -3058,7 +3067,7 @@ int hdd_softap_set_channel_change(struct net_device *dev, int target_chan_freq,
 				hdd_ctx->psoc,
 				policy_mgr_convert_device_mode_to_qdf_type(
 					adapter->device_mode),
-				target_chan_freq,
+				target_chan_freq, policy_mgr_get_bw(target_bw),
 				adapter->vdev_id,
 				forced,
 				sap_ctx->csa_reason)) {
@@ -5264,24 +5273,6 @@ int wlan_hdd_cfg80211_start_bss(struct hdd_adapter *adapter,
 			return -EINVAL;
 		}
 	}
-	/*
-	 * For STA+SAP concurrency support from GUI, first STA connection gets
-	 * triggered and while it is in progress, SAP start also comes up.
-	 * Once STA association is successful, STA connect event is sent to
-	 * kernel which gets queued in kernel workqueue and supplicant won't
-	 * process M1 received from AP and send M2 until this NL80211_CONNECT
-	 * event is received. Workqueue is not scheduled as RTNL lock is already
-	 * taken by hostapd thread which has issued start_bss command to driver.
-	 * Driver cannot complete start_bss as the pending command at the head
-	 * of the SME command pending list is hw_mode_update for STA session
-	 * which cannot be processed as SME is in WAITforKey state for STA
-	 * interface. The start_bss command for SAP interface is queued behind
-	 * the hw_mode_update command and so it cannot be processed until
-	 * hw_mode_update command is processed. This is causing a deadlock so
-	 * disconnect the STA interface first if connection or key exchange is
-	 * in progress and then start SAP interface.
-	 */
-	hdd_abort_ongoing_sta_connection(hdd_ctx);
 
 	mac_handle = hdd_ctx->mac_handle;
 
@@ -6061,13 +6052,6 @@ static int __wlan_hdd_cfg80211_stop_ap(struct wiphy *wiphy,
 	hdd_debug("Device_mode %s(%d)",
 		  qdf_opmode_str(adapter->device_mode), adapter->device_mode);
 
-	/*
-	 * If a STA connection is in progress in another adapter, disconnect
-	 * the STA and complete the SAP operation. STA will reconnect
-	 * after SAP stop is done.
-	 */
-	hdd_abort_ongoing_sta_connection(hdd_ctx);
-
 	if (adapter->device_mode == QDF_SAP_MODE) {
 		wlan_hdd_del_station(adapter);
 		mac_handle = hdd_ctx->mac_handle;
@@ -6352,6 +6336,9 @@ wlan_hdd_ap_ap_force_scc_override(struct hdd_adapter *adapter,
 		return false;
 	}
 
+	if (adapter->device_mode == QDF_P2P_GO_MODE &&
+	    policy_mgr_is_p2p_p2p_conc_supported(hdd_ctx->psoc))
+		return false;
 	if (!policy_mgr_concurrent_beaconing_sessions_running(hdd_ctx->psoc))
 		return false;
 	if (policy_mgr_dual_beacon_on_single_mac_mcc_capable(hdd_ctx->psoc))

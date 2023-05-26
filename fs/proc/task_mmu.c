@@ -380,15 +380,65 @@ static int is_stack(struct vm_area_struct *vma)
 	__len;								\
 })
 
-#define print_vma_hex2(out, val) \
+#define print_vma_hex5(out, val, clz_fn) \
 ({									\
 	const typeof(val) __val = val;					\
 	char *const __out = out;					\
+	size_t __len;							\
 									\
-	__out[1] = hex_asc[(__val >>  0) & 0xf];			\
-	__out[0] = hex_asc[(__val >>  4) & 0xf];			\
+	if (__val) {							\
+		__len = (sizeof(__val) * 8 - clz_fn(__val) + 3) / 4;	\
+		switch (__len) {					\
+		case 5:							\
+			__out[4] = hex_asc[(__val >>  0) & 0xf];	\
+			__out[3] = hex_asc[(__val >>  4) & 0xf];	\
+			__out[2] = hex_asc[(__val >>  8) & 0xf];	\
+			__out[1] = hex_asc[(__val >> 12) & 0xf];	\
+			__out[0] = hex_asc[(__val >> 16) & 0xf];	\
+			break;						\
+		case 4:							\
+			__out[3] = hex_asc[(__val >>  0) & 0xf];	\
+			__out[2] = hex_asc[(__val >>  4) & 0xf];	\
+			__out[1] = hex_asc[(__val >>  8) & 0xf];	\
+			__out[0] = hex_asc[(__val >> 12) & 0xf];	\
+			break;						\
+		case 3:							\
+			__out[2] = hex_asc[(__val >>  0) & 0xf];	\
+			__out[1] = hex_asc[(__val >>  4) & 0xf];	\
+			__out[0] = hex_asc[(__val >>  8) & 0xf];	\
+			break;						\
+		default:						\
+			__out[1] = hex_asc[(__val >>  0) & 0xf];	\
+			__out[0] = hex_asc[(__val >>  4) & 0xf];	\
+			__len = 2;					\
+			break;						\
+		}							\
+	} else {							\
+		*(u16 *)__out = U16_C(0x3030);				\
+		__len = 2;						\
+	}								\
 									\
-	2;								\
+	__len;								\
+})
+
+#define print_vma_hex3(out, val, clz_fn) \
+({									\
+	const typeof(val) __val = val;					\
+	char *const __out = out;					\
+	size_t __len;							\
+									\
+	if (__val & 0xf00) {						\
+		__out[2] = hex_asc[(__val >> 0) & 0xf];			\
+		__out[1] = hex_asc[(__val >> 4) & 0xf];			\
+		__out[0] = hex_asc[(__val >> 8) & 0xf];			\
+		__len = 3;						\
+	} else {							\
+		__out[1] = hex_asc[(__val >> 0) & 0xf];			\
+		__out[0] = hex_asc[(__val >> 4) & 0xf];			\
+		__len = 2;						\
+	}								\
+									\
+	__len;								\
 })
 
 static int show_vma_header_prefix(struct seq_file *m, unsigned long start,
@@ -400,7 +450,7 @@ static int show_vma_header_prefix(struct seq_file *m, unsigned long start,
 	char *out;
 
 	/* Set the overflow status to get more memory if there's no space */
-	if (seq_get_buf(m, &out) < 65) {
+	if (seq_get_buf(m, &out) < 69) {
 		seq_commit(m, -1);
 		return -ENOMEM;
 	}
@@ -425,11 +475,11 @@ static int show_vma_header_prefix(struct seq_file *m, unsigned long start,
 
 	out[len++] = ' ';
 
-	len += print_vma_hex2(out + len, MAJOR(dev));
+	len += print_vma_hex3(out + len, MAJOR(dev), __builtin_clz);
 
 	out[len++] = ':';
 
-	len += print_vma_hex2(out + len, MINOR(dev));
+	len += print_vma_hex5(out + len, MINOR(dev), __builtin_clz);
 
 	out[len++] = ' ';
 
@@ -478,19 +528,16 @@ show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
 		 * program uses newlines in its paths then it can kick rocks.
 		 */
 		if (size > 1) {
-			const int inlen = size - 1;
-			int outlen = inlen;
 			char *p;
 
-			p = d_path_outlen(&file->f_path, buf, &outlen);
+			p = d_path(&file->f_path, buf, size);
 			if (!IS_ERR(p)) {
 				size_t len;
 
-				if (outlen != inlen)
-					len = inlen - outlen - 1;
-				else
-					len = strlen(p);
-				memmove(buf, p, len);
+				/* Minus one to exclude the NUL character */
+				len = size - (p - buf) - 1;
+				if (likely(p > buf))
+					memmove(buf, p, len);
 				buf[len] = '\n';
 				seq_commit(m, len + 1);
 				return;
@@ -904,9 +951,7 @@ static int smaps_hugetlb_range(pte_t *pte, unsigned long hmask,
 			page = device_private_entry_to_page(swpent);
 	}
 	if (page) {
-		int mapcount = page_mapcount(page);
-
-		if (mapcount >= 2)
+		if (page_mapcount(page) >= 2 || hugetlb_pmd_shared(pte))
 			mss->shared_hugetlb += huge_page_size(hstate_vma(vma));
 		else
 			mss->private_hugetlb += huge_page_size(hstate_vma(vma));
@@ -1069,7 +1114,7 @@ static int show_smaps_rollup(struct seq_file *m, void *v)
 		last_vma_end = vma->vm_end;
 	}
 
-	show_vma_header_prefix(m, priv->mm->mmap->vm_start,
+	show_vma_header_prefix(m, priv->mm->mmap ? priv->mm->mmap->vm_start : 0,
 			       last_vma_end, 0, 0, 0, 0);
 	seq_puts(m, "[rollup]\n");
 
@@ -1323,7 +1368,6 @@ static ssize_t clear_refs_write(struct file *file, const char __user *buf,
 	struct mm_struct *mm;
 	struct vm_area_struct *vma;
 	enum clear_refs_types type;
-	struct mmu_gather tlb;
 	int itype;
 	int rv;
 
@@ -1368,7 +1412,6 @@ static ssize_t clear_refs_write(struct file *file, const char __user *buf,
 			count = -EINTR;
 			goto out_mm;
 		}
-		tlb_gather_mmu(&tlb, mm, 0, -1);
 		if (type == CLEAR_REFS_SOFT_DIRTY) {
 			for (vma = mm->mmap; vma; vma = vma->vm_next) {
 				if (!(vma->vm_flags & VM_SOFTDIRTY))
@@ -1407,15 +1450,18 @@ static ssize_t clear_refs_write(struct file *file, const char __user *buf,
 				break;
 			}
 
+			inc_tlb_flush_pending(mm);
 			mmu_notifier_range_init(&range, MMU_NOTIFY_SOFT_DIRTY,
 						0, NULL, mm, 0, -1UL);
 			mmu_notifier_invalidate_range_start(&range);
 		}
 		walk_page_range(mm, 0, mm->highest_vm_end, &clear_refs_walk_ops,
 				&cp);
-		if (type == CLEAR_REFS_SOFT_DIRTY)
+		if (type == CLEAR_REFS_SOFT_DIRTY) {
 			mmu_notifier_invalidate_range_end(&range);
-		tlb_finish_mmu(&tlb, 0, -1);
+			flush_tlb_mm(mm);
+			dec_tlb_flush_pending(mm);
+		}
 		up_read(&mm->mmap_sem);
 out_mm:
 		mmput(mm);

@@ -1,3 +1,69 @@
+c449deb2b99f mm: memcg: fix swapcached stat accounting
+7f63cf2d9b9b mm: Multi-gen LRU: remove wait_event_killable()
+
+abf086721a2f mm: multi-gen LRU: simplify lru_gen_look_around()
+b5ff4133617d mm: multi-gen LRU: improve walk_pmd_range()
+37cc99979d04 mm: multi-gen LRU: improve lru_gen_exit_memcg()
+de08eaa61564 mm: multi-gen LRU: fix crash during cgroup migration
+
+fd3b1bc3c86e mm/madvise: fix madvise_pageout for private file mappings
+
+359a5e1416ca mm: multi-gen LRU: retry folios written back while isolated
+dda1c41a07b4 mm: multi-gen LRU: move lru_gen_add_mm() out of IRQ-off region
+8be976a0937a mm: multi-gen LRU: design doc
+07017acb0601 mm: multi-gen LRU: admin guide
+d6c3af7d8a2b mm: multi-gen LRU: debugfs interface
+1332a809d95a mm: multi-gen LRU: thrashing prevention
+354ed5974429 mm: multi-gen LRU: kill switch
+f76c83378851 mm: multi-gen LRU: optimize multiple memcgs
+bd74fdaea146 mm: multi-gen LRU: support page table walks
+018ee47f1489 mm: multi-gen LRU: exploit locality in rmap
+ac35a4902374 mm: multi-gen LRU: minimal implementation
+ec1c86b25f4b mm: multi-gen LRU: groundwork
+
+adb8213014b2 mm: memcg: fix stale protection of reclaim target memcg
+0538a82c39e9 mm: vmscan: make rotations a secondary factor in balancing anon vs file
+cc674ab3c018 mm/mmap: fix memory leak in mmap_region()
+
+6d4675e60135 mm: don't be stuck to rmap lock on reclaim path
+
+9282012fc0aa page_alloc: fix invalid watermark check on a negative value
+3a9bb7b1879b mm/page_io: count submission time as thrashing delay for delayacct
+aa1cf99b87e9 delayacct: support re-entrance detection of thrashing accounting
+f347c9d2697f filemap: make the accounting of thrashing more consistent
+02e458d8d04e mm/vmscan: remove obsolete comment in get_scan_count
+c91bdc935899 mm: memcontrol: don't allocate cgroup swap arrays when memcg is disabled
+e55b9f96860f mm: memcontrol: drop dead CONFIG_MEMCG_SWAP config symbol
+deb0f6562884 mm/mmap: undo ->mmap() when arch_validate_flags() fails
+
+ca2864e52d39 mm: compaction: make sure highest is above the min_pfn
+65d759c8f9f5 mm: compaction: support triggering of proactive compaction by user
+e1e92bfa3825 mm: compaction: optimize proactive compaction deferrals
+b55ca5264b0c mm/compaction: fix 'limit' in fast_isolate_freepages
+d2155fe54ddb mm: compaction: remove duplicate !list_empty(&sublist) check
+40d7e2032007 mm/compaction: correct deferral logic for proactive compaction
+e2d26aa5fb39 mm/compaction: remove duplicated VM_BUG_ON_PAGE !PageLocked
+9df41314390b mm/compaction: do page isolation first in compaction
+2271b016bf36 mm/compaction: make defer_compaction and compaction_deferred static
+2b1a20c3afbc mm/compaction: move compaction_suitable's comment to right place
+19d3cf9de1c7 mm/compaction: rename 'start_pfn' to 'iteration_start_pfn' in compact_zone()
+d20bdd571ee5 mm/compaction: stop isolation if too many pages are isolated and we have pages to migrate
+38935861d85a mm/compaction: count pages and stop correctly during page isolation
+62b35fe0eba2 mm/compaction.c: micro-optimization remove unnecessary branch
+a1c1dbeb2e1a mm/compaction.c: delete duplicated word
+860b32729a21 mm/compaction: correct the comments of compact_defer_shift
+d34c0a7599ea mm: use unsigned types for fragmentation score
+25788738eb9c mm: fix compile error due to COMPACTION_HPAGE_ORDER
+facdaa917c4d mm: proactive compaction
+d25b5bd8a8f4 mm/lru: introduce TestClearPageLRU()
+
+0a7dd4e901b8 mm/vmalloc: Fix unlock order in s_stop()
+e36176be1c39 mm/vmalloc: rework vmap_area_lock
+060650a2a059 mm/vmalloc: add more comments to the adjust_va_to_fit_type()
+f07116d77b5b mm/vmalloc: respect passed gfp_mask when doing preloading
+81f1ba586e39 mm/vmalloc: remove preempt_disable/enable when doing preloading
+dcf61ff06d17 mm/vmalloc.c: remove unnecessary highmem_mask from parameter of gfpflags_allow_blocking()
+
 f27ce0e14088 page_alloc: consider highatomic reserve in watermark fast
 
 8beeae86b8e1 mm/page_alloc: fix documentation error

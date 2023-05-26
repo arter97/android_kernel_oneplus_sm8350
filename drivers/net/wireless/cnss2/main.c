@@ -836,7 +836,7 @@ out:
 	return ret;
 }
 
-static char *cnss_driver_event_to_str(enum cnss_driver_event_type type)
+static __maybe_unused char *cnss_driver_event_to_str(enum cnss_driver_event_type type)
 {
 	switch (type) {
 	case CNSS_DRIVER_EVENT_SERVER_ARRIVE:
@@ -3385,8 +3385,7 @@ MODULE_DEVICE_TABLE(of, cnss_of_match_table);
 static inline bool
 cnss_use_nv_mac(struct cnss_plat_data *plat_priv)
 {
-	return of_property_read_bool(plat_priv->plat_dev->dev.of_node,
-				     "use-nv-mac");
+	return true;
 }
 
 void cnss_set_fw_version(u32 version, u32 ext)
@@ -3414,6 +3413,26 @@ cnss_is_converged_dt(struct cnss_plat_data *plat_priv)
 	return of_property_read_bool(plat_priv->plat_dev->dev.of_node,
 				     "qcom,converged-dt");
 }
+
+int cnss_set_wfc_mode(struct device *dev, struct cnss_wfc_cfg cfg)
+{
+	struct cnss_plat_data *plat_priv = cnss_bus_dev_to_plat_priv(dev);
+	int ret = 0;
+
+	if (!plat_priv)
+		return -ENODEV;
+
+	/* If IMS server is connected, return success without QMI send */
+	if (test_bit(CNSS_IMS_CONNECTED, &plat_priv->driver_state)) {
+		cnss_pr_dbg("Ignore host request as IMS server is connected");
+		return ret;
+	}
+
+	ret = cnss_wlfw_send_host_wfc_call_status(plat_priv, cfg);
+
+	return ret;
+}
+EXPORT_SYMBOL(cnss_set_wfc_mode);
 
 static int cnss_probe(struct platform_device *plat_dev)
 {

@@ -177,14 +177,25 @@ static void iommu_free_dev_param(struct device *dev)
 int iommu_probe_device(struct device *dev)
 {
 	const struct iommu_ops *ops = dev->bus->iommu_ops;
+	static DEFINE_MUTEX(iommu_probe_device_lock);
 	int ret;
 
 	WARN_ON(dev->iommu_group);
 	if (!ops)
 		return -EINVAL;
 
-	if (!iommu_get_dev_param(dev))
-		return -ENOMEM;
+	/*
+	 * Serialise to avoid races between IOMMU drivers registering in
+	 * parallel and/or the "replay" calls from ACPI/OF code via client
+	 * driver probe. Once the latter have been cleaned up we should
+	 * probably be able to use device_lock() here to minimise the scope,
+	 * but for now enforcing a simple global ordering is fine.
+	 */
+	mutex_lock(&iommu_probe_device_lock);
+	if (!iommu_get_dev_param(dev)) {
+		ret = -ENOMEM;
+		goto err_unlock;
+	}
 
 	if (!try_module_get(ops->owner)) {
 		ret = -EINVAL;
@@ -195,12 +206,17 @@ int iommu_probe_device(struct device *dev)
 	if (ret)
 		goto err_module_put;
 
+	mutex_unlock(&iommu_probe_device_lock);
+
 	return 0;
 
 err_module_put:
 	module_put(ops->owner);
 err_free_dev_param:
 	iommu_free_dev_param(dev);
+err_unlock:
+	mutex_unlock(&iommu_probe_device_lock);
+
 	return ret;
 }
 
@@ -306,8 +322,8 @@ static ssize_t iommu_group_show_name(struct iommu_group *group, char *buf)
  * Elements are sorted by start address and overlapping segments
  * of the same type are merged.
  */
-static int iommu_insert_resv_region(struct iommu_resv_region *new,
-				    struct list_head *regions)
+int iommu_insert_resv_region(struct iommu_resv_region *new,
+			     struct list_head *regions)
 {
 	struct iommu_resv_region *iter, *tmp, *nr, *top;
 	LIST_HEAD(stack);
@@ -1908,8 +1924,8 @@ size_t iommu_pgsize(unsigned long pgsize_bitmap,
 	return pgsize;
 }
 
-static int __iommu_map(struct iommu_domain *domain, unsigned long iova,
-		       phys_addr_t paddr, size_t size, int prot, gfp_t gfp)
+int __iommu_map(struct iommu_domain *domain, unsigned long iova,
+	      phys_addr_t paddr, size_t size, int prot, gfp_t gfp)
 {
 	const struct iommu_ops *ops = domain->ops;
 	unsigned long orig_iova = iova;
@@ -2060,9 +2076,8 @@ size_t iommu_unmap_fast(struct iommu_domain *domain,
 }
 EXPORT_SYMBOL_GPL(iommu_unmap_fast);
 
-static size_t __iommu_map_sg(struct iommu_domain *domain, unsigned long iova,
-			     struct scatterlist *sg, unsigned int nents, int prot,
-			     gfp_t gfp)
+size_t iommu_map_sg(struct iommu_domain *domain, unsigned long iova,
+		    struct scatterlist *sg, unsigned int nents, int prot)
 {
 	size_t mapped = 0;
 	struct msm_iommu_ops *ops = to_msm_iommu_ops(domain->ops);
@@ -2072,6 +2087,7 @@ static size_t __iommu_map_sg(struct iommu_domain *domain, unsigned long iova,
 	trace_map_sg(to_msm_iommu_domain(domain), iova, mapped, prot);
 	return mapped;
 }
+EXPORT_SYMBOL_GPL(iommu_map_sg);
 
 size_t default_iommu_map_sg(struct iommu_domain *domain, unsigned long iova,
 		    struct scatterlist *sg, unsigned int nents, int prot, gfp_t gfp)
@@ -2116,21 +2132,6 @@ out_err:
 
 }
 EXPORT_SYMBOL(default_iommu_map_sg);
-
-size_t iommu_map_sg(struct iommu_domain *domain, unsigned long iova,
-		    struct scatterlist *sg, unsigned int nents, int prot)
-{
-	might_sleep();
-	return __iommu_map_sg(domain, iova, sg, nents, prot, GFP_KERNEL);
-}
-EXPORT_SYMBOL_GPL(iommu_map_sg);
-
-size_t iommu_map_sg_atomic(struct iommu_domain *domain, unsigned long iova,
-		    struct scatterlist *sg, unsigned int nents, int prot)
-{
-	return __iommu_map_sg(domain, iova, sg, nents, prot, GFP_ATOMIC);
-}
-EXPORT_SYMBOL_GPL(iommu_map_sg_atomic);
 
 int iommu_domain_window_enable(struct iommu_domain *domain, u32 wnd_nr,
 			       phys_addr_t paddr, u64 size, int prot)

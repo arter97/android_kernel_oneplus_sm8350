@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2014-2021, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
@@ -975,7 +975,7 @@ static void _sde_kms_drm_check_dpms(struct drm_atomic_state *old_state,
 			old_mode = DRM_PANEL_BLANK_POWERDOWN;
 		}
 
-		if ((old_mode != new_mode) || (old_fps != new_fps)) {
+		if (old_mode != new_mode) {
 			struct drm_panel_notifier notifier_data;
 
 			SDE_EVT32(old_mode, new_mode, old_fps, new_fps,
@@ -1247,12 +1247,14 @@ static void _sde_kms_release_splash_resource(struct sde_kms *sde_kms,
 {
 	struct msm_drm_private *priv;
 	struct sde_splash_display *splash_display;
+	struct sde_power_handle *phandle;
 	int i;
 
 	if (!sde_kms || !crtc)
 		return;
 
 	priv = sde_kms->dev->dev_private;
+	phandle = &priv->phandle;
 
 	if (!crtc->state->active || !sde_kms->splash_data.num_splash_displays)
 		return;
@@ -1279,9 +1281,9 @@ static void _sde_kms_release_splash_resource(struct sde_kms *sde_kms,
 	/* remove the votes if all displays are done with splash */
 	if (!sde_kms->splash_data.num_splash_displays) {
 		for (i = 0; i < SDE_POWER_HANDLE_DBUS_ID_MAX; i++)
-			sde_power_data_bus_set_quota(&priv->phandle, i,
+			sde_power_data_bus_set_quota(phandle, i,
 				SDE_POWER_HANDLE_ENABLE_BUS_AB_QUOTA,
-				SDE_POWER_HANDLE_ENABLE_BUS_IB_QUOTA);
+				phandle->ib_quota[i]);
 
 		pm_runtime_put_sync(sde_kms->dev->dev);
 	}
@@ -3737,38 +3739,51 @@ void sde_kms_display_early_wakeup(struct drm_device *dev,
 }
 
 #ifdef CONFIG_DEEPSLEEP
-static int _sde_kms_pm_set_clk_src(struct sde_kms *sde_kms, bool enable)
+static int _sde_kms_pm_deepsleep_helper(struct sde_kms *sde_kms, bool enter)
 {
 	int i, rc = 0;
 	void *display;
 	struct dsi_display *dsi_display;
 
-	if (mem_sleep_current == PM_SUSPEND_MEM) {
-		SDE_INFO("Deepsleep\n");
+	if (mem_sleep_current != PM_SUSPEND_MEM)
+		return 0;
 
-		for (i = 0; i < sde_kms->dsi_display_count; i++) {
-			display = sde_kms->dsi_displays[i];
-			dsi_display = (struct dsi_display *)display;
+	SDE_INFO("Deepsleep : enter %d\n", enter);
 
-			if (!dsi_display->needs_clk_src_reset)
-				continue;
+	for (i = 0; i < sde_kms->dsi_display_count; i++) {
+		display = sde_kms->dsi_displays[i];
+		dsi_display = (struct dsi_display *)display;
 
-			if (enable)
-				rc = dsi_display_set_clk_src(dsi_display);
-			else
-				rc = dsi_display_unset_clk_src(dsi_display);
 
-			if (rc) {
-				SDE_ERROR("failed to set clks rc:%d\n", rc);
-				return rc;
-			}
+		if (enter) {
+			/* During deepsleep, clk_parent are reset at HW
+			 * but sw caching is retained in clk framework. To
+			 * maintain same state. unset parents and restore
+			 * during exit.
+			 */
+			if (dsi_display->needs_clk_src_reset)
+				(void)dsi_display_unset_clk_src(dsi_display);
+
+			/* DSI ctrl regulator can be disabled, even in static
+			 * screen, during deepsleep
+			 */
+			if (dsi_display->needs_ctrl_vreg_disable)
+				(void)dsi_display_ctrl_vreg_off(dsi_display);
+		} else {
+			if (dsi_display->needs_ctrl_vreg_disable)
+				(void)dsi_display_ctrl_vreg_on(dsi_display);
+
+			if (dsi_display->needs_clk_src_reset)
+				(void)dsi_display_set_clk_src(dsi_display);
+
 		}
 	}
 
 	return rc;
 }
 #else
-static inline int _sde_kms_pm_set_clk_src(struct sde_kms *sde_kms, bool enable)
+static inline int _sde_kms_pm_deepsleep_helper(struct sde_kms *sde_kms,
+					bool enter)
 {
 	return 0;
 }
@@ -3914,6 +3929,7 @@ retry:
 				DRM_ERROR("failed to get crtc %d state\n",
 						conn->state->crtc->base.id);
 				drm_connector_list_iter_end(&conn_iter);
+				ret = -EINVAL;
 				goto unlock;
 			}
 
@@ -3952,6 +3968,12 @@ unlock:
 		drm_modeset_backoff(&ctx);
 		goto retry;
 	}
+
+	if ((ret || !num_crtcs) && sde_kms->suspend_state) {
+		drm_atomic_state_put(sde_kms->suspend_state);
+		sde_kms->suspend_state = NULL;
+	}
+
 	drm_modeset_drop_locks(&ctx);
 	drm_modeset_acquire_fini(&ctx);
 
@@ -3965,8 +3987,7 @@ unlock:
 	pm_runtime_put_sync(dev);
 	pm_runtime_get_noresume(dev);
 
-	/* reset clock source based on PM suspend state */
-	_sde_kms_pm_set_clk_src(sde_kms, false);
+	_sde_kms_pm_deepsleep_helper(sde_kms, true);
 
 	/* dump clock state before entering suspend */
 	if (sde_kms->pm_suspend_clk_dump)
@@ -3993,7 +4014,8 @@ static int sde_kms_pm_resume(struct device *dev)
 
 	SDE_EVT32(sde_kms->suspend_state != NULL);
 
-	drm_mode_config_reset(ddev);
+	if (sde_kms->suspend_state)
+		drm_mode_config_reset(ddev);
 
 	drm_modeset_acquire_init(&ctx, 0);
 retry:
@@ -4005,8 +4027,8 @@ retry:
 		goto end;
 	}
 
-	/* reset clock source based on PM suspend state */
-	_sde_kms_pm_set_clk_src(sde_kms, true);
+	/* If coming out of deepsleep, restore resources.*/
+	_sde_kms_pm_deepsleep_helper(sde_kms, false);
 
 	sde_kms->suspend_block = false;
 

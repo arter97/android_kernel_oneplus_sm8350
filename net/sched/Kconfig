@@ -469,17 +469,6 @@ config NET_CLS_BASIC
 	  To compile this code as a module, choose M here: the
 	  module will be called cls_basic.
 
-config NET_CLS_TCINDEX
-	tristate "Traffic-Control Index (TCINDEX)"
-	select NET_CLS
-	---help---
-	  Say Y here if you want to be able to classify packets based on
-	  traffic control indices. You will want this feature if you want
-	  to implement Differentiated Services together with DSMARK.
-
-	  To compile this code as a module, choose M here: the
-	  module will be called cls_tcindex.
-
 config NET_CLS_ROUTE4
 	tristate "Routing decision (ROUTE)"
 	depends on INET
@@ -974,6 +963,32 @@ config NET_TC_SKB_EXT
 	  the correct chain in tc software datapath.
 
 	  Say N here if you won't be using tc<->ovs offload or tc chains offload.
+
+config NET_SCHED_ACT_VLAN_QGKI
+	bool "VLAN pop_eth/push_eth patch"
+	depends on NET_ACT_VLAN
+	depends on QGKI
+	help
+	  Say Y here to support tc VLAN pop_eth/push_eth actions. Macro guards the
+	  code against ABI breakage. When this flag is enabled, it is safe to assume
+	  that the build is a Non GKI build.
+
+	  Say N to exclude this support.
+
+	  If unsure, say Y.
+
+config NET_SCHED_ACT_MPLS_QGKI
+	bool "MPLS mac_push patch"
+	depends on NET_ACT_MPLS
+	depends on QGKI
+	help
+	  Say Y here to support tc MPLS mac_push actions. Macro guards the code
+	  against ABI breakage. When this flag is enabled, it is safe to assume
+	  that the build is a Non GKI build.
+
+	  Say N to exclude this support.
+
+	  If unsure, say Y.
 
 endif # NET_SCHED
 

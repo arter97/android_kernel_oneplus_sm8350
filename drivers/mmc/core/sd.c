@@ -857,7 +857,7 @@ try_again:
 #if defined(CONFIG_SDC_QTI)
 	   (ocr & SD_OCR_S18R) &&
 #endif
-	   (*rocr & 0x01000000)) {
+	   (*rocr & SD_ROCR_S18A)) {
 		err = mmc_set_uhs_voltage(host, pocr);
 		if (err == -EAGAIN) {
 			retries--;
@@ -1122,7 +1122,7 @@ retry:
 					mmc_remove_card(card);
 				goto retry;
 			}
-			goto done;
+			goto cont;
 		}
 	}
 
@@ -1159,6 +1159,7 @@ retry:
 		}
 	}
 
+cont:
 	if (host->cqe_ops && !host->cqe_enabled) {
 		err = host->cqe_ops->cqe_enable(host, card);
 		if (!err) {
@@ -1176,11 +1177,12 @@ retry:
 		err = -EINVAL;
 		goto free_card;
 	}
-done:
+
 #if defined(CONFIG_SDC_QTI)
 	card->clk_scaling_highest = mmc_sd_get_max_clock(card);
 	card->clk_scaling_lowest = host->f_min;
 #endif
+
 	host->card = card;
 	return 0;
 

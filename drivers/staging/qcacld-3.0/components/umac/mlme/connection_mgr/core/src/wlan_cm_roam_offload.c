@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2012-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -271,6 +272,51 @@ cm_roam_send_rt_stats_config(struct wlan_objmgr_psoc *psoc,
 
 	return status;
 }
+
+QDF_STATUS
+cm_roam_send_ho_delay_config(struct wlan_objmgr_psoc *psoc,
+			     uint8_t vdev_id, uint16_t param_value)
+{
+	QDF_STATUS status;
+
+	wlan_cm_roam_set_ho_delay_config(psoc, param_value);
+	status = wlan_cm_tgt_send_roam_ho_delay_config(psoc,
+						       vdev_id, param_value);
+	if (QDF_IS_STATUS_ERROR(status))
+		mlme_debug("fail to send roam HO delay config");
+
+	return status;
+}
+
+QDF_STATUS
+cm_exclude_rm_partial_scan_freq(struct wlan_objmgr_psoc *psoc,
+				uint8_t vdev_id, uint8_t param_value)
+{
+	QDF_STATUS status;
+
+	wlan_cm_set_exclude_rm_partial_scan_freq(psoc, param_value);
+	status = wlan_cm_tgt_exclude_rm_partial_scan_freq(psoc, vdev_id,
+							  param_value);
+	if (QDF_IS_STATUS_ERROR(status))
+		mlme_debug("fail to exclude roam partial scan channels");
+
+	return status;
+}
+
+QDF_STATUS cm_roam_full_scan_6ghz_on_disc(struct wlan_objmgr_psoc *psoc,
+					  uint8_t vdev_id,
+					  uint8_t param_value)
+{
+	QDF_STATUS status;
+
+	wlan_cm_roam_set_full_scan_6ghz_on_disc(psoc, param_value);
+	status = wlan_cm_tgt_send_roam_full_scan_6ghz_on_disc(psoc, vdev_id,
+							      param_value);
+	if (QDF_IS_STATUS_ERROR(status))
+		mlme_debug("fail to send 6 GHz channels inclusion in full scan");
+
+	return status;
+}
 #else
 static inline void
 cm_roam_reason_vsie(struct wlan_objmgr_psoc *psoc, uint8_t vdev_id,
@@ -502,6 +548,7 @@ cm_roam_start_req(struct wlan_objmgr_psoc *psoc, uint8_t vdev_id,
 {
 	struct wlan_roam_start_config *start_req;
 	QDF_STATUS status;
+	struct cm_roam_values_copy temp;
 
 	start_req = qdf_mem_malloc(sizeof(*start_req));
 	if (!start_req)
@@ -524,6 +571,18 @@ cm_roam_start_req(struct wlan_objmgr_psoc *psoc, uint8_t vdev_id,
 
 	start_req->wlan_roam_rt_stats_config =
 			wlan_cm_get_roam_rt_stats(psoc, ROAM_RT_STATS_ENABLE);
+
+	start_req->wlan_roam_ho_delay_config =
+			wlan_cm_roam_get_ho_delay_config(psoc);
+
+	start_req->wlan_exclude_rm_partial_scan_freq =
+				wlan_cm_get_exclude_rm_partial_scan_freq(psoc);
+
+	start_req->wlan_roam_full_scan_6ghz_on_disc =
+				wlan_cm_roam_get_full_scan_6ghz_on_disc(psoc);
+
+	wlan_cm_roam_cfg_get_value(psoc, vdev_id, ROAM_RSSI_DIFF_6GHZ, &temp);
+	start_req->wlan_roam_rssi_diff_6ghz = temp.uint_value;
 
 	status = wlan_cm_tgt_send_roam_start_req(psoc, vdev_id, start_req);
 	if (QDF_IS_STATUS_ERROR(status))
@@ -548,6 +607,7 @@ cm_roam_update_config_req(struct wlan_objmgr_psoc *psoc, uint8_t vdev_id,
 {
 	struct wlan_roam_update_config *update_req;
 	QDF_STATUS status;
+	struct cm_roam_values_copy temp;
 
 	cm_roam_set_roam_reason_better_ap(psoc, vdev_id, false);
 
@@ -573,6 +633,18 @@ cm_roam_update_config_req(struct wlan_objmgr_psoc *psoc, uint8_t vdev_id,
 
 	update_req->wlan_roam_rt_stats_config =
 			wlan_cm_get_roam_rt_stats(psoc, ROAM_RT_STATS_ENABLE);
+
+	update_req->wlan_roam_ho_delay_config =
+			wlan_cm_roam_get_ho_delay_config(psoc);
+
+	update_req->wlan_exclude_rm_partial_scan_freq =
+				wlan_cm_get_exclude_rm_partial_scan_freq(psoc);
+
+	update_req->wlan_roam_full_scan_6ghz_on_disc =
+				wlan_cm_roam_get_full_scan_6ghz_on_disc(psoc);
+
+	wlan_cm_roam_cfg_get_value(psoc, vdev_id, ROAM_RSSI_DIFF_6GHZ, &temp);
+	update_req->wlan_roam_rssi_diff_6ghz = temp.uint_value;
 
 	status = wlan_cm_tgt_send_roam_update_req(psoc, vdev_id, update_req);
 	if (QDF_IS_STATUS_ERROR(status))
@@ -960,7 +1032,10 @@ cm_roam_switch_to_deinit(struct wlan_objmgr_pdev *pdev,
 		if (sup_disabled_roam) {
 			mlme_err("vdev[%d]: supplicant disabled roam. clear roam scan mode",
 				 vdev_id);
-			cm_roam_switch_to_rso_stop(pdev, vdev_id, reason);
+			status = cm_roam_stop_req(psoc, vdev_id,
+						  REASON_DISCONNECTED);
+			if (QDF_IS_STATUS_ERROR(status))
+				mlme_err("ROAM: Unable to clear roam scan mode");
 		}
 
 	case WLAN_ROAM_INIT:

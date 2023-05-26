@@ -191,6 +191,9 @@ static struct socinfo {
 #define SMEM_IMAGE_VERSION_OEM_OFFSET 95
 #define SMEM_IMAGE_VERSION_PARTITION_APPS 10
 
+int softsku_idx;
+module_param_named(softsku_idx, softsku_idx, int, 0644);
+
 /* Version 2 */
 static uint32_t socinfo_get_raw_id(void)
 {
@@ -706,6 +709,8 @@ static const struct soc_id soc_id[] = {
 	{ 498, "YUPIKP-IOT" },
 	{ 499, "YUPIKP" },
 	{ 515, "YUPIK-LTE" },
+	{ 575, "KATMAI" },
+	{ 576, "KATMAIP" },
 	{ 523, "BENGAL" },
 	{ 524, "SCUBA" },
 	{ 417, "BENGAL" },

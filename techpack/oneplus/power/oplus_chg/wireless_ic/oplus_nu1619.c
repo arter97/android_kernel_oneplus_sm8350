@@ -88,26 +88,27 @@ static int nu1619_wpc_get_voltage_now(void);
 static int nu1619_wpc_get_current_now(void);
 static int nu1619_wpc_get_real_type(void);
 
-
 #ifdef OPLUS_FEATURE_CHG_BASIC
-void __attribute__((weak)) switch_wireless_charger_state(int wireless_state) {return;}
+void __attribute__((weak)) switch_wireless_charger_state(int wireless_state)
+{
+	return;
+}
 #endif
 
 static DEFINE_MUTEX(nu1619_i2c_access);
 
 /*This array must be consisten with E_FASTCHARGE_LEVEL*/
-static int fasctchg_current[FASTCHARGE_LEVEL_NUM] =
-{
-0,			/*FASTCHARGE_LEVEL_UNKNOW*/
-2300,		/*FASTCHARGE_LEVEL_1*/
-1250,		/*FASTCHARGE_LEVEL_2*/
-1000,		/*FASTCHARGE_LEVEL_3*/
-900,		/*FASTCHARGE_LEVEL_4*/
-800,		/*FASTCHARGE_LEVEL_5*/
-700,		/*FASTCHARGE_LEVEL_6*/
-600,		/*FASTCHARGE_LEVEL_7*/
-500,		/*FASTCHARGE_LEVEL_8*/
-400,		/*FASTCHARGE_LEVEL_9*/
+static int fasctchg_current[FASTCHARGE_LEVEL_NUM] = {
+	0, /*FASTCHARGE_LEVEL_UNKNOW*/
+	2300, /*FASTCHARGE_LEVEL_1*/
+	1250, /*FASTCHARGE_LEVEL_2*/
+	1000, /*FASTCHARGE_LEVEL_3*/
+	900, /*FASTCHARGE_LEVEL_4*/
+	800, /*FASTCHARGE_LEVEL_5*/
+	700, /*FASTCHARGE_LEVEL_6*/
+	600, /*FASTCHARGE_LEVEL_7*/
+	500, /*FASTCHARGE_LEVEL_8*/
+	400, /*FASTCHARGE_LEVEL_9*/
 };
 
 static void wpc_battery_update(void)
@@ -132,22 +133,19 @@ static int get_rtc_time(unsigned long *rtc_time)
 
 	rtc = rtc_class_open(CONFIG_RTC_HCTOSYS_DEVICE);
 	if (rtc == NULL) {
-		pr_err("Failed to open rtc device (%s)\n",
-				CONFIG_RTC_HCTOSYS_DEVICE);
+		pr_err("Failed to open rtc device (%s)\n", CONFIG_RTC_HCTOSYS_DEVICE);
 		return -EINVAL;
 	}
 
 	rc = rtc_read_time(rtc, &tm);
 	if (rc) {
-		pr_err("Failed to read rtc time (%s) : %d\n",
-				CONFIG_RTC_HCTOSYS_DEVICE, rc);
+		pr_err("Failed to read rtc time (%s) : %d\n", CONFIG_RTC_HCTOSYS_DEVICE, rc);
 		goto close_time;
 	}
 
 	rc = rtc_valid_tm(&tm);
 	if (rc) {
-		pr_err("Invalid RTC time (%s): %d\n",
-				CONFIG_RTC_HCTOSYS_DEVICE, rc);
+		pr_err("Invalid RTC time (%s): %d\n", CONFIG_RTC_HCTOSYS_DEVICE, rc);
 		goto close_time;
 	}
 	rtc_tm_to_time(&tm, rtc_time);
@@ -173,11 +171,11 @@ static int nu1619_test_charging_status(void)
 	}
 
 	chg_err("<~WPC~>[-TEST-]charging time: %ds\n", now_seconds - records_seconds);
-	if ((now_seconds - records_seconds) >  270) {
+	if ((now_seconds - records_seconds) > 270) {
 		return 4;
-	} else if ((now_seconds - records_seconds) >  180) {
+	} else if ((now_seconds - records_seconds) > 180) {
 		return 1;
-	} else if ((now_seconds - records_seconds) >  20) {
+	} else if ((now_seconds - records_seconds) > 20) {
 		return 2;
 	} else {
 		return 0;
@@ -197,11 +195,11 @@ static void nu1619_test_reset_record_seconds(void)
 	/*chg_err("<~WPC~>[-TEST-] record begin seconds: %d\n", records_seconds);*/
 }
 
-#define P22X_ADD_COUNT      2
+#define P22X_ADD_COUNT 2
 static int __nu1619_read_reg(struct oplus_nu1619_ic *chip, int reg, char *returnData, int count)
 {
 	/* We have 16-bit i2c addresses - care for endianness */
-	char cmd_buf[2]={ reg >> 8, reg & 0xff };
+	char cmd_buf[2] = { reg >> 8, reg & 0xff };
 	int ret = 0;
 	int i;
 	char val_buf[20];
@@ -289,7 +287,7 @@ static int nu1619_read_reg(struct oplus_nu1619_ic *chip, int reg, char *returnDa
 	return ret;
 }
 
-static int nu1619_config_interface (struct oplus_nu1619_ic *chip, int RegNum, int val, int MASK)
+static int nu1619_config_interface(struct oplus_nu1619_ic *chip, int RegNum, int val, int MASK)
 {
 	char nu1619_reg = 0;
 	int ret = 0;
@@ -334,10 +332,9 @@ static int nu1619_write_cmd_D(struct oplus_nu1619_ic *chip, int val)
 	return ret;
 }
 
-
 static void nu1619_clear_irq(struct oplus_nu1619_ic *chip, char mark0, char mark1)
 {
-	char write_data[2] = {0, 0};
+	char write_data[2] = { 0, 0 };
 
 	return;
 
@@ -552,7 +549,6 @@ static void nu1619_set_rx_charge_voltage(struct oplus_nu1619_ic *chip, int vol)
 	nu1619_write_cmd_D(chip, 0x02);
 }
 
-
 static void nu1619_set_rx_charge_current(struct oplus_nu1619_ic *chip, int chg_current)
 {
 	chg_err("<~WPC~> set charge current: %d\n", chg_current);
@@ -606,22 +602,14 @@ static int nu1619_decrease_vout_to_target(struct oplus_nu1619_ic *chip, int vout
 {
 	int temp_value;
 
-	chg_err("<~WPC~> vout_setting[%d], vout_sample[%d],target_voltage[%d]\n",
-			chip->nu1619_chg_status.charge_voltage,
-			chip->nu1619_chg_status.vout,
-			vout_target);
+	chg_err("<~WPC~> vout_setting[%d], vout_sample[%d],target_voltage[%d]\n", chip->nu1619_chg_status.charge_voltage, chip->nu1619_chg_status.vout,
+		vout_target);
 
 	if (chip->nu1619_chg_status.vout > vout_target) {
 		if (chip->nu1619_chg_status.charge_voltage > vout_target) {
-			temp_value = nu1619_decrease_vc_by_step(chip,
-													chip->nu1619_chg_status.charge_voltage,
-													vout_target,
-													WPC_CHARGE_VOLTAGE_CHANGE_STEP_1V);
+			temp_value = nu1619_decrease_vc_by_step(chip, chip->nu1619_chg_status.charge_voltage, vout_target, WPC_CHARGE_VOLTAGE_CHANGE_STEP_1V);
 		} else {
-			temp_value = nu1619_decrease_vc_by_step(chip,
-													chip->nu1619_chg_status.charge_voltage,
-													vout_min,
-													WPC_CHARGE_VOLTAGE_CHANGE_STEP_100MV);
+			temp_value = nu1619_decrease_vc_by_step(chip, chip->nu1619_chg_status.charge_voltage, vout_min, WPC_CHARGE_VOLTAGE_CHANGE_STEP_100MV);
 		}
 
 		if (temp_value != 0) {
@@ -640,22 +628,14 @@ static int nu1619_increase_vout_to_target(struct oplus_nu1619_ic *chip, int vout
 {
 	int temp_value;
 
-	chg_err("<~WPC~> vout_setting[%d], vout_sample[%d],target_voltage[%d]\n",
-			chip->nu1619_chg_status.charge_voltage,
-			chip->nu1619_chg_status.vout,
-			vout_target);
+	chg_err("<~WPC~> vout_setting[%d], vout_sample[%d],target_voltage[%d]\n", chip->nu1619_chg_status.charge_voltage, chip->nu1619_chg_status.vout,
+		vout_target);
 
 	if (chip->nu1619_chg_status.vout < vout_target) {
 		if (chip->nu1619_chg_status.charge_voltage < vout_target) {
-			temp_value = nu1619_increase_vc_by_step(chip,
-													chip->nu1619_chg_status.charge_voltage,
-													vout_target,
-													WPC_CHARGE_VOLTAGE_CHANGE_STEP_1V);
+			temp_value = nu1619_increase_vc_by_step(chip, chip->nu1619_chg_status.charge_voltage, vout_target, WPC_CHARGE_VOLTAGE_CHANGE_STEP_1V);
 		} else {
-			temp_value = nu1619_increase_vc_by_step(chip,
-													chip->nu1619_chg_status.charge_voltage,
-													vout_max,
-													WPC_CHARGE_VOLTAGE_CHANGE_STEP_100MV);
+			temp_value = nu1619_increase_vc_by_step(chip, chip->nu1619_chg_status.charge_voltage, vout_max, WPC_CHARGE_VOLTAGE_CHANGE_STEP_100MV);
 		}
 
 		if (temp_value != 0) {
@@ -721,7 +701,7 @@ static void nu1619_reset_variables(struct oplus_nu1619_ic *chip)
 
 static void nu1619_init(struct oplus_nu1619_ic *chip)
 {
-	char write_data[2] = {0, 0};
+	char write_data[2] = { 0, 0 };
 	return;
 
 	write_data[0] = 0x17;
@@ -731,7 +711,6 @@ static void nu1619_init(struct oplus_nu1619_ic *chip)
 	write_data[0] = 0x30;
 	write_data[1] = 0x00;
 	nu1619_write_reg_multi_byte(chip, 0x0056, write_data, 2);
-
 
 	write_data[0] = 0x20;
 	write_data[1] = 0x00;
@@ -829,8 +808,8 @@ bool nu1619_wpc_get_normal_charging(void)
 		return false;
 	}
 
-	if(nu1619_chip->wireless_mode == WIRELESS_MODE_RX) {
-		if(nu1619_chip->nu1619_chg_status.fastchg_ing) {
+	if (nu1619_chip->wireless_mode == WIRELESS_MODE_RX) {
+		if (nu1619_chip->nu1619_chg_status.fastchg_ing) {
 			return false;
 		} else {
 			return true;
@@ -847,8 +826,8 @@ bool nu1619_wpc_get_fast_charging(void)
 		return false;
 	}
 
-	if(nu1619_chip->wireless_mode == WIRELESS_MODE_RX) {
-		if(nu1619_chip->nu1619_chg_status.fastchg_ing) {
+	if (nu1619_chip->wireless_mode == WIRELESS_MODE_RX) {
+		if (nu1619_chip->nu1619_chg_status.fastchg_ing) {
 			return true;
 		} else {
 			return false;
@@ -883,7 +862,7 @@ bool nu1619_wpc_get_otg_charging(void)
 		return false;
 	}
 
-	if(nu1619_chip->wireless_mode == WIRELESS_MODE_TX) {
+	if (nu1619_chip->wireless_mode == WIRELESS_MODE_TX) {
 		return true;
 	} else {
 		return false;
@@ -892,7 +871,7 @@ bool nu1619_wpc_get_otg_charging(void)
 
 int nu1619_get_rx_temperature(void)
 {
-	char temp_data[2] = {0, 0};
+	char temp_data[2] = { 0, 0 };
 	int temp_value;
 	int rc;
 
@@ -927,27 +906,27 @@ void nu1619_set_rtx_function_prepare(void)
 
 static void nu1619_disable_tx_power(void)
 {
-		chg_err("<~WPC~> nu1619_disable_tx_power\n");
-		if (oplus_get_wired_chg_present() == true) {
-			chg_err("<~WPC~> wired_chg_present\n");
-			nu1619_set_booster_en_val(0);
-			nu1619_set_ext2_wireless_otg_en_val(1);
-		} else if (oplus_get_wired_otg_online() == true) {
-			chg_err("<~WPC~> wired_otg_online\n");
-			/*mp2650_wireless_set_mps_otg_en_val(0);in mp2650_otg_disable*/
-			mp2650_otg_disable();
-			oplus_set_wrx_otg_value(0);
-		} else {
-			mp2650_otg_disable();
-			/*mp2650_wireless_set_mps_otg_en_val(0);in mp2650_otg_disable*/
-			oplus_set_wrx_otg_value(0);
-			mp2650_enable_charging();
-			msleep(100);
-			oplus_set_wrx_en_value(0);
-		}
+	chg_err("<~WPC~> nu1619_disable_tx_power\n");
+	if (oplus_get_wired_chg_present() == true) {
+		chg_err("<~WPC~> wired_chg_present\n");
+		nu1619_set_booster_en_val(0);
+		nu1619_set_ext2_wireless_otg_en_val(1);
+	} else if (oplus_get_wired_otg_online() == true) {
+		chg_err("<~WPC~> wired_otg_online\n");
+		/*mp2650_wireless_set_mps_otg_en_val(0);in mp2650_otg_disable*/
+		mp2650_otg_disable();
+		oplus_set_wrx_otg_value(0);
+	} else {
+		mp2650_otg_disable();
+		/*mp2650_wireless_set_mps_otg_en_val(0);in mp2650_otg_disable*/
+		oplus_set_wrx_otg_value(0);
+		mp2650_enable_charging();
+		msleep(100);
+		oplus_set_wrx_en_value(0);
+	}
 
-		mp2650_set_mps_otg_voltage(false);
-		mp2650_set_mps_second_otg_voltage(false);
+	mp2650_set_mps_otg_voltage(false);
+	mp2650_set_mps_second_otg_voltage(false);
 }
 
 static int nu1619_start_tx(struct oplus_nu1619_ic *chip)
@@ -955,7 +934,7 @@ static int nu1619_start_tx(struct oplus_nu1619_ic *chip)
 	int ret = -1;
 	static int cnt = 0;
 	mutex_lock(&nu1619_i2c_access);
-	while (ret !=0 && ++cnt < 10) {
+	while (ret != 0 && ++cnt < 10) {
 		ret = __nu1619_write_reg(chip, 0x000D, 0x20);
 		msleep(10);
 	}
@@ -1151,18 +1130,9 @@ void nu1619_wpc_print_log(void)
 	chg_err("<~WPC~>vt_sleep[%d], idt_connect[%d], idt_int[%d], idt_en[%d], \
 booster_en[%d], chargepump_en[%d], wrx_en[%d], wrx_otg_en[%d], mps_otg_en[%d], \
 5V_en[%d], EXT2_otg_en[%d], EXT1_otg_en[%d]\n",
-							nu1619_get_vt_sleep_val(),
-							nu1619_get_idt_con_val(),
-							nu1619_get_idt_int_val(),
-							oplus_get_idt_en_val(),
-							nu1619_get_booster_en_val(),
-							chargepump_get_chargepump_en_val(),
-							oplus_get_wrx_en_val(),
-							oplus_get_wrx_otg_val(),
-							mp2650_wireless_get_mps_otg_en_val(),
-							nu1619_get_cp_ldo_5v_val(),
-							nu1619_get_ext2_wireless_otg_en_val(),
-							nu1619_get_ext1_wired_otg_en_val());
+		nu1619_get_vt_sleep_val(), nu1619_get_idt_con_val(), nu1619_get_idt_int_val(), oplus_get_idt_en_val(), nu1619_get_booster_en_val(),
+		chargepump_get_chargepump_en_val(), oplus_get_wrx_en_val(), oplus_get_wrx_otg_val(), mp2650_wireless_get_mps_otg_en_val(),
+		nu1619_get_cp_ldo_5v_val(), nu1619_get_ext2_wireless_otg_en_val(), nu1619_get_ext1_wired_otg_en_val());
 
 	if (!nu1619_chip->nu1619_chg_status.charge_online) {
 		chg_err("<~WPC~> charge_online is false\n");
@@ -1172,26 +1142,15 @@ booster_en[%d], chargepump_en[%d], wrx_en[%d], wrx_otg_en[%d], mps_otg_en[%d], \
 
 	chg_err("<~WPC~> [Chg sta: %d] [Adap type: %d] [Chg type: %d] [Dock Ver: %d] \
 [Chg Vol: %d] [Chg Curr: %d] [Curr limit: %d] [ffc: %d] [silent: %d]\n",
-			nu1619_chip->nu1619_chg_status.charge_status,
-			nu1619_chip->nu1619_chg_status.adapter_type,
-			nu1619_chip->nu1619_chg_status.charge_type,
-			nu1619_chip->nu1619_chg_status.dock_version,
-			nu1619_chip->nu1619_chg_status.charge_voltage,
-			nu1619_chip->nu1619_chg_status.charge_current,
-			nu1619_chip->nu1619_chg_status.fastchg_current_limit,
-			nu1619_chip->nu1619_chg_status.wpc_ffc_charge,
-			nu1619_chip->nu1619_chg_status.work_silent_mode);
+		nu1619_chip->nu1619_chg_status.charge_status, nu1619_chip->nu1619_chg_status.adapter_type, nu1619_chip->nu1619_chg_status.charge_type,
+		nu1619_chip->nu1619_chg_status.dock_version, nu1619_chip->nu1619_chg_status.charge_voltage, nu1619_chip->nu1619_chg_status.charge_current,
+		nu1619_chip->nu1619_chg_status.fastchg_current_limit, nu1619_chip->nu1619_chg_status.wpc_ffc_charge,
+		nu1619_chip->nu1619_chg_status.work_silent_mode);
 
 	chg_err("<~WPC~> [Temp: %d] [Soc: %d] [Chg curr: %d] [Batt vol: %d]\
 [Batt vol max: %d] [Batt vol min: %d] [Term Vol: %d] [Term Curr: %d]\n",
-			g_oplus_chip->temperature,
-			g_oplus_chip->soc,
-			g_oplus_chip->icharging,
-			g_oplus_chip->batt_volt,
-			g_oplus_chip->batt_volt_max,
-			g_oplus_chip->batt_volt_min,
-			mp2650_get_termchg_voltage(),
-			mp2650_get_termchg_current());
+		g_oplus_chip->temperature, g_oplus_chip->soc, g_oplus_chip->icharging, g_oplus_chip->batt_volt, g_oplus_chip->batt_volt_max,
+		g_oplus_chip->batt_volt_min, mp2650_get_termchg_voltage(), mp2650_get_termchg_current());
 
 	/*chg_err("<~WPC~> P9415 Temperature = %d", nu1619_get_rx_temperature());*/
 }
@@ -1241,7 +1200,6 @@ static int nu1619_enter_write_mode(struct oplus_nu1619_ic *chip)
 
 	return 1;
 }
-
 
 static int nu1619_wirte_firmware_data(struct oplus_nu1619_ic *chip, unsigned short addr, unsigned short length)
 {
@@ -1353,7 +1311,6 @@ static int nu1619_wirte_firmware_data(struct oplus_nu1619_ic *chip, unsigned sho
 	return 1;
 }
 
-
 static int nu1619_config_gpio_1V8(struct oplus_nu1619_ic *chip)
 {
 	int ret;
@@ -1370,7 +1327,6 @@ static int nu1619_config_gpio_1V8(struct oplus_nu1619_ic *chip)
 
 	return 1;
 }
-
 
 static int nu1619_enter_dtm_mode(struct oplus_nu1619_ic *chip)
 {
@@ -1413,7 +1369,6 @@ static int nu1619_enter_dtm_mode(struct oplus_nu1619_ic *chip)
 	return 1;
 }
 
-
 static int nu1619_exit_dtm_mode(struct oplus_nu1619_ic *chip)
 {
 	int ret;
@@ -1442,7 +1397,6 @@ static int nu1619_exit_dtm_mode(struct oplus_nu1619_ic *chip)
 
 	return 1;
 }
-
 
 bool nu1619_check_i2c_is_ok(struct oplus_nu1619_ic *chip)
 {
@@ -1498,7 +1452,7 @@ static bool nu1619_download_firmware_data(struct oplus_nu1619_ic *chip, char are
 	return true;
 }
 
-bool nu1619_download_firmware_area(struct oplus_nu1619_ic * chip, char area)
+bool nu1619_download_firmware_area(struct oplus_nu1619_ic *chip, char area)
 {
 	bool status = false;
 	if (area == BOOT_AREA) {
@@ -1515,7 +1469,7 @@ bool nu1619_download_firmware_area(struct oplus_nu1619_ic * chip, char area)
 	return true;
 }
 
-bool nu1619_download_firmware(struct oplus_nu1619_ic * chip)
+bool nu1619_download_firmware(struct oplus_nu1619_ic *chip)
 {
 	bool status = false;
 	status = nu1619_download_firmware_area(chip, BOOT_AREA);
@@ -1538,8 +1492,8 @@ bool nu1619_download_firmware(struct oplus_nu1619_ic * chip)
 	return true;
 }
 
-static bool nu1619_req_checksum_and_fw_version(struct oplus_nu1619_ic *chip,
-					       char *boot_check_sum, char *rx_check_sum, char *tx_check_sum, char *boot_ver, char *rx_ver, char *tx_ver)
+static bool nu1619_req_checksum_and_fw_version(struct oplus_nu1619_ic *chip, char *boot_check_sum, char *rx_check_sum, char *tx_check_sum, char *boot_ver,
+					       char *rx_ver, char *tx_ver)
 {
 	char read_buffer1[4];
 	char read_buffer2[5];
@@ -1581,8 +1535,8 @@ static bool nu1619_check_firmware_version(struct oplus_nu1619_ic *chip)
 		g_boot_no_need_update = true;
 		chg_err("[nu1619] [%s] g_boot_no_need_update = true \n", __func__);
 	}
-	chg_err(",g_tx_no_need_update=%d, g_rx_no_need_update=%d, g_boot_no_need_update=%d \n",
-		g_tx_no_need_update, g_rx_no_need_update, g_boot_no_need_update);
+	chg_err(",g_tx_no_need_update=%d, g_rx_no_need_update=%d, g_boot_no_need_update=%d \n", g_tx_no_need_update, g_rx_no_need_update,
+		g_boot_no_need_update);
 	if ((g_tx_no_need_update) && (g_rx_no_need_update) && (g_boot_no_need_update)) {
 		return false;
 	}
@@ -1601,8 +1555,7 @@ static bool nu1619_check_firmware(struct oplus_nu1619_ic *chip)
 	}
 }
 
-
-bool nu1619_onekey_download_firmware(struct oplus_nu1619_ic * chip)
+bool nu1619_onekey_download_firmware(struct oplus_nu1619_ic *chip)
 {
 	bool status = false;
 	chg_err("[nu1619] enter \n");
@@ -1641,11 +1594,10 @@ bool nu1619_onekey_download_firmware(struct oplus_nu1619_ic * chip)
 	return true;
 }
 
-
 static int nu1619_check_idt_fw_update(struct oplus_nu1619_ic *chip)
 {
 	int rc = -1;
-/*
+	/*
 //	static int idt_update_retry_cnt = 0;
 //	char temp[4] = {0, 0, 0, 0};
 //	unsigned char *fw_buf;
@@ -1685,7 +1637,7 @@ static int nu1619_check_idt_fw_update(struct oplus_nu1619_ic *chip)
 	oplus_wireless_set_otg_en_val(0);
 	msleep(1000);
 
-	if(nu1619_onekey_download_firmware(chip) == true) {
+	if (nu1619_onekey_download_firmware(chip) == true) {
 		chip->nu1619_chg_status.check_fw_update = true;
 	}
 
@@ -1719,7 +1671,7 @@ bool nu1619_firmware_is_updating(void)
 	return nu1619_chip->nu1619_chg_status.idt_fw_updating;
 }
 
-static int nu1619_get_vrect_iout(struct oplus_nu1619_ic * chip)
+static int nu1619_get_vrect_iout(struct oplus_nu1619_ic *chip)
 {
 	static int iout_error_cnt = 0;
 	char val_buf[5] = { 0, 0, 0, 0, 0 };
@@ -1805,8 +1757,7 @@ READ_IOUT_RETRY:
 	return 0;
 }
 
-
-static int nu1619_get_vout(struct oplus_nu1619_ic * chip)
+static int nu1619_get_vout(struct oplus_nu1619_ic *chip)
 {
 	char val_buf[5] = { 0, 0, 0, 0, 0 };
 	int vout_value = 0;
@@ -1818,7 +1769,7 @@ static int nu1619_get_vout(struct oplus_nu1619_ic * chip)
 	return vout_value;
 }
 
-static int nu1619_get_tx_iout(struct oplus_nu1619_ic * chip)
+static int nu1619_get_tx_iout(struct oplus_nu1619_ic *chip)
 {
 	char val_buf[5] = { 0, 0, 0, 0, 0 };
 	int iout_value = 0;
@@ -1831,34 +1782,33 @@ static int nu1619_get_tx_iout(struct oplus_nu1619_ic * chip)
 	return iout_value;
 }
 
-static void nu1619_begin_CEP_detect(struct oplus_nu1619_ic * chip)
+static void nu1619_begin_CEP_detect(struct oplus_nu1619_ic *chip)
 {
 	chip->nu1619_chg_status.CEP_ready = false;
 	schedule_delayed_work(&chip->nu1619_CEP_work, P922X_CEP_INTERVAL);
 }
 
-static void nu1619_reset_CEP_flag(struct oplus_nu1619_ic * chip)
+static void nu1619_reset_CEP_flag(struct oplus_nu1619_ic *chip)
 {
 	chip->nu1619_chg_status.CEP_ready = false;
 }
 
-int nu1619_get_CEP_flag(struct oplus_nu1619_ic * chip)
+int nu1619_get_CEP_flag(struct oplus_nu1619_ic *chip)
 {
 	if (chip->nu1619_chg_status.CEP_ready == false) {
 		chg_err("<~WPC~> CEP value isn't ready!\n");
 		return -1;
 	}
 
-	if ((chip->nu1619_chg_status.CEP_value == 0) || (chip->nu1619_chg_status.CEP_value == 1)
-		|| (chip->nu1619_chg_status.CEP_value == 2) || (chip->nu1619_chg_status.CEP_value == 0xFF)
-		|| (chip->nu1619_chg_status.CEP_value == 0xFE)) {
+	if ((chip->nu1619_chg_status.CEP_value == 0) || (chip->nu1619_chg_status.CEP_value == 1) || (chip->nu1619_chg_status.CEP_value == 2) ||
+	    (chip->nu1619_chg_status.CEP_value == 0xFF) || (chip->nu1619_chg_status.CEP_value == 0xFE)) {
 		return 0;
 	} else {
 		return 1;
 	}
 }
 
-static void nu1619_print_CEP_flag(struct oplus_nu1619_ic * chip)
+static void nu1619_print_CEP_flag(struct oplus_nu1619_ic *chip)
 {
 	if ((nu1619_chip->nu1619_chg_status.charge_online) && (chip->nu1619_chg_status.CEP_ready)) {
 		chg_err("<~WPC~> CEP value = %d\n", chip->nu1619_chg_status.CEP_value);
@@ -1873,7 +1823,7 @@ static int to_cep_info(char cep_value)
 	return cep_info;
 }
 
-static int nu1619_detect_CEP(struct oplus_nu1619_ic * chip)
+static int nu1619_detect_CEP(struct oplus_nu1619_ic *chip)
 {
 	int rc = -1;
 	char temp = 0;
@@ -1900,7 +1850,7 @@ static int nu1619_get_work_freq(struct oplus_nu1619_ic *chip, int *val)
 {
 	int rc;
 	char temp;
-return 0;
+	return 0;
 	rc = nu1619_read_reg(chip, 0x5e, &temp, 1);
 	if (rc) {
 		chg_err("Couldn't read rx freq val, rc = %d\n", rc);
@@ -1916,7 +1866,7 @@ static int nu1619_get_special_ID(struct oplus_nu1619_ic *chip)
 	int rc;
 	char temp[2];
 
-return 0;
+	return 0;
 	rc = nu1619_read_reg(chip, 0xA2, temp, 2);
 	if (rc) {
 		chg_err("Couldn't read rx freq val, rc = %d\n", rc);
@@ -1980,18 +1930,18 @@ void nu1619_set_wireless_charge_stop(void)
 
 void nu1619_restart_charger(struct oplus_nu1619_ic *chip)
 {
-/*
+	/*
 	nu1619_set_rx_charge_current(chip, WPC_CHARGE_CURRENT_200MA);
 	mp2650_input_current_limit_without_aicl(WPC_CHARGE_CURRENT_LIMIT_300MA);
 */
 	nu1619_set_rx_terminate_voltage(chip, WPC_TERMINATION_VOLTAGE_CV);
-/*
+	/*
 	mp2650_enable_charging();
 	msleep(100);
 */
 	chargepump_disable();
 	nu1619_set_rx_charge_current(chip, WPC_CHARGE_CURRENT_FASTCHG);
-/*
+	/*
 	mp2650_input_current_limit_without_aicl(1000);
 	nu1619_set_rx_charge_voltage(chip, WPC_CHARGE_VOLTAGE_CHGPUMP_TO_CHARGER);
 */
@@ -2113,8 +2063,8 @@ static void nu1619_fastcharge_current_adjust_40w(struct oplus_nu1619_ic *chip, b
 		chg_err("<~WPC~> batt_volt[%d] >= 4.5V, Not in FFC\n", g_oplus_chip->batt_volt);
 		nu1619_ready_to_switch_to_charger(chip, true);
 		return;
-	} else if (chip->nu1619_chg_status.wpc_ffc_charge && (g_oplus_chip->batt_volt >= 4500)
-				&& ((g_oplus_chip->icharging < 0) && ((-1 * g_oplus_chip->icharging) < 900))) {
+	} else if (chip->nu1619_chg_status.wpc_ffc_charge && (g_oplus_chip->batt_volt >= 4500) &&
+		   ((g_oplus_chip->icharging < 0) && ((-1 * g_oplus_chip->icharging) < 900))) {
 		chg_err("<~WPC~> batt_volt[%d] >= 4.5V, batt_cur[%d] < 900ma, In FFC\n", g_oplus_chip->batt_volt, (-1 * g_oplus_chip->icharging));
 		chip->nu1619_chg_status.wpc_ffc_charge = false;
 		nu1619_ready_to_switch_to_charger(chip, true);
@@ -2123,8 +2073,8 @@ static void nu1619_fastcharge_current_adjust_40w(struct oplus_nu1619_ic *chip, b
 		chg_err("<~WPC~> batt_volt[%d], Not in FFC\n", g_oplus_chip->batt_volt);
 		nu1619_ready_to_switch_to_charger(chip, true);
 		return;
-	} else if (((g_oplus_chip->temperature < WPC_CHARGE_FFC_TEMP_MIN)
-			|| (g_oplus_chip->temperature > WPC_CHARGE_FFC_TEMP_MAX)) && (g_oplus_chip->batt_volt > 4370)) {
+	} else if (((g_oplus_chip->temperature < WPC_CHARGE_FFC_TEMP_MIN) || (g_oplus_chip->temperature > WPC_CHARGE_FFC_TEMP_MAX)) &&
+		   (g_oplus_chip->batt_volt > 4370)) {
 		chg_err("<~WPC~> batt_volt[%d], temperature[%d]\n", g_oplus_chip->batt_volt, g_oplus_chip->temperature);
 		chip->nu1619_chg_status.wpc_ffc_charge = false;
 		nu1619_ready_to_switch_to_charger(chip, true);
@@ -2137,9 +2087,8 @@ static void nu1619_fastcharge_current_adjust_40w(struct oplus_nu1619_ic *chip, b
 		return;
 	}
 
-	if (g_oplus_chip->batt_volt >= 4370
-		&& ((g_oplus_chip->icharging < 0) && ((-1 * g_oplus_chip->icharging) < 800))
-		&& chip->nu1619_chg_status.wpc_reach_stable_charge == true) {
+	if (g_oplus_chip->batt_volt >= 4370 && ((g_oplus_chip->icharging < 0) && ((-1 * g_oplus_chip->icharging) < 800)) &&
+	    chip->nu1619_chg_status.wpc_reach_stable_charge == true) {
 		chg_err("<~WPC~> icharging < 800. Exit FFC.\n");
 		chip->nu1619_chg_status.wpc_ffc_charge = false;
 		nu1619_set_rx_terminate_voltage(chip, WPC_TERMINATION_VOLTAGE_CV);
@@ -2151,7 +2100,7 @@ static void nu1619_fastcharge_current_adjust_40w(struct oplus_nu1619_ic *chip, b
 		return;
 	}
 
-	if(adjust_current_delay > 0) {
+	if (adjust_current_delay > 0) {
 		adjust_current_delay--;
 		return;
 	}
@@ -2159,7 +2108,7 @@ static void nu1619_fastcharge_current_adjust_40w(struct oplus_nu1619_ic *chip, b
 	if (chip->nu1619_chg_status.wpc_reach_stable_charge) {
 		if (!chip->nu1619_chg_status.wpc_reach_4370mv && (g_oplus_chip->batt_volt >= 4370)) {
 			chg_err("<~WPC~> First reach 4370mV.\n");
-			if(fasctchg_current[chip->nu1619_chg_status.fastcharge_level] > fasctchg_current[FASTCHARGE_LEVEL_3]) {
+			if (fasctchg_current[chip->nu1619_chg_status.fastcharge_level] > fasctchg_current[FASTCHARGE_LEVEL_3]) {
 				chg_err("<~WPC~> turn to %dMA charge\n", fasctchg_current[FASTCHARGE_LEVEL_3]);
 				chip->nu1619_chg_status.iout_stated_current = fasctchg_current[FASTCHARGE_LEVEL_3];
 				chip->nu1619_chg_status.fastcharge_level = FASTCHARGE_LEVEL_3;
@@ -2174,7 +2123,7 @@ static void nu1619_fastcharge_current_adjust_40w(struct oplus_nu1619_ic *chip, b
 			chip->nu1619_chg_status.wpc_reach_4370mv = true;
 			adjust_current_delay = 2;
 			goto ADJUST_FINISH;
-		}/* else if (chip->nu1619_chg_status.wpc_reach_4370mv && (g_oplus_chip->batt_volt >= 4370)) {
+		} /* else if (chip->nu1619_chg_status.wpc_reach_4370mv && (g_oplus_chip->batt_volt >= 4370)) {
 		}*/
 	}
 
@@ -2265,8 +2214,8 @@ static void nu1619_fastcharge_current_adjust_40w(struct oplus_nu1619_ic *chip, b
 ADJUST_FINISH:
 	chip->nu1619_chg_status.iout_stated_current = fasctchg_current[chip->nu1619_chg_status.fastcharge_level];
 	if (chip->nu1619_chg_status.iout_stated_current > chip->nu1619_chg_status.fastchg_current_limit) {
-		chg_err("<~WPC~> charge_current[%d] > charge_current_limit[%d]\n",
-				chip->nu1619_chg_status.iout_stated_current, chip->nu1619_chg_status.fastchg_current_limit);
+		chg_err("<~WPC~> charge_current[%d] > charge_current_limit[%d]\n", chip->nu1619_chg_status.iout_stated_current,
+			chip->nu1619_chg_status.fastchg_current_limit);
 		chip->nu1619_chg_status.iout_stated_current = chip->nu1619_chg_status.fastchg_current_limit;
 	}
 }
@@ -2283,7 +2232,7 @@ static void nu1619_fastcharge_skewing_proc_40w(struct oplus_nu1619_ic *chip, boo
 
 	chg_err("<~WPC~> ~~~~~~~~40W fastcharg skewing proc(delay %d)~~~~~~~~\n", skewing_proc_delay);
 
-	if(skewing_proc_delay > 0) {
+	if (skewing_proc_delay > 0) {
 		skewing_proc_delay--;
 		return;
 	}
@@ -2300,8 +2249,8 @@ static void nu1619_fastcharge_skewing_proc_40w(struct oplus_nu1619_ic *chip, boo
 	}
 
 	if (chip->nu1619_chg_status.iout_stated_current > chip->nu1619_chg_status.fastchg_current_limit) {
-		chg_err("<~WPC~> charge_current[%d] > charge_current_limit[%d]\n",
-				chip->nu1619_chg_status.iout_stated_current, chip->nu1619_chg_status.fastchg_current_limit);
+		chg_err("<~WPC~> charge_current[%d] > charge_current_limit[%d]\n", chip->nu1619_chg_status.iout_stated_current,
+			chip->nu1619_chg_status.fastchg_current_limit);
 		chip->nu1619_chg_status.iout_stated_current = chip->nu1619_chg_status.fastchg_current_limit;
 	}
 }
@@ -2350,10 +2299,8 @@ static void nu1619_TX_message_process(struct oplus_nu1619_ic *chip)
 
 static int nu1619_resume_chargepump_fastchg(struct oplus_nu1619_ic *chip)
 {
-	if ((chip->nu1619_chg_status.wpc_reach_4370mv == false)
-		&& (g_oplus_chip->batt_volt <= 4370)
-		&& (g_oplus_chip->temperature < 390)
-		&& g_oplus_chip->temperature > g_oplus_chip->limits.little_cool_bat_decidegc) {
+	if ((chip->nu1619_chg_status.wpc_reach_4370mv == false) && (g_oplus_chip->batt_volt <= 4370) && (g_oplus_chip->temperature < 390) &&
+	    g_oplus_chip->temperature > g_oplus_chip->limits.little_cool_bat_decidegc) {
 		chip->nu1619_chg_status.iout_stated_current = fasctchg_current[chip->nu1619_chg_status.fastcharge_level];
 		chg_err("<~WPC~> resume chargepump IOUT: %d\n", chip->nu1619_chg_status.iout_stated_current);
 		return 1;
@@ -2372,239 +2319,205 @@ static int oplus_wpc_chg_parse_chg_dt(struct oplus_nu1619_ic *chip)
 		return -EINVAL;
 	}
 
-	rc = of_property_read_u32(node, "qcom,iout_ma",
-			&chip->nu1619_chg_status.wpc_chg_param.iout_ma);
+	rc = of_property_read_u32(node, "qcom,iout_ma", &chip->nu1619_chg_status.wpc_chg_param.iout_ma);
 	if (rc) {
 		chip->nu1619_chg_status.wpc_chg_param.iout_ma = 1000;
 	}
 	chg_err("iout_ma[%d]\n", chip->nu1619_chg_status.wpc_chg_param.iout_ma);
 
-	rc = of_property_read_u32(node, "qcom,bpp_input_ma",
-			&chip->nu1619_chg_status.wpc_chg_param.bpp_input_ma);
+	rc = of_property_read_u32(node, "qcom,bpp_input_ma", &chip->nu1619_chg_status.wpc_chg_param.bpp_input_ma);
 	if (rc) {
 		chip->nu1619_chg_status.wpc_chg_param.bpp_input_ma = 750;
 	}
 	chg_err("bpp_input_ma[%d]\n", chip->nu1619_chg_status.wpc_chg_param.bpp_input_ma);
 
-	rc = of_property_read_u32(node, "qcom,epp_input_ma",
-			&chip->nu1619_chg_status.wpc_chg_param.epp_input_ma);
+	rc = of_property_read_u32(node, "qcom,epp_input_ma", &chip->nu1619_chg_status.wpc_chg_param.epp_input_ma);
 	if (rc) {
 		chip->nu1619_chg_status.wpc_chg_param.epp_input_ma = 800;
 	}
 	chg_err("epp_input_ma[%d]\n", chip->nu1619_chg_status.wpc_chg_param.epp_input_ma);
 
-	rc = of_property_read_u32(node, "qcom,epp_temp_warm_input_ma",
-			&chip->nu1619_chg_status.wpc_chg_param.epp_temp_warm_input_ma);
+	rc = of_property_read_u32(node, "qcom,epp_temp_warm_input_ma", &chip->nu1619_chg_status.wpc_chg_param.epp_temp_warm_input_ma);
 	if (rc) {
 		chip->nu1619_chg_status.wpc_chg_param.epp_temp_warm_input_ma = 500;
 	}
 	chg_err("epp_input_ma[%d]\n", chip->nu1619_chg_status.wpc_chg_param.epp_temp_warm_input_ma);
 
-	rc = of_property_read_u32(node, "qcom,epp_input_step_ma",
-			&chip->nu1619_chg_status.wpc_chg_param.epp_input_step_ma);
+	rc = of_property_read_u32(node, "qcom,epp_input_step_ma", &chip->nu1619_chg_status.wpc_chg_param.epp_input_step_ma);
 	if (rc) {
 		chip->nu1619_chg_status.wpc_chg_param.epp_input_step_ma = 100;
 	}
 	chg_err("epp_input_step_ma[%d]\n", chip->nu1619_chg_status.wpc_chg_param.epp_input_step_ma);
 
-	rc = of_property_read_u32(node, "qcom,warp_input_ma",
-			&chip->nu1619_chg_status.wpc_chg_param.warp_input_ma);
+	rc = of_property_read_u32(node, "qcom,warp_input_ma", &chip->nu1619_chg_status.wpc_chg_param.warp_input_ma);
 	if (rc) {
 		chip->nu1619_chg_status.wpc_chg_param.warp_input_ma = 1000;
 	}
 	chg_err("warp_input_ma[%d]\n", chip->nu1619_chg_status.wpc_chg_param.warp_input_ma);
 
-	rc = of_property_read_u32(node, "qcom,warp_iout_ma",
-			&chip->nu1619_chg_status.wpc_chg_param.warp_iout_ma);
+	rc = of_property_read_u32(node, "qcom,warp_iout_ma", &chip->nu1619_chg_status.wpc_chg_param.warp_iout_ma);
 	if (rc) {
 		chip->nu1619_chg_status.wpc_chg_param.warp_iout_ma = 1000;
 	}
 	chg_err("warp_iout_ma[%d]\n", chip->nu1619_chg_status.wpc_chg_param.warp_iout_ma);
 
-	rc = of_property_read_u32(node, "qcom,swarp_input_ma",
-			&chip->nu1619_chg_status.wpc_chg_param.swarp_input_ma);
+	rc = of_property_read_u32(node, "qcom,swarp_input_ma", &chip->nu1619_chg_status.wpc_chg_param.swarp_input_ma);
 	if (rc) {
 		chip->nu1619_chg_status.wpc_chg_param.swarp_input_ma = 1000;
 	}
 	chg_err("swarp_input_ma[%d]\n", chip->nu1619_chg_status.wpc_chg_param.swarp_input_ma);
 
-	rc = of_property_read_u32(node, "qcom,swarp_65w_iout_ma",
-			&chip->nu1619_chg_status.wpc_chg_param.swarp_65w_iout_ma);
+	rc = of_property_read_u32(node, "qcom,swarp_65w_iout_ma", &chip->nu1619_chg_status.wpc_chg_param.swarp_65w_iout_ma);
 	if (rc) {
 		chip->nu1619_chg_status.wpc_chg_param.swarp_65w_iout_ma = 2000;
 	}
 	chg_err("swarp_65w_iout_ma[%d]\n", chip->nu1619_chg_status.wpc_chg_param.swarp_65w_iout_ma);
 
-	rc = of_property_read_u32(node, "qcom,swarp_50w_iout_ma",
-			&chip->nu1619_chg_status.wpc_chg_param.swarp_50w_iout_ma);
+	rc = of_property_read_u32(node, "qcom,swarp_50w_iout_ma", &chip->nu1619_chg_status.wpc_chg_param.swarp_50w_iout_ma);
 	if (rc) {
 		chip->nu1619_chg_status.wpc_chg_param.swarp_50w_iout_ma = 1750;
 	}
 	chg_err("swarp_50w_iout_ma[%d]\n", chip->nu1619_chg_status.wpc_chg_param.swarp_50w_iout_ma);
 
-	rc = of_property_read_u32(node, "qcom,bpp_temp_cold_fastchg_ma",
-			&chip->nu1619_chg_status.wpc_chg_param.bpp_temp_cold_fastchg_ma);
+	rc = of_property_read_u32(node, "qcom,bpp_temp_cold_fastchg_ma", &chip->nu1619_chg_status.wpc_chg_param.bpp_temp_cold_fastchg_ma);
 	if (rc) {
 		chip->nu1619_chg_status.wpc_chg_param.bpp_temp_cold_fastchg_ma = 360;
 	}
 	chg_err("temp_cold_fastchg_ma[%d]\n", chip->nu1619_chg_status.wpc_chg_param.bpp_temp_cold_fastchg_ma);
 
-	rc = of_property_read_u32(node, "qcom,warp_temp_little_cold_fastchg_ma",
-			&chip->nu1619_chg_status.wpc_chg_param.warp_temp_little_cold_fastchg_ma);
+	rc = of_property_read_u32(node, "qcom,warp_temp_little_cold_fastchg_ma", &chip->nu1619_chg_status.wpc_chg_param.warp_temp_little_cold_fastchg_ma);
 	if (rc) {
 		chip->nu1619_chg_status.wpc_chg_param.warp_temp_little_cold_fastchg_ma = 1200;
 	}
 	chg_err("warp_temp_little_cold_fastchg_ma[%d]\n", chip->nu1619_chg_status.wpc_chg_param.warp_temp_little_cold_fastchg_ma);
 
-	rc = of_property_read_u32(node, "qcom,swarp_temp_little_cold_iout_ma",
-			&chip->nu1619_chg_status.wpc_chg_param.swarp_temp_little_cold_iout_ma);
+	rc = of_property_read_u32(node, "qcom,swarp_temp_little_cold_iout_ma", &chip->nu1619_chg_status.wpc_chg_param.swarp_temp_little_cold_iout_ma);
 	if (rc) {
 		chip->nu1619_chg_status.wpc_chg_param.swarp_temp_little_cold_iout_ma = 650;
 	}
 	chg_err("swarp_temp_little_cold_iout_ma[%d]\n", chip->nu1619_chg_status.wpc_chg_param.swarp_temp_little_cold_iout_ma);
 
-	rc = of_property_read_u32(node, "qcom,swarp_temp_little_cold_fastchg_ma",
-			&chip->nu1619_chg_status.wpc_chg_param.swarp_temp_little_cold_fastchg_ma);
+	rc = of_property_read_u32(node, "qcom,swarp_temp_little_cold_fastchg_ma", &chip->nu1619_chg_status.wpc_chg_param.swarp_temp_little_cold_fastchg_ma);
 	if (rc) {
 		chip->nu1619_chg_status.wpc_chg_param.swarp_temp_little_cold_fastchg_ma = 1200;
 	}
 	chg_err("swarp_temp_little_cold_fastchg_ma[%d]\n", chip->nu1619_chg_status.wpc_chg_param.swarp_temp_little_cold_fastchg_ma);
 
-	rc = of_property_read_u32(node, "qcom,bpp_temp_little_cold_fastchg_ma",
-			&chip->nu1619_chg_status.wpc_chg_param.bpp_temp_little_cold_fastchg_ma);
+	rc = of_property_read_u32(node, "qcom,bpp_temp_little_cold_fastchg_ma", &chip->nu1619_chg_status.wpc_chg_param.bpp_temp_little_cold_fastchg_ma);
 	if (rc) {
 		chip->nu1619_chg_status.wpc_chg_param.bpp_temp_little_cold_fastchg_ma = 600;
 	}
 	chg_err("bpp_temp_little_cold_fastchg_ma[%d]\n", chip->nu1619_chg_status.wpc_chg_param.bpp_temp_little_cold_fastchg_ma);
 
-	rc = of_property_read_u32(node, "qcom,epp_temp_little_cold_fastchg_ma",
-			&chip->nu1619_chg_status.wpc_chg_param.epp_temp_little_cold_fastchg_ma);
+	rc = of_property_read_u32(node, "qcom,epp_temp_little_cold_fastchg_ma", &chip->nu1619_chg_status.wpc_chg_param.epp_temp_little_cold_fastchg_ma);
 	if (rc) {
 		chip->nu1619_chg_status.wpc_chg_param.epp_temp_little_cold_fastchg_ma = 1400;
 	}
 	chg_err("epp_temp_little_cold_fastchg_ma[%d]\n", chip->nu1619_chg_status.wpc_chg_param.epp_temp_little_cold_fastchg_ma);
 
-	rc = of_property_read_u32(node, "qcom,warp_temp_cool_fastchg_ma",
-			&chip->nu1619_chg_status.wpc_chg_param.warp_temp_cool_fastchg_ma);
+	rc = of_property_read_u32(node, "qcom,warp_temp_cool_fastchg_ma", &chip->nu1619_chg_status.wpc_chg_param.warp_temp_cool_fastchg_ma);
 	if (rc) {
 		chip->nu1619_chg_status.wpc_chg_param.warp_temp_cool_fastchg_ma = 1200;
 	}
 	chg_err("warp_temp_cool_fastchg_ma[%d]\n", chip->nu1619_chg_status.wpc_chg_param.warp_temp_cool_fastchg_ma);
 
-	rc = of_property_read_u32(node, "qcom,swarp_temp_cool_iout_ma",
-			&chip->nu1619_chg_status.wpc_chg_param.swarp_temp_cool_iout_ma);
+	rc = of_property_read_u32(node, "qcom,swarp_temp_cool_iout_ma", &chip->nu1619_chg_status.wpc_chg_param.swarp_temp_cool_iout_ma);
 	if (rc) {
 		chip->nu1619_chg_status.wpc_chg_param.swarp_temp_cool_iout_ma = 650;
 	}
 	chg_err("swarp_temp_cool_iout_ma[%d]\n", chip->nu1619_chg_status.wpc_chg_param.swarp_temp_cool_iout_ma);
 
-	rc = of_property_read_u32(node, "qcom,swarp_temp_cool_fastchg_ma",
-			&chip->nu1619_chg_status.wpc_chg_param.swarp_temp_cool_fastchg_ma);
+	rc = of_property_read_u32(node, "qcom,swarp_temp_cool_fastchg_ma", &chip->nu1619_chg_status.wpc_chg_param.swarp_temp_cool_fastchg_ma);
 	if (rc) {
 		chip->nu1619_chg_status.wpc_chg_param.swarp_temp_cool_fastchg_ma = 1200;
 	}
 	chg_err("swarp_temp_cool_fastchg_ma[%d]\n", chip->nu1619_chg_status.wpc_chg_param.swarp_temp_cool_fastchg_ma);
 
-	rc = of_property_read_u32(node, "qcom,bpp_temp_cool_fastchg_ma",
-			&chip->nu1619_chg_status.wpc_chg_param.bpp_temp_cool_fastchg_ma);
+	rc = of_property_read_u32(node, "qcom,bpp_temp_cool_fastchg_ma", &chip->nu1619_chg_status.wpc_chg_param.bpp_temp_cool_fastchg_ma);
 	if (rc) {
 		chip->nu1619_chg_status.wpc_chg_param.bpp_temp_cool_fastchg_ma = 600;
 	}
 	chg_err("bpp_temp_cool_fastchg_ma[%d]\n", chip->nu1619_chg_status.wpc_chg_param.bpp_temp_cool_fastchg_ma);
 
-	rc = of_property_read_u32(node, "qcom,epp_temp_cool_fastchg_ma",
-			&chip->nu1619_chg_status.wpc_chg_param.epp_temp_cool_fastchg_ma);
+	rc = of_property_read_u32(node, "qcom,epp_temp_cool_fastchg_ma", &chip->nu1619_chg_status.wpc_chg_param.epp_temp_cool_fastchg_ma);
 	if (rc) {
 		chip->nu1619_chg_status.wpc_chg_param.epp_temp_cool_fastchg_ma = 1400;
 	}
 	chg_err("epp_temp_cool_fastchg_ma[%d]\n", chip->nu1619_chg_status.wpc_chg_param.epp_temp_cool_fastchg_ma);
 
-	rc = of_property_read_u32(node, "qcom,warp_temp_little_cool_fastchg_ma",
-			&chip->nu1619_chg_status.wpc_chg_param.warp_temp_little_cool_fastchg_ma);
+	rc = of_property_read_u32(node, "qcom,warp_temp_little_cool_fastchg_ma", &chip->nu1619_chg_status.wpc_chg_param.warp_temp_little_cool_fastchg_ma);
 	if (rc) {
 		chip->nu1619_chg_status.wpc_chg_param.warp_temp_little_cool_fastchg_ma = 1200;
 	}
 	chg_err("warp_temp_little_cool_fastchg_ma[%d]\n", chip->nu1619_chg_status.wpc_chg_param.warp_temp_little_cool_fastchg_ma);
 
-	rc = of_property_read_u32(node, "qcom,swarp_temp_little_cool_fastchg_ma",
-			&chip->nu1619_chg_status.wpc_chg_param.swarp_temp_little_cool_fastchg_ma);
+	rc = of_property_read_u32(node, "qcom,swarp_temp_little_cool_fastchg_ma", &chip->nu1619_chg_status.wpc_chg_param.swarp_temp_little_cool_fastchg_ma);
 	if (rc) {
 		chip->nu1619_chg_status.wpc_chg_param.swarp_temp_little_cool_fastchg_ma = 1200;
 	}
 	chg_err("swarp_temp_little_cool_fastchg_ma[%d]\n", chip->nu1619_chg_status.wpc_chg_param.swarp_temp_little_cool_fastchg_ma);
 
-	rc = of_property_read_u32(node, "qcom,bpp_temp_little_cool_fastchg_ma",
-			&chip->nu1619_chg_status.wpc_chg_param.bpp_temp_little_cool_fastchg_ma);
+	rc = of_property_read_u32(node, "qcom,bpp_temp_little_cool_fastchg_ma", &chip->nu1619_chg_status.wpc_chg_param.bpp_temp_little_cool_fastchg_ma);
 	if (rc) {
 		chip->nu1619_chg_status.wpc_chg_param.bpp_temp_little_cool_fastchg_ma = 600;
 	}
 	chg_err("bpp_temp_little_cool_fastchg_ma[%d]\n", chip->nu1619_chg_status.wpc_chg_param.bpp_temp_little_cool_fastchg_ma);
 
-	rc = of_property_read_u32(node, "qcom,epp_temp_little_cool_fastchg_ma",
-			&chip->nu1619_chg_status.wpc_chg_param.epp_temp_little_cool_fastchg_ma);
+	rc = of_property_read_u32(node, "qcom,epp_temp_little_cool_fastchg_ma", &chip->nu1619_chg_status.wpc_chg_param.epp_temp_little_cool_fastchg_ma);
 	if (rc) {
 		chip->nu1619_chg_status.wpc_chg_param.epp_temp_little_cool_fastchg_ma = 1400;
 	}
 	chg_err("epp_temp_little_cool_fastchg_ma[%d]\n", chip->nu1619_chg_status.wpc_chg_param.epp_temp_little_cool_fastchg_ma);
 
-	rc = of_property_read_u32(node, "qcom,warp_temp_normal_fastchg_ma",
-			&chip->nu1619_chg_status.wpc_chg_param.warp_temp_normal_fastchg_ma);
+	rc = of_property_read_u32(node, "qcom,warp_temp_normal_fastchg_ma", &chip->nu1619_chg_status.wpc_chg_param.warp_temp_normal_fastchg_ma);
 	if (rc) {
 		chip->nu1619_chg_status.wpc_chg_param.warp_temp_normal_fastchg_ma = 1200;
 	}
 	chg_err("warp_temp_normal_fastchg_ma[%d]\n", chip->nu1619_chg_status.wpc_chg_param.warp_temp_normal_fastchg_ma);
 
-	rc = of_property_read_u32(node, "qcom,swarp_temp_normal_fastchg_ma",
-			&chip->nu1619_chg_status.wpc_chg_param.swarp_temp_normal_fastchg_ma);
+	rc = of_property_read_u32(node, "qcom,swarp_temp_normal_fastchg_ma", &chip->nu1619_chg_status.wpc_chg_param.swarp_temp_normal_fastchg_ma);
 	if (rc) {
 		chip->nu1619_chg_status.wpc_chg_param.swarp_temp_normal_fastchg_ma = 1200;
 	}
 	chg_err("swarp_temp_normal_fastchg_ma[%d]\n", chip->nu1619_chg_status.wpc_chg_param.swarp_temp_normal_fastchg_ma);
 
-	rc = of_property_read_u32(node, "qcom,bpp_temp_normal_fastchg_ma",
-			&chip->nu1619_chg_status.wpc_chg_param.bpp_temp_normal_fastchg_ma);
+	rc = of_property_read_u32(node, "qcom,bpp_temp_normal_fastchg_ma", &chip->nu1619_chg_status.wpc_chg_param.bpp_temp_normal_fastchg_ma);
 	if (rc) {
 		chip->nu1619_chg_status.wpc_chg_param.bpp_temp_normal_fastchg_ma = 1200;
 	}
 	chg_err("bpp_temp_normal_fastchg_ma[%d]\n", chip->nu1619_chg_status.wpc_chg_param.bpp_temp_normal_fastchg_ma);
 
-	rc = of_property_read_u32(node, "qcom,epp_temp_normal_fastchg_ma",
-			&chip->nu1619_chg_status.wpc_chg_param.epp_temp_normal_fastchg_ma);
+	rc = of_property_read_u32(node, "qcom,epp_temp_normal_fastchg_ma", &chip->nu1619_chg_status.wpc_chg_param.epp_temp_normal_fastchg_ma);
 	if (rc) {
 		chip->nu1619_chg_status.wpc_chg_param.epp_temp_normal_fastchg_ma = 1400;
 	}
 	chg_err("epp_temp_normal_fastchg_ma[%d]\n", chip->nu1619_chg_status.wpc_chg_param.epp_temp_normal_fastchg_ma);
 
-	rc = of_property_read_u32(node, "qcom,warp_temp_warm_fastchg_ma",
-			&chip->nu1619_chg_status.wpc_chg_param.warp_temp_warm_fastchg_ma);
+	rc = of_property_read_u32(node, "qcom,warp_temp_warm_fastchg_ma", &chip->nu1619_chg_status.wpc_chg_param.warp_temp_warm_fastchg_ma);
 	if (rc) {
 		chip->nu1619_chg_status.wpc_chg_param.warp_temp_warm_fastchg_ma = 1200;
 	}
 	chg_err("warp_temp_warm_fastchg_ma[%d]\n", chip->nu1619_chg_status.wpc_chg_param.warp_temp_warm_fastchg_ma);
 
-	rc = of_property_read_u32(node, "qcom,swarp_temp_warm_fastchg_ma",
-			&chip->nu1619_chg_status.wpc_chg_param.swarp_temp_warm_fastchg_ma);
+	rc = of_property_read_u32(node, "qcom,swarp_temp_warm_fastchg_ma", &chip->nu1619_chg_status.wpc_chg_param.swarp_temp_warm_fastchg_ma);
 	if (rc) {
 		chip->nu1619_chg_status.wpc_chg_param.swarp_temp_warm_fastchg_ma = 1200;
 	}
 	chg_err("swarp_temp_warm_fastchg_ma[%d]\n", chip->nu1619_chg_status.wpc_chg_param.swarp_temp_warm_fastchg_ma);
 
-	rc = of_property_read_u32(node, "qcom,bpp_temp_warm_fastchg_ma",
-			&chip->nu1619_chg_status.wpc_chg_param.bpp_temp_warm_fastchg_ma);
+	rc = of_property_read_u32(node, "qcom,bpp_temp_warm_fastchg_ma", &chip->nu1619_chg_status.wpc_chg_param.bpp_temp_warm_fastchg_ma);
 	if (rc) {
 		chip->nu1619_chg_status.wpc_chg_param.bpp_temp_warm_fastchg_ma = 600;
 	}
 	chg_err("bpp_temp_warm_fastchg_ma[%d]\n", chip->nu1619_chg_status.wpc_chg_param.bpp_temp_warm_fastchg_ma);
 
-	rc = of_property_read_u32(node, "qcom,epp_temp_warm_fastchg_ma",
-			&chip->nu1619_chg_status.wpc_chg_param.epp_temp_warm_fastchg_ma);
+	rc = of_property_read_u32(node, "qcom,epp_temp_warm_fastchg_ma", &chip->nu1619_chg_status.wpc_chg_param.epp_temp_warm_fastchg_ma);
 	if (rc) {
 		chip->nu1619_chg_status.wpc_chg_param.epp_temp_warm_fastchg_ma = 1400;
 	}
 	chg_err("epp_temp_warm_fastchg_ma[%d]\n", chip->nu1619_chg_status.wpc_chg_param.epp_temp_warm_fastchg_ma);
 
-	rc = of_property_read_u32(node, "qcom,curr_cp_to_charger",
-			&chip->nu1619_chg_status.wpc_chg_param.curr_cp_to_charger);
+	rc = of_property_read_u32(node, "qcom,curr_cp_to_charger", &chip->nu1619_chg_status.wpc_chg_param.curr_cp_to_charger);
 	if (rc) {
 		chip->nu1619_chg_status.wpc_chg_param.curr_cp_to_charger = 400;
 	}
@@ -2621,19 +2534,18 @@ static bool oplus_wpc_get_fastchg_allow(struct oplus_nu1619_ic *chip)
 	temp = oplus_chg_get_chg_temperature();
 	cap = oplus_chg_get_ui_soc();
 
-	if(chip->nu1619_chg_status.adapter_type != ADAPTER_TYPE_WARP
-		&& chip->nu1619_chg_status.adapter_type != ADAPTER_TYPE_SWARP
-		&& chip->nu1619_chg_status.adapter_type != ADAPTER_TYPE_SWARP_50W) {
+	if (chip->nu1619_chg_status.adapter_type != ADAPTER_TYPE_WARP && chip->nu1619_chg_status.adapter_type != ADAPTER_TYPE_SWARP &&
+	    chip->nu1619_chg_status.adapter_type != ADAPTER_TYPE_SWARP_50W) {
 		chip->nu1619_chg_status.fastchg_allow = false;
 		return chip->nu1619_chg_status.fastchg_allow;
 	}
-/*
+	/*
 	if(cap > 90){
 		chip->nu1619_chg_status.fastchg_allow = false;
 		return chip->nu1619_chg_status.fastchg_allow;
 	}
 */
-	if(temp < 0 || temp > 450) {
+	if (temp < 0 || temp > 450) {
 		chip->nu1619_chg_status.fastchg_allow = false;
 		return chip->nu1619_chg_status.fastchg_allow;
 	}
@@ -2675,8 +2587,7 @@ int nu1619_charge_set_max_current_by_tbatt(struct oplus_nu1619_ic *chip)
 		}
 		break;
 	case BATTERY_STATUS__COLD_TEMP:
-		if (chip->nu1619_chg_status.charge_status != WPC_CHG_STATUS_DEFAULT
-				&& chip->nu1619_chg_status.adapter_type != ADAPTER_TYPE_EPP) {
+		if (chip->nu1619_chg_status.charge_status != WPC_CHG_STATUS_DEFAULT && chip->nu1619_chg_status.adapter_type != ADAPTER_TYPE_EPP) {
 			chg_err("<~WPC~> self reset: because of cold temp\n");
 			nu1619_self_reset(chip, true);
 		}
@@ -2752,8 +2663,7 @@ int nu1619_charge_set_max_current_by_tbatt(struct oplus_nu1619_ic *chip)
 		}
 		break;
 	case BATTERY_STATUS__WARM_TEMP:
-		if (chip->nu1619_chg_status.charge_status != WPC_CHG_STATUS_DEFAULT
-				&& chip->nu1619_chg_status.adapter_type != ADAPTER_TYPE_EPP) {
+		if (chip->nu1619_chg_status.charge_status != WPC_CHG_STATUS_DEFAULT && chip->nu1619_chg_status.adapter_type != ADAPTER_TYPE_EPP) {
 			chg_err("<~WPC~> self reset: because of warm temp\n");
 			nu1619_self_reset(chip, true);
 		}
@@ -2765,8 +2675,7 @@ int nu1619_charge_set_max_current_by_tbatt(struct oplus_nu1619_ic *chip)
 	case BATTERY_STATUS__REMOVED:
 	case BATTERY_STATUS__LOW_TEMP:
 	case BATTERY_STATUS__HIGH_TEMP:
-		if (chip->nu1619_chg_status.charge_status != WPC_CHG_STATUS_DEFAULT
-				&& chip->nu1619_chg_status.adapter_type != ADAPTER_TYPE_EPP) {
+		if (chip->nu1619_chg_status.charge_status != WPC_CHG_STATUS_DEFAULT && chip->nu1619_chg_status.adapter_type != ADAPTER_TYPE_EPP) {
 			chg_err("<~WPC~> self reset: because of low/high temp\n");
 			nu1619_self_reset(chip, true);
 		}
@@ -2778,22 +2687,18 @@ int nu1619_charge_set_max_current_by_tbatt(struct oplus_nu1619_ic *chip)
 	default:
 		break;
 	}
-	if(pre_tbatt != now_tbatt) {
-		if(pre_tbatt == BATTERY_STATUS__REMOVED
-			|| pre_tbatt == BATTERY_STATUS__LOW_TEMP
-			|| pre_tbatt == BATTERY_STATUS__HIGH_TEMP
-			|| pre_tbatt == BATTERY_STATUS__COLD_TEMP
-			|| pre_tbatt == BATTERY_STATUS__WARM_TEMP) {
-			if ((g_oplus_chip->temperature > g_oplus_chip->limits.little_cold_bat_decidegc)
-				&& (g_oplus_chip->temperature < g_oplus_chip->limits.warm_bat_decidegc)) {
+	if (pre_tbatt != now_tbatt) {
+		if (pre_tbatt == BATTERY_STATUS__REMOVED || pre_tbatt == BATTERY_STATUS__LOW_TEMP || pre_tbatt == BATTERY_STATUS__HIGH_TEMP ||
+		    pre_tbatt == BATTERY_STATUS__COLD_TEMP || pre_tbatt == BATTERY_STATUS__WARM_TEMP) {
+			if ((g_oplus_chip->temperature > g_oplus_chip->limits.little_cold_bat_decidegc) &&
+			    (g_oplus_chip->temperature < g_oplus_chip->limits.warm_bat_decidegc)) {
 				chip->nu1619_chg_status.adapter_type = ADAPTER_TYPE_UNKNOW;
 			}
 		}
 		pre_tbatt = now_tbatt;
 	}
-	if(chip->nu1619_chg_status.adapter_type != ADAPTER_TYPE_WARP
-		&& chip->nu1619_chg_status.adapter_type != ADAPTER_TYPE_SWARP
-		&& chip->nu1619_chg_status.adapter_type != ADAPTER_TYPE_SWARP_50W)
+	if (chip->nu1619_chg_status.adapter_type != ADAPTER_TYPE_WARP && chip->nu1619_chg_status.adapter_type != ADAPTER_TYPE_SWARP &&
+	    chip->nu1619_chg_status.adapter_type != ADAPTER_TYPE_SWARP_50W)
 		nu1619_set_rx_charge_current(chip, charging_current);
 	return 0;
 }
@@ -2828,8 +2733,7 @@ static int oplus_wpc_set_input_current(struct oplus_nu1619_ic *chip)
 			chip->nu1619_chg_status.epp_current_limit = WPC_CHARGE_CURRENT_EPP_SPEC;
 		} else {
 			if (chip->nu1619_chg_status.epp_current_limit < input_current_threshold) {
-				chip->nu1619_chg_status.epp_current_limit +=
-					chip->nu1619_chg_status.wpc_chg_param.epp_input_step_ma;
+				chip->nu1619_chg_status.epp_current_limit += chip->nu1619_chg_status.wpc_chg_param.epp_input_step_ma;
 				chg_err("<~WPC~>EPP increase charge current to %dmA\n", chip->nu1619_chg_status.epp_current_limit);
 			} else {
 				chip->nu1619_chg_status.epp_current_limit = input_current_threshold;
@@ -2856,23 +2760,21 @@ static int oplus_wpc_set_input_current(struct oplus_nu1619_ic *chip)
 				}
 			}
 		}
-		if(chip->nu1619_chg_status.BPP_current_limit < 300)
+		if (chip->nu1619_chg_status.BPP_current_limit < 300)
 			chip->nu1619_chg_status.BPP_current_limit = 300;
 		current_limit = chip->nu1619_chg_status.BPP_current_limit;
 		break;
 	}
-	if(g_oplus_chip->batt_full == true && g_oplus_chip->in_rechging == false) {
+	if (g_oplus_chip->batt_full == true && g_oplus_chip->in_rechging == false) {
 		chip->nu1619_chg_status.wpc_chg_param.pre_input_ma = 0;
 		current_limit = 200;
 	}
-	if(chip->nu1619_chg_status.fastchg_ing == true) {
+	if (chip->nu1619_chg_status.fastchg_ing == true) {
 		return 0;
 	}
-	if(current_limit != chip->nu1619_chg_status.wpc_chg_param.pre_input_ma) {
-		chg_err("<~WPC~> current_limit %d, pre_input_ma[%d], adapter_type[%d]\n",
-			current_limit,
-		chip->nu1619_chg_status.wpc_chg_param.pre_input_ma,
-		chip->nu1619_chg_status.adapter_type);
+	if (current_limit != chip->nu1619_chg_status.wpc_chg_param.pre_input_ma) {
+		chg_err("<~WPC~> current_limit %d, pre_input_ma[%d], adapter_type[%d]\n", current_limit, chip->nu1619_chg_status.wpc_chg_param.pre_input_ma,
+			chip->nu1619_chg_status.adapter_type);
 		chip->nu1619_chg_status.wpc_chg_param.pre_input_ma = current_limit;
 		oplus_chg_set_input_current_without_aicl(current_limit);
 	}
@@ -2883,18 +2785,18 @@ int nu1619_charge_set_max_current_by_adapter_power(struct oplus_nu1619_ic *chip)
 {
 	switch (chip->nu1619_chg_status.adapter_power) {
 	case ADAPTER_POWER_65W:
-		if(nu1619_test_charging_status() == 4) {
-			if(chip->nu1619_chg_status.fastchg_current_limit > fasctchg_current[FASTCHARGE_LEVEL_2])
+		if (nu1619_test_charging_status() == 4) {
+			if (chip->nu1619_chg_status.fastchg_current_limit > fasctchg_current[FASTCHARGE_LEVEL_2])
 				chip->nu1619_chg_status.fastchg_current_limit = fasctchg_current[FASTCHARGE_LEVEL_2];
 		}
 		break;
 	case ADAPTER_POWER_50W:
-		if(chip->nu1619_chg_status.fastchg_current_limit > chip->nu1619_chg_status.wpc_chg_param.swarp_50w_iout_ma)
+		if (chip->nu1619_chg_status.fastchg_current_limit > chip->nu1619_chg_status.wpc_chg_param.swarp_50w_iout_ma)
 			chip->nu1619_chg_status.fastchg_current_limit = chip->nu1619_chg_status.wpc_chg_param.swarp_50w_iout_ma;
 		break;
 	case ADAPTER_POWER_30W:
 	case ADAPTER_POWER_20W:
-		if(chip->nu1619_chg_status.fastchg_current_limit > chip->nu1619_chg_status.wpc_chg_param.warp_temp_normal_fastchg_ma)
+		if (chip->nu1619_chg_status.fastchg_current_limit > chip->nu1619_chg_status.wpc_chg_param.warp_temp_normal_fastchg_ma)
 			chip->nu1619_chg_status.fastchg_current_limit = chip->nu1619_chg_status.wpc_chg_param.warp_temp_normal_fastchg_ma;
 		break;
 	default:
@@ -2981,9 +2883,8 @@ static int nu1619_charge_status_process(struct oplus_nu1619_ic *chip)
 		}
 #else
 		/*deviation check*/
-		if ((chip->nu1619_chg_status.adapter_type == ADAPTER_TYPE_WARP
-				|| chip->nu1619_chg_status.adapter_type == ADAPTER_TYPE_SWARP)
-				&& !chip->nu1619_chg_status.deviation_check_done) {
+		if ((chip->nu1619_chg_status.adapter_type == ADAPTER_TYPE_WARP || chip->nu1619_chg_status.adapter_type == ADAPTER_TYPE_SWARP) &&
+		    !chip->nu1619_chg_status.deviation_check_done) {
 			if (g_oplus_chip->batt_volt_max > 4100) {
 				freq_thr = chip->nu1619_chg_status.freq_threshold + 2;
 			} else if (g_oplus_chip->batt_volt_max > 3700) {
@@ -3006,8 +2907,7 @@ static int nu1619_charge_status_process(struct oplus_nu1619_ic *chip)
 				chg_err("<~WPC~> phone location is deviation, work_freq=%d, freq_thr=%d\n", work_freq, freq_thr);
 			}
 		}
-		if ((chip->nu1619_chg_status.adapter_type == ADAPTER_TYPE_WARP)
-			|| (chip->nu1619_chg_status.adapter_type == ADAPTER_TYPE_SWARP)) {
+		if ((chip->nu1619_chg_status.adapter_type == ADAPTER_TYPE_WARP) || (chip->nu1619_chg_status.adapter_type == ADAPTER_TYPE_SWARP)) {
 			if (chip->nu1619_chg_status.fastchg_allow == true) {
 				chip->nu1619_chg_status.charge_status = WPC_CHG_STATUS_READY_FOR_FASTCHG;
 				break;
@@ -3022,9 +2922,9 @@ static int nu1619_charge_status_process(struct oplus_nu1619_ic *chip)
 		if (chip->nu1619_chg_status.epp_current_step == WPC_CHARGE_CURRENT_EPP_INIT) {
 			mp2650_set_vindpm_vol(11500);
 		}
-		if (chip->nu1619_chg_status.epp_current_limit >= chip->nu1619_chg_status.wpc_chg_param.epp_input_ma
-				|| (chip->nu1619_chg_status.epp_current_limit >= chip->nu1619_chg_status.wpc_chg_param.epp_temp_warm_input_ma
-					&& oplus_chg_get_tbatt_status() == BATTERY_STATUS__WARM_TEMP)) {
+		if (chip->nu1619_chg_status.epp_current_limit >= chip->nu1619_chg_status.wpc_chg_param.epp_input_ma ||
+		    (chip->nu1619_chg_status.epp_current_limit >= chip->nu1619_chg_status.wpc_chg_param.epp_temp_warm_input_ma &&
+		     oplus_chg_get_tbatt_status() == BATTERY_STATUS__WARM_TEMP)) {
 			chg_err("<~WPC~> 2 turn to WPC_CHG_STATUS_EPP_WORKING\n");
 			chip->nu1619_chg_status.charge_status = WPC_CHG_STATUS_EPP_WORKING;
 			if (chip->nu1619_chg_status.engineering_mode == true) {
@@ -3090,10 +2990,9 @@ static int nu1619_charge_status_process(struct oplus_nu1619_ic *chip)
 		if (chip->nu1619_chg_status.ftm_mode) {
 			chip->nu1619_chg_status.charge_status = WPC_CHG_STATUS_READY_FOR_FTM;
 		} else {
-			if (chip->nu1619_chg_status.adapter_type == ADAPTER_TYPE_WARP
-				|| (g_oplus_chip->wpc_no_chargerpump && chip->nu1619_chg_status.adapter_type == ADAPTER_TYPE_SWARP)
-				|| g_oplus_chip->soc >= 90
-				|| g_oplus_chip->temperature < g_oplus_chip->limits.little_cool_bat_decidegc) {
+			if (chip->nu1619_chg_status.adapter_type == ADAPTER_TYPE_WARP ||
+			    (g_oplus_chip->wpc_no_chargerpump && chip->nu1619_chg_status.adapter_type == ADAPTER_TYPE_SWARP) || g_oplus_chip->soc >= 90 ||
+			    g_oplus_chip->temperature < g_oplus_chip->limits.little_cool_bat_decidegc) {
 				chip->nu1619_chg_status.charge_status = WPC_CHG_STATUS_CHARGER_FASTCHG_INIT;
 			} else {
 				cep_nonzero_cnt = 0;
@@ -3154,8 +3053,7 @@ static int nu1619_charge_status_process(struct oplus_nu1619_ic *chip)
 		if (chargepump_check_dwp_status() == -1) {
 			chg_err("<~WPC~> open chargepump false!\n");
 			chargepump_disable();
-			if ((chip->nu1619_chg_status.vout >= 19000)
-				|| (chip->nu1619_chg_status.vout >= (g_oplus_chip->batt_volt * 4 + 600))) {
+			if ((chip->nu1619_chg_status.vout >= 19000) || (chip->nu1619_chg_status.vout >= (g_oplus_chip->batt_volt * 4 + 600))) {
 				chg_err("<~WPC~> Vout >= 19V or Vout >= 2*Vbatt, turn to MP2762!\n");
 				chip->nu1619_chg_status.adapter_type = ADAPTER_TYPE_WARP;
 				chip->nu1619_chg_status.charge_status = WPC_CHG_STATUS_CHARGER_FASTCHG_INIT;
@@ -3176,19 +3074,17 @@ static int nu1619_charge_status_process(struct oplus_nu1619_ic *chip)
 			vout_value = nu1619_get_vout(chip);
 			batt_volt = oplus_gauge_get_batt_mvolts();
 			chg_err("<~WPC~> Vout: %d, Vbatt: %d\n", vout_value, batt_volt);
-			if ((chargepump_check_dwp_status() == -2)
-				|| (chip->nu1619_chg_status.vout < (batt_volt * 4 - 500))) {
+			if ((chargepump_check_dwp_status() == -2) || (chip->nu1619_chg_status.vout < (batt_volt * 4 - 500))) {
 				chg_err("<~WPC~> chargepump fail or Vout < 2*Vbatt - 500!\n");
 				chargepump_disable();
 				chip->nu1619_chg_status.charge_status = WPC_CHG_STATUS_INCREASE_VOLTAGE_FOR_CHARGEPUMP;
 				break;
 			}
 
-			for(i = 0; i < CHARGEPUMP_DETECT_CNT; i++) {
+			for (i = 0; i < CHARGEPUMP_DETECT_CNT; i++) {
 				mdelay(5);
 				vout_value = nu1619_get_vout(chip);
-				if ((chip->nu1619_chg_status.vout < (batt_volt * 4 - 500))
-					 || (chargepump_check_dwp_status() == -2)) {
+				if ((chip->nu1619_chg_status.vout < (batt_volt * 4 - 500)) || (chargepump_check_dwp_status() == -2)) {
 					chg_err("<~WPC~> 40times: chargepump fail or Vout < 2*Vbatt - 500!\n");
 					chargepump_disable();
 					chip->nu1619_chg_status.charge_status = WPC_CHG_STATUS_INCREASE_VOLTAGE_FOR_CHARGEPUMP;
@@ -3255,8 +3151,8 @@ static int nu1619_charge_status_process(struct oplus_nu1619_ic *chip)
 			cep_nonzero_cnt = 0;
 			nu1619_ready_to_switch_to_charger(chip, true);
 			break;
-		} else if (chip->nu1619_chg_status.wpc_ffc_charge && (g_oplus_chip->batt_volt >= 4500)
-					&& ((g_oplus_chip->icharging < 0) && ((-1 * g_oplus_chip->icharging) < 900))) {
+		} else if (chip->nu1619_chg_status.wpc_ffc_charge && (g_oplus_chip->batt_volt >= 4500) &&
+			   ((g_oplus_chip->icharging < 0) && ((-1 * g_oplus_chip->icharging) < 900))) {
 			chg_err("<~WPC~> batt_volt[%d] >= 4.5V, batt_cur[%d] < 900ma, In FFC\n", g_oplus_chip->batt_volt, (-1 * g_oplus_chip->icharging));
 			cep_nonzero_cnt = 0;
 			chip->nu1619_chg_status.wpc_ffc_charge = false;
@@ -3267,8 +3163,8 @@ static int nu1619_charge_status_process(struct oplus_nu1619_ic *chip)
 			cep_nonzero_cnt = 0;
 			nu1619_ready_to_switch_to_charger(chip, true);
 			break;
-		} else if (((g_oplus_chip->temperature < WPC_CHARGE_FFC_TEMP_MIN)
-				|| (g_oplus_chip->temperature > WPC_CHARGE_FFC_TEMP_MAX)) && (g_oplus_chip->batt_volt > 4370)) {
+		} else if (((g_oplus_chip->temperature < WPC_CHARGE_FFC_TEMP_MIN) || (g_oplus_chip->temperature > WPC_CHARGE_FFC_TEMP_MAX)) &&
+			   (g_oplus_chip->batt_volt > 4370)) {
 			chg_err("<~WPC~> batt_volt[%d], temperature[%d]\n", g_oplus_chip->batt_volt, g_oplus_chip->temperature);
 			cep_nonzero_cnt = 0;
 			chip->nu1619_chg_status.wpc_ffc_charge = false;
@@ -3389,7 +3285,7 @@ static int nu1619_charge_status_process(struct oplus_nu1619_ic *chip)
 
 					nu1619_reset_CEP_flag(chip);
 					work_delay = 0;
-				}  else {
+				} else {
 					nu1619_restart_charger(chip);
 					chip->nu1619_chg_status.charge_status = WPC_CHG_STATUS_DECREASE_VOUT_TO_12V;
 				}
@@ -3412,10 +3308,7 @@ static int nu1619_charge_status_process(struct oplus_nu1619_ic *chip)
 		break;
 	case WPC_CHG_STATUS_INCREASE_CURRENT_FOR_CHARGER:
 		chg_err("<~WPC~> ..........WPC_CHG_STATUS_INCREASE_CURRENT_FOR_CHARGER..........\n");
-		temp_value = nu1619_increase_vc_by_step(chip,
-												chip->nu1619_chg_status.charge_current,
-												chip->nu1619_chg_status.fastchg_current_limit,
-												500);
+		temp_value = nu1619_increase_vc_by_step(chip, chip->nu1619_chg_status.charge_current, chip->nu1619_chg_status.fastchg_current_limit, 500);
 		if (temp_value != 0) {
 			nu1619_set_rx_charge_current(chip, temp_value);
 			work_delay = WPC_INCREASE_CURRENT_DELAY;
@@ -3429,10 +3322,8 @@ static int nu1619_charge_status_process(struct oplus_nu1619_ic *chip)
 		chg_err("<~WPC~> ..........WPC_CHG_STATUS_ADJUST_VOL_AFTER_INC_CURRENT..........\n");
 		if (chip->nu1619_chg_status.iout > (chip->nu1619_chg_status.iout_stated_current + WPC_CHARGE_CURRENT_OFFSET)) {
 			chg_err("<~WPC~>  IDT Iout > %dmA!\n", (chip->nu1619_chg_status.iout_stated_current + WPC_CHARGE_CURRENT_OFFSET));
-			temp_value = nu1619_increase_vc_by_step(chip,
-													chip->nu1619_chg_status.charge_voltage,
-													NU1619_WPC_CHARGE_VOLTAGE_FASTCHG_MAX,
-													WPC_CHARGE_VOLTAGE_CHANGE_STEP_1V);
+			temp_value = nu1619_increase_vc_by_step(chip, chip->nu1619_chg_status.charge_voltage, NU1619_WPC_CHARGE_VOLTAGE_FASTCHG_MAX,
+								WPC_CHARGE_VOLTAGE_CHANGE_STEP_1V);
 			if (temp_value != 0) {
 				nu1619_set_rx_charge_voltage(chip, temp_value);
 			} else {
@@ -3450,10 +3341,9 @@ static int nu1619_charge_status_process(struct oplus_nu1619_ic *chip)
 			nu1619_set_FOD_parameter(chip, 0);
 		}
 
-		if (chip->nu1619_chg_status.engineering_mode == true
-				&& chip->nu1619_chg_status.iout >= 950
-				&& chip->nu1619_chg_status.vout > (NU1619_WPC_CHARGE_VOLTAGE_FASTCHG - WPC_CHARGE_VOLTAGE_CHANGE_STEP_1V)
-				&& chip->nu1619_chg_status.send_message == P9221_CMD_NULL) {
+		if (chip->nu1619_chg_status.engineering_mode == true && chip->nu1619_chg_status.iout >= 950 &&
+		    chip->nu1619_chg_status.vout > (NU1619_WPC_CHARGE_VOLTAGE_FASTCHG - WPC_CHARGE_VOLTAGE_CHANGE_STEP_1V) &&
+		    chip->nu1619_chg_status.send_message == P9221_CMD_NULL) {
 			if (nu1619_get_CEP_flag(chip) == 0 && chip->nu1619_chg_status.rx_power == 0) {
 				chip->nu1619_chg_status.rx_power = -1;
 				chip->nu1619_chg_status.send_message = P9221_CMD_GET_RXTX_POWER;
@@ -3464,7 +3354,7 @@ static int nu1619_charge_status_process(struct oplus_nu1619_ic *chip)
 		}
 
 		if (chip->nu1619_chg_status.adapter_type == ADAPTER_TYPE_WARP) {
-			if(chip->nu1619_chg_status.fastchg_current_limit > 3000) {
+			if (chip->nu1619_chg_status.fastchg_current_limit > 3000) {
 				chg_err("<~WPC~>fastchg_current_limit > 3000\n");
 				chip->nu1619_chg_status.fastchg_current_limit = 3000;
 				nu1619_set_rx_charge_current(chip, chip->nu1619_chg_status.fastchg_current_limit);
@@ -3472,12 +3362,9 @@ static int nu1619_charge_status_process(struct oplus_nu1619_ic *chip)
 				break;
 			}
 		}
-		if (g_oplus_chip->temperature < 410 + shake_temp
-				&& chip->nu1619_chg_status.charge_voltage < NU1619_WPC_CHARGE_VOLTAGE_FASTCHG) {
-			temp_value = nu1619_increase_vc_by_step(chip,
-													chip->nu1619_chg_status.charge_voltage,
-													NU1619_WPC_CHARGE_VOLTAGE_FASTCHG,
-													WPC_CHARGE_VOLTAGE_CHANGE_STEP_1V);
+		if (g_oplus_chip->temperature < 410 + shake_temp && chip->nu1619_chg_status.charge_voltage < NU1619_WPC_CHARGE_VOLTAGE_FASTCHG) {
+			temp_value = nu1619_increase_vc_by_step(chip, chip->nu1619_chg_status.charge_voltage, NU1619_WPC_CHARGE_VOLTAGE_FASTCHG,
+								WPC_CHARGE_VOLTAGE_CHANGE_STEP_1V);
 			if (temp_value != 0) {
 				nu1619_set_rx_charge_voltage(chip, temp_value);
 				chg_err("<~WPC~> increase charger voltage\n");
@@ -3496,19 +3383,15 @@ static int nu1619_charge_status_process(struct oplus_nu1619_ic *chip)
 			chip->nu1619_chg_status.fastchg_current_limit = 2000;
 			if (chip->nu1619_chg_status.charge_current < chip->nu1619_chg_status.fastchg_current_limit) {
 				chg_err("<~WPC~> The tempearture is < 38. Icrease current.\n");
-				temp_value = nu1619_increase_vc_by_step(chip,
-												chip->nu1619_chg_status.charge_current,
-												chip->nu1619_chg_status.fastchg_current_limit,
-												500);
+				temp_value = nu1619_increase_vc_by_step(chip, chip->nu1619_chg_status.charge_current,
+									chip->nu1619_chg_status.fastchg_current_limit, 500);
 				if (temp_value != 0) {
 					nu1619_set_rx_charge_current(chip, temp_value);
 					work_delay = WPC_INCREASE_CURRENT_DELAY;
 				}
 			} else {
-				temp_value = nu1619_decrease_vc_by_step(chip,
-												chip->nu1619_chg_status.charge_current,
-												chip->nu1619_chg_status.fastchg_current_limit,
-												500);
+				temp_value = nu1619_decrease_vc_by_step(chip, chip->nu1619_chg_status.charge_current,
+									chip->nu1619_chg_status.fastchg_current_limit, 500);
 				if (temp_value != 0) {
 					nu1619_set_rx_charge_current(chip, temp_value);
 					chg_err("<~WPC~> The tempearture is < 38. Decrease current.\n");
@@ -3521,10 +3404,8 @@ static int nu1619_charge_status_process(struct oplus_nu1619_ic *chip)
 			chip->nu1619_chg_status.fastchg_current_limit = 3000;
 			if (chip->nu1619_chg_status.charge_current < chip->nu1619_chg_status.fastchg_current_limit) {
 				chg_err("<~WPC~> The tempearture is < 38. Icrease current.\n");
-				temp_value = nu1619_increase_vc_by_step(chip,
-												chip->nu1619_chg_status.charge_current,
-												chip->nu1619_chg_status.fastchg_current_limit,
-												500);
+				temp_value = nu1619_increase_vc_by_step(chip, chip->nu1619_chg_status.charge_current,
+									chip->nu1619_chg_status.fastchg_current_limit, 500);
 				if (temp_value != 0) {
 					nu1619_set_rx_charge_current(chip, temp_value);
 					work_delay = WPC_INCREASE_CURRENT_DELAY;
@@ -3536,10 +3417,8 @@ static int nu1619_charge_status_process(struct oplus_nu1619_ic *chip)
 	case WPC_CHG_STATUS_READY_FOR_FTM:
 		chg_err("<~WPC~> ..........WPC_CHG_STATUS_READY_FOR_FTM..........\n");
 		if (nu1619_get_CEP_flag(chip) == 0) {
-			temp_value = nu1619_increase_vc_by_step(chip,
-													chip->nu1619_chg_status.charge_voltage,
-													WPC_CHARGE_VOLTAGE_FTM,
-													WPC_CHARGE_VOLTAGE_CHANGE_STEP_1V);
+			temp_value = nu1619_increase_vc_by_step(chip, chip->nu1619_chg_status.charge_voltage, WPC_CHARGE_VOLTAGE_FTM,
+								WPC_CHARGE_VOLTAGE_CHANGE_STEP_1V);
 			if (temp_value != 0) {
 				nu1619_set_rx_charge_voltage(chip, temp_value);
 				nu1619_reset_CEP_flag(chip);
@@ -3582,12 +3461,11 @@ static int nu1619_charge_status_process(struct oplus_nu1619_ic *chip)
 
 static void nu1619_idt_dischg_status(struct oplus_nu1619_ic *chip)
 {
-	char regdata[2] = {0};
+	char regdata[2] = { 0 };
 	int rc = 0;
 
 	nu1619_read_reg(chip, 0x23, regdata, 2);
-	chg_err("<~WPC~>rtx func 0x23-->[0x%x],0x24-->[0x%x]!, wpc_dischg_status[%d]\n",
-		regdata[0], regdata[1], chip->nu1619_chg_status.wpc_dischg_status);
+	chg_err("<~WPC~>rtx func 0x23-->[0x%x],0x24-->[0x%x]!, wpc_dischg_status[%d]\n", regdata[0], regdata[1], chip->nu1619_chg_status.wpc_dischg_status);
 	regdata[1] = 0;
 	if (regdata[1] != 0) {
 		if (P922X_REG_RTX_ERR_TX_RXAC & regdata[1]) {
@@ -3624,7 +3502,7 @@ static void nu1619_idt_dischg_status(struct oplus_nu1619_ic *chip)
 		default:
 			break;
 		}
-/*
+		/*
 		if ((P922X_REG_RTX_ERR_TX_CEPTIMEOUT & regdata[1]) == 0) {
 			//chip->nu1619_chg_status.wpc_dischg_status = WPC_DISCHG_STATUS_OFF;
 			//g_oplus_chip->otg_switch = 0;
@@ -3689,16 +3567,14 @@ static void nu1619_commu_data_process(struct oplus_nu1619_ic *chip)
 {
 	int rc = -1;
 	char temp[3] = { 0, 0, 0 };
-	char val_buf[6] = { 0, 0, 0, 0, 0 , 0 };
+	char val_buf[6] = { 0, 0, 0, 0, 0, 0 };
 	char tx_command, tx_command_r;
 	char tx_data, tx_data_r;
 
 	chg_err("<~WPC~>rtx func chip->nu1619_chg_status.wpc_dischg_status[%d]\n", chip->nu1619_chg_status.wpc_dischg_status);
-	if (chip->nu1619_chg_status.wpc_dischg_status == WPC_DISCHG_STATUS_ON
-		|| chip->nu1619_chg_status.wpc_dischg_status == WPC_DISCHG_IC_READY
-		|| chip->nu1619_chg_status.wpc_dischg_status == WPC_DISCHG_IC_PING_DEVICE
-		|| chip->nu1619_chg_status.wpc_dischg_status == WPC_DISCHG_IC_TRANSFER
-		|| chip->nu1619_chg_status.wpc_dischg_status == WPC_DISCHG_IC_ERR_TX_CEPTIMEOUT) {
+	if (chip->nu1619_chg_status.wpc_dischg_status == WPC_DISCHG_STATUS_ON || chip->nu1619_chg_status.wpc_dischg_status == WPC_DISCHG_IC_READY ||
+	    chip->nu1619_chg_status.wpc_dischg_status == WPC_DISCHG_IC_PING_DEVICE || chip->nu1619_chg_status.wpc_dischg_status == WPC_DISCHG_IC_TRANSFER ||
+	    chip->nu1619_chg_status.wpc_dischg_status == WPC_DISCHG_IC_ERR_TX_CEPTIMEOUT) {
 		cancel_delayed_work_sync(&chip->idt_dischg_work);
 		nu1619_idt_dischg_status(chip);
 	}
@@ -3735,8 +3611,7 @@ static void nu1619_commu_data_process(struct oplus_nu1619_ic *chip)
 			tx_command_r = ~val_buf[2];
 			tx_data = val_buf[3];
 			tx_data_r = ~val_buf[4];
-			chg_err("<~WPC~> Received TX command: [0x%02X, 0x%02X], data: [0x%02X, 0x%02X]\n",
-				tx_command, tx_command_r, tx_data, tx_data_r);
+			chg_err("<~WPC~> Received TX command: [0x%02X, 0x%02X], data: [0x%02X, 0x%02X]\n", tx_command, tx_command_r, tx_data, tx_data_r);
 			switch (tx_command) {
 			case P9237_RESPONE_ADAPTER_TYPE:
 				if ((tx_command == tx_command_r) && (tx_data == tx_data_r)) {
@@ -3793,8 +3668,7 @@ static void nu1619_commu_data_process(struct oplus_nu1619_ic *chip)
 				if (val_buf[0] == 0x5F) {
 					chip->nu1619_chg_status.rx_power = val_buf[4] + (val_buf[5] << 8);
 					chip->nu1619_chg_status.tx_power = val_buf[2] + (val_buf[3] << 8);
-					chg_err("<~WPC~> rx_power[%d], tx_power[%d]\n",
-						chip->nu1619_chg_status.rx_power, chip->nu1619_chg_status.tx_power);
+					chg_err("<~WPC~> rx_power[%d], tx_power[%d]\n", chip->nu1619_chg_status.rx_power, chip->nu1619_chg_status.tx_power);
 					if (chip->nu1619_chg_status.send_message == P9221_CMD_GET_RXTX_POWER) {
 						chip->nu1619_chg_status.send_msg_cnt = 0;
 						chip->nu1619_chg_status.send_message = P9221_CMD_NULL;
@@ -3810,7 +3684,6 @@ static void nu1619_commu_data_process(struct oplus_nu1619_ic *chip)
 	nu1619_clear_irq(chip, temp[0], temp[1]);
 	msleep(5);
 }
-
 
 static void nu1619_get_running_mode(struct oplus_nu1619_ic *chip)
 {
@@ -3840,7 +3713,6 @@ static void nu1619_get_running_mode(struct oplus_nu1619_ic *chip)
 	}
 }
 
-
 int nu1619_get_idt_con_val(void)
 {
 	struct oplus_nu1619_ic *chip = nu1619_chip;
@@ -3855,9 +3727,7 @@ int nu1619_get_idt_con_val(void)
 		return -1;
 	}
 
-	if (IS_ERR_OR_NULL(chip->pinctrl)
-		|| IS_ERR_OR_NULL(chip->idt_con_active)
-		|| IS_ERR_OR_NULL(chip->idt_con_sleep)) {
+	if (IS_ERR_OR_NULL(chip->pinctrl) || IS_ERR_OR_NULL(chip->idt_con_active) || IS_ERR_OR_NULL(chip->idt_con_sleep)) {
 		chg_err("pinctrl null, return\n");
 		return -1;
 	}
@@ -3879,9 +3749,7 @@ int nu1619_get_idt_int_val(void)
 		return -1;
 	}
 
-	if (IS_ERR_OR_NULL(chip->pinctrl)
-		|| IS_ERR_OR_NULL(chip->idt_int_active)
-		|| IS_ERR_OR_NULL(chip->idt_int_sleep)) {
+	if (IS_ERR_OR_NULL(chip->pinctrl) || IS_ERR_OR_NULL(chip->idt_int_active) || IS_ERR_OR_NULL(chip->idt_int_sleep)) {
 		chg_err("pinctrl null, return\n");
 		return -1;
 	}
@@ -3896,8 +3764,7 @@ static void nu1619_idt_event_int_func(struct work_struct *work)
 
 	chg_err("<~WPC~> action for 22222\n");
 
-	if (nu1619_chip->nu1619_chg_status.charge_online == true
-			|| nu1619_wpc_get_otg_charging() == true) {
+	if (nu1619_chip->nu1619_chg_status.charge_online == true || nu1619_wpc_get_otg_charging() == true) {
 		nu1619_commu_data_process(chip);
 	}
 }
@@ -3913,9 +3780,7 @@ static void nu1619_idt_connect_int_func(struct work_struct *work)
 	}
 
 #ifndef FASTCHG_TEST_BY_TIME
-	if (oplus_get_wired_chg_present() == true
-			&& (chip->wireless_mode == WIRELESS_MODE_NULL)
-			&& chip->nu1619_chg_status.wpc_self_reset == false) {
+	if (oplus_get_wired_chg_present() == true && (chip->wireless_mode == WIRELESS_MODE_NULL) && chip->nu1619_chg_status.wpc_self_reset == false) {
 		nu1619_set_vt_sleep_val(1);
 		chg_err("<~WPC~> wired charging, return\n");
 		return;
@@ -3927,7 +3792,6 @@ static void nu1619_idt_connect_int_func(struct work_struct *work)
 		chg_err("<~WPC~> wireless_mode = WIRELESS_MODE_TX, return\n");
 		return;
 	}
-
 
 	if (nu1619_get_idt_con_val() == 1) {
 		chg_err(" !!!!! <~WPC~>[-TEST-] wpc dock has connected!>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n");
@@ -4124,22 +3988,19 @@ static int nu1619_idt_con_gpio_init(struct oplus_nu1619_ic *chip)
 		return -EINVAL;
 	}
 
-	chip->idt_con_active =
-			pinctrl_lookup_state(chip->pinctrl, "idt_connect_active");
+	chip->idt_con_active = pinctrl_lookup_state(chip->pinctrl, "idt_connect_active");
 	if (IS_ERR_OR_NULL(chip->idt_con_active)) {
 		chg_err("get idt_con_active fail\n");
 		return -EINVAL;
 	}
 
-	chip->idt_con_sleep =
-			pinctrl_lookup_state(chip->pinctrl, "idt_connect_sleep");
+	chip->idt_con_sleep = pinctrl_lookup_state(chip->pinctrl, "idt_connect_sleep");
 	if (IS_ERR_OR_NULL(chip->idt_con_sleep)) {
 		chg_err("get idt_con_sleep fail\n");
 		return -EINVAL;
 	}
 
-	chip->idt_con_default =
-			pinctrl_lookup_state(chip->pinctrl, "idt_connect_default");
+	chip->idt_con_default = pinctrl_lookup_state(chip->pinctrl, "idt_connect_default");
 	if (IS_ERR_OR_NULL(chip->idt_con_default)) {
 		chg_err("get idt_con_default fail\n");
 		return -EINVAL;
@@ -4167,22 +4028,19 @@ static int nu1619_idt_int_gpio_init(struct oplus_nu1619_ic *chip)
 		return -EINVAL;
 	}
 
-	chip->idt_int_active =
-			pinctrl_lookup_state(chip->pinctrl, "idt_int_active");
+	chip->idt_int_active = pinctrl_lookup_state(chip->pinctrl, "idt_int_active");
 	if (IS_ERR_OR_NULL(chip->idt_int_active)) {
 		chg_err("get idt_int_active fail\n");
 		return -EINVAL;
 	}
 
-	chip->idt_int_sleep =
-			pinctrl_lookup_state(chip->pinctrl, "idt_int_sleep");
+	chip->idt_int_sleep = pinctrl_lookup_state(chip->pinctrl, "idt_int_sleep");
 	if (IS_ERR_OR_NULL(chip->idt_int_sleep)) {
 		chg_err("get idt_int_sleep fail\n");
 		return -EINVAL;
 	}
 
-	chip->idt_int_default =
-			pinctrl_lookup_state(chip->pinctrl, "idt_int_default");
+	chip->idt_int_default = pinctrl_lookup_state(chip->pinctrl, "idt_int_default");
 	if (IS_ERR_OR_NULL(chip->idt_int_default)) {
 		chg_err("get idt_int_default fail\n");
 		return -EINVAL;
@@ -4210,22 +4068,19 @@ static int nu1619_ext1_wired_otg_gpio_init(struct oplus_nu1619_ic *chip)
 		return -EINVAL;
 	}
 
-	chip->ext1_wired_otg_en_active =
-			pinctrl_lookup_state(chip->pinctrl, "ext1_wired_otg_en_active");
+	chip->ext1_wired_otg_en_active = pinctrl_lookup_state(chip->pinctrl, "ext1_wired_otg_en_active");
 	if (IS_ERR_OR_NULL(chip->ext1_wired_otg_en_active)) {
 		chg_err("get ext1_wired_otg_en_active fail\n");
 		return -EINVAL;
 	}
 
-	chip->ext1_wired_otg_en_sleep =
-			pinctrl_lookup_state(chip->pinctrl, "ext1_wired_otg_en_sleep");
+	chip->ext1_wired_otg_en_sleep = pinctrl_lookup_state(chip->pinctrl, "ext1_wired_otg_en_sleep");
 	if (IS_ERR_OR_NULL(chip->ext1_wired_otg_en_sleep)) {
 		chg_err("get ext1_wired_otg_en_sleep fail\n");
 		return -EINVAL;
 	}
 
-	chip->ext1_wired_otg_en_default =
-			pinctrl_lookup_state(chip->pinctrl, "ext1_wired_otg_en_default");
+	chip->ext1_wired_otg_en_default = pinctrl_lookup_state(chip->pinctrl, "ext1_wired_otg_en_default");
 	if (IS_ERR_OR_NULL(chip->ext1_wired_otg_en_default)) {
 		chg_err("get ext1_wired_otg_en_default fail\n");
 		return -EINVAL;
@@ -4233,14 +4088,11 @@ static int nu1619_ext1_wired_otg_gpio_init(struct oplus_nu1619_ic *chip)
 
 #ifdef OPLUS_FEATURE_CHG_BASIC
 	gpio_direction_output(chip->ext1_wired_otg_en_gpio, 1);
-	pinctrl_select_state(chip->pinctrl,
-			chip->ext1_wired_otg_en_active);
+	pinctrl_select_state(chip->pinctrl, chip->ext1_wired_otg_en_active);
 #else
 	gpio_direction_output(chip->ext1_wired_otg_en_gpio, 0);
-	pinctrl_select_state(chip->pinctrl,
-			chip->ext1_wired_otg_en_default);
+	pinctrl_select_state(chip->pinctrl, chip->ext1_wired_otg_en_default);
 #endif
-
 
 	return 0;
 }
@@ -4259,26 +4111,21 @@ void nu1619_set_ext1_wired_otg_en_val(int value)
 		return;
 	}
 
-	if (IS_ERR_OR_NULL(chip->pinctrl)
-		|| IS_ERR_OR_NULL(chip->ext1_wired_otg_en_active)
-		|| IS_ERR_OR_NULL(chip->ext1_wired_otg_en_sleep)
-		|| IS_ERR_OR_NULL(chip->ext1_wired_otg_en_default)) {
+	if (IS_ERR_OR_NULL(chip->pinctrl) || IS_ERR_OR_NULL(chip->ext1_wired_otg_en_active) || IS_ERR_OR_NULL(chip->ext1_wired_otg_en_sleep) ||
+	    IS_ERR_OR_NULL(chip->ext1_wired_otg_en_default)) {
 		chg_err("pinctrl null, return\n");
 		return;
 	}
 
 	if (value) {
 		gpio_direction_output(chip->ext1_wired_otg_en_gpio, 1);
-		pinctrl_select_state(chip->pinctrl,
-				chip->ext1_wired_otg_en_default);
+		pinctrl_select_state(chip->pinctrl, chip->ext1_wired_otg_en_default);
 	} else {
 		gpio_direction_output(chip->ext1_wired_otg_en_gpio, 0);
-		pinctrl_select_state(chip->pinctrl,
-				chip->ext1_wired_otg_en_sleep);
+		pinctrl_select_state(chip->pinctrl, chip->ext1_wired_otg_en_sleep);
 	}
 
-	chg_err("<~WPC~>set value:%d, gpio_val:%d\n",
-		value, gpio_get_value(chip->ext1_wired_otg_en_gpio));
+	chg_err("<~WPC~>set value:%d, gpio_val:%d\n", value, gpio_get_value(chip->ext1_wired_otg_en_gpio));
 }
 
 int nu1619_get_ext1_wired_otg_en_val(void)
@@ -4295,17 +4142,14 @@ int nu1619_get_ext1_wired_otg_en_val(void)
 		return -1;
 	}
 
-	if (IS_ERR_OR_NULL(chip->pinctrl)
-		|| IS_ERR_OR_NULL(chip->ext1_wired_otg_en_active)
-		|| IS_ERR_OR_NULL(chip->ext1_wired_otg_en_sleep)
-		|| IS_ERR_OR_NULL(chip->ext1_wired_otg_en_default)) {
+	if (IS_ERR_OR_NULL(chip->pinctrl) || IS_ERR_OR_NULL(chip->ext1_wired_otg_en_active) || IS_ERR_OR_NULL(chip->ext1_wired_otg_en_sleep) ||
+	    IS_ERR_OR_NULL(chip->ext1_wired_otg_en_default)) {
 		chg_err("pinctrl null, return\n");
 		return -1;
 	}
 
 	return gpio_get_value(chip->ext1_wired_otg_en_gpio);
 }
-
 
 static int nu1619_ext2_wireless_otg_gpio_init(struct oplus_nu1619_ic *chip)
 {
@@ -4320,22 +4164,19 @@ static int nu1619_ext2_wireless_otg_gpio_init(struct oplus_nu1619_ic *chip)
 		return -EINVAL;
 	}
 
-	chip->ext2_wireless_otg_en_active =
-			pinctrl_lookup_state(chip->pinctrl, "ext2_wireless_otg_en_active");
+	chip->ext2_wireless_otg_en_active = pinctrl_lookup_state(chip->pinctrl, "ext2_wireless_otg_en_active");
 	if (IS_ERR_OR_NULL(chip->ext2_wireless_otg_en_active)) {
 		chg_err("get ext2_wireless_otg_en_active fail\n");
 		return -EINVAL;
 	}
 
-	chip->ext2_wireless_otg_en_sleep =
-			pinctrl_lookup_state(chip->pinctrl, "ext2_wireless_otg_en_sleep");
+	chip->ext2_wireless_otg_en_sleep = pinctrl_lookup_state(chip->pinctrl, "ext2_wireless_otg_en_sleep");
 	if (IS_ERR_OR_NULL(chip->ext2_wireless_otg_en_sleep)) {
 		chg_err("get ext2_wireless_otg_en_sleep fail\n");
 		return -EINVAL;
 	}
 
-	chip->ext2_wireless_otg_en_default =
-			pinctrl_lookup_state(chip->pinctrl, "ext2_wireless_otg_en_default");
+	chip->ext2_wireless_otg_en_default = pinctrl_lookup_state(chip->pinctrl, "ext2_wireless_otg_en_default");
 	if (IS_ERR_OR_NULL(chip->ext2_wireless_otg_en_default)) {
 		chg_err("get ext2_wireless_otg_en_default fail\n");
 		return -EINVAL;
@@ -4343,12 +4184,10 @@ static int nu1619_ext2_wireless_otg_gpio_init(struct oplus_nu1619_ic *chip)
 
 #ifdef OPLUS_FEATURE_CHG_BASIC
 	gpio_direction_output(chip->ext2_wireless_otg_en_gpio, 1);
-	pinctrl_select_state(chip->pinctrl,
-			chip->ext2_wireless_otg_en_active);
+	pinctrl_select_state(chip->pinctrl, chip->ext2_wireless_otg_en_active);
 #else
 	gpio_direction_output(chip->ext2_wireless_otg_en_gpio, 0);
-	pinctrl_select_state(chip->pinctrl,
-			chip->ext2_wireless_otg_en_default);
+	pinctrl_select_state(chip->pinctrl, chip->ext2_wireless_otg_en_default);
 #endif
 
 	return 0;
@@ -4368,26 +4207,21 @@ void nu1619_set_ext2_wireless_otg_en_val(int value)
 		return;
 	}
 
-	if (IS_ERR_OR_NULL(chip->pinctrl)
-		|| IS_ERR_OR_NULL(chip->ext2_wireless_otg_en_active)
-		|| IS_ERR_OR_NULL(chip->ext2_wireless_otg_en_sleep)
-		|| IS_ERR_OR_NULL(chip->ext2_wireless_otg_en_default)) {
+	if (IS_ERR_OR_NULL(chip->pinctrl) || IS_ERR_OR_NULL(chip->ext2_wireless_otg_en_active) || IS_ERR_OR_NULL(chip->ext2_wireless_otg_en_sleep) ||
+	    IS_ERR_OR_NULL(chip->ext2_wireless_otg_en_default)) {
 		chg_err("pinctrl null, return\n");
 		return;
 	}
 
 	if (value) {
 		gpio_direction_output(chip->ext2_wireless_otg_en_gpio, 1);
-		pinctrl_select_state(chip->pinctrl,
-				chip->ext2_wireless_otg_en_default);
+		pinctrl_select_state(chip->pinctrl, chip->ext2_wireless_otg_en_default);
 	} else {
 		gpio_direction_output(chip->ext2_wireless_otg_en_gpio, 0);
-		pinctrl_select_state(chip->pinctrl,
-				chip->ext2_wireless_otg_en_sleep);
+		pinctrl_select_state(chip->pinctrl, chip->ext2_wireless_otg_en_sleep);
 	}
 
-	chg_err("<~WPC~>set value:%d, gpio_val:%d\n",
-		value, gpio_get_value(chip->ext2_wireless_otg_en_gpio));
+	chg_err("<~WPC~>set value:%d, gpio_val:%d\n", value, gpio_get_value(chip->ext2_wireless_otg_en_gpio));
 }
 
 int nu1619_get_ext2_wireless_otg_en_val(void)
@@ -4404,10 +4238,8 @@ int nu1619_get_ext2_wireless_otg_en_val(void)
 		return -1;
 	}
 
-	if (IS_ERR_OR_NULL(chip->pinctrl)
-		|| IS_ERR_OR_NULL(chip->ext2_wireless_otg_en_active)
-		|| IS_ERR_OR_NULL(chip->ext2_wireless_otg_en_sleep)
-		|| IS_ERR_OR_NULL(chip->ext2_wireless_otg_en_default)) {
+	if (IS_ERR_OR_NULL(chip->pinctrl) || IS_ERR_OR_NULL(chip->ext2_wireless_otg_en_active) || IS_ERR_OR_NULL(chip->ext2_wireless_otg_en_sleep) ||
+	    IS_ERR_OR_NULL(chip->ext2_wireless_otg_en_default)) {
 		chg_err("pinctrl null, return\n");
 		return -1;
 	}
@@ -4428,30 +4260,26 @@ static int nu1619_vt_sleep_gpio_init(struct oplus_nu1619_ic *chip)
 		return -EINVAL;
 	}
 
-	chip->vt_sleep_active =
-			pinctrl_lookup_state(chip->pinctrl, "vt_sleep_active");
+	chip->vt_sleep_active = pinctrl_lookup_state(chip->pinctrl, "vt_sleep_active");
 	if (IS_ERR_OR_NULL(chip->vt_sleep_active)) {
 		chg_err("get vt_sleep_active fail\n");
 		return -EINVAL;
 	}
 
-	chip->vt_sleep_sleep =
-			pinctrl_lookup_state(chip->pinctrl, "vt_sleep_sleep");
+	chip->vt_sleep_sleep = pinctrl_lookup_state(chip->pinctrl, "vt_sleep_sleep");
 	if (IS_ERR_OR_NULL(chip->vt_sleep_sleep)) {
 		chg_err("get vt_sleep_sleep fail\n");
 		return -EINVAL;
 	}
 
-	chip->vt_sleep_default =
-			pinctrl_lookup_state(chip->pinctrl, "vt_sleep_default");
+	chip->vt_sleep_default = pinctrl_lookup_state(chip->pinctrl, "vt_sleep_default");
 	if (IS_ERR_OR_NULL(chip->vt_sleep_default)) {
 		chg_err("get vt_sleep_default fail\n");
 		return -EINVAL;
 	}
 
 	gpio_direction_output(chip->vt_sleep_gpio, 0);
-	pinctrl_select_state(chip->pinctrl,
-			chip->vt_sleep_sleep);
+	pinctrl_select_state(chip->pinctrl, chip->vt_sleep_sleep);
 
 	return 0;
 }
@@ -4470,26 +4298,21 @@ void nu1619_set_vt_sleep_val(int value)
 		return;
 	}
 
-	if (IS_ERR_OR_NULL(chip->pinctrl)
-		|| IS_ERR_OR_NULL(chip->vt_sleep_active)
-		|| IS_ERR_OR_NULL(chip->vt_sleep_sleep)
-		|| IS_ERR_OR_NULL(chip->vt_sleep_default)) {
+	if (IS_ERR_OR_NULL(chip->pinctrl) || IS_ERR_OR_NULL(chip->vt_sleep_active) || IS_ERR_OR_NULL(chip->vt_sleep_sleep) ||
+	    IS_ERR_OR_NULL(chip->vt_sleep_default)) {
 		chg_err("pinctrl null, return\n");
 		return;
 	}
 
 	if (value) {
 		gpio_direction_output(chip->vt_sleep_gpio, 1);
-		pinctrl_select_state(chip->pinctrl,
-				chip->vt_sleep_default);
+		pinctrl_select_state(chip->pinctrl, chip->vt_sleep_default);
 	} else {
 		gpio_direction_output(chip->vt_sleep_gpio, 0);
-		pinctrl_select_state(chip->pinctrl,
-				chip->vt_sleep_sleep);
+		pinctrl_select_state(chip->pinctrl, chip->vt_sleep_sleep);
 	}
 
-	chg_err("<~WPC~>set value:%d, gpio_val:%d\n",
-		value, gpio_get_value(chip->vt_sleep_gpio));
+	chg_err("<~WPC~>set value:%d, gpio_val:%d\n", value, gpio_get_value(chip->vt_sleep_gpio));
 }
 
 int nu1619_get_vt_sleep_val(void)
@@ -4506,10 +4329,8 @@ int nu1619_get_vt_sleep_val(void)
 		return -1;
 	}
 
-	if (IS_ERR_OR_NULL(chip->pinctrl)
-		|| IS_ERR_OR_NULL(chip->vt_sleep_active)
-		|| IS_ERR_OR_NULL(chip->vt_sleep_sleep)
-		|| IS_ERR_OR_NULL(chip->vt_sleep_default)) {
+	if (IS_ERR_OR_NULL(chip->pinctrl) || IS_ERR_OR_NULL(chip->vt_sleep_active) || IS_ERR_OR_NULL(chip->vt_sleep_sleep) ||
+	    IS_ERR_OR_NULL(chip->vt_sleep_default)) {
 		chg_err("pinctrl null, return\n");
 		return -1;
 	}
@@ -4530,30 +4351,26 @@ static int nu1619_vbat_en_gpio_init(struct oplus_nu1619_ic *chip)
 		return -EINVAL;
 	}
 
-	chip->vbat_en_active =
-			pinctrl_lookup_state(chip->pinctrl, "vbat_en_active");
+	chip->vbat_en_active = pinctrl_lookup_state(chip->pinctrl, "vbat_en_active");
 	if (IS_ERR_OR_NULL(chip->vbat_en_active)) {
 		chg_err("get vbat_en_active fail\n");
 		return -EINVAL;
 	}
 
-	chip->vbat_en_sleep =
-			pinctrl_lookup_state(chip->pinctrl, "vbat_en_sleep");
+	chip->vbat_en_sleep = pinctrl_lookup_state(chip->pinctrl, "vbat_en_sleep");
 	if (IS_ERR_OR_NULL(chip->vbat_en_sleep)) {
 		chg_err("get vbat_en_sleep fail\n");
 		return -EINVAL;
 	}
 
-	chip->vbat_en_default =
-			pinctrl_lookup_state(chip->pinctrl, "vbat_en_default");
+	chip->vbat_en_default = pinctrl_lookup_state(chip->pinctrl, "vbat_en_default");
 	if (IS_ERR_OR_NULL(chip->vbat_en_default)) {
 		chg_err("get vbat_en_default fail\n");
 		return -EINVAL;
 	}
 
 	gpio_direction_output(chip->vbat_en_gpio, 0);
-	pinctrl_select_state(chip->pinctrl,
-			chip->vbat_en_sleep);
+	pinctrl_select_state(chip->pinctrl, chip->vbat_en_sleep);
 
 	return 0;
 }
@@ -4572,26 +4389,21 @@ void nu1619_set_vbat_en_val(int value)
 		return;
 	}
 
-	if (IS_ERR_OR_NULL(chip->pinctrl)
-		|| IS_ERR_OR_NULL(chip->vbat_en_active)
-		|| IS_ERR_OR_NULL(chip->vbat_en_sleep)
-		|| IS_ERR_OR_NULL(chip->vbat_en_default)) {
+	if (IS_ERR_OR_NULL(chip->pinctrl) || IS_ERR_OR_NULL(chip->vbat_en_active) || IS_ERR_OR_NULL(chip->vbat_en_sleep) ||
+	    IS_ERR_OR_NULL(chip->vbat_en_default)) {
 		chg_err("pinctrl null, return\n");
 		return;
 	}
 
 	if (value) {
 		gpio_direction_output(chip->vbat_en_gpio, 1);
-		pinctrl_select_state(chip->pinctrl,
-				chip->vbat_en_default);
+		pinctrl_select_state(chip->pinctrl, chip->vbat_en_default);
 	} else {
 		gpio_direction_output(chip->vbat_en_gpio, 0);
-		pinctrl_select_state(chip->pinctrl,
-				chip->vbat_en_sleep);
+		pinctrl_select_state(chip->pinctrl, chip->vbat_en_sleep);
 	}
 
-	chg_err("<~WPC~>set value:%d, gpio_val:%d\n",
-		value, gpio_get_value(chip->vbat_en_gpio));
+	chg_err("<~WPC~>set value:%d, gpio_val:%d\n", value, gpio_get_value(chip->vbat_en_gpio));
 }
 
 int nu1619_get_vbat_en_val(void)
@@ -4608,17 +4420,14 @@ int nu1619_get_vbat_en_val(void)
 		return -1;
 	}
 
-	if (IS_ERR_OR_NULL(chip->pinctrl)
-		|| IS_ERR_OR_NULL(chip->vbat_en_active)
-		|| IS_ERR_OR_NULL(chip->vbat_en_sleep)
-		|| IS_ERR_OR_NULL(chip->vbat_en_default)) {
+	if (IS_ERR_OR_NULL(chip->pinctrl) || IS_ERR_OR_NULL(chip->vbat_en_active) || IS_ERR_OR_NULL(chip->vbat_en_sleep) ||
+	    IS_ERR_OR_NULL(chip->vbat_en_default)) {
 		chg_err("pinctrl null, return\n");
 		return -1;
 	}
 
 	return gpio_get_value(chip->vbat_en_gpio);
 }
-
 
 static int nu1619_booster_en_gpio_init(struct oplus_nu1619_ic *chip)
 {
@@ -4633,30 +4442,26 @@ static int nu1619_booster_en_gpio_init(struct oplus_nu1619_ic *chip)
 		return -EINVAL;
 	}
 
-	chip->booster_en_active =
-			pinctrl_lookup_state(chip->pinctrl, "booster_en_active");
+	chip->booster_en_active = pinctrl_lookup_state(chip->pinctrl, "booster_en_active");
 	if (IS_ERR_OR_NULL(chip->booster_en_active)) {
 		chg_err("get booster_en_active fail\n");
 		return -EINVAL;
 	}
 
-	chip->booster_en_sleep =
-			pinctrl_lookup_state(chip->pinctrl, "booster_en_sleep");
+	chip->booster_en_sleep = pinctrl_lookup_state(chip->pinctrl, "booster_en_sleep");
 	if (IS_ERR_OR_NULL(chip->booster_en_sleep)) {
 		chg_err("get booster_en_sleep fail\n");
 		return -EINVAL;
 	}
 
-	chip->booster_en_default =
-			pinctrl_lookup_state(chip->pinctrl, "booster_en_default");
+	chip->booster_en_default = pinctrl_lookup_state(chip->pinctrl, "booster_en_default");
 	if (IS_ERR_OR_NULL(chip->booster_en_default)) {
 		chg_err("get booster_en_default fail\n");
 		return -EINVAL;
 	}
 
 	gpio_direction_output(chip->booster_en_gpio, 0);
-	pinctrl_select_state(chip->pinctrl,
-			chip->booster_en_sleep);
+	pinctrl_select_state(chip->pinctrl, chip->booster_en_sleep);
 
 	chg_err("gpio_val:%d\n", gpio_get_value(chip->booster_en_gpio));
 
@@ -4677,26 +4482,21 @@ void nu1619_set_booster_en_val(int value)
 		return;
 	}
 
-	if (IS_ERR_OR_NULL(chip->pinctrl)
-		|| IS_ERR_OR_NULL(chip->booster_en_active)
-		|| IS_ERR_OR_NULL(chip->booster_en_sleep)
-		|| IS_ERR_OR_NULL(chip->booster_en_default)) {
+	if (IS_ERR_OR_NULL(chip->pinctrl) || IS_ERR_OR_NULL(chip->booster_en_active) || IS_ERR_OR_NULL(chip->booster_en_sleep) ||
+	    IS_ERR_OR_NULL(chip->booster_en_default)) {
 		chg_err("pinctrl null, return\n");
 		return;
 	}
 
 	if (value) {
 		gpio_direction_output(chip->booster_en_gpio, 1);
-		pinctrl_select_state(chip->pinctrl,
-				chip->booster_en_active);
+		pinctrl_select_state(chip->pinctrl, chip->booster_en_active);
 	} else {
 		gpio_direction_output(chip->booster_en_gpio, 0);
-		pinctrl_select_state(chip->pinctrl,
-				chip->booster_en_sleep);
+		pinctrl_select_state(chip->pinctrl, chip->booster_en_sleep);
 	}
 
-	chg_err("<~WPC~>set value:%d, gpio_val:%d\n",
-		value, gpio_get_value(chip->booster_en_gpio));
+	chg_err("<~WPC~>set value:%d, gpio_val:%d\n", value, gpio_get_value(chip->booster_en_gpio));
 }
 
 int nu1619_get_booster_en_val(void)
@@ -4713,17 +4513,14 @@ int nu1619_get_booster_en_val(void)
 		return -1;
 	}
 
-	if (IS_ERR_OR_NULL(chip->pinctrl)
-		|| IS_ERR_OR_NULL(chip->booster_en_active)
-		|| IS_ERR_OR_NULL(chip->booster_en_sleep)
-		|| IS_ERR_OR_NULL(chip->booster_en_default)) {
+	if (IS_ERR_OR_NULL(chip->pinctrl) || IS_ERR_OR_NULL(chip->booster_en_active) || IS_ERR_OR_NULL(chip->booster_en_sleep) ||
+	    IS_ERR_OR_NULL(chip->booster_en_default)) {
 		chg_err("pinctrl null, return\n");
 		return -1;
 	}
 
 	return gpio_get_value(chip->booster_en_gpio);
 }
-
 
 void nu1619_set_cp_ldo_5v_val(int value)
 {
@@ -4739,26 +4536,21 @@ void nu1619_set_cp_ldo_5v_val(int value)
 		return;
 	}
 
-	if (IS_ERR_OR_NULL(chip->pinctrl)
-		|| IS_ERR_OR_NULL(chip->cp_ldo_5v_active)
-		|| IS_ERR_OR_NULL(chip->cp_ldo_5v_sleep)
-		|| IS_ERR_OR_NULL(chip->cp_ldo_5v_default)) {
+	if (IS_ERR_OR_NULL(chip->pinctrl) || IS_ERR_OR_NULL(chip->cp_ldo_5v_active) || IS_ERR_OR_NULL(chip->cp_ldo_5v_sleep) ||
+	    IS_ERR_OR_NULL(chip->cp_ldo_5v_default)) {
 		chg_err("pinctrl null, return\n");
 		return;
 	}
 
 	if (value) {
 		gpio_direction_output(chip->cp_ldo_5v_gpio, 1);
-		pinctrl_select_state(chip->pinctrl,
-				chip->cp_ldo_5v_active);
+		pinctrl_select_state(chip->pinctrl, chip->cp_ldo_5v_active);
 	} else {
 		gpio_direction_output(chip->cp_ldo_5v_gpio, 0);
-		pinctrl_select_state(chip->pinctrl,
-				chip->cp_ldo_5v_sleep);
+		pinctrl_select_state(chip->pinctrl, chip->cp_ldo_5v_sleep);
 	}
 
-	chg_err("set value:%d, gpio_val:%d\n",
-		value, gpio_get_value(chip->cp_ldo_5v_gpio));
+	chg_err("set value:%d, gpio_val:%d\n", value, gpio_get_value(chip->cp_ldo_5v_gpio));
 }
 
 int nu1619_get_cp_ldo_5v_val(void)
@@ -4775,10 +4567,8 @@ int nu1619_get_cp_ldo_5v_val(void)
 		return -1;
 	}
 
-	if (IS_ERR_OR_NULL(chip->pinctrl)
-		|| IS_ERR_OR_NULL(chip->cp_ldo_5v_active)
-		|| IS_ERR_OR_NULL(chip->cp_ldo_5v_sleep)
-		|| IS_ERR_OR_NULL(chip->cp_ldo_5v_default)) {
+	if (IS_ERR_OR_NULL(chip->pinctrl) || IS_ERR_OR_NULL(chip->cp_ldo_5v_active) || IS_ERR_OR_NULL(chip->cp_ldo_5v_sleep) ||
+	    IS_ERR_OR_NULL(chip->cp_ldo_5v_default)) {
 		chg_err("pinctrl null, return\n");
 		return -1;
 	}
@@ -4875,8 +4665,7 @@ static int nu1619_set_silent_mode(bool is_silent)
 		return -1;
 	}
 
-	if ((chip->nu1619_chg_status.send_message != P9221_CMD_NULL)
-		&& (chip->nu1619_chg_status.send_message != P9221_CMD_SET_PWM_PULSE)) {
+	if ((chip->nu1619_chg_status.send_message != P9221_CMD_NULL) && (chip->nu1619_chg_status.send_message != P9221_CMD_SET_PWM_PULSE)) {
 		return -1;
 	}
 
@@ -4906,30 +4695,26 @@ static int nu1619_cp_ldo_5v_gpio_init(struct oplus_nu1619_ic *chip)
 		return -EINVAL;
 	}
 
-	chip->cp_ldo_5v_active =
-			pinctrl_lookup_state(chip->pinctrl, "cp_ldo_5v_active");
+	chip->cp_ldo_5v_active = pinctrl_lookup_state(chip->pinctrl, "cp_ldo_5v_active");
 	if (IS_ERR_OR_NULL(chip->cp_ldo_5v_active)) {
 		chg_err("get cp_ldo_5v_active fail\n");
 		return -EINVAL;
 	}
 
-	chip->cp_ldo_5v_sleep =
-			pinctrl_lookup_state(chip->pinctrl, "cp_ldo_5v_sleep");
+	chip->cp_ldo_5v_sleep = pinctrl_lookup_state(chip->pinctrl, "cp_ldo_5v_sleep");
 	if (IS_ERR_OR_NULL(chip->cp_ldo_5v_sleep)) {
 		chg_err("get cp_ldo_5v_sleep fail\n");
 		return -EINVAL;
 	}
 
-	chip->cp_ldo_5v_default =
-			pinctrl_lookup_state(chip->pinctrl, "cp_ldo_5v_default");
+	chip->cp_ldo_5v_default = pinctrl_lookup_state(chip->pinctrl, "cp_ldo_5v_default");
 	if (IS_ERR_OR_NULL(chip->cp_ldo_5v_default)) {
 		chg_err("get cp_ldo_5v_default fail\n");
 		return -EINVAL;
 	}
 
 	gpio_direction_output(chip->cp_ldo_5v_gpio, 0);
-	pinctrl_select_state(chip->pinctrl,
-			chip->cp_ldo_5v_sleep);
+	pinctrl_select_state(chip->pinctrl, chip->cp_ldo_5v_sleep);
 
 	chg_err("gpio_val:%d\n", gpio_get_value(chip->cp_ldo_5v_gpio));
 
@@ -5102,7 +4887,7 @@ static int nu1619_idt_gpio_init(struct oplus_nu1619_ic *chip)
 static int nu1619_add = 0;
 static ssize_t nu1619_reg_store(struct file *filp, const char __user *buff, size_t len, loff_t *data)
 {
-	char write_data[32] = {0};
+	char write_data[32] = { 0 };
 	char val_buf;
 	int rc;
 
@@ -5126,9 +4911,9 @@ static ssize_t nu1619_reg_store(struct file *filp, const char __user *buff, size
 
 	rc = nu1619_read_reg(nu1619_chip, nu1619_add, &val_buf, 1);
 	if (rc) {
-		 chg_err("Couldn't read 0x%02x rc = %d\n", nu1619_add, rc);
+		chg_err("Couldn't read 0x%02x rc = %d\n", nu1619_add, rc);
 	} else {
-		 chg_err("nu1619_read 0x%02x = 0x%02x\n", nu1619_add, val_buf);
+		chg_err("nu1619_read 0x%02x = 0x%02x\n", nu1619_add, val_buf);
 	}
 
 	return len;
@@ -5136,14 +4921,14 @@ static ssize_t nu1619_reg_store(struct file *filp, const char __user *buff, size
 
 static ssize_t nu1619_reg_show(struct file *filp, char __user *buff, size_t count, loff_t *off)
 {
-	char page[256] = {0};
+	char page[256] = { 0 };
 	char val_buf;
 	int rc;
 	int len = 0;
 
 	rc = nu1619_read_reg(nu1619_chip, nu1619_add, &val_buf, 1);
 	if (rc) {
-		 chg_err("Couldn't read 0x%02x rc = %d\n", nu1619_add, rc);
+		chg_err("Couldn't read 0x%02x rc = %d\n", nu1619_add, rc);
 	}
 
 	len = sprintf(page, "reg = 0x%x, data = 0x%x\n", nu1619_add, val_buf);
@@ -5178,7 +4963,7 @@ static void init_nu1619_add_log(void)
 
 static ssize_t nu1619_data_log_write(struct file *filp, const char __user *buff, size_t len, loff_t *data)
 {
-	char write_data[32] = {0};
+	char write_data[32] = { 0 };
 	int critical_log = 0;
 	int rc;
 
@@ -5205,7 +4990,7 @@ static ssize_t nu1619_data_log_write(struct file *filp, const char __user *buff,
 
 	rc = nu1619_config_interface(nu1619_chip, nu1619_add, critical_log, 0xFF);
 	if (rc) {
-		 chg_err("Couldn't write 0x%02x rc = %d\n", nu1619_add, rc);
+		chg_err("Couldn't write 0x%02x rc = %d\n", nu1619_add, rc);
 	}
 
 	return len;
@@ -5265,7 +5050,7 @@ static void nu1619_task_work_process(struct work_struct *work)
 		nu1619_charge_status_process(chip);
 
 		/* run again after interval */
-		switch(chip->nu1619_chg_status.charge_status) {
+		switch (chip->nu1619_chg_status.charge_status) {
 		case WPC_CHG_STATUS_FAST_CHARGING_FROM_CHGPUMP:
 		case WPC_CHG_STATUS_INCREASE_CURRENT_FOR_CHARGER:
 		case WPC_CHG_STATUS_FAST_CHARGING_FROM_CHARGER:
@@ -5390,7 +5175,7 @@ static void wlchg_reset_variables(struct oplus_nu1619_ic *chip)
 	chg_status->freq_thr_inc = false;
 	chg_status->is_deviation = false;
 	chg_status->deviation_check_done = false;
-/*
+	/*
 	chg_param->mBattTempBoundT0 = chg_param->BATT_TEMP_T0;
 	chg_param->mBattTempBoundT1 = chg_param->BATT_TEMP_T1;
 	chg_param->mBattTempBoundT2 = chg_param->BATT_TEMP_T2;
@@ -5410,7 +5195,7 @@ static ssize_t proc_wireless_voltage_rect_read(struct file *file, char __user *b
 	int vrect = 0;
 	struct oplus_nu1619_ic *chip = nu1619_chip;
 
-	if(chip == NULL) {
+	if (chip == NULL) {
 		chg_err("%s: nu1619 driver is not ready\n", __func__);
 		return 0;
 	}
@@ -5432,11 +5217,10 @@ static ssize_t proc_wireless_voltage_rect_write(struct file *file, const char __
 	return count;
 }
 
-static const struct file_operations proc_wireless_voltage_rect_ops =
-{
+static const struct file_operations proc_wireless_voltage_rect_ops = {
 	.read = proc_wireless_voltage_rect_read,
-	.write  = proc_wireless_voltage_rect_write,
-	.open  = simple_open,
+	.write = proc_wireless_voltage_rect_write,
+	.open = simple_open,
 	.owner = THIS_MODULE,
 };
 
@@ -5447,7 +5231,7 @@ static ssize_t proc_wireless_current_out_read(struct file *file, char __user *bu
 	int iout = 0;
 	struct oplus_nu1619_ic *chip = nu1619_chip;
 
-	if(chip == NULL) {
+	if (chip == NULL) {
 		chg_err("%s: nu1619 driver is not ready\n", __func__);
 		return 0;
 	}
@@ -5467,7 +5251,7 @@ static ssize_t proc_wireless_current_out_read(struct file *file, char __user *bu
 static ssize_t proc_wireless_current_out_write(struct file *file, const char __user *buf, size_t count, loff_t *lo)
 {
 #ifdef DEBUG_FASTCHG_BY_ADB
-	char cur_string[8] = {0};
+	char cur_string[8] = { 0 };
 	int cur = 0;
 	int len = count < 8 ? count : 8;
 
@@ -5488,14 +5272,12 @@ static ssize_t proc_wireless_current_out_write(struct file *file, const char __u
 	return count;
 }
 
-static const struct file_operations proc_wireless_current_out_ops =
-{
+static const struct file_operations proc_wireless_current_out_ops = {
 	.read = proc_wireless_current_out_read,
-	.write  = proc_wireless_current_out_write,
-	.open  = simple_open,
+	.write = proc_wireless_current_out_write,
+	.open = simple_open,
 	.owner = THIS_MODULE,
 };
-
 
 static ssize_t proc_wireless_ftm_mode_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
 {
@@ -5508,21 +5290,19 @@ static ssize_t proc_wireless_ftm_mode_read(struct file *file, char __user *buf, 
 		return 0;
 	}
 
-	sprintf(page, "ftm_mode[%d], engineering_mode[%d]\n",
-		chip->nu1619_chg_status.ftm_mode,
-		chip->nu1619_chg_status.engineering_mode);
+	sprintf(page, "ftm_mode[%d], engineering_mode[%d]\n", chip->nu1619_chg_status.ftm_mode, chip->nu1619_chg_status.engineering_mode);
 	ret = simple_read_from_buffer(buf, count, ppos, page, strlen(page));
 
 	return ret;
 }
 
-#define FTM_MODE_DISABLE			0
-#define FTM_MODE_ENABLE			1
-#define ENGINEERING_MODE_ENABLE	2
-#define ENGINEERING_MODE_DISABLE	3
+#define FTM_MODE_DISABLE 0
+#define FTM_MODE_ENABLE 1
+#define ENGINEERING_MODE_ENABLE 2
+#define ENGINEERING_MODE_DISABLE 3
 static ssize_t proc_wireless_ftm_mode_write(struct file *file, const char __user *buf, size_t len, loff_t *lo)
 {
-	char buffer[4] = {0};
+	char buffer[4] = { 0 };
 	int ftm_mode = 0;
 	struct oplus_nu1619_ic *chip = nu1619_chip;
 
@@ -5557,32 +5337,26 @@ static ssize_t proc_wireless_ftm_mode_write(struct file *file, const char __user
 	return len;
 }
 
-static const struct file_operations proc_wireless_ftm_mode_ops =
-{
+static const struct file_operations proc_wireless_ftm_mode_ops = {
 	.read = proc_wireless_ftm_mode_read,
-	.write  = proc_wireless_ftm_mode_write,
-	.open  = simple_open,
+	.write = proc_wireless_ftm_mode_write,
+	.open = simple_open,
 	.owner = THIS_MODULE,
 };
 
-static ssize_t proc_wireless_rx_voltage_read(struct file *file,
-					     char __user *buf, size_t count,
-					     loff_t *ppos)
+static ssize_t proc_wireless_rx_voltage_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
 {
 	char vol_string[8];
 	int len = 0;
-	len = snprintf(vol_string, 8, "%d",
-		       nu1619_chip->nu1619_chg_status.charge_voltage);
+	len = snprintf(vol_string, 8, "%d", nu1619_chip->nu1619_chg_status.charge_voltage);
 
 	copy_to_user(buf, vol_string, len);
 
 	return 0;
 }
-static ssize_t proc_wireless_rx_voltage_write(struct file *file,
-					      const char __user *buf,
-					      size_t count, loff_t *lo)
+static ssize_t proc_wireless_rx_voltage_write(struct file *file, const char __user *buf, size_t count, loff_t *lo)
 {
-	char vol_string[8] = {0};
+	char vol_string[8] = { 0 };
 	int vol = 0;
 	int len = count < 8 ? count : 8;
 
@@ -5611,8 +5385,7 @@ static const struct file_operations proc_wireless_rx_voltage = {
 	.owner = THIS_MODULE,
 };
 
-static ssize_t proc_wireless_tx_read(struct file *file, char __user *buf,
-				     size_t count, loff_t *ppos)
+static ssize_t proc_wireless_tx_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
 {
 	uint8_t ret = 0;
 	char page[10];
@@ -5635,8 +5408,7 @@ static ssize_t proc_wireless_tx_read(struct file *file, char __user *buf,
 	return ret;
 }
 
-static ssize_t proc_wireless_tx_write(struct file *file, const char __user *buf,
-				      size_t count, loff_t *lo)
+static ssize_t proc_wireless_tx_write(struct file *file, const char __user *buf, size_t count, loff_t *lo)
 {
 	char buffer[5] = { 0 };
 	struct oplus_nu1619_ic *chip = nu1619_chip;
@@ -5681,8 +5453,7 @@ static const struct file_operations proc_wireless_tx_ops = {
 	.owner = THIS_MODULE,
 };
 
-static ssize_t proc_wireless_epp_read(struct file *file, char __user *buf,
-				      size_t count, loff_t *ppos)
+static ssize_t proc_wireless_epp_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
 {
 	uint8_t ret = 0;
 #ifdef oplus_wireless
@@ -5710,9 +5481,7 @@ static ssize_t proc_wireless_epp_read(struct file *file, char __user *buf,
 	return ret;
 }
 
-static ssize_t proc_wireless_epp_write(struct file *file,
-				       const char __user *buf, size_t count,
-				       loff_t *lo)
+static ssize_t proc_wireless_epp_write(struct file *file, const char __user *buf, size_t count, loff_t *lo)
 {
 #ifdef oplus_wireless
 	char buffer[5] = { 0 };
@@ -5758,8 +5527,7 @@ static const struct file_operations proc_wireless_epp_ops = {
 	.owner = THIS_MODULE,
 };
 static int proc_charge_pump_status;
-static ssize_t proc_wireless_charge_pump_read(struct file *file, char __user *buf,
-					   size_t count, loff_t *ppos)
+static ssize_t proc_wireless_charge_pump_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
 {
 	uint8_t ret = 0;
 	char page[6];
@@ -5777,9 +5545,7 @@ static ssize_t proc_wireless_charge_pump_read(struct file *file, char __user *bu
 	return ret;
 }
 
-static ssize_t proc_wireless_charge_pump_write(struct file *file,
-					       const char __user *buf,
-					       size_t count, loff_t *lo)
+static ssize_t proc_wireless_charge_pump_write(struct file *file, const char __user *buf, size_t count, loff_t *lo)
 {
 	char buffer[2] = { 0 };
 	int val = 0;
@@ -5846,8 +5612,7 @@ static const struct file_operations proc_wireless_charge_pump_ops = {
 	.owner = THIS_MODULE,
 };
 
-static ssize_t proc_wireless_bat_mult_read(struct file *file, char __user *buf,
-					   size_t count, loff_t *ppos)
+static ssize_t proc_wireless_bat_mult_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
 {
 	uint8_t ret = 0;
 	char page[6];
@@ -5865,9 +5630,7 @@ static ssize_t proc_wireless_bat_mult_read(struct file *file, char __user *buf,
 	return ret;
 }
 
-static ssize_t proc_wireless_bat_mult_write(struct file *file,
-					    const char __user *buf,
-					    size_t count, loff_t *lo)
+static ssize_t proc_wireless_bat_mult_write(struct file *file, const char __user *buf, size_t count, loff_t *lo)
 {
 #ifdef oplus_wireless
 	char buffer[5] = { 0 };
@@ -5897,8 +5660,7 @@ static const struct file_operations proc_wireless_bat_mult_ops = {
 	.owner = THIS_MODULE,
 };
 
-static ssize_t proc_wireless_deviated_read(struct file *file, char __user *buf,
-					   size_t count, loff_t *ppos)
+static ssize_t proc_wireless_deviated_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
 {
 	uint8_t ret = 0;
 	char page[7];
@@ -5927,8 +5689,7 @@ static const struct file_operations proc_wireless_deviated_ops = {
 	.owner = THIS_MODULE,
 };
 
-static ssize_t proc_wireless_rx_read(struct file *file, char __user *buf,
-					    size_t count, loff_t *ppos)
+static ssize_t proc_wireless_rx_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
 {
 	uint8_t ret = 0;
 	char page[3];
@@ -5939,15 +5700,13 @@ static ssize_t proc_wireless_rx_read(struct file *file, char __user *buf,
 		return -ENODEV;
 	}
 
-
 	memset(page, 0, 3);
 	snprintf(page, 3, "%c\n", !chip->disable_charge ? '1' : '0');
 	ret = simple_read_from_buffer(buf, count, ppos, page, 3);
 	return ret;
 }
 
-static ssize_t proc_wireless_rx_write(struct file *file, const char __user *buf,
-				      size_t count, loff_t *lo)
+static ssize_t proc_wireless_rx_write(struct file *file, const char __user *buf, size_t count, loff_t *lo)
 {
 	char buffer[5] = { 0 };
 	struct oplus_nu1619_ic *chip = nu1619_chip;
@@ -5993,13 +5752,12 @@ static const struct file_operations proc_wireless_rx_ops = {
 };
 
 #define UPGRADE_START 0
-#define UPGRADE_FW    1
-#define UPGRADE_END   2
+#define UPGRADE_FW 1
+#define UPGRADE_END 2
 struct idt_fw_head {
 	u8 magic[4];
 	int size;
 };
-
 
 static int nu1619_enter_read_mode(struct oplus_nu1619_ic *chip)
 {
@@ -6040,14 +5798,14 @@ static int nu1619_exit_read_mode(struct oplus_nu1619_ic *chip)
 	return 1;
 }
 
-static bool nu1619_upgrade_firmware(struct oplus_nu1619_ic *chip,  u8 *fw_buf, int fw_size)
+static bool nu1619_upgrade_firmware(struct oplus_nu1619_ic *chip, u8 *fw_buf, int fw_size)
 {
 	u16 addr = 256;
 	u8 addr_h = 0;
 	u8 addr_l = 0;
 	int i = 0;
 	int j = 0;
-	u8 read_buf[4] = {0, 0, 0, 0};
+	u8 read_buf[4] = { 0, 0, 0, 0 };
 	u8 *fw_data = NULL;
 	int pass_count = 0;
 	int ret = 0;
@@ -6187,10 +5945,8 @@ static bool nu1619_upgrade_firmware(struct oplus_nu1619_ic *chip,  u8 *fw_buf, i
 			dev_err(chip->dev, "fw_data[0]=0x%x \n", (0xff & (~fw_data[i + 0])));
 		}
 
-		if ((read_buf[0] == (0xff & (~fw_data[i + 0])))
-				&& (read_buf[1] == (0xff & (~fw_data[i + 1])))
-				&& (read_buf[2] == (0xff & (~fw_data[i + 2])))
-				&& (read_buf[3] == (0xff & (~fw_data[i + 3])))) {
+		if ((read_buf[0] == (0xff & (~fw_data[i + 0]))) && (read_buf[1] == (0xff & (~fw_data[i + 1]))) && (read_buf[2] == (0xff & (~fw_data[i + 2]))) &&
+		    (read_buf[3] == (0xff & (~fw_data[i + 3])))) {
 			pass_count++;
 		} else {
 			j++;
@@ -6213,12 +5969,10 @@ CCC:
 		return false;
 	/************exit dtm************/
 
-	chg_err(" error_count=%d, pass_count=%d, (sizeof(nu1619_fw_data_rx))=%ld\n",
-			j, pass_count, (sizeof(nu1619_fw_data_rx)));
+	chg_err(" error_count=%d, pass_count=%d, (sizeof(nu1619_fw_data_rx))=%ld\n", j, pass_count, (sizeof(nu1619_fw_data_rx)));
 
-	chg_err(" fw_data version=0x%x, 0x%x, 0x%x, 0x%x\n",
-			0xff & (~fw_data[fw_size - 4]), 0xff & (~fw_data[fw_size - 3]),
-			0xff & (~fw_data[fw_size - 2]), 0xff & (~fw_data[fw_size - 1]));
+	chg_err(" fw_data version=0x%x, 0x%x, 0x%x, 0x%x\n", 0xff & (~fw_data[fw_size - 4]), 0xff & (~fw_data[fw_size - 3]), 0xff & (~fw_data[fw_size - 2]),
+		0xff & (~fw_data[fw_size - 1]));
 
 	/*rx_fw_version = fw_data[fw_buf - 1];
 	rx_bin_project_id_h = fw_data[fw_buf - 3];
@@ -6235,9 +5989,7 @@ CCC:
 	}
 }
 
-static ssize_t proc_wireless_upgrade_firmware_write(struct file *file,
-					      const char __user *buf,
-					      size_t count, loff_t *lo)
+static ssize_t proc_wireless_upgrade_firmware_write(struct file *file, const char __user *buf, size_t count, loff_t *lo)
 {
 	u8 temp_buf[sizeof(struct idt_fw_head)];
 	int rc = 0;
@@ -6262,8 +6014,7 @@ start:
 		memset(temp_buf, 0, sizeof(struct idt_fw_head));
 		copy_from_user(temp_buf, buf, sizeof(struct idt_fw_head));
 		fw_head = (struct idt_fw_head *)temp_buf;
-		if (fw_head->magic[0] == 0x02 && fw_head->magic[1] == 0x00 &&
-		    fw_head->magic[2] == 0x03 && fw_head->magic[3] == 0x00) {
+		if (fw_head->magic[0] == 0x02 && fw_head->magic[1] == 0x00 && fw_head->magic[2] == 0x03 && fw_head->magic[3] == 0x00) {
 			fw_size = fw_head->size;
 			fw_buf = kzalloc(fw_size, GFP_KERNEL);
 			if (fw_buf == NULL) {
@@ -6338,9 +6089,7 @@ static const struct file_operations proc_upgrade_firmware_ops = {
 	.owner = THIS_MODULE,
 };
 
-static ssize_t proc_wireless_rx_freq_read(struct file *file,
-					  char __user *buf, size_t count,
-					  loff_t *ppos)
+static ssize_t proc_wireless_rx_freq_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
 {
 	int rc;
 	char string[8];
@@ -6359,9 +6108,7 @@ static ssize_t proc_wireless_rx_freq_read(struct file *file,
 
 	return rc;
 }
-static ssize_t proc_wireless_rx_freq_write(struct file *file,
-					   const char __user *buf,
-					   size_t count, loff_t *lo)
+static ssize_t proc_wireless_rx_freq_write(struct file *file, const char __user *buf, size_t count, loff_t *lo)
 {
 	char string[16];
 	int freq = 0;
@@ -6390,8 +6137,7 @@ static const struct file_operations proc_wireless_rx_freq_ops = {
 };
 
 #ifdef HW_TEST_EDITION
-static ssize_t proc_wireless_w30w_time_read(struct file *file, char __user *buf,
-					    size_t count, loff_t *ppos)
+static ssize_t proc_wireless_w30w_time_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
 {
 	uint8_t ret = 0;
 #ifdef oplus_wireless
@@ -6409,9 +6155,7 @@ static ssize_t proc_wireless_w30w_time_read(struct file *file, char __user *buf,
 	return ret;
 }
 
-static ssize_t proc_wireless_w30w_time_write(struct file *file,
-					     const char __user *buf,
-					     size_t count, loff_t *lo)
+static ssize_t proc_wireless_w30w_time_write(struct file *file, const char __user *buf, size_t count, loff_t *lo)
 {
 #ifdef oplus_wireless
 	char buffer[4] = { 0 };
@@ -6452,8 +6196,7 @@ static const struct file_operations proc_wireless_w30w_time_ops = {
 
 #endif
 
-static ssize_t proc_wireless_user_sleep_mode_read(struct file *file, char __user *buf,
-					    size_t count, loff_t *ppos)
+static ssize_t proc_wireless_user_sleep_mode_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
 {
 	uint8_t ret = 0;
 	char page[10];
@@ -6471,15 +6214,14 @@ static ssize_t proc_wireless_user_sleep_mode_read(struct file *file, char __user
 	return ret;
 }
 
-#define FASTCHG_MODE		0
-#define SILENT_MODE			1
-#define BATTERY_FULL_MODE	2
-#define CALL_MODE			598
-#define EXIT_CALL_MODE		599
-static ssize_t proc_wireless_user_sleep_mode_write(struct file *file, const char __user *buf,
-				      size_t len, loff_t *lo)
+#define FASTCHG_MODE 0
+#define SILENT_MODE 1
+#define BATTERY_FULL_MODE 2
+#define CALL_MODE 598
+#define EXIT_CALL_MODE 599
+static ssize_t proc_wireless_user_sleep_mode_write(struct file *file, const char __user *buf, size_t len, loff_t *lo)
 {
-	char buffer[4] = {0};
+	char buffer[4] = { 0 };
 	int pmw_pulse = 0;
 	int rc = -1;
 	struct oplus_nu1619_ic *chip = nu1619_chip;
@@ -6538,8 +6280,7 @@ static const struct file_operations proc_wireless_user_sleep_mode_ops = {
 	.owner = THIS_MODULE,
 };
 
-static ssize_t proc_wireless_idt_adc_test_read(struct file *file, char __user *buf,
-		size_t count, loff_t *ppos)
+static ssize_t proc_wireless_idt_adc_test_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
 {
 	uint8_t ret = 0;
 	char page[10];
@@ -6563,10 +6304,9 @@ static ssize_t proc_wireless_idt_adc_test_read(struct file *file, char __user *b
 	return ret;
 }
 
-static ssize_t proc_wireless_idt_adc_test_write(struct file *file, const char __user *buf,
-		size_t len, loff_t *lo)
+static ssize_t proc_wireless_idt_adc_test_write(struct file *file, const char __user *buf, size_t len, loff_t *lo)
 {
-	char buffer[4] = {0};
+	char buffer[4] = { 0 };
 	int idt_adc_cmd = 0;
 	struct oplus_nu1619_ic *chip = nu1619_chip;
 
@@ -6609,7 +6349,7 @@ static const struct file_operations proc_wireless_idt_adc_test_ops = {
 static ssize_t proc_wireless_rx_power_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
 {
 	uint8_t ret = 0;
-	char page[16] = {0};
+	char page[16] = { 0 };
 	int rx_power = 0;
 	struct oplus_nu1619_ic *chip = nu1619_chip;
 
@@ -6637,18 +6377,17 @@ static ssize_t proc_wireless_rx_power_write(struct file *file, const char __user
 	return count;
 }
 
-static const struct file_operations proc_wireless_rx_power_ops =
-{
+static const struct file_operations proc_wireless_rx_power_ops = {
 	.read = proc_wireless_rx_power_read,
-	.write  = proc_wireless_rx_power_write,
-	.open  = simple_open,
+	.write = proc_wireless_rx_power_write,
+	.open = simple_open,
 	.owner = THIS_MODULE,
 };
 
 static ssize_t proc_wireless_tx_power_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
 {
 	uint8_t ret = 0;
-	char page[16] = {0};
+	char page[16] = { 0 };
 	int tx_power = 0;
 	struct oplus_nu1619_ic *chip = nu1619_chip;
 
@@ -6674,11 +6413,10 @@ static ssize_t proc_wireless_tx_power_write(struct file *file, const char __user
 	return count;
 }
 
-static const struct file_operations proc_wireless_tx_power_ops =
-{
+static const struct file_operations proc_wireless_tx_power_ops = {
 	.read = proc_wireless_tx_power_read,
-	.write  = proc_wireless_tx_power_write,
-	.open  = simple_open,
+	.write = proc_wireless_tx_power_write,
+	.open = simple_open,
 	.owner = THIS_MODULE,
 };
 
@@ -6691,172 +6429,124 @@ static int init_wireless_charge_proc(struct oplus_nu1619_ic *chip)
 	prEntry_da = proc_mkdir("wireless", NULL);
 	if (prEntry_da == NULL) {
 		ret = -ENOMEM;
-		chg_debug("%s: Couldn't create wireless proc entry\n",
-			  __func__);
+		chg_debug("%s: Couldn't create wireless proc entry\n", __func__);
 	}
 
-	prEntry_tmp = proc_create_data("voltage_rect", 0664, prEntry_da,
-				       &proc_wireless_voltage_rect_ops, chip);
+	prEntry_tmp = proc_create_data("voltage_rect", 0664, prEntry_da, &proc_wireless_voltage_rect_ops, chip);
 	if (prEntry_tmp == NULL) {
 		ret = -ENOMEM;
-		chg_debug("%s: Couldn't create proc entry, %d\n", __func__,
-			  __LINE__);
+		chg_debug("%s: Couldn't create proc entry, %d\n", __func__, __LINE__);
 	}
 
-	prEntry_tmp = proc_create_data("rx_voltage", 0664, prEntry_da,
-				       &proc_wireless_rx_voltage, chip);
+	prEntry_tmp = proc_create_data("rx_voltage", 0664, prEntry_da, &proc_wireless_rx_voltage, chip);
 	if (prEntry_tmp == NULL) {
 		ret = -ENOMEM;
-		chg_debug("%s: Couldn't create proc entry, %d\n", __func__,
-			  __LINE__);
+		chg_debug("%s: Couldn't create proc entry, %d\n", __func__, __LINE__);
 	}
 
-	prEntry_tmp = proc_create_data("current_out", 0664, prEntry_da,
-				       &proc_wireless_current_out_ops, chip);
+	prEntry_tmp = proc_create_data("current_out", 0664, prEntry_da, &proc_wireless_current_out_ops, chip);
 	if (prEntry_tmp == NULL) {
 		ret = -ENOMEM;
-		chg_debug("%s: Couldn't create proc entry, %d\n", __func__,
-			  __LINE__);
+		chg_debug("%s: Couldn't create proc entry, %d\n", __func__, __LINE__);
 	}
 
-	prEntry_tmp = proc_create_data("ftm_mode", 0664, prEntry_da,
-				       &proc_wireless_ftm_mode_ops, chip);
+	prEntry_tmp = proc_create_data("ftm_mode", 0664, prEntry_da, &proc_wireless_ftm_mode_ops, chip);
 	if (prEntry_tmp == NULL) {
 		ret = -ENOMEM;
-		chg_debug("%s: Couldn't create proc entry, %d\n", __func__,
-			  __LINE__);
+		chg_debug("%s: Couldn't create proc entry, %d\n", __func__, __LINE__);
 	}
 
-	prEntry_tmp = proc_create_data("enable_tx", 0664, prEntry_da,
-				       &proc_wireless_tx_ops, chip);
+	prEntry_tmp = proc_create_data("enable_tx", 0664, prEntry_da, &proc_wireless_tx_ops, chip);
 	if (prEntry_tmp == NULL) {
 		ret = -ENOMEM;
-		chg_debug("%s: Couldn't create proc entry, %d\n", __func__,
-			  __LINE__);
+		chg_debug("%s: Couldn't create proc entry, %d\n", __func__, __LINE__);
 	}
 
-	prEntry_tmp = proc_create_data("epp_or_bpp", 0664, prEntry_da,
-				       &proc_wireless_epp_ops, chip);
+	prEntry_tmp = proc_create_data("epp_or_bpp", 0664, prEntry_da, &proc_wireless_epp_ops, chip);
 	if (prEntry_tmp == NULL) {
 		ret = -ENOMEM;
-		chg_debug("%s: Couldn't create proc entry, %d\n", __func__,
-			  __LINE__);
+		chg_debug("%s: Couldn't create proc entry, %d\n", __func__, __LINE__);
 	}
 
-	prEntry_tmp = proc_create_data("charge_pump_en", 0664, prEntry_da,
-				       &proc_wireless_charge_pump_ops, chip);
+	prEntry_tmp = proc_create_data("charge_pump_en", 0664, prEntry_da, &proc_wireless_charge_pump_ops, chip);
 	if (prEntry_tmp == NULL) {
 		ret = -ENOMEM;
-		chg_debug("%s: Couldn't create proc entry, %d\n", __func__,
-			  __LINE__);
+		chg_debug("%s: Couldn't create proc entry, %d\n", __func__, __LINE__);
 	}
 
-	prEntry_tmp = proc_create_data("bat_mult", 0664, prEntry_da,
-				       &proc_wireless_bat_mult_ops, chip);
+	prEntry_tmp = proc_create_data("bat_mult", 0664, prEntry_da, &proc_wireless_bat_mult_ops, chip);
 	if (prEntry_tmp == NULL) {
 		ret = -ENOMEM;
-		chg_debug("%s: Couldn't create proc entry, %d\n", __func__,
-			  __LINE__);
+		chg_debug("%s: Couldn't create proc entry, %d\n", __func__, __LINE__);
 	}
 
-	prEntry_tmp = proc_create_data("deviated", 0664, prEntry_da,
-				       &proc_wireless_deviated_ops, chip);
+	prEntry_tmp = proc_create_data("deviated", 0664, prEntry_da, &proc_wireless_deviated_ops, chip);
 	if (prEntry_tmp == NULL) {
 		ret = -ENOMEM;
-		chg_debug("%s: Couldn't create proc entry, %d\n", __func__,
-			  __LINE__);
+		chg_debug("%s: Couldn't create proc entry, %d\n", __func__, __LINE__);
 	}
 
-	prEntry_tmp = proc_create_data("enable_rx", 0664, prEntry_da,
-				       &proc_wireless_rx_ops, chip);
+	prEntry_tmp = proc_create_data("enable_rx", 0664, prEntry_da, &proc_wireless_rx_ops, chip);
 	if (prEntry_tmp == NULL) {
 		ret = -ENOMEM;
-		chg_debug("%s: Couldn't create proc entry, %d\n", __func__,
-			  __LINE__);
+		chg_debug("%s: Couldn't create proc entry, %d\n", __func__, __LINE__);
 	}
 
-	prEntry_tmp = proc_create_data("upgrade_firmware", 0664, prEntry_da,
-				       &proc_upgrade_firmware_ops, chip);
+	prEntry_tmp = proc_create_data("upgrade_firmware", 0664, prEntry_da, &proc_upgrade_firmware_ops, chip);
 	if (prEntry_tmp == NULL) {
 		ret = -ENOMEM;
-		chg_debug("%s: Couldn't create proc entry, %d\n", __func__,
-			  __LINE__);
+		chg_debug("%s: Couldn't create proc entry, %d\n", __func__, __LINE__);
 	}
 
-	prEntry_tmp = proc_create_data("rx_freq", 0664, prEntry_da,
-				       &proc_wireless_rx_freq_ops, chip);
+	prEntry_tmp = proc_create_data("rx_freq", 0664, prEntry_da, &proc_wireless_rx_freq_ops, chip);
 	if (prEntry_tmp == NULL) {
 		ret = -ENOMEM;
-		chg_debug("%s: Couldn't create proc entry, %d\n", __func__,
-			  __LINE__);
+		chg_debug("%s: Couldn't create proc entry, %d\n", __func__, __LINE__);
 	}
 
-	prEntry_tmp = proc_create_data("user_sleep_mode", 0664, prEntry_da,
-				       &proc_wireless_user_sleep_mode_ops, chip);
+	prEntry_tmp = proc_create_data("user_sleep_mode", 0664, prEntry_da, &proc_wireless_user_sleep_mode_ops, chip);
 	if (prEntry_tmp == NULL) {
 		ret = -ENOMEM;
-		chg_debug("%s: Couldn't create proc entry, %d\n", __func__,
-			  __LINE__);
+		chg_debug("%s: Couldn't create proc entry, %d\n", __func__, __LINE__);
 	}
 
-	prEntry_tmp = proc_create_data("idt_adc_test", 0664, prEntry_da,
-				       &proc_wireless_idt_adc_test_ops, chip);
+	prEntry_tmp = proc_create_data("idt_adc_test", 0664, prEntry_da, &proc_wireless_idt_adc_test_ops, chip);
 	if (prEntry_tmp == NULL) {
 		ret = -ENOMEM;
-		chg_debug("%s: Couldn't create proc entry, %d\n", __func__,
-			  __LINE__);
+		chg_debug("%s: Couldn't create proc entry, %d\n", __func__, __LINE__);
 	}
 
 #ifdef HW_TEST_EDITION
-	prEntry_tmp = proc_create_data("w30w_time", 0664, prEntry_da,
-				       &proc_wireless_w30w_time_ops, chip);
+	prEntry_tmp = proc_create_data("w30w_time", 0664, prEntry_da, &proc_wireless_w30w_time_ops, chip);
 	if (prEntry_tmp == NULL) {
 		ret = -ENOMEM;
-		chg_debug("%s: Couldn't create proc entry, %d\n", __func__,
-			  __LINE__);
+		chg_debug("%s: Couldn't create proc entry, %d\n", __func__, __LINE__);
 	}
 #endif
 
-	prEntry_tmp = proc_create_data("rx_power", 0664, prEntry_da,
-				       &proc_wireless_rx_power_ops, chip);
+	prEntry_tmp = proc_create_data("rx_power", 0664, prEntry_da, &proc_wireless_rx_power_ops, chip);
 	if (prEntry_tmp == NULL) {
 		ret = -ENOMEM;
-		chg_debug("%s: Couldn't create proc entry, %d\n", __func__,
-			  __LINE__);
+		chg_debug("%s: Couldn't create proc entry, %d\n", __func__, __LINE__);
 	}
 
-	prEntry_tmp = proc_create_data("tx_power", 0664, prEntry_da,
-				       &proc_wireless_tx_power_ops, chip);
+	prEntry_tmp = proc_create_data("tx_power", 0664, prEntry_da, &proc_wireless_tx_power_ops, chip);
 	if (prEntry_tmp == NULL) {
 		ret = -ENOMEM;
-		chg_debug("%s: Couldn't create proc entry, %d\n", __func__,
-			  __LINE__);
+		chg_debug("%s: Couldn't create proc entry, %d\n", __func__, __LINE__);
 	}
 
 	return 0;
 }
 
-
 static enum power_supply_property nu1619_wireless_props[] = {
-	POWER_SUPPLY_PROP_PRESENT,
-	POWER_SUPPLY_PROP_ONLINE,
-	POWER_SUPPLY_PROP_VOLTAGE_NOW,
-	POWER_SUPPLY_PROP_VOLTAGE_MAX,
-	POWER_SUPPLY_PROP_CURRENT_NOW,
-	POWER_SUPPLY_PROP_CURRENT_MAX,
-	POWER_SUPPLY_PROP_REAL_TYPE,
-	POWER_SUPPLY_PROP_TX_VOLTAGE_NOW,
-	POWER_SUPPLY_PROP_TX_CURRENT_NOW,
-	POWER_SUPPLY_PROP_CP_VOLTAGE_NOW,
-	POWER_SUPPLY_PROP_CP_CURRENT_NOW,
-	POWER_SUPPLY_PROP_WIRELESS_MODE,
-	POWER_SUPPLY_PROP_WIRELESS_TYPE,
-	POWER_SUPPLY_PROP_CEP_INFO,
+	POWER_SUPPLY_PROP_PRESENT,	  POWER_SUPPLY_PROP_ONLINE,	    POWER_SUPPLY_PROP_VOLTAGE_NOW,    POWER_SUPPLY_PROP_VOLTAGE_MAX,
+	POWER_SUPPLY_PROP_CURRENT_NOW,	  POWER_SUPPLY_PROP_CURRENT_MAX,    POWER_SUPPLY_PROP_REAL_TYPE,      POWER_SUPPLY_PROP_TX_VOLTAGE_NOW,
+	POWER_SUPPLY_PROP_TX_CURRENT_NOW, POWER_SUPPLY_PROP_CP_VOLTAGE_NOW, POWER_SUPPLY_PROP_CP_CURRENT_NOW, POWER_SUPPLY_PROP_WIRELESS_MODE,
+	POWER_SUPPLY_PROP_WIRELESS_TYPE,  POWER_SUPPLY_PROP_CEP_INFO,
 };
 
-static int nu1619_wireless_get_prop(struct power_supply *psy,
-				   enum power_supply_property psp,
-				   union power_supply_propval *val)
+static int nu1619_wireless_get_prop(struct power_supply *psy, enum power_supply_property psp, union power_supply_propval *val)
 {
 	struct oplus_nu1619_ic *chip = nu1619_chip;
 	int rc = 0;
@@ -6881,7 +6571,7 @@ static int nu1619_wireless_get_prop(struct power_supply *psy,
 			val->intval = nu1619_wireless_get_vout();
 		else
 #endif
-		val->intval = nu1619_wireless_get_vout();
+			val->intval = nu1619_wireless_get_vout();
 		rc = 0;
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
@@ -6890,7 +6580,7 @@ static int nu1619_wireless_get_prop(struct power_supply *psy,
 			val->intval = chip->nu1619_chg_status.target_vol;
 		else
 #endif
-		val->intval = 0;
+			val->intval = 0;
 		rc = 0;
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
@@ -6899,7 +6589,7 @@ static int nu1619_wireless_get_prop(struct power_supply *psy,
 			val->intval = nu1619_chip->nu1619_chg_status.iout;
 		else
 #endif
-		val->intval = nu1619_chip->nu1619_chg_status.iout;
+			val->intval = nu1619_chip->nu1619_chg_status.iout;
 		if (nu1619_chip->nu1619_chg_status.tx_online == true)
 			val->intval = nu1619_get_tx_iout(nu1619_chip);
 		rc = 0;
@@ -6910,7 +6600,7 @@ static int nu1619_wireless_get_prop(struct power_supply *psy,
 			val->intval = chip->nu1619_chg_status.max_current;
 		else
 #endif
-		val->intval = 0;
+			val->intval = 0;
 		rc = 0;
 		break;
 	case POWER_SUPPLY_PROP_TX_VOLTAGE_NOW:
@@ -6919,7 +6609,7 @@ static int nu1619_wireless_get_prop(struct power_supply *psy,
 			val->intval = nu1619_chip->nu1619_chg_status.tx_vol;
 		else
 #endif
-		val->intval = 0;
+			val->intval = 0;
 		rc = 0;
 		break;
 	case POWER_SUPPLY_PROP_TX_CURRENT_NOW:
@@ -6928,7 +6618,7 @@ static int nu1619_wireless_get_prop(struct power_supply *psy,
 			val->intval = nu1619_chip->nu1619_chg_status.tx_curr;
 		else
 #endif
-		val->intval = 0;
+			val->intval = 0;
 		rc = 0;
 		break;
 	case POWER_SUPPLY_PROP_CP_VOLTAGE_NOW:
@@ -6942,7 +6632,7 @@ static int nu1619_wireless_get_prop(struct power_supply *psy,
 			val->intval = 0;
 		}
 #else
-			val->intval = 0;
+		val->intval = 0;
 #endif
 		rc = 0;
 		break;
@@ -6957,7 +6647,7 @@ static int nu1619_wireless_get_prop(struct power_supply *psy,
 			val->intval = 0;
 		}
 #else
-			val->intval = 0;
+		val->intval = 0;
 #endif
 		rc = 0;
 		break;
@@ -7016,9 +6706,7 @@ static int nu1619_wireless_get_prop(struct power_supply *psy,
 	return 0;
 }
 
-static int nu1619_wireless_set_prop(struct power_supply *psy,
-				   enum power_supply_property psp,
-				   const union power_supply_propval *val)
+static int nu1619_wireless_set_prop(struct power_supply *psy, enum power_supply_property psp, const union power_supply_propval *val)
 {
 #ifdef oplus_wireless
 	struct oplus_chg_chip *chip = power_supply_get_drvdata(psy);
@@ -7052,8 +6740,8 @@ static int nu1619_wireless_set_prop(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CEP_INFO:
 		if (val->intval == 0) {
-			chg_err("clear cep info = %d, wpc_skewing_proc = %d\n",
-				nu1619_chip->nu1619_chg_status.cep_info, nu1619_chip->nu1619_chg_status.wpc_skewing_proc);
+			chg_err("clear cep info = %d, wpc_skewing_proc = %d\n", nu1619_chip->nu1619_chg_status.cep_info,
+				nu1619_chip->nu1619_chg_status.wpc_skewing_proc);
 			if (!nu1619_chip->nu1619_chg_status.wpc_skewing_proc) {
 				nu1619_chip->nu1619_chg_status.skewing_info = false;
 				nu1619_chip->nu1619_chg_status.cep_info = 0;
@@ -7071,8 +6759,7 @@ static int nu1619_wireless_set_prop(struct power_supply *psy,
 	return rc;
 }
 
-static int nu1619_wireless_prop_is_writeable(struct power_supply *psy,
-					    enum power_supply_property psp)
+static int nu1619_wireless_prop_is_writeable(struct power_supply *psy, enum power_supply_property psp)
 {
 	int rc;
 
@@ -7091,7 +6778,6 @@ static int nu1619_wireless_prop_is_writeable(struct power_supply *psy,
 	return rc;
 }
 
-
 static const struct power_supply_desc wireless_psy_desc = {
 	.name = "wireless",
 	.type = POWER_SUPPLY_TYPE_WIRELESS,
@@ -7108,8 +6794,7 @@ static int nu1619_init_wireless_psy(struct oplus_nu1619_ic *chip)
 
 	wireless_cfg.drv_data = chip;
 	wireless_cfg.of_node = chip->dev->of_node;
-	chip->wireless_psy = devm_power_supply_register(
-		chip->dev, &wireless_psy_desc, &wireless_cfg);
+	chip->wireless_psy = devm_power_supply_register(chip->dev, &wireless_psy_desc, &wireless_cfg);
 	if (IS_ERR(chip->wireless_psy)) {
 		chg_err("Couldn't register wireless power supply\n");
 		return PTR_ERR(chip->wireless_psy);
@@ -7190,7 +6875,7 @@ static int nu1619_wpc_get_real_type(void)
 		real_type = POWER_SUPPLY_TYPE_USB_DCP;
 		break;
 	case ADAPTER_TYPE_EPP:
-		real_type = POWER_SUPPLY_TYPE_USB_PD;/*PD/QC*/
+		real_type = POWER_SUPPLY_TYPE_USB_PD; /*PD/QC*/
 		break;
 	case ADAPTER_TYPE_UNKNOW:
 		if (chip->nu1619_chg_status.rx_runing_mode == RX_RUNNING_MODE_BPP)
@@ -7237,7 +6922,7 @@ struct oplus_wpc_operations nu1619_ops = {
 
 static int nu1619_driver_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
-	struct oplus_nu1619_ic	*chip;
+	struct oplus_nu1619_ic *chip;
 	struct oplus_wpc_chip *wpc_chip;
 	int rc = 0;
 
@@ -7248,8 +6933,7 @@ static int nu1619_driver_probe(struct i2c_client *client, const struct i2c_devic
 		return -EPROBE_DEFER;
 	}
 
-	chip = devm_kzalloc(&client->dev,
-		sizeof(struct oplus_nu1619_ic), GFP_KERNEL);
+	chip = devm_kzalloc(&client->dev, sizeof(struct oplus_nu1619_ic), GFP_KERNEL);
 	if (!chip) {
 		chg_err(" kzalloc() failed\n");
 		return -ENOMEM;
@@ -7318,14 +7002,12 @@ static int nu1619_driver_probe(struct i2c_client *client, const struct i2c_devic
 	return 0;
 }
 
-
 static struct i2c_driver nu1619_i2c_driver;
 
 static int nu1619_driver_remove(struct i2c_client *client)
 {
 	return 0;
 }
-
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0))
 static int nu1619_pm_resume(struct device *dev)
@@ -7339,8 +7021,8 @@ static int nu1619_pm_suspend(struct device *dev)
 }
 
 static const struct dev_pm_ops nu1619_pm_ops = {
-	.resume		= nu1619_pm_resume,
-	.suspend		= nu1619_pm_suspend,
+	.resume = nu1619_pm_resume,
+	.suspend = nu1619_pm_suspend,
 };
 #else
 static int nu1619_resume(struct i2c_client *client)
@@ -7362,10 +7044,10 @@ static void nu1619_reset(struct i2c_client *client)
 	nu1619_set_vt_sleep_val(1);
 
 	wpc_con_level = nu1619_get_idt_con_val();
-	if(wpc_con_level == 1) {
+	if (wpc_con_level == 1) {
 		msleep(100);
 
-		while(wait_wpc_disconn_cnt < 10) {
+		while (wait_wpc_disconn_cnt < 10) {
 			wpc_con_level = nu1619_get_idt_con_val();
 			if (wpc_con_level == 0) {
 				break;
@@ -7385,16 +7067,15 @@ static void nu1619_reset(struct i2c_client *client)
   *********************************************************/
 
 static const struct of_device_id nu1619_match[] = {
-	{ .compatible = "oplus,nu1619-charger"},
-	{ },
+	{ .compatible = "oplus,nu1619-charger" },
+	{},
 };
 
 static const struct i2c_device_id nu1619_id[] = {
-	{"nu1619-charger", 0},
+	{ "nu1619-charger", 0 },
 	{},
 };
 MODULE_DEVICE_TABLE(i2c, nu1619_id);
-
 
 static struct i2c_driver nu1619_i2c_driver = {
 	.driver		= {
@@ -7414,7 +7095,6 @@ static struct i2c_driver nu1619_i2c_driver = {
 	.shutdown	= nu1619_reset,
 	.id_table	= nu1619_id,
 };
-
 
 module_i2c_driver(nu1619_i2c_driver);
 MODULE_DESCRIPTION("Driver for nu1619 charger chip");

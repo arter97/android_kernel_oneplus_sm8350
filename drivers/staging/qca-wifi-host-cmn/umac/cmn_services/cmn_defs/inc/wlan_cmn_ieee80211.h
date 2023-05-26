@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2017-2020 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -150,8 +151,13 @@
  */
 #define WLAN_TPE_IE_MAX_LEN                      9
 
+#define WLAN_TPE_IE_MIN_LEN                      2
+#define WLAN_MAX_NUM_TPE_IE                      8
 /* Max channel switch time IE length */
 #define WLAN_MAX_CHAN_SWITCH_TIME_IE_LEN         4
+
+/* Length of Timestamp field */
+#define WLAN_TIMESTAMP_LEN                       8
 
 /* HT capability flags */
 #define WLAN_HTCAP_C_ADVCODING             0x0001
@@ -195,6 +201,10 @@
 #define WLAN_VHTOP_CHWIDTH_REVSIG_160    1
 /* 80 + 80 MHz Operating Channel  (revised signalling) */
 #define WLAN_VHTOP_CHWIDTH_REVSIG_80_80  1
+
+#define WLAN_MAX_HEOP_IE_LEN              16
+#define WLAN_HEOP_OUI_TYPE                "\x24"
+#define WLAN_HEOP_OUI_SIZE                1
 
 #define WLAN_HEOP_FIXED_PARAM_LENGTH       7
 #define WLAN_HEOP_VHTOP_LENGTH             3
@@ -907,6 +917,53 @@ enum wlan_status_code {
 #define RSN_CAP_MFP_CAPABLE 0x80
 #define RSN_CAP_MFP_REQUIRED 0x40
 
+/* FILS Discovery */
+#define WLAN_ACTION_FILS_DISCOVERY         34
+#define WLAN_FD_FRAMECNTL_CAP              0x0020
+#define WLAN_FD_FRAMECNTL_SHORTSSID        0x0040
+#define WLAN_FD_FRAMECNTL_CH_CENTERFREQ    0x0200
+#define WLAN_FD_FRAMECNTL_LEN_PRES         0x1000
+#define WLAN_FD_FRAMECNTL_SHORTSSID_LEN    0x0003
+
+#define WLAN_FD_SSID_LEN_PRES(_v)          ((_v) & 0x1F)
+#define WLAN_FD_IS_CAP_PRESENT(_v)         ((_v) & WLAN_FD_FRAMECNTL_CAP)
+#define WLAN_FD_IS_LEN_PRESENT(_v)         ((_v) & WLAN_FD_FRAMECNTL_LEN_PRES)
+#define WLAN_FD_IS_FRAMECNTL_CH_CENTERFREQ(_v)\
+					((_v) & WLAN_FD_FRAMECNTL_CH_CENTERFREQ)
+
+#define WLAN_FD_CAP_LEN                    2
+#define WLAN_FD_CAP_ESS_S                  0
+#define WLAN_FD_CAP_PRIVACY_S              1
+#define WLAN_FD_CAP_BSS_CHWIDTH_S          2
+#define WLAN_FD_CAP_NSS_S                  5
+#define WLAN_FD_CAP_PHY_INDEX_S            2
+#define WLAN_FD_CAP_MIN_RATE_S             5
+
+#define WLAN_FD_CHWIDTH_20                 0
+#define WLAN_FD_CHWIDTH_40                 1
+#define WLAN_FD_CHWIDTH_80                 2
+#define WLAN_FD_CHWIDTH_160_80_80          3
+#define WLAN_FD_CHWIDTH_320                4
+
+#define WLAN_FD_CAP_NSS_GTE_5              4
+#define WLAN_FD_CAP_NSS_MODE_1             1
+#define WLAN_FD_CAP_NSS_MODE_2             2
+#define WLAN_FD_CAP_NSS_MODE_3             3
+#define WLAN_FD_CAP_NSS_MODE_4             4
+#define WLAN_FD_CAP_NSS_MODE_5             5
+#define WLAN_FD_CAP_NSS_MODE_6             6
+#define WLAN_FD_CAP_NSS_MODE_7             7
+#define WLAN_FD_CAP_NSS_MODE_8             8
+
+#define WLAN_FD_CAP_ESS_ENABLE             1
+
+#define WLAN_FD_CAP_PHY_INDEX_NON_HT_OFDM  1
+#define WLAN_FD_CAP_PHY_INDEX_HT           2
+#define WLAN_FD_CAP_PHY_INDEX_VHT          3
+#define WLAN_FD_CAP_PHY_INDEX_HE           4
+
+#define WLAN_FD_CAP_MIN_RATE               0
+
 /**
  * struct element_info - defines length of a memory block and memory block
  * @len: length of memory block
@@ -1343,11 +1400,16 @@ struct wlan_ie_vhtop {
 	uint16_t vhtop_basic_mcs_set;
 } qdf_packed;
 
+#define WLAN_HE_PHYCAP_SU_BFER_OFFSET 3
+#define WLAN_HE_PHYCAP_SU_BFER_IDX 7
+#define WLAN_HE_PHYCAP_SU_BFER_BITS 1
+
 #define WLAN_HE_PHYCAP_160_SUPPORT BIT(2)
 #define WLAN_HE_PHYCAP_80_80_SUPPORT BIT(3)
 #define WLAN_HE_MACCAP_LEN 6
 #define WLAN_HE_PHYCAP_LEN 11
 #define WLAN_HE_MAX_MCS_MAPS 3
+
 /**
  * struct wlan_ie_hecaps - HT capabilities
  * @elem_id: HE caps IE

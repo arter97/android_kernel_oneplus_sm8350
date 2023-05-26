@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2017-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -338,6 +338,18 @@ util_scan_get_phymode_6g(struct wlan_objmgr_pdev *pdev,
 					band_mask);
 
 	return phymode;
+}
+
+uint8_t
+util_scan_get_6g_oper_channel(uint8_t *he_op_ie)
+{
+	struct he_oper_6g_param *he_6g_params;
+
+	he_6g_params = util_scan_get_he_6g_params(he_op_ie);
+	if (!he_6g_params)
+		return 0;
+
+	return he_6g_params->primary_channel;
 }
 #else
 static QDF_STATUS
@@ -2123,7 +2135,7 @@ static uint32_t util_gen_new_ie(uint8_t *ie, uint32_t ielen,
 	 */
 	tmp_new = sub_copy;
 	while (((tmp_new + tmp_new[1] + MIN_IE_LEN) - sub_copy) <=
-	       subie_len) {
+	       (subie_len - 1)) {
 		if (!(tmp_new[0] == WLAN_ELEMID_NONTX_BSSID_CAP ||
 		      tmp_new[0] == WLAN_ELEMID_SSID ||
 		      tmp_new[0] == WLAN_ELEMID_MULTI_BSSID_IDX ||
@@ -2137,7 +2149,7 @@ static uint32_t util_gen_new_ie(uint8_t *ie, uint32_t ielen,
 			}
 		}
 		if (((tmp_new + tmp_new[1] + MIN_IE_LEN) - sub_copy) >=
-		    subie_len)
+		    (subie_len - 1))
 			break;
 		tmp_new += tmp_new[1] + MIN_IE_LEN;
 	}

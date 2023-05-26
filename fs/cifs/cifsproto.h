@@ -208,9 +208,9 @@ extern int cifs_acl_to_fattr(struct cifs_sb_info *cifs_sb,
 extern int id_mode_to_cifs_acl(struct inode *inode, const char *path, __u64,
 					kuid_t, kgid_t);
 extern struct cifs_ntsd *get_cifs_acl(struct cifs_sb_info *, struct inode *,
-					const char *, u32 *);
+				      const char *, u32 *, u32);
 extern struct cifs_ntsd *get_cifs_acl_by_fid(struct cifs_sb_info *,
-						const struct cifs_fid *, u32 *);
+				const struct cifs_fid *, u32 *, u32);
 extern int set_cifs_acl(struct cifs_ntsd *, __u32, struct inode *,
 				const char *, int);
 
@@ -583,8 +583,8 @@ int cifs_alloc_hash(const char *name, struct crypto_shash **shash,
 		    struct sdesc **sdesc);
 void cifs_free_hash(struct crypto_shash **shash, struct sdesc **sdesc);
 
-extern void rqst_page_get_length(struct smb_rqst *rqst, unsigned int page,
-				unsigned int *len, unsigned int *offset);
+void rqst_page_get_length(const struct smb_rqst *rqst, unsigned int page,
+			  unsigned int *len, unsigned int *offset);
 
 void extract_unc_hostname(const char *unc, const char **h, size_t *len);
 int copy_path_name(char *dst, const char *src);
@@ -599,5 +599,13 @@ static inline int get_dfs_path(const unsigned int xid, struct cifs_ses *ses,
 			      referral, NULL);
 }
 #endif
+
+static inline int cifs_create_options(struct cifs_sb_info *cifs_sb, int options)
+{
+	if (cifs_sb && (backup_cred(cifs_sb)))
+		return options | CREATE_OPEN_BACKUP_INTENT;
+	else
+		return options;
+}
 
 #endif			/* _CIFSPROTO_H */

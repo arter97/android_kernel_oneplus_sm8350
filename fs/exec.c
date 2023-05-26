@@ -1047,7 +1047,6 @@ static int exec_mmap(struct mm_struct *mm)
 	active_mm = tsk->active_mm;
 	tsk->active_mm = mm;
 	tsk->mm = mm;
-	lru_gen_add_mm(mm);
 	/*
 	 * This prevents preemption while active_mm is being loaded and
 	 * it and mm are being updated, which could cause problems for
@@ -1060,10 +1059,11 @@ static int exec_mmap(struct mm_struct *mm)
 	activate_mm(active_mm, mm);
 	if (IS_ENABLED(CONFIG_ARCH_WANT_IRQS_OFF_ACTIVATE_MM))
 		local_irq_enable();
-	lru_gen_use_mm(mm);
 	tsk->mm->vmacache_seqnum = 0;
 	vmacache_flush(tsk);
+	lru_gen_add_mm(mm);
 	task_unlock(tsk);
+	lru_gen_use_mm(mm);
 	if (old_mm) {
 		up_read(&old_mm->mmap_sem);
 		BUG_ON(active_mm != old_mm);
@@ -1210,10 +1210,6 @@ no_thread_group:
 	/* we have changed execution domain */
 	tsk->exit_signal = SIGCHLD;
 
-#ifdef CONFIG_POSIX_TIMERS
-	exit_itimers(sig);
-	flush_itimer_signals();
-#endif
 
 	if (refcount_read(&oldsighand->count) != 1) {
 		struct sighand_struct *newsighand;
@@ -1281,15 +1277,21 @@ void __set_task_comm(struct task_struct *tsk, const char *buf, bool exec)
  */
 int flush_old_exec(struct linux_binprm * bprm)
 {
+	struct task_struct *me = current;
 	int retval;
 
 	/*
 	 * Make sure we have a private signal table and that
 	 * we are unassociated from the previous thread group.
 	 */
-	retval = de_thread(current);
+	retval = de_thread(me);
 	if (retval)
 		goto out;
+
+#ifdef CONFIG_POSIX_TIMERS
+	exit_itimers(me);
+	flush_itimer_signals();
+#endif
 
 	/*
 	 * Must be called _before_ exec_mmap() as bprm->mm is
@@ -1317,10 +1319,10 @@ int flush_old_exec(struct linux_binprm * bprm)
 	bprm->mm = NULL;
 
 	set_fs(USER_DS);
-	current->flags &= ~(PF_RANDOMIZE | PF_FORKNOEXEC | PF_KTHREAD |
+	me->flags &= ~(PF_RANDOMIZE | PF_FORKNOEXEC | PF_KTHREAD |
 					PF_NOFREEZE | PF_NO_SETAFFINITY);
 	flush_thread();
-	current->personality &= ~bprm->per_clear;
+	me->personality &= ~bprm->per_clear;
 
 	/*
 	 * We have to apply CLOEXEC before we change whether the process is
@@ -1328,7 +1330,7 @@ int flush_old_exec(struct linux_binprm * bprm)
 	 * trying to access the should-be-closed file descriptors of a process
 	 * undergoing exec(2).
 	 */
-	do_close_on_exec(current->files);
+	do_close_on_exec(me->files);
 	return 0;
 
 out:

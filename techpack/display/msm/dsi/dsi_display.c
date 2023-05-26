@@ -8,6 +8,7 @@
 #include <linux/of.h>
 #include <linux/of_gpio.h>
 #include <linux/err.h>
+#include <linux/compaction.h>
 
 #include "msm_drv.h"
 #include "sde_connector.h"
@@ -1694,6 +1695,8 @@ extern int dsi_panel_set_aod_mode(struct dsi_panel *panel, int level);
 
 extern void zram_set_screen_state(bool on);
 
+bool dsi_screen_on __read_mostly = false;
+
 int dsi_display_set_power(struct drm_connector *connector,
 		int power_mode, void *disp)
 {
@@ -1769,6 +1772,8 @@ int dsi_display_set_power(struct drm_connector *connector,
 		f2fs_panel_notifier_call_chain(DRM_PANEL_EARLY_EVENT_BLANK, &notifier_data_f2fs);
 #endif
 		zram_set_screen_state(true);
+		WRITE_ONCE(dsi_screen_on, true);
+		wmb();
 		break;
 	case SDE_MODE_DPMS_OFF:
 		blank = DRM_PANEL_BLANK_POWERDOWN_CUST;
@@ -1782,6 +1787,9 @@ int dsi_display_set_power(struct drm_connector *connector,
 		f2fs_panel_notifier_call_chain(DRM_PANEL_EARLY_EVENT_BLANK, &notifier_data_f2fs);
 #endif
 		zram_set_screen_state(false);
+		WRITE_ONCE(dsi_screen_on, false);
+		wmb();
+		trigger_proactive_compaction(false);
 		break;
 	default:
 		return rc;
@@ -2971,6 +2979,63 @@ void dsi_display_enable_event(struct drm_connector *connector,
 	}
 }
 
+int dsi_display_ctrl_vreg_on(struct dsi_display *display)
+{
+	int rc = 0;
+	int i;
+	struct dsi_display_ctrl *ctrl;
+	struct dsi_ctrl *dsi_ctrl;
+
+	display_for_each_ctrl(i, display) {
+		ctrl = &display->ctrl[i];
+		if (!ctrl->ctrl)
+			continue;
+
+		dsi_ctrl = ctrl->ctrl;
+		if (dsi_ctrl->current_state.host_initialized) {
+			rc = dsi_pwr_enable_regulator(
+					&dsi_ctrl->pwr_info.host_pwr, true);
+			if (rc) {
+				DSI_ERR("[%s] Failed to enable vreg, rc=%d\n",
+				       dsi_ctrl->name, rc);
+				goto error;
+			}
+			DSI_DEBUG("[%s] Enable ctrl vreg\n", dsi_ctrl->name);
+		}
+	}
+error:
+	return rc;
+}
+
+int dsi_display_ctrl_vreg_off(struct dsi_display *display)
+{
+	int rc = 0;
+	int i;
+	struct dsi_display_ctrl *ctrl;
+	struct dsi_ctrl *dsi_ctrl;
+
+	display_for_each_ctrl(i, display) {
+		ctrl = &display->ctrl[i];
+		if (!ctrl->ctrl)
+			continue;
+
+		dsi_ctrl = ctrl->ctrl;
+		if (dsi_ctrl->current_state.host_initialized) {
+			rc = dsi_pwr_enable_regulator(
+				&dsi_ctrl->pwr_info.host_pwr, false);
+			if (rc) {
+				DSI_ERR("[%s] Failed to disable vreg, rc=%d\n",
+				       dsi_ctrl->name, rc);
+				goto error;
+			}
+			DSI_DEBUG("[%s] Disable ctrl vreg\n", dsi_ctrl->name);
+		}
+	}
+error:
+	return rc;
+}
+
+
 static int dsi_display_ctrl_power_on(struct dsi_display *display)
 {
 	int rc = 0;
@@ -4045,6 +4110,12 @@ static int dsi_display_clocks_init(struct dsi_display *display)
 
 	num_clk = dsi_display_get_clocks_count(display, dsi_clock_name);
 
+	if (num_clk <= 0) {
+		rc = num_clk;
+		DSI_WARN("failed to read %s, rc = %d\n", dsi_clock_name, num_clk);
+		goto error;
+	}
+
 	DSI_DEBUG("clk count=%d\n", num_clk);
 
 	for (i = 0; i < num_clk; i++) {
@@ -4747,6 +4818,9 @@ static int dsi_display_parse_dt(struct dsi_display *display)
 
 	display->needs_clk_src_reset = of_property_read_bool(of_node,
 				"qcom,needs-clk-src-reset");
+
+	display->needs_ctrl_vreg_disable = of_property_read_bool(of_node,
+				"qcom,needs-ctrl-vreg-disable");
 
 	/* Parse all external bridges from port 0 */
 	display_for_each_ctrl(i, display) {

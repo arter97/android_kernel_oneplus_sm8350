@@ -90,17 +90,11 @@ static inline void kunmap(struct page *page)
 
 static inline void *kmap_atomic(struct page *page)
 {
-	preempt_disable();
-	pagefault_disable();
 	return page_address(page);
 }
 #define kmap_atomic_prot(page, prot)	kmap_atomic(page)
 
-static inline void __kunmap_atomic(void *addr)
-{
-	pagefault_enable();
-	preempt_enable();
-}
+static inline void __kunmap_atomic(void *addr) {}
 
 #define kmap_atomic_pfn(pfn)	kmap_atomic(pfn_to_page(pfn))
 
@@ -118,7 +112,6 @@ static inline int kmap_atomic_idx_push(void)
 	int idx = __this_cpu_inc_return(__kmap_atomic_idx) - 1;
 
 #ifdef CONFIG_DEBUG_HIGHMEM
-	WARN_ON_ONCE(in_irq() && !irqs_disabled());
 	BUG_ON(idx >= KM_TYPE_NR);
 #endif
 	return idx;
@@ -277,5 +270,23 @@ static inline void copy_highpage(struct page *to, struct page *from)
 }
 
 #endif
+
+static inline void memcpy_from_page(char *to, struct page *page,
+				    size_t offset, size_t len)
+{
+	char *from = kmap_atomic(page);
+
+	memcpy(to, from + offset, len);
+	kunmap_atomic(from);
+}
+
+static inline void memcpy_to_page(struct page *page, size_t offset,
+				  const char *from, size_t len)
+{
+	char *to = kmap_atomic(page);
+
+	memcpy(to + offset, from, len);
+	kunmap_atomic(to);
+}
 
 #endif /* _LINUX_HIGHMEM_H */

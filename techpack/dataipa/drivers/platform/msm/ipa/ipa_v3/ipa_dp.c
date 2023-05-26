@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/delay.h>
@@ -915,8 +916,9 @@ static int ipa3_rx_switch_to_intr_mode(struct ipa3_sys_context *sys)
 			atomic_set(&sys->curr_polling_state, 1);
 			__ipa3_update_curr_poll_state(sys->ep->client, 1);
 		} else {
-			IPAERR("Failed to switch to intr mode %d ch_id %d\n",
-			 sys->curr_polling_state, sys->ep->gsi_chan_hdl);
+			IPAERR("Failed to switch to intr mode %d ch_id %lu\n",
+			       atomic_read(&sys->curr_polling_state),
+			       sys->ep->gsi_chan_hdl);
 		}
 	}
 
@@ -1382,10 +1384,14 @@ int ipa3_setup_sys_pipe(struct ipa_sys_connect_params *sys_in, u32 *clnt_hdl)
 fail_gen3:
 	ipa3_disable_data_path(ipa_ep_idx);
 fail_repl:
-	ep->sys->repl_hdlr = ipa3_replenish_rx_cache;
-	ep->sys->repl->capacity = 0;
-	kfree(ep->sys->repl);
-	ep->sys->repl = NULL;
+	if (IPA_CLIENT_IS_CONS(ep->client))
+		ipa3_cleanup_rx(ep->sys);
+
+	if(ep->sys->repl) {
+		ep->sys->repl->capacity = 0;
+		kfree(ep->sys->repl);
+		ep->sys->repl = NULL;
+	}
 fail_page_recycle_repl:
 	if (ep->sys->page_recycle_repl) {
 		ep->sys->page_recycle_repl->capacity = 0;
@@ -1409,6 +1415,7 @@ fail_wq:
 fail_and_disable_clocks:
 	IPA_ACTIVE_CLIENTS_DEC_EP(sys_in->client);
 fail_gen:
+	IPA_STATS_INC_CNT(ipa3_ctx->stats.pipe_setup_fail_cnt);
 	return result;
 }
 
@@ -2075,6 +2082,9 @@ static struct ipa3_rx_pkt_wrapper *ipa3_alloc_rx_pkt_page(
 		return NULL;
 
 	rx_pkt->page_data.page_order = IPA_WAN_PAGE_ORDER;
+	if (is_tmp_alloc)
+		flag |= __GFP_RETRY_MAYFAIL | __GFP_NOWARN;
+
 	/* Try a lower order page for order 3 pages in case allocation fails. */
 	rx_pkt->page_data.page = ipa3_alloc_page(flag,
 				&rx_pkt->page_data.page_order,
@@ -2146,8 +2156,8 @@ begin:
 			goto fail_kmem_cache_alloc;
 		rx_pkt = ipa3_alloc_rx_pkt_page(GFP_KERNEL, true);
 		if (unlikely(!rx_pkt)) {
-			IPAERR("ipa3_alloc_rx_pkt_page fails\n");
-			break;
+			IPAERR_RL("ipa3_alloc_rx_pkt_page fails\n");
+			goto fail_kmem_cache_alloc;
 		}
 		rx_pkt->sys = sys;
 		sys->repl->cache[curr] = rx_pkt;

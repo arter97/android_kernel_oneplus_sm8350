@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2016-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -2655,12 +2655,14 @@ struct set_fwtest_params {
  * @WFA_CONFIG_CSA: configure the driver to ignore CSA
  * @WFA_CONFIG_OCV: configure OCI
  * @WFA_CONFIG_SA_QUERY: configure driver/firmware to ignore SAquery timeout
+ * @WFA_FILS_DISCV_FRAMES: FD frames TX enable disable config
  */
 enum wfa_test_cmds {
 	WFA_CONFIG_RXNE,
 	WFA_CONFIG_CSA,
 	WFA_CONFIG_OCV,
 	WFA_CONFIG_SA_QUERY,
+	WFA_FILS_DISCV_FRAMES,
 };
 
 /**
@@ -4697,6 +4699,7 @@ typedef enum {
 #ifdef WLAN_FEATURE_PKT_CAPTURE_V2
 	wmi_vdev_smart_monitor_event_id,
 #endif
+	 wmi_roam_frame_event_id,
 	wmi_events_max,
 } wmi_conv_event_id;
 
@@ -5273,6 +5276,9 @@ typedef enum {
 	wmi_service_thermal_stats_temp_range_supported,
 #endif
 	wmi_service_pno_scan_conf_per_ch_support,
+#ifdef WLAN_FEATURE_P2P_P2P_STA
+	wmi_service_p2p_p2p_cc_support,
+#endif
 	wmi_services_max,
 } wmi_conv_service_ids;
 #define WMI_SERVICE_UNAVAILABLE 0xFFFF

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2014-2021, The Linux Foundation. All rights reserved.
+ *
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 /*
@@ -507,8 +509,8 @@ static void ipa3_copy_qmi_flt_rule_ex(
 	 */
 	flt_spec_ptr = (struct ipa_filter_spec_ex_type_v01 *) flt_spec_ptr_void;
 
-	q6_ul_flt_rule_ptr->ip = flt_spec_ptr->ip_type;
-	q6_ul_flt_rule_ptr->action = flt_spec_ptr->filter_action;
+	q6_ul_flt_rule_ptr->ip = (enum ipa_ip_type)flt_spec_ptr->ip_type;
+	q6_ul_flt_rule_ptr->action = (enum ipa_flt_action)flt_spec_ptr->filter_action;
 	if (flt_spec_ptr->is_routing_table_index_valid == true)
 		q6_ul_flt_rule_ptr->rt_tbl_idx =
 		flt_spec_ptr->route_table_index;
@@ -1402,6 +1404,7 @@ static void apps_ipa_packet_receive_notify(void *priv,
 		skb->dev = IPA_NETDEV();
 		skb->protocol = htons(ETH_P_MAP);
 		skb_set_mac_header(skb, 0);
+		skb_reset_network_header(skb);
 
 		if (ipa3_rmnet_res.ipa_napi_enable) {
 			trace_rmnet_ipa_netif_rcv_skb3(skb, dev->stats.rx_packets);
@@ -3410,8 +3413,7 @@ int rmnet_ipa3_set_tether_client_pipe(
 		return -EFAULT;
 	}
 	/* error checking if dl_dst_pipe_len valid or not*/
-	if (data->dl_dst_pipe_len > QMI_IPA_MAX_PIPES_V01 ||
-		data->dl_dst_pipe_len < 0) {
+	if (data->dl_dst_pipe_len > QMI_IPA_MAX_PIPES_V01) {
 		IPAWANERR("DL dst pipes %d exceeding max %d\n",
 			data->dl_dst_pipe_len,
 			QMI_IPA_MAX_PIPES_V01);

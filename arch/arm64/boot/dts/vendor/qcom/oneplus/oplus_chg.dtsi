@@ -594,6 +594,7 @@
 };
 
 &pm8350_gpios {
+	/delete-node/ pm8350_rear_tof_therm_default;
 	gpio1_v {
 		gpio1_adc_default: gpio1_adc_default {
 			pins = "gpio1"; /* GPIO 1 */
@@ -633,7 +634,7 @@
 
 	qcom,input_current_camera_ma = <1500>;
 	qcom,batt_current_camera_ma = <500>;
-	qcom,fast_current_camera_level = <0x03>;
+	qcom,fast_current_camera_level = <CURR_LIMIT_7BIT_2_0A>;
 
 	qcom,input_current_warp_led_ma_high = <3600>;
 	qcom,input_current_warp_led_ma_warm = <3600>;
@@ -649,7 +650,7 @@
 
 	qcom,input_current_calling_ma = <1500>;
 	qcom,batt_current_calling_ma = <500>;
-	qcom,fast_current_calling_level = <0x03>;
+	qcom,fast_current_calling_level = <CURR_LIMIT_7BIT_2_0A>;
 
 	//qcom,input_current_led_ma_overtemp = <900>;
 	qcom,overtemp_bat_decidegc = <350>;
@@ -805,35 +806,35 @@
 					       360   390 1000  3 1
 					       380   650 500   3 2>;
 
-	oplus,swarp_chg_led_on_strategy_data = <(-20) 340 0x0c 1 0
-						(-20) 370 0x05 2 0
-						360   390 0x04 3 1
-						380   650 0x03 3 2>;
+	oplus,swarp_chg_led_on_strategy_data = <(-20) 340 CURR_LIMIT_7BIT_6_3A 1 0
+						(-20) 370 CURR_LIMIT_7BIT_3_0A 2 0
+						360   390 CURR_LIMIT_7BIT_2_5A 3 1
+						380   650 CURR_LIMIT_7BIT_2_0A 3 2>;
 
-	oplus,swarp_chg_led_off_strategy_data = <(-20) 410 0x0c 1 0
-						 390   650 0x03 1 0>;
+	oplus,swarp_chg_led_off_strategy_data = <(-20) 410 CURR_LIMIT_7BIT_6_3A 1 0
+						 390   650 CURR_LIMIT_7BIT_2_0A 1 0>;
 
 	oplus,normal_chg_led_off_strategy_data = <(-20) 400 3000 1 0
 						  370   410 1000 2 0
 						  380   420 800  3 1
 						  400   650 500  3 2>;
 
-	oplus,swarp_general_chg_strategy_data_low = <0   50  0x03 1 0
-						     40  120 0x04 2 0
-						     110 160 0x09 3 1
-						     150 425 0x0c 5 2
-						     400 425 0x09 5 3
-						     420 435 0x07 6 4
-						     420 445 0x05 7 4
-						     430 450 0x03 7 6>;
+	oplus,swarp_general_chg_strategy_data_low = <0   50  CURR_LIMIT_7BIT_2_0A 1 0
+						     40  120 CURR_LIMIT_7BIT_2_5A 2 0
+						     110 160 CURR_LIMIT_7BIT_5_0A 3 1
+						     150 425 CURR_LIMIT_7BIT_6_3A 5 2
+						     400 425 CURR_LIMIT_7BIT_5_0A 5 3
+						     420 435 CURR_LIMIT_7BIT_4_0A 6 4
+						     420 445 CURR_LIMIT_7BIT_3_0A 7 4
+						     430 450 CURR_LIMIT_7BIT_2_0A 7 6>;
 
-	oplus,swarp_general_chg_strategy_data_high = <0   50  0x03 1 0
-						      40  120 0x04 2 0
-						      110 160 0x09 3 1
-						      150 390 0x0c 4 2
-						      375 410 0x07 5 3
-						      395 430 0x05 6 4
-						      415 450 0x03 6 5>;
+	oplus,swarp_general_chg_strategy_data_high = <0   50  CURR_LIMIT_7BIT_2_0A 1 0
+						      40  120 CURR_LIMIT_7BIT_2_5A 2 0
+						      110 160 CURR_LIMIT_7BIT_5_0A 3 1
+						      150 390 CURR_LIMIT_7BIT_6_3A 4 2
+						      375 410 CURR_LIMIT_7BIT_4_0A 5 3
+						      395 430 CURR_LIMIT_7BIT_3_0A 6 4
+						      415 450 CURR_LIMIT_7BIT_2_0A 6 5>;
 
 	oplus,device-depth = <2>;
 	oplus,pm8350-path-name = "qcom,spmi", "qcom,spmi", "qcom,pm8350";
@@ -843,7 +844,6 @@
 	oplus,otg_type = <0>;
 	oplus,typec_ic = <&oplus_typec_ic>;
 
-	/* @bsp, 2020/06/06 Add notification for OTG ctrl */
 	op,vbus-ctrl-gpio = <&pm8350c_gpios 7 GPIO_ACTIVE_LOW>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&vbus_ctrl_default>;
@@ -1190,4 +1190,9 @@
 
 &smb1398_debug {
 	status = "ok";
+};
+
+&pm8350b_haptics {
+	status = "ok";
+	qcom,disable-pm-ops;
 };

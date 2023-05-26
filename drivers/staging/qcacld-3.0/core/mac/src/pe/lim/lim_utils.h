@@ -105,6 +105,12 @@ typedef enum {
 #define MAX_WAIT_FOR_BCN_TX_COMPLETE 4000
 #define MAX_WAKELOCK_FOR_CSA         5000
 
+#ifdef WLAN_FEATURE_11BE
+#define MAX_NUM_PWR_LEVELS 16
+#else
+#define MAX_NUM_PWR_LEVELS 8
+#endif
+
 #ifdef WLAN_FEATURE_11W
 typedef union uPmfSaQueryTimerId {
 	struct {
@@ -1075,7 +1081,6 @@ static inline void lim_deactivate_and_change_timer_host_roam(
 {}
 #endif
 
-bool lim_is_robust_mgmt_action_frame(uint8_t action_category);
 uint8_t lim_compute_ext_cap_ie_length(tDot11fIEExtCap *ext_cap);
 
 void lim_update_caps_info_for_bss(struct mac_context *mac_ctx,
