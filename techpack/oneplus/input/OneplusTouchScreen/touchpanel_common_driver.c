@@ -68,7 +68,7 @@ static uint8_t Down2UpSwip_enable = 0;	    // |^
 static uint8_t Mgestrue_enable = 1;			// M
 static uint8_t Wgestrue_enable = 1;			// W
 static uint8_t Sgestrue_enable = 1;			// S
-static uint8_t SingleTap_enable = 0;	    // single tap
+static uint8_t SingleTap_enable = 1;	    // single tap
 
 /*******Part2:declear Area********************************/
 static void speedup_resume(struct work_struct *work);
@@ -356,6 +356,42 @@ int sec_double_tap(struct gesture_info *gesture)
 
 }
 
+static ssize_t tp_get_single_tap_pressed(struct device *device,
+				struct device_attribute *attribute,
+				char *buffer)
+{
+	struct touchpanel_data *ts = dev_get_drvdata(device);
+	return scnprintf(buffer, PAGE_SIZE, "%d\n", ts->gesture.gesture_type == SingleTap);
+}
+
+static DEVICE_ATTR(single_tap_pressed, 0444, tp_get_single_tap_pressed, NULL);
+
+static ssize_t tp_get_double_tap_pressed(struct device *device,
+				struct device_attribute *attribute,
+				char *buffer)
+{
+	struct touchpanel_data *ts = dev_get_drvdata(device);
+	return scnprintf(buffer, PAGE_SIZE, "%d\n", ts->gesture.gesture_type == DouTap);
+}
+
+static DEVICE_ATTR(double_tap_pressed, 0444, tp_get_double_tap_pressed, NULL);
+
+static void tp_report_key(struct touchpanel_data *ts, unsigned int key)
+{
+	input_report_key(ts->input_dev, key, 1);
+	input_sync(ts->input_dev);
+	input_report_key(ts->input_dev, key, 0);
+	input_sync(ts->input_dev);
+}
+
+static void tp_gesture_report_single_tap(struct work_struct *work)
+{
+	struct touchpanel_data *ts = container_of(work, struct touchpanel_data, report_single_tap_work.work);
+
+	sysfs_notify(&ts->client->dev.kobj, NULL, "single_tap_pressed");
+	__pm_relax(&ts->single_tap_pm);
+}
+
 static void tp_gesture_handle(struct touchpanel_data *ts)
 {
 	struct gesture_info gesture_info_temp = { 0, };
@@ -457,10 +493,18 @@ static void tp_gesture_handle(struct touchpanel_data *ts)
 
     if (enabled) {
 		memcpy(&ts->gesture, &gesture_info_temp, sizeof(struct gesture_info));
-		input_report_key(ts->input_dev, key, 1);
-		input_sync(ts->input_dev);
-		input_report_key(ts->input_dev, key, 0);
-		input_sync(ts->input_dev);
+		if (key == KEY_GESTURE_SINGLE_TAP) {
+			smp_mb();
+			schedule_delayed_work(&ts->report_single_tap_work, msecs_to_jiffies(250));
+			__pm_stay_awake(&ts->single_tap_pm);
+		} else {
+			cancel_delayed_work(&ts->report_single_tap_work);
+			__pm_relax(&ts->single_tap_pm);
+			if (key == KEY_DOUBLE_TAP)
+				sysfs_notify(&ts->client->dev.kobj, NULL, "double_tap_pressed");
+			else
+				tp_report_key(ts, key);
+		}
 	}
 }
 
@@ -2434,8 +2478,6 @@ static const struct file_operations proc_incell_panel_fops = {
 	    .owner = THIS_MODULE, \
 	};
 
-GESTURE_ATTR(single_tap, SingleTap_enable);
-GESTURE_ATTR(double_tap, DouTap_enable);
 GESTURE_ATTR(up_arrow, UpVee_enable);
 GESTURE_ATTR(down_arrow, DownVee_enable);
 GESTURE_ATTR(left_arrow, LeftVee_enable);
@@ -3032,6 +3074,7 @@ static int init_touchpanel_proc(struct touchpanel_data *ts)
 	int ret = 0;
 	struct proc_dir_entry *prEntry_tp = NULL;
 	struct proc_dir_entry *prEntry_tmp = NULL;
+	char sysfs_path[128], *__sysfs_path;
 
 	TPD_INFO("%s entry\n", __func__);
 
@@ -3077,8 +3120,6 @@ static int init_touchpanel_proc(struct touchpanel_data *ts)
 	}
 	//proc files-step2-4:/proc/touchpanel/double_tap_enable (black gesture related interface)
 	if (ts->black_gesture_support) {
-		CREATE_GESTURE_NODE(single_tap);
-		CREATE_GESTURE_NODE(double_tap);
 		CREATE_GESTURE_NODE(up_arrow);
 		CREATE_GESTURE_NODE(down_arrow);
 		CREATE_GESTURE_NODE(left_arrow);
@@ -3217,6 +3258,24 @@ static int init_touchpanel_proc(struct touchpanel_data *ts)
 
 	//create debug_info node
 	init_debug_info_proc(ts);
+
+	// Create sensor nodes
+	if (device_create_file(&ts->client->dev, &dev_attr_single_tap_pressed))
+		TPD_INFO("%s: Couldn't create dev_attr_single_tap_pressed, %d\n", __func__, __LINE__);
+	if (device_create_file(&ts->client->dev, &dev_attr_double_tap_pressed))
+		TPD_INFO("%s: Couldn't create dev_attr_double_tap_pressed, %d\n", __func__, __LINE__);
+
+	// Create a symlink of /sys i2c path to procfs for easy lookup
+	__sysfs_path = kobject_get_path(&ts->client->dev.kobj, GFP_KERNEL);
+	if (__sysfs_path == NULL) {
+		TPD_INFO("%s: Couldn't resolve sysfs path, %d\n", __func__, __LINE__);
+	} else {
+		sprintf(sysfs_path, "/sys%s", __sysfs_path);
+		kfree(__sysfs_path);
+		prEntry_tmp = proc_symlink("i2c", prEntry_tp, sysfs_path);
+		if (prEntry_tmp == NULL)
+			TPD_INFO("%s: Couldn't create proc symlink, %d\n", __func__, __LINE__);
+	}
 
 	return ret;
 }
@@ -4674,7 +4733,6 @@ static int init_input_device(struct touchpanel_data *ts)
 		set_bit(KEY_GESTURE_W, ts->input_dev->keybit);
 		set_bit(KEY_GESTURE_M, ts->input_dev->keybit);
 		set_bit(KEY_GESTURE_S, ts->input_dev->keybit);
-		set_bit(KEY_DOUBLE_TAP, ts->input_dev->keybit);
 		set_bit(KEY_GESTURE_CIRCLE, ts->input_dev->keybit);
 		set_bit(KEY_GESTURE_TWO_SWIPE, ts->input_dev->keybit);
 		set_bit(KEY_GESTURE_UP_ARROW, ts->input_dev->keybit);
@@ -4685,7 +4743,6 @@ static int init_input_device(struct touchpanel_data *ts)
 		set_bit(KEY_GESTURE_SWIPE_DOWN, ts->input_dev->keybit);
 		set_bit(KEY_GESTURE_SWIPE_RIGHT, ts->input_dev->keybit);
 		set_bit(KEY_GESTURE_SWIPE_UP, ts->input_dev->keybit);
-		set_bit(KEY_GESTURE_SINGLE_TAP, ts->input_dev->keybit);
 	}
 
 	ts->kpd_input_dev->name = TPD_DEVICE "_kpd";
@@ -5859,6 +5916,10 @@ int register_common_touch_device(struct touchpanel_data *pdata)
 	} else {
 		ts->irq = ts->client->irq;
 	}
+
+	INIT_DELAYED_WORK(&ts->report_single_tap_work, tp_gesture_report_single_tap);
+	wakeup_source_add(&ts->single_tap_pm);
+
 	tp_register_times++;
 	g_tp = ts;
 	complete(&ts->pm_complete);
@@ -6001,7 +6062,8 @@ static int tp_suspend(struct device *dev)
 			if (ts->int_mode == UNBANNABLE) {	//workaroud for config fail when suspend for 19805
 				msleep(20);
 			}
-			ts->ts_ops->mode_switch(ts->chip_data, MODE_TOUCH_HOLD, false);	//suspend, close touchhold function.
+			// Leave MODE_TOUCH_HOLD enabled during suspend for Always on Fingerprint
+			// ts->ts_ops->mode_switch(ts->chip_data, MODE_TOUCH_HOLD, false);	//suspend, close touchhold function.
 			ts->ts_ops->mode_switch(ts->chip_data, MODE_GESTURE, true);
 			goto EXIT;
 		}

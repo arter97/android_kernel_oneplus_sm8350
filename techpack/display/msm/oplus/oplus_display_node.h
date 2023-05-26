@@ -29,10 +29,6 @@
 
 #include "dsi_display.h"
 #include "dsi_panel.h"
-#ifdef CONFIG_PXLW_IRIS
-#include "oplus_adfr.h"
-#endif
-
 #include "op_panel.h"
 
 enum {

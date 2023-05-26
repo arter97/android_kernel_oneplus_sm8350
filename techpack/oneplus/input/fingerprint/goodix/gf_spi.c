@@ -653,10 +653,21 @@ static ssize_t screen_state_get(struct device *device,
 	return scnprintf(buffer, PAGE_SIZE, "%i\n", gfDev->screen_state);
 }
 
+static ssize_t udfps_pressed_get(struct device *device,
+			     struct device_attribute *attribute,
+			     char *buffer)
+{
+	struct gf_dev *gfDev = dev_get_drvdata(device);
+
+	return scnprintf(buffer, PAGE_SIZE, "%i\n", gfDev->udfps_pressed);
+}
+
 static DEVICE_ATTR(screen_state, 0400, screen_state_get, NULL);
+static DEVICE_ATTR(udfps_pressed, 0444, udfps_pressed_get, NULL);
 
 static struct attribute *gf_attributes[] = {
 	&dev_attr_screen_state.attr,
+	&dev_attr_udfps_pressed.attr,
 	NULL
 };
 
@@ -667,6 +678,8 @@ static const struct attribute_group gf_attribute_group = {
 static struct fp_underscreen_info fp_tpinfo ={0};
 int opticalfp_irq_handler(struct fp_underscreen_info* tp_info)
 {
+	struct gf_dev *gf_dev = &gf;
+
 	pr_info("[info]:%s\n", __func__);
 
 	if (gf.spi == NULL) {
@@ -677,10 +690,13 @@ int opticalfp_irq_handler(struct fp_underscreen_info* tp_info)
 	if (fp_tpinfo.touch_state == 1) {
 		fp_tpinfo.touch_state = GF_NET_EVENT_TP_TOUCHDOWN;
 		sendnlmsg_tp(&fp_tpinfo,sizeof(fp_tpinfo));
+		WRITE_ONCE(gf_dev->udfps_pressed, 1);
 	} else if (fp_tpinfo.touch_state == 0) {
 		fp_tpinfo.touch_state = GF_NET_EVENT_TP_TOUCHUP;
 		sendnlmsg_tp(&fp_tpinfo,sizeof(fp_tpinfo));
+		WRITE_ONCE(gf_dev->udfps_pressed, 0);
 	}
+	sysfs_notify(&gf_dev->spi->dev.kobj, NULL, dev_attr_udfps_pressed.attr.name);
 	return 0;
 }
 

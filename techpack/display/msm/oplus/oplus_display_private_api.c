@@ -15,14 +15,6 @@
 #include "oplus_display_private_api.h"
 #include "dsi_panel.h"
 
-#if defined(CONFIG_PXLW_IRIS)
-#include "../dsi/iris/dsi_iris5_api.h"
-#include "../dsi/iris/dsi_iris5_lightup.h"
-#include "../dsi/iris/dsi_iris5_loop_back.h"
-#elif defined(CONFIG_PXLW_SOFT_IRIS)
-#include "../dsi/iris/dsi_iris5_api.h"
-#endif
-
 #define to_dsi_bridge(x)  container_of((x), struct dsi_bridge, base)
 
 extern ssize_t oplus_mipi_dcs_read_buffer(struct mipi_dsi_device *dsi, u8 cmd, const void *data, size_t len);
@@ -305,38 +297,6 @@ int mipi_dsi_dcs_set_display_brightness_samsung(struct dsi_display *dsi_display,
 
 	return dsi_display_write_panel_reg(dsi_display, MIPI_DCS_SET_DISPLAY_BRIGHTNESS, payload, 2);
 }
-
-#if defined(CONFIG_PXLW_IRIS)
-int iris_loop_back_test(struct drm_connector *connector)
-{
-	int ret = -1;
-	struct iris_cfg *pcfg;
-	struct dsi_display *dsi_display = NULL;
-	struct dsi_bridge *c_bridge;
-
-	DSI_ERR("%s start\n", __func__);
-
-	if ((connector == NULL) || (connector->encoder == NULL)
-			|| (connector->encoder->bridge == NULL))
-		return -EINVAL;
-
-	c_bridge =  to_dsi_bridge(connector->encoder->bridge);
-	dsi_display = c_bridge->display;
-
-	if ((dsi_display == NULL) || (dsi_display->panel == NULL))
-		return -EINVAL;
-
-	if (dsi_display->panel->panel_initialized == true) {
-		pcfg = iris_get_cfg();
-		mutex_lock(&pcfg->lb_mutex);
-		ret = iris_loop_back_validate();
-		DSI_ERR("iris_loop_back_validate finish, ret = %d", ret);
-		mutex_unlock(&pcfg->lb_mutex);
-	}
-	DSI_ERR("%s end\n", __func__);
-	return ret;
-}
-#endif
 
 /* ---------------- dsi_panel ----------------*/
 int dsi_panel_set_native_loading_effect_mode_nolock(struct dsi_panel *panel, int level)

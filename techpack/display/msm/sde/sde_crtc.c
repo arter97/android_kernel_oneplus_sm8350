@@ -68,15 +68,6 @@
 #include <drm/drm_mipi_dsi.h>
 #include <drm/drm_sysfs.h>
 #include <drm/drmP.h>
-#ifdef CONFIG_PXLW_IRIS
-#include "oplus_adfr.h"
-#endif
-#if defined(CONFIG_PXLW_IRIS)
-#include "iris/dsi_iris5_api.h"
-#elif defined(CONFIG_PXLW_SOFT_IRIS)
-#include "iris/dsi_iris5_api.h"
-#include "iris/dsi_iris5.h"
-#endif
 #include "oplus_onscreenfingerprint.h"
 
 #define to_drm_connector(d) dev_get_drvdata(d)
@@ -2581,12 +2572,6 @@ static void sde_crtc_frame_event_work(struct kthread_work *work)
 		_sde_crtc_retire_event(fevent->connector, fevent->ts,
 				(fevent->event & SDE_ENCODER_FRAME_EVENT_ERROR)
 				? SDE_FENCE_SIGNAL_ERROR : SDE_FENCE_SIGNAL);
-
-#ifdef CONFIG_PXLW_IRIS
-	if (iris_is_chip_supported()) {
-		sde_crtc_adfr_handle_frame_event(crtc, fevent);
-	}
-#endif
 
 	if (fevent->event & SDE_ENCODER_FRAME_EVENT_PANEL_DEAD)
 		SDE_ERROR("crtc%d ts:%lld received panel dead event\n",

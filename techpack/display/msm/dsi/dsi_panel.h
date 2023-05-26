@@ -412,24 +412,12 @@ struct dsi_panel {
 	int panel_test_gpio;
 
 	int power_mode;
-#if defined(CONFIG_PXLW_IRIS)
-	bool is_secondary;
-#endif
 	enum dsi_panel_physical_type panel_type;
 
 	struct dsi_tlmm_gpio *tlmm_gpio;
 	u32 tlmm_gpio_count;
 
 	struct dsi_panel_ops panel_ops;
-#ifdef CONFIG_PXLW_IRIS
-	int vsync_switch_gpio;
-	int vsync_switch_gpio_level;
-	bool vsync_switch_pending;
-	bool force_te_vsync;
-	bool need_vsync_switch;
-	u32 cur_h_active;
-#endif /*(CONFIG_PXLW_IRIS)*/
-
 	struct oplus_msd_aod_info msd_config;
 };
 
@@ -455,7 +443,7 @@ static inline void dsi_panel_release_panel_lock(struct dsi_panel *panel)
 
 static inline bool dsi_panel_is_type_oled(struct dsi_panel *panel)
 {
-	return (panel->panel_type == DSI_DISPLAY_PANEL_TYPE_OLED);
+	return true;
 }
 
 struct dsi_panel *dsi_panel_get(struct device *parent,

@@ -579,8 +579,10 @@ struct touchpanel_data {
 	struct workqueue_struct *async_workqueue;
 	struct work_struct fw_update_work;	/*using for fw update */
 	struct delayed_work work_read_info;	/*using for print more rawdata when probe */
+	struct delayed_work report_single_tap_work;
 	struct work_struct load_lcd_type_work;
 	struct wakeup_source source;
+	struct wakeup_source single_tap_pm;
 	struct iio_channel *skin_therm_chan;
 	struct hrtimer temp_timer;
 	struct work_struct get_temperature_work;

@@ -382,29 +382,8 @@ enum dsi_cmd_set_type {
 	DSI_CMD_LOADING_EFFECT_OFF_O,
 	DSI_CMD_SET_GAMMA_CHANGE_WRITE,
 	DSI_CMD_SET_REGISTER_READ,
-#if defined(CONFIG_PXLW_IRIS)
-	DSI_CMD_SET_ABYP,
-#endif
-#ifdef CONFIG_PXLW_IRIS
-	DSI_CMD_QSYNC_MIN_FPS_0,
-	DSI_CMD_QSYNC_MIN_FPS_1,
-	DSI_CMD_QSYNC_MIN_FPS_2,
-	DSI_CMD_QSYNC_MIN_FPS_3,
-	DSI_CMD_QSYNC_MIN_FPS_4,
-	DSI_CMD_QSYNC_MIN_FPS_5,
-	DSI_CMD_QSYNC_MIN_FPS_6,
-	DSI_CMD_QSYNC_MIN_FPS_7,
-	DSI_CMD_QSYNC_MIN_FPS_8,
-	DSI_CMD_QSYNC_MIN_FPS_9,
-	DSI_CMD_FAKEFRAME,
-	DSI_CMD_ADFR_PRE_SWITCH,
-#endif
 	DSI_CMD_SET_MAX
 };
-
-#ifdef CONFIG_PXLW_IRIS
-#define DSI_CMD_QSYNC_MIN_FPS_COUNTS 10
-#endif
 
 /**
  * enum dsi_cmd_set_state - command set state
@@ -745,13 +724,6 @@ struct dsi_display_mode_priv_info {
 	struct msm_roi_caps roi_caps;
 	bool widebus_support;
 	u32 allowed_mode_switch;
-#ifdef CONFIG_PXLW_IRIS
-	u32 qsync_min_fps_sets_size;
-	u32 qsync_min_fps_sets[DSI_CMD_QSYNC_MIN_FPS_COUNTS];
-	u32 current_qsync_mode;
-	u32 fakeframe_config;
-	u32 deferred_fakeframe_time;
-#endif
 };
 
 /**

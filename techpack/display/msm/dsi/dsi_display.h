@@ -287,11 +287,6 @@ struct dsi_display {
 
 	u32 te_source;
 	u32 clk_gating_config;
-#if defined(CONFIG_PXLW_IRIS)
-	u32 off;
-	u32 cnt;
-	u8 cmd_data_type;
-#endif
 	bool queue_cmd_waits;
 	struct workqueue_struct *dma_cmd_workq;
 
@@ -306,14 +301,6 @@ struct dsi_display {
 	struct dsi_panel_cmd_set cmd_set;
 
 	bool enabled;
-
-#ifdef CONFIG_PXLW_IRIS
-	bool need_qsync_restore;
-	bool force_qsync_mode_off;
-	uint32_t current_qsync_mode;
-	uint32_t current_qsync_dynamic_min_fps;
-	struct completion switch_te_gate;
-#endif
 };
 
 int dsi_display_dev_probe(struct platform_device *pdev);
