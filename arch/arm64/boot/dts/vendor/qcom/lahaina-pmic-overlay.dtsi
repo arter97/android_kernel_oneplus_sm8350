@@ -137,6 +137,7 @@
 				regulator-min-microvolt = <2696000>;
 				regulator-max-microvolt = <3000000>;
 				qcom,min-dropout-voltage = <200000>;
+				qcom,hpm-min-load = <0>;
 			};
 
 			L4I: pm8008i_l4: regulator@4300 {
@@ -145,6 +146,7 @@
 				regulator-min-microvolt = <2696000>;
 				regulator-max-microvolt = <2904000>;
 				qcom,min-dropout-voltage = <200000>;
+				qcom,hpm-min-load = <0>;
 			};
 
 			L5I: pm8008i_l5: regulator@4400 {
@@ -220,7 +222,7 @@
 				regulator-min-microvolt = <944000>;
 				regulator-max-microvolt = <1152000>;
 				qcom,min-dropout-voltage = <100000>;
-				qcom,hpm-min-load = <30000>;
+				qcom,hpm-min-load = <0>;
 			};
 
 			L2J: pm8008j_l2: regulator@4100 {
@@ -229,7 +231,7 @@
 				regulator-min-microvolt = <944000>;
 				regulator-max-microvolt = <1056000>;
 				qcom,min-dropout-voltage = <225000>;
-				qcom,hpm-min-load = <30000>;
+				qcom,hpm-min-load = <0>;
 			};
 
 			L3J: pm8008j_l3: regulator@4200 {
@@ -238,6 +240,7 @@
 				regulator-min-microvolt = <2700000>;
 				regulator-max-microvolt = <3000000>;
 				qcom,min-dropout-voltage = <70000>;
+				qcom,hpm-min-load = <0>;
 			};
 
 			L4J: pm8008j_l4: regulator@4300 {
@@ -263,6 +266,7 @@
 				regulator-min-microvolt = <2700000>;
 				regulator-max-microvolt = <3000000>;
 				qcom,min-dropout-voltage = <200000>;
+				qcom,hpm-min-load = <0>;
 			};
 
 			L7J: pm8008j_l7: regulator@4600 {
@@ -271,6 +275,7 @@
 				regulator-min-microvolt = <2700000>;
 				regulator-max-microvolt = <3000000>;
 				qcom,min-dropout-voltage = <200000>;
+				qcom,hpm-min-load = <0>;
 			};
 		};
 	};
