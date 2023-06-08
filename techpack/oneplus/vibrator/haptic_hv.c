@@ -1921,9 +1921,7 @@ static int parse_dt(struct device *dev, struct aw_haptic *aw_haptic,
 		aw_dev_info("%s: irq gpio provide ok irq = %d.\n", __func__,
 			    aw_haptic->irq_gpio);
 #ifdef OPLUS_FEATURE_CHG_BASIC
-	if (of_property_read_u32(np, "qcom,device_id", &aw_haptic->device_id))
-		aw_haptic->device_id = 9595;
-	aw_dev_info("%s: device_id=%d\n", __func__, aw_haptic->device_id);
+	aw_dev_info("%s: device_id=%d\n", __func__, DEVICE_ID);
 
 	if (of_property_read_u8(np, "oplus,aw86927_boost_voltage",
 				&AW86927_HAPTIC_HIGH_LEVEL_REG_VAL)) {
@@ -2257,17 +2255,17 @@ static int ram_update(struct aw_haptic *aw_haptic)
 	aw_haptic->ram_init = false;
 	aw_haptic->rtp_init = false;
 
-	if (aw_haptic->device_id == 815) {
+	if (DEVICE_ID == 815) {
 		if (aw_haptic->f0 < F0_VAL_MIN_0815 ||
 		    aw_haptic->f0 > F0_VAL_MAX_0815)
 			aw_haptic->f0 = 1700;
 
-	} else if (aw_haptic->device_id == 81538) {
+	} else if (DEVICE_ID == 81538) {
 		if (aw_haptic->f0 < F0_VAL_MIN_081538 ||
 		    aw_haptic->f0 > F0_VAL_MAX_081538)
 			aw_haptic->f0 = 1500;
 
-	} else if (aw_haptic->device_id == 832) {
+	} else if (DEVICE_ID == 832) {
 		if (aw_haptic->f0 < F0_VAL_MIN_0832 ||
 		    aw_haptic->f0 > F0_VAL_MAX_0832)
 			aw_haptic->f0 = 2350;
@@ -2297,21 +2295,21 @@ static int ram_update(struct aw_haptic *aw_haptic)
  *	}
  */
 
-	if (aw_haptic->device_id == 832) {
+	if (DEVICE_ID == 832) {
 		aw_dev_info("%s:19065 haptic bin name  %s\n", __func__,
 			    aw_ram_name_19065[index]);
 		return request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
 					       aw_ram_name_19065[index],
 					       aw_haptic->dev, GFP_KERNEL,
 					       aw_haptic, ram_load);
-	} else if (aw_haptic->device_id == 833) {
+	} else if (DEVICE_ID == 833) {
 		aw_dev_info("%s:19065 haptic bin name  %s\n", __func__,
 			    aw_ram_name_19161[index]);
 		return request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
 					       aw_ram_name_19161[index],
 					       aw_haptic->dev, GFP_KERNEL,
 					       aw_haptic, ram_load);
-	} else if (aw_haptic->device_id == 81538) {
+	} else if (DEVICE_ID == 81538) {
 		if (aw_haptic->vibration_style ==
 		    AW_HAPTIC_VIBRATION_CRISP_STYLE) {
 			aw_dev_info("%s:150Hz haptic bin name  %s\n", __func__,
@@ -2682,9 +2680,9 @@ static void vibrator_work_routine(struct work_struct *work)
 	aw_haptic->func->play_stop(aw_haptic);
 	if (aw_haptic->state) {
 		if (aw_haptic->activate_mode == AW_RAM_LOOP_MODE) {
-			if (aw_haptic->device_id == 832 ||
-			    aw_haptic->device_id == 833 ||
-			    aw_haptic->device_id == 815) {
+			if (DEVICE_ID == 832 ||
+			    DEVICE_ID == 833 ||
+			    DEVICE_ID == 815) {
 				ram_vbat_comp(aw_haptic, false);
 				aw_haptic->func->bst_mode_config(
 					aw_haptic, AW_BST_BOOST_MODE);
@@ -2797,13 +2795,13 @@ static void rtp_play(struct aw_haptic *aw_haptic)
 static const struct firmware *
 old_work_file_load_accord_f0(struct aw_haptic *aw_haptic)
 {
-	const struct firmware *rtp_file;
+	const struct firmware *rtp_file = NULL;
 	unsigned int f0_file_num = 1024;
 	int ret = -1;
 
 	if (aw_haptic->rtp_file_num == AW_WAVEFORM_INDEX_OLD_STEADY ||
 	    aw_haptic->rtp_file_num == AW_WAVEFORM_INDEX_HIGH_TEMP) {
-		if (aw_haptic->device_id == 815) {
+		if (DEVICE_ID == 815) {
 			if (aw_haptic->f0 <= 1610)
 				f0_file_num = 0;
 			else if (aw_haptic->f0 <= 1630)
@@ -2826,7 +2824,7 @@ old_work_file_load_accord_f0(struct aw_haptic *aw_haptic)
 				f0_file_num = 9;
 			else
 				f0_file_num = 10;
-		} else if (aw_haptic->device_id == 81538) {
+		} else if (DEVICE_ID == 81538) {
 			if (aw_haptic->f0 <= 1410)
 				f0_file_num = 0;
 			else if (aw_haptic->f0 <= 1430)
@@ -2849,8 +2847,8 @@ old_work_file_load_accord_f0(struct aw_haptic *aw_haptic)
 				f0_file_num = 9;
 			else
 				f0_file_num = 10;
-		} else if (aw_haptic->device_id == 832 ||
-			   aw_haptic->device_id == 833) {
+		} else if (DEVICE_ID == 832 ||
+			   DEVICE_ID == 833) {
 			if (aw_haptic->f0 <= 2255)
 				f0_file_num = 0;
 			else if (aw_haptic->f0 <= 2265)
@@ -2875,20 +2873,20 @@ old_work_file_load_accord_f0(struct aw_haptic *aw_haptic)
 				f0_file_num = 10;
 		}
 		if (aw_haptic->rtp_file_num == AW_WAVEFORM_INDEX_OLD_STEADY) {
-			if (aw_haptic->device_id == 815) {
+			if (DEVICE_ID == 815) {
 				ret = request_firmware(
 					&rtp_file,
 					aw_old_steady_test_rtp_name_0815
 						[f0_file_num],
 					aw_haptic->dev);
-			} else if (aw_haptic->device_id == 81538) {
+			} else if (DEVICE_ID == 81538) {
 				ret = request_firmware(
 					&rtp_file,
 					aw_old_steady_test_rtp_name_081538
 						[f0_file_num],
 					aw_haptic->dev);
-			} else if (aw_haptic->device_id == 832 ||
-				   aw_haptic->device_id == 833) {
+			} else if (DEVICE_ID == 832 ||
+				   DEVICE_ID == 833) {
 				ret = request_firmware(
 					&rtp_file,
 					aw_old_steady_test_rtp_name_0832
@@ -2896,20 +2894,20 @@ old_work_file_load_accord_f0(struct aw_haptic *aw_haptic)
 					aw_haptic->dev);
 			}
 		} else {
-			if (aw_haptic->device_id == 815) {
+			if (DEVICE_ID == 815) {
 				ret = request_firmware(
 					&rtp_file,
 					aw_high_temp_high_humidity_0815
 						[f0_file_num],
 					aw_haptic->dev);
-			} else if (aw_haptic->device_id == 81538) {
+			} else if (DEVICE_ID == 81538) {
 				ret = request_firmware(
 					&rtp_file,
 					aw_high_temp_high_humidity_081538
 						[f0_file_num],
 					aw_haptic->dev);
-			} else if (aw_haptic->device_id == 832 ||
-				   aw_haptic->device_id == 833) {
+			} else if (DEVICE_ID == 832 ||
+				   DEVICE_ID == 833) {
 				ret = request_firmware(
 					&rtp_file,
 					aw_high_temp_high_humidity_0832
@@ -2919,7 +2917,7 @@ old_work_file_load_accord_f0(struct aw_haptic *aw_haptic)
 		}
 		if (ret < 0) {
 			aw_dev_err("%s: failed to read id[%d],index[%d]\n",
-				   __func__, aw_haptic->device_id, f0_file_num);
+				   __func__, DEVICE_ID, f0_file_num);
 			aw_haptic->rtp_routine_on = 0;
 			return NULL;
 		}
@@ -3034,7 +3032,7 @@ static void rtp_work_routine(struct work_struct *work)
 		aw_dev_info("%s: rtp_file_num[%d]\n", __func__,
 			    aw_haptic->rtp_file_num);
 		aw_haptic->rtp_routine_on = 1;
-		if (aw_haptic->device_id == 815) {
+		if (DEVICE_ID == 815) {
 			if (aw_haptic->f0 <= 1670) {
 				ret = request_firmware(
 					&rtp_file,
@@ -3053,12 +3051,12 @@ static void rtp_work_routine(struct work_struct *work)
 						[aw_haptic->rtp_file_num],
 					aw_haptic->dev);
 			}
-		} else if (aw_haptic->device_id == 81538) {
+		} else if (DEVICE_ID == 81538) {
 			ret = request_firmware(
 				&rtp_file,
 				aw_rtp_name_150Hz[aw_haptic->rtp_file_num],
 				aw_haptic->dev);
-		} else if (aw_haptic->device_id == 832) {
+		} else if (DEVICE_ID == 832) {
 			if (aw_haptic->f0 <= 2280) {
 				ret = request_firmware(
 					&rtp_file,
@@ -3144,11 +3142,11 @@ static void rtp_work_routine(struct work_struct *work)
 	memcpy(aw_rtp->data, rtp_file->data, rtp_file->size);
 	mutex_unlock(&aw_haptic->rtp_lock);
 	release_firmware(rtp_file);
-	if (aw_haptic->device_id == 815) {
+	if (DEVICE_ID == 815) {
 		aw_dev_info("%s: rtp file [%s] size = %d, f0 = %d\n", __func__,
 			    aw_rtp_name[aw_haptic->rtp_file_num], aw_rtp->len,
 			    aw_haptic->f0);
-	} else if (aw_haptic->device_id == 81538) {
+	} else if (DEVICE_ID == 81538) {
 		aw_dev_info("%s: rtp file [%s] size = %d, f0 = %d\n", __func__,
 			    aw_rtp_name_150Hz[aw_haptic->rtp_file_num],
 			    aw_rtp->len, aw_haptic->f0);
@@ -3677,8 +3675,8 @@ static ssize_t activate_store(struct device *dev, struct device_attribute *attr,
 
 		mutex_lock(&aw_haptic->lock);
 
-		if (aw_haptic->device_id == 815 ||
-		    aw_haptic->device_id == 81538)
+		if (DEVICE_ID == 815 ||
+		    DEVICE_ID == 81538)
 			aw_haptic->func->set_gain(aw_haptic, aw_haptic->gain);
 		aw_haptic->func->set_repeat_seq(aw_haptic,
 						AW_WAVEFORM_INDEX_SINE_CYCLE);
@@ -3837,7 +3835,7 @@ static ssize_t vmax_store(struct device *dev, struct device_attribute *attr,
 		aw_haptic->gain = AW_HAPTIC_RAM_VBAT_COMP_GAIN;
 	}
 
-	if (aw_haptic->device_id == 833) {
+	if (DEVICE_ID == 833) {
 		aw_haptic->vmax = AW86927_HAPTIC_HIGH_LEVEL_REG_VAL;
 		aw_haptic->gain = 0x80;
 	}
@@ -4196,25 +4194,25 @@ static ssize_t f0_store(struct device *dev, struct device_attribute *attr,
 
 	aw_dev_info("%s: f0 = %d\n", __func__, val);
 
-	if (aw_haptic->device_id == 815) {
+	if (DEVICE_ID == 815) {
 		aw_haptic->f0 = val;
 		if (aw_haptic->f0 < F0_VAL_MIN_0815 ||
 		    aw_haptic->f0 > F0_VAL_MAX_0815)
 			aw_haptic->f0 = 1700;
 
-	} else if (aw_haptic->device_id == 81538) {
+	} else if (DEVICE_ID == 81538) {
 		aw_haptic->f0 = val;
 		if (aw_haptic->f0 < F0_VAL_MIN_081538 ||
 		    aw_haptic->f0 > F0_VAL_MAX_081538)
 			aw_haptic->f0 = 1500;
 
-	} else if (aw_haptic->device_id == 832) {
+	} else if (DEVICE_ID == 832) {
 		aw_haptic->f0 = val;
 		if (aw_haptic->f0 < F0_VAL_MIN_0832 ||
 		    aw_haptic->f0 > F0_VAL_MAX_0832)
 			aw_haptic->f0 = 2300;
 
-	} else if (aw_haptic->device_id == 833) {
+	} else if (DEVICE_ID == 833) {
 		aw_haptic->f0 = val;
 		if (aw_haptic->f0 < F0_VAL_MIN_0833 ||
 		    aw_haptic->f0 > F0_VAL_MAX_0833)
@@ -4949,7 +4947,7 @@ static ssize_t waveform_index_store(struct device *dev,
 		container_of(cdev, struct aw_haptic, vib_dev);
 	unsigned int databuf[1] = { 0 };
 
-	if (aw_haptic->device_id == 833) {
+	if (DEVICE_ID == 833) {
 		aw_haptic->vmax = AW86927_HAPTIC_HIGH_LEVEL_REG_VAL;
 		aw_haptic->gain = 0x80;
 		aw_haptic->func->set_gain(aw_haptic, aw_haptic->gain);
@@ -5083,11 +5081,7 @@ static ssize_t haptic_ram_test_store(struct device *dev,
 static ssize_t device_id_show(struct device *dev, struct device_attribute *attr,
 			      char *buf)
 {
-	cdev_t *cdev = dev_get_drvdata(dev);
-	struct aw_haptic *aw_haptic =
-		container_of(cdev, struct aw_haptic, vib_dev);
-
-	return snprintf(buf, PAGE_SIZE, "%d\n", aw_haptic->device_id);
+	return snprintf(buf, PAGE_SIZE, "%d\n", DEVICE_ID);
 }
 
 static ssize_t device_id_store(struct device *dev,

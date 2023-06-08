@@ -4570,31 +4570,31 @@ static int aw8697_ram_update(struct aw8697 *aw8697)
 	//173 174,174
 	//>175 ,174
 #ifdef CONFIG_OPLUS_HAPTIC_OOS
-	if (aw8697->device_id == 815 || aw8697->device_id == 1815 ||
-	    aw8697->device_id == 9595) {
+	if (DEVICE_ID == 815 || DEVICE_ID == 1815 ||
+	    DEVICE_ID == 9595) {
 #else
-	if (aw8697->device_id == 815 || aw8697->device_id == 9595) {
+	if (DEVICE_ID == 815 || DEVICE_ID == 9595) {
 #endif
 		if (aw8697->f0 < F0_VAL_MIN_0815 ||
 		    aw8697->f0 > F0_VAL_MAX_0815) {
 			aw8697->f0 = 1700;
 		}
-	} else if (aw8697->device_id == 81538) {
+	} else if (DEVICE_ID == 81538) {
 		if (aw8697->f0 < F0_VAL_MIN_081538 ||
 		    aw8697->f0 > F0_VAL_MAX_081538) {
 			aw8697->f0 = 1500;
 		}
-	} else if (aw8697->device_id == 619) {
+	} else if (DEVICE_ID == 619) {
 		if (aw8697->f0 < F0_VAL_MIN_0619 ||
 		    aw8697->f0 > F0_VAL_MAX_0619) {
 			aw8697->f0 = 1700;
 		}
-	} else if (aw8697->device_id == 1040) {
+	} else if (DEVICE_ID == 1040) {
 		if (aw8697->f0 < F0_VAL_MIN_1040 ||
 		    aw8697->f0 > F0_VAL_MAX_1040) {
 			aw8697->f0 = 1700;
 		}
-	} else if (aw8697->device_id == 832) {
+	} else if (DEVICE_ID == 832) {
 		if (aw8697->f0 < F0_VAL_MIN_0832 ||
 		    aw8697->f0 > F0_VAL_MAX_0832) {
 			aw8697->f0 = 2350;
@@ -4630,7 +4630,7 @@ static int aw8697_ram_update(struct aw8697 *aw8697)
         index = 4;
     }
 */
-	if (aw8697->device_id == 9595) {
+	if (DEVICE_ID == 9595) {
 		if (aw8697->haptic_real_f0 < 167) {
 			index = 0;
 		} else if (aw8697->haptic_real_f0 < 169) {
@@ -4645,7 +4645,7 @@ static int aw8697_ram_update(struct aw8697 *aw8697)
 	}
 
 #ifdef CONFIG_OPLUS_HAPTIC_OOS
-	if (aw8697->device_id == 1815) {
+	if (DEVICE_ID == 1815) {
 		if (aw8697->haptic_real_f0 < 167) {
 			index = 0;
 		} else if (aw8697->haptic_real_f0 < 169) {
@@ -4660,7 +4660,7 @@ static int aw8697_ram_update(struct aw8697 *aw8697)
 	}
 
 #ifdef CONFIG_ARCH_LITO
-	if (aw8697->device_id == 832) {
+	if (DEVICE_ID == 832) {
 		if (aw8697->haptic_real_f0 < 167) {
 			index = 0;
 		} else if (aw8697->haptic_real_f0 < 169) {
@@ -4676,7 +4676,7 @@ static int aw8697_ram_update(struct aw8697 *aw8697)
 #endif /* CONFIG_ARCH_LITO */
 #endif /* CONFIG_OPLUS_HAPTIC_OOS */
 
-	if (aw8697->device_id == 619) {
+	if (DEVICE_ID == 619) {
 		if (aw8697->haptic_real_f0 < 167) {
 			index = 0;
 		} else if (aw8697->haptic_real_f0 < 169) {
@@ -4690,7 +4690,7 @@ static int aw8697_ram_update(struct aw8697 *aw8697)
 		}
 	}
 
-	if (aw8697->device_id == 1040) {
+	if (DEVICE_ID == 1040) {
 		if (aw8697->haptic_real_f0 < 167) {
 			index = 0;
 		} else if (aw8697->haptic_real_f0 < 169) {
@@ -4704,21 +4704,21 @@ static int aw8697_ram_update(struct aw8697 *aw8697)
 		}
 	}
 
-	if (aw8697->device_id == 832) {
+	if (DEVICE_ID == 832) {
 		pr_info("%s:0832 haptic bin name  %s \n", __func__,
 			aw8697_ram_name_0832[index]);
 		return request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
 					       aw8697_ram_name_0832[index],
 					       aw8697->dev, GFP_KERNEL, aw8697,
 					       aw8697_ram_loaded);
-	} else if (aw8697->device_id == 833) {
+	} else if (DEVICE_ID == 833) {
 		pr_info("%s:19065 haptic bin name  %s \n", __func__,
 			aw8697_ram_name_19161[index]);
 		return request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
 					       aw8697_ram_name_19161[index],
 					       aw8697->dev, GFP_KERNEL, aw8697,
 					       aw8697_ram_loaded);
-	} else if (aw8697->device_id == 9595) {
+	} else if (DEVICE_ID == 9595) {
 		pr_info("%s:9595 haptic bin name  %s \n", __func__,
 			aw8697_ram_name_9595[index]);
 		return request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
@@ -4726,7 +4726,7 @@ static int aw8697_ram_update(struct aw8697 *aw8697)
 					       aw8697->dev, GFP_KERNEL, aw8697,
 					       aw8697_ram_loaded);
 #ifdef CONFIG_OPLUS_HAPTIC_OOS
-	} else if (aw8697->device_id == 1815) {
+	} else if (DEVICE_ID == 1815) {
 		pr_info("%s:1815 haptic bin name  %s \n", __func__,
 			aw8697_ram_name_1815[index]);
 		return request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
@@ -4734,21 +4734,21 @@ static int aw8697_ram_update(struct aw8697 *aw8697)
 					       aw8697->dev, GFP_KERNEL, aw8697,
 					       aw8697_ram_loaded);
 #endif
-	} else if (aw8697->device_id == 619) {
+	} else if (DEVICE_ID == 619) {
 		pr_info("%s:0619 haptic bin name  %s \n", __func__,
 			aw8697_ram_name_0619[index]);
 		return request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
 					       aw8697_ram_name_0619[index],
 					       aw8697->dev, GFP_KERNEL, aw8697,
 					       aw8697_ram_loaded);
-	} else if (aw8697->device_id == 1040) {
+	} else if (DEVICE_ID == 1040) {
 		pr_info("%s:1040 haptic bin name  %s \n", __func__,
 			aw8697_ram_name_1040[index]);
 		return request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG,
 					       aw8697_ram_name_1040[index],
 					       aw8697->dev, GFP_KERNEL, aw8697,
 					       aw8697_ram_loaded);
-	} else if (aw8697->device_id == 81538) {
+	} else if (DEVICE_ID == 81538) {
 		if (aw8697->vibration_style ==
 		    AW8697_HAPTIC_VIBRATION_CRISP_STYLE) {
 			pr_info("%s:150Hz haptic bin name  %s \n", __func__,
@@ -4922,7 +4922,7 @@ static int aw8697_haptic_play_mode(struct aw8697 *aw8697,
 		aw8697_haptic_active(aw8697);
 
 #if defined(OPLUS_FEATURE_CHG_BASIC) && !defined(CONFIG_OPLUS_HAPTIC_OOS)
-		if (aw8697->device_id == DEV_ID_0619)
+		if (DEVICE_ID == DEV_ID_0619)
 			break;
 #endif
 
@@ -6124,9 +6124,9 @@ aw8697_old_work_file_load_accord_f0(struct aw8697 *aw8697)
 	if (aw8697->rtp_file_num == AW8697_WAVEFORM_INDEX_OLD_STEADY ||
 	    aw8697->rtp_file_num == AW8697_WAVEFORM_INDEX_HIGH_TEMP) {
 #ifdef CONFIG_OPLUS_HAPTIC_OOS
-		if (aw8697->device_id == 815 || aw8697->device_id == 1815) {
+		if (DEVICE_ID == 815 || DEVICE_ID == 1815) {
 #else
-		if (aw8697->device_id == 815 || aw8697->device_id == 9595) {
+		if (DEVICE_ID == 815 || DEVICE_ID == 9595) {
 #endif
 			if (aw8697->f0 <= 1610)
 				f0_file_num = 0;
@@ -6150,7 +6150,7 @@ aw8697_old_work_file_load_accord_f0(struct aw8697 *aw8697)
 				f0_file_num = 9;
 			else
 				f0_file_num = 10;
-		} else if (aw8697->device_id == 81538) {
+		} else if (DEVICE_ID == 81538) {
 			if (aw8697->f0 <= 1450) {
 				f0_file_num = 0;
 			} else if (aw8697->f0 <= 1460) {
@@ -6174,8 +6174,8 @@ aw8697_old_work_file_load_accord_f0(struct aw8697 *aw8697)
 			} else {
 				f0_file_num = 10;
 			}
-		} else if (aw8697->device_id == 832 ||
-			   aw8697->device_id == 833) {
+		} else if (DEVICE_ID == 832 ||
+			   DEVICE_ID == 833) {
 			if (aw8697->f0 <= 2255)
 				f0_file_num = 0;
 			else if (aw8697->f0 <= 2265)
@@ -6200,34 +6200,34 @@ aw8697_old_work_file_load_accord_f0(struct aw8697 *aw8697)
 				f0_file_num = 10;
 		}
 		if (aw8697->rtp_file_num == AW8697_WAVEFORM_INDEX_OLD_STEADY) {
-			if (aw8697->device_id == 815) {
+			if (DEVICE_ID == 815) {
 				ret = request_firmware(
 					&rtp_file,
 					aw8697_old_steady_test_rtp_name_0815
 						[f0_file_num],
 					aw8697->dev);
-			} else if (aw8697->device_id == 81538) {
+			} else if (DEVICE_ID == 81538) {
 				ret = request_firmware(
 					&rtp_file,
 					aw8697_old_steady_test_rtp_name_081538
 						[f0_file_num],
 					aw8697->dev);
 #ifdef CONFIG_OPLUS_HAPTIC_OOS
-			} else if (aw8697->device_id == 1815) {
+			} else if (DEVICE_ID == 1815) {
 				ret = request_firmware(
 					&rtp_file,
 					aw8697_old_steady_test_rtp_name_1815
 						[f0_file_num],
 					aw8697->dev);
 #endif
-			} else if (aw8697->device_id == 9595) {
+			} else if (DEVICE_ID == 9595) {
 				ret = request_firmware(
 					&rtp_file,
 					aw8697_old_steady_test_rtp_name_9595
 						[f0_file_num],
 					aw8697->dev);
-			} else if (aw8697->device_id == 832 ||
-				   aw8697->device_id == 833) {
+			} else if (DEVICE_ID == 832 ||
+				   DEVICE_ID == 833) {
 				ret = request_firmware(
 					&rtp_file,
 					aw8697_old_steady_test_rtp_name_0832
@@ -6235,34 +6235,34 @@ aw8697_old_work_file_load_accord_f0(struct aw8697 *aw8697)
 					aw8697->dev);
 			}
 		} else {
-			if (aw8697->device_id == 815) {
+			if (DEVICE_ID == 815) {
 				ret = request_firmware(
 					&rtp_file,
 					aw8697_high_temp_high_humidity_0815
 						[f0_file_num],
 					aw8697->dev);
-			} else if (aw8697->device_id == 81538) {
+			} else if (DEVICE_ID == 81538) {
 				ret = request_firmware(
 					&rtp_file,
 					aw8697_high_temp_high_humidity_081538
 						[f0_file_num],
 					aw8697->dev);
 #ifdef CONFIG_OPLUS_HAPTIC_OOS
-			} else if (aw8697->device_id == 1815) {
+			} else if (DEVICE_ID == 1815) {
 				ret = request_firmware(
 					&rtp_file,
 					aw8697_high_temp_high_humidity_1815
 						[f0_file_num],
 					aw8697->dev);
 #endif
-			} else if (aw8697->device_id == 9595) {
+			} else if (DEVICE_ID == 9595) {
 				ret = request_firmware(
 					&rtp_file,
 					aw8697_high_temp_high_humidity_9595
 						[f0_file_num],
 					aw8697->dev);
-			} else if (aw8697->device_id == 832 ||
-				   aw8697->device_id == 833) {
+			} else if (DEVICE_ID == 832 ||
+				   DEVICE_ID == 833) {
 				ret = request_firmware(
 					&rtp_file,
 					aw8697_high_temp_high_humidity_0832
@@ -6272,7 +6272,7 @@ aw8697_old_work_file_load_accord_f0(struct aw8697 *aw8697)
 		}
 		if (ret < 0) {
 			pr_err("%s: failed to read id[%d],index[%d]\n",
-			       __func__, aw8697->device_id, f0_file_num);
+			       __func__, DEVICE_ID, f0_file_num);
 			aw8697->rtp_routine_on = 0;
 			return NULL;
 		}
@@ -6493,7 +6493,7 @@ static void aw8697_rtp_work_routine(struct work_struct *work)
 		pr_info("%s  aw8697->rtp_file_num[%d]\n", __func__,
 			aw8697->rtp_file_num);
 		aw8697->rtp_routine_on = 1;
-		if (aw8697->device_id == 815) {
+		if (DEVICE_ID == 815) {
 			if (aw8697->f0 <= 1670) {
 				ret = request_firmware(
 					&rtp_file,
@@ -6512,7 +6512,7 @@ static void aw8697_rtp_work_routine(struct work_struct *work)
 						[aw8697->rtp_file_num],
 					aw8697->dev);
 			}
-		} else if (aw8697->device_id == 81538) {
+		} else if (DEVICE_ID == 81538) {
 			if (aw8697->f0 <= 1470) {
 				ret = request_firmware(
 					&rtp_file,
@@ -6533,18 +6533,18 @@ static void aw8697_rtp_work_routine(struct work_struct *work)
 					aw8697->dev);
 			}
 #ifdef CONFIG_OPLUS_HAPTIC_OOS
-		} else if (aw8697->device_id == 1815) {
+		} else if (DEVICE_ID == 1815) {
 			ret = request_firmware(
 				&rtp_file,
 				aw8697_rtp_name_1815_170Hz[aw8697->rtp_file_num],
 				aw8697->dev);
 #endif
-		} else if (aw8697->device_id == 9595) {
+		} else if (DEVICE_ID == 9595) {
 			ret = request_firmware(
 				&rtp_file,
 				aw8697_rtp_name_9595_170Hz[aw8697->rtp_file_num],
 				aw8697->dev);
-		} else if (aw8697->device_id == 619) {
+		} else if (DEVICE_ID == 619) {
 #ifdef CONFIG_OPLUS_HAPTIC_OOS
 			if (aw8697->f0 <= 1680) {
 				ret = request_firmware(
@@ -6571,12 +6571,12 @@ static void aw8697_rtp_work_routine(struct work_struct *work)
 				aw8697_rtp_name[aw8697->rtp_file_num],
 				aw8697->dev);
 #endif
-		} else if (aw8697->device_id == 1040) {
+		} else if (DEVICE_ID == 1040) {
 			ret = request_firmware(
 				&rtp_file,
 				aw8697_rtp_name[aw8697->rtp_file_num],
 				aw8697->dev);
-		} else if (aw8697->device_id == 832) {
+		} else if (DEVICE_ID == 832) {
 #ifndef CONFIG_OPLUS_HAPTIC_OOS
 			if (aw8697->f0 <= 2280) {
 				ret = request_firmware(
@@ -6715,21 +6715,21 @@ static void aw8697_rtp_work_routine(struct work_struct *work)
 	mutex_unlock(&aw8697->rtp_lock); //vincent
 	release_firmware(rtp_file);
 
-	if (aw8697->device_id == 815) {
+	if (DEVICE_ID == 815) {
 		pr_info("%s: rtp file [%s] size = %d, f0 = %d\n", __func__,
 			aw8697_rtp_name[aw8697->rtp_file_num], aw8697_rtp->len,
 			aw8697->f0);
-	} else if (aw8697->device_id == 81538) {
+	} else if (DEVICE_ID == 81538) {
 		pr_info("%s: rtp file [%s] size = %d, f0 = %d\n", __func__,
 			aw8697_rtp_name_150Hz[aw8697->rtp_file_num],
 			aw8697_rtp->len, aw8697->f0);
 #ifdef CONFIG_OPLUS_HAPTIC_OOS
-	} else if (aw8697->device_id == 1815) {
+	} else if (DEVICE_ID == 1815) {
 		pr_info("%s: rtp file [%s] size = %d, f0 = %d\n", __func__,
 			aw8697_rtp_name_1815_170Hz[aw8697->rtp_file_num],
 			aw8697_rtp->len, aw8697->f0);
 #endif
-	} else if (aw8697->device_id == 619) {
+	} else if (DEVICE_ID == 619) {
 #ifdef CONFIG_OPLUS_HAPTIC_OOS
 		if (aw8697->f0 <= 1680) {
 			pr_info("%s: rtp file [%s] size = %d, f0 = %d\n",
@@ -6752,11 +6752,11 @@ static void aw8697_rtp_work_routine(struct work_struct *work)
 			aw8697_rtp_name[aw8697->rtp_file_num], aw8697_rtp->len,
 			aw8697->f0);
 #endif
-	} else if (aw8697->device_id == 1040) {
+	} else if (DEVICE_ID == 1040) {
 		pr_info("%s: rtp file [%s] size = %d, f0 = %d\n", __func__,
 			aw8697_rtp_name[aw8697->rtp_file_num], aw8697_rtp->len,
 			aw8697->f0);
-	} else if (aw8697->device_id == 9595) {
+	} else if (DEVICE_ID == 9595) {
 		pr_info("%s: rtp file [%s] size = %d, f0 = %d\n", __func__,
 			aw8697_rtp_name_9595_170Hz[aw8697->rtp_file_num],
 			aw8697_rtp->len, aw8697->f0);
@@ -7705,7 +7705,7 @@ static int aw8697_haptic_f0_calibration(struct aw8697 *aw8697)
 		pr_err("%s get f0=%d\n", __func__, f0_limit);
 
 #ifdef OPLUS_FEATURE_CHG_BASIC
-		if (aw8697->device_id == 832 || aw8697->device_id == 833) {
+		if (DEVICE_ID == 832 || DEVICE_ID == 833) {
 			if (aw8697->f0 * 100 <
 			    AW8697_0832_HAPTIC_F0_PRE *
 				    (100 - AW8697_0832_HAPTIC_F0_CALI_PERCEN)) {
@@ -7722,7 +7722,7 @@ static int aw8697_haptic_f0_calibration(struct aw8697 *aw8697)
 					    AW8697_0832_HAPTIC_F0_CALI_PERCEN) /
 					   100;
 			}
-		} else if (aw8697->device_id == 81538) {
+		} else if (DEVICE_ID == 81538) {
 			if (aw8697->f0 * 100 <
 			    AW8697_081538_HAPTIC_F0_PRE *
 				    (100 -
@@ -8400,15 +8400,15 @@ static int aw8697_haptic_init(struct aw8697 *aw8697)
 	/* f0 calibration */
 	mutex_lock(&aw8697->lock);
 #ifdef OPLUS_FEATURE_CHG_BASIC
-	if (aw8697->device_id == 832 ||
-	    aw8697->device_id == 833) { //19065 and 19161
+	if (DEVICE_ID == 832 ||
+	    DEVICE_ID == 833) { //19065 and 19161
 		aw8697->f0_pre = AW8697_0832_HAPTIC_F0_PRE;
 		aw8697->cont_drv_lvl = AW8697_0832_HAPTIC_CONT_DRV_LVL;
 		aw8697->cont_drv_lvl_ov = AW8697_0832_HAPTIC_CONT_DRV_LVL_OV;
 		aw8697->cont_td = AW8697_0832_HAPTIC_CONT_TD;
 		aw8697->cont_zc_thr = AW8697_0832_HAPTIC_CONT_ZC_THR;
 		aw8697->cont_num_brk = AW8697_0832_HAPTIC_CONT_NUM_BRK;
-	} else if (aw8697->device_id == 81538) {
+	} else if (DEVICE_ID == 81538) {
 		aw8697->f0_pre = AW8697_081538_HAPTIC_F0_PRE;
 		aw8697->cont_drv_lvl = AW8697_081538_HAPTIC_CONT_DRV_LVL;
 		aw8697->cont_drv_lvl_ov = AW8697_081538_HAPTIC_CONT_DRV_LVL_OV;
@@ -8680,9 +8680,9 @@ static ssize_t aw8697_activate_store(struct device *dev,
 		mutex_lock(&aw8697->lock);
 
 #ifdef CONFIG_OPLUS_HAPTIC_OOS
-		if (aw8697->device_id == 815 || aw8697->device_id == 1815)
+		if (DEVICE_ID == 815 || DEVICE_ID == 1815)
 #else
-		if (aw8697->device_id == 815 || aw8697->device_id == 9595)
+		if (DEVICE_ID == 815 || DEVICE_ID == 9595)
 #endif
 			aw8697_haptic_set_gain(aw8697, aw8697->gain);
 		aw8697_haptic_set_repeat_wav_seq(
@@ -8699,17 +8699,17 @@ static ssize_t aw8697_activate_store(struct device *dev,
 	}
 #endif
 #else
-	if (aw8697->device_id == 9595) {
+	if (DEVICE_ID == 9595) {
 		rtp_max_num = sizeof(aw8697_rtp_name_9595_170Hz) /
 			      AW8697_RTP_NAME_MAX;
-	} else if (aw8697->device_id == 1815) {
+	} else if (DEVICE_ID == 1815) {
 		rtp_max_num = sizeof(aw8697_rtp_name_1815_170Hz) /
 			      AW8697_RTP_NAME_MAX;
-	} else if (aw8697->device_id == 832) {
+	} else if (DEVICE_ID == 832) {
 		rtp_max_num = sizeof(aw8697_rtp_name_0832_234Hz) /
 			      AW8697_RTP_NAME_MAX;
 #ifdef CONFIG_OPLUS_HAPTIC_OOS
-	} else if (aw8697->device_id == 619) {
+	} else if (DEVICE_ID == 619) {
 		rtp_max_num = sizeof(aw8697_rtp_name_0619_170Hz) /
 			      AW8697_RTP_NAME_MAX;
 #endif /* CONFIG_OPLUS_HAPTIC_OOS */
@@ -9284,18 +9284,18 @@ static ssize_t aw8697_rtp_store(struct device *dev,
 	}
 
 #ifdef CONFIG_OPLUS_HAPTIC_OOS
-	if ((aw8697->device_id == 1815 || aw8697->device_id == 832) &&
+	if ((DEVICE_ID == 1815 || DEVICE_ID == 832) &&
 	    val >= OPLUS_START_INDEX && val <= OPLUS_END_INDEX) {
 		/* */
 		val = val - 30;
 	}
 
-	if ((aw8697->device_id == 619 || aw8697->device_id == 1040) &&
+	if ((DEVICE_ID == 619 || DEVICE_ID == 1040) &&
 	    val >= OPLUS_START_INDEX && val <= OPLUS_END_INDEX) {
 		val = val - 30;
 	}
 #endif
-	if (aw8697->device_id == 9595 && val >= OPLUS_START_INDEX &&
+	if (DEVICE_ID == 9595 && val >= OPLUS_START_INDEX &&
 	    val <= OPLUS_END_INDEX) {
 		val = val - 49;
 	}
@@ -9346,14 +9346,14 @@ static ssize_t aw8697_rtp_store(struct device *dev,
 	aw8697_interrupt_clear(aw8697);
 	mutex_unlock(&aw8697->lock);
 
-	if (aw8697->device_id == 9595) {
+	if (DEVICE_ID == 9595) {
 		rtp_max_num = sizeof(aw8697_rtp_name_9595_170Hz) /
 			      AW8697_RTP_NAME_MAX;
 #ifdef CONFIG_OPLUS_HAPTIC_OOS
-	} else if (aw8697->device_id == 1815) {
+	} else if (DEVICE_ID == 1815) {
 		rtp_max_num = sizeof(aw8697_rtp_name_1815_170Hz) /
 			      AW8697_RTP_NAME_MAX;
-	} else if (aw8697->device_id == 619) {
+	} else if (DEVICE_ID == 619) {
 		rtp_max_num = sizeof(aw8697_rtp_name_0619_170Hz) /
 			      AW8697_RTP_NAME_MAX;
 #endif
@@ -9460,41 +9460,41 @@ static ssize_t aw8697_f0_store(struct device *dev,
 	pr_err("%s:  f0 = %d\n", __FUNCTION__, val);
 
 #ifdef CONFIG_OPLUS_HAPTIC_OOS
-	if (aw8697->device_id == 815 || aw8697->device_id == 1815 ||
-	    aw8697->device_id == 9595) {
+	if (DEVICE_ID == 815 || DEVICE_ID == 1815 ||
+	    DEVICE_ID == 9595) {
 #else
-	if (aw8697->device_id == 815 || aw8697->device_id == 9595) {
+	if (DEVICE_ID == 815 || DEVICE_ID == 9595) {
 #endif
 		aw8697->f0 = val;
 		if (aw8697->f0 < F0_VAL_MIN_0815 ||
 		    aw8697->f0 > F0_VAL_MAX_0815) {
 			aw8697->f0 = 1700;
 		}
-	} else if (aw8697->device_id == 81538) {
+	} else if (DEVICE_ID == 81538) {
 		aw8697->f0 = val;
 		if (aw8697->f0 < F0_VAL_MIN_081538 ||
 		    aw8697->f0 > F0_VAL_MAX_081538) {
 			aw8697->f0 = 1500;
 		}
-	} else if (aw8697->device_id == 832) {
+	} else if (DEVICE_ID == 832) {
 		aw8697->f0 = val;
 		if (aw8697->f0 < F0_VAL_MIN_0832 ||
 		    aw8697->f0 > F0_VAL_MAX_0832) {
 			aw8697->f0 = 2300;
 		}
-	} else if (aw8697->device_id == 833) {
+	} else if (DEVICE_ID == 833) {
 		aw8697->f0 = val;
 		if (aw8697->f0 < F0_VAL_MIN_0833 ||
 		    aw8697->f0 > F0_VAL_MAX_0833) {
 			aw8697->f0 = 2330;
 		}
-	} else if (aw8697->device_id == 619) {
+	} else if (DEVICE_ID == 619) {
 		aw8697->f0 = val;
 		if (aw8697->f0 < F0_VAL_MIN_0619 ||
 		    aw8697->f0 > F0_VAL_MAX_0619) {
 			aw8697->f0 = 1700;
 		}
-	} else if (aw8697->device_id == 1040) {
+	} else if (DEVICE_ID == 1040) {
 		aw8697->f0 = val;
 		if (aw8697->f0 < F0_VAL_MIN_1040 ||
 		    aw8697->f0 > F0_VAL_MAX_1040) {
@@ -10175,7 +10175,7 @@ static int aw8697_check_f0_data(struct aw8697 *aw8697)
 	pr_err("%s get f0=%d\n", __func__, f0_limit);
 
 #ifdef OPLUS_FEATURE_CHG_BASIC
-	if (aw8697->device_id == 832 || aw8697->device_id == 833) {
+	if (DEVICE_ID == 832 || DEVICE_ID == 833) {
 		if (aw8697->f0 * 100 <
 		    AW8697_0832_HAPTIC_F0_PRE *
 			    (100 - AW8697_0832_HAPTIC_F0_CALI_PERCEN)) {
@@ -10899,15 +10899,7 @@ static ssize_t aw8697_haptic_ram_test_store(struct device *dev,
 static ssize_t aw8697_device_id_show(struct device *dev,
 				     struct device_attribute *attr, char *buf)
 {
-#ifdef TIMED_OUTPUT
-	struct timed_output_dev *to_dev = dev_get_drvdata(dev);
-	struct aw8697 *aw8697 = container_of(to_dev, struct aw8697, to_dev);
-#else
-	struct led_classdev *cdev = dev_get_drvdata(dev);
-	struct aw8697 *aw8697 = container_of(cdev, struct aw8697, cdev);
-#endif
-
-	return snprintf(buf, PAGE_SIZE, "%d\n", aw8697->device_id);
+	return snprintf(buf, PAGE_SIZE, "%d\n", DEVICE_ID);
 }
 
 static ssize_t aw8697_device_id_store(struct device *dev,
@@ -11095,9 +11087,9 @@ static void aw8697_vibrator_work_routine(struct work_struct *work)
 	if (aw8697->state) {
 		mutex_lock(&aw8697->lock);
 		if (aw8697->activate_mode == AW8697_HAPTIC_ACTIVATE_RAM_MODE) {
-			if (aw8697->device_id == 832 ||
-			    aw8697->device_id == 833 ||
-			    aw8697->device_id == 81538) {
+			if (DEVICE_ID == 832 ||
+			    DEVICE_ID == 833 ||
+			    DEVICE_ID == 81538) {
 				aw8697_haptic_ram_vbat_comp(aw8697, false);
 			} else {
 				aw8697_haptic_ram_vbat_comp(aw8697, true);
@@ -11355,10 +11347,8 @@ static int aw8697_parse_dt(struct device *dev, struct aw8697 *aw8697,
 		dev_info(dev, "%s: irq gpio provided ok.\n", __func__);
 	}
 #ifdef OPLUS_FEATURE_CHG_BASIC
-	if (of_property_read_u32(np, "qcom,device_id", &aw8697->device_id))
-		aw8697->device_id = 9595;
 	dev_info(dev, "%s: aw8697->device_id=%d\n", __func__,
-		 aw8697->device_id);
+		 DEVICE_ID);
 	if (of_property_read_u8(np, "qcom,aw8697_boost_voltage",
 				&AW8697_HAPTIC_HIGH_LEVEL_REG_VAL)) {
 #ifdef CONFIG_OPLUS_HAPTIC_OOS
@@ -11608,22 +11598,22 @@ static int aw8697_i2c_probe(struct i2c_client *i2c,
 	}
 
 #if defined(OPLUS_FEATURE_CHG_BASIC) && !defined(CONFIG_OPLUS_HAPTIC_OOS)
-	if (aw8697->device_id == DEV_ID_0619)
+	if (DEVICE_ID == DEV_ID_0619)
 		AW8697_HAPTIC_RAM_VBAT_COMP_GAIN = 0x3B;
 #endif
 
 #ifdef CONFIG_OPLUS_HAPTIC_OOS
-	if (aw8697->device_id == DEV_ID_0619) {
+	if (DEVICE_ID == DEV_ID_0619) {
 		one_sine_data = one_sine_data_0619;
 		rtp_500ms_first_sine_place = RTP_500MS_FIRST_SINE_PLACE_0619;
 		one_sine_data_length = ONE_SINE_DATA_LENGTH_0619;
 		one_sine_data_time = ONE_SINE_DATA_TIME_0619;
-	} else if (aw8697->device_id == DEV_ID_0832) {
+	} else if (DEVICE_ID == DEV_ID_0832) {
 		one_sine_data = one_sine_data_0832;
 		rtp_500ms_first_sine_place = RTP_500MS_FIRST_SINE_PLACE_0832;
 		one_sine_data_length = ONE_SINE_DATA_LENGTH_0832;
 		one_sine_data_time = ONE_SINE_DATA_TIME_0832;
-	} else if (aw8697->device_id == DEV_ID_1040) {
+	} else if (DEVICE_ID == DEV_ID_1040) {
 		one_sine_data = one_sine_data_1040;
 		rtp_500ms_first_sine_place = RTP_500MS_FIRST_SINE_PLACE_1040;
 		one_sine_data_length = ONE_SINE_DATA_LENGTH_1040;

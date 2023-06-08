@@ -780,7 +780,6 @@ struct aw_haptic {
 	int duration;
 	int amplitude;
 	int reset_gpio;
-	int device_id;
 	int pre_haptic_number;
 
 	uint32_t f0;

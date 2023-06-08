@@ -423,7 +423,6 @@ struct aw8697 {
 #endif
 	int reset_gpio;
 	int irq_gpio;
-	int device_id;
 
 	unsigned char hwen_flag;
 	unsigned char flags;

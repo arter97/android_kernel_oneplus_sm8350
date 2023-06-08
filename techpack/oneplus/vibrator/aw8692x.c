@@ -1375,7 +1375,7 @@ static unsigned long aw8692x_get_theory_time(struct aw_haptic *aw_haptic)
 static void aw8692x_haptic_value_init(struct aw_haptic *aw_haptic)
 {
 #ifdef OPLUS_FEATURE_CHG_BASIC
-	if (aw_haptic->device_id == 832 || aw_haptic->device_id == 833) {
+	if (DEVICE_ID == 832 || DEVICE_ID == 833) {
 		aw_haptic->info.f0_pre = AW8692X_0832_F0_PRE;
 		aw_haptic->info.f0_cali_percent = AW8692X_0832_F0_CALI_PERCEN;
 		aw_haptic->info.cont_drv1_lvl = AW8692X_0832_CONT_DRV1_LVL;
