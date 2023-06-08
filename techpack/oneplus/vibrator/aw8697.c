@@ -84,50 +84,50 @@ static uint8_t AW8697_HAPTIC_HIGH_LEVEL_REG_VAL = 0x18;
 #define AW8697_RTP_NAME_MAX 64
 //static char *aw8697_ram_name = "aw8697_haptic.bin";
 //
-static char aw8697_ram_name[5][30] = {
+static const char aw8697_ram_name[5][30] = {
 	{ "aw8697_haptic_170.bin" }, { "aw8697_haptic_170.bin" },
 	{ "aw8697_haptic_170.bin" }, { "aw8697_haptic_170.bin" },
 	{ "aw8697_haptic_170.bin" },
 };
 
-static char aw8697_ram_name_0619[5][30] = {
+static const char aw8697_ram_name_0619[5][30] = {
 	{ "aw8697_haptic_166.bin" }, { "aw8697_haptic_168.bin" },
 	{ "aw8697_haptic_170.bin" }, { "aw8697_haptic_172.bin" },
 	{ "aw8697_haptic_174.bin" },
 };
 
-static char aw8697_ram_name_1040[5][30] = {
+static const char aw8697_ram_name_1040[5][30] = {
 	{ "aw8697_haptic_166.bin" }, { "aw8697_haptic_168.bin" },
 	{ "aw8697_haptic_170.bin" }, { "aw8697_haptic_172.bin" },
 	{ "aw8697_haptic_174.bin" },
 };
 
-static char aw8697_ram_name_170_soft[5][30] = {
+static const char aw8697_ram_name_170_soft[5][30] = {
 	{ "aw8697_haptic_170_soft.bin" }, { "aw8697_haptic_170_soft.bin" },
 	{ "aw8697_haptic_170_soft.bin" }, { "aw8697_haptic_170_soft.bin" },
 	{ "aw8697_haptic_170_soft.bin" },
 };
 
-static char aw8697_ram_name_150[5][30] = {
+static const char aw8697_ram_name_150[5][30] = {
 	{ "aw8697_haptic_150.bin" }, { "aw8697_haptic_150.bin" },
 	{ "aw8697_haptic_150.bin" }, { "aw8697_haptic_150.bin" },
 	{ "aw8697_haptic_150.bin" },
 };
 
-static char aw8697_ram_name_150_soft[5][30] = {
+static const char aw8697_ram_name_150_soft[5][30] = {
 	{ "aw8697_haptic_150_soft.bin" }, { "aw8697_haptic_150_soft.bin" },
 	{ "aw8697_haptic_150_soft.bin" }, { "aw8697_haptic_150_soft.bin" },
 	{ "aw8697_haptic_150_soft.bin" },
 };
 
-static char aw8697_long_sound_rtp_name[5][30] = {
+static const char aw8697_long_sound_rtp_name[5][30] = {
 	{ "aw8697_long_sound_168.bin" },
 	{ "aw8697_long_sound_170.bin" },
 	{ "aw8697_long_sound_173.bin" },
 	{ "aw8697_long_sound_175.bin" },
 };
 
-static char aw8697_old_steady_test_rtp_name_0815[11][60] = {
+static const char aw8697_old_steady_test_rtp_name_0815[11][60] = {
 	{ "aw8697_old_steady_test_RTP_52_160Hz.bin" },
 	{ "aw8697_old_steady_test_RTP_52_162Hz.bin" },
 	{ "aw8697_old_steady_test_RTP_52_164Hz.bin" },
@@ -141,7 +141,7 @@ static char aw8697_old_steady_test_rtp_name_0815[11][60] = {
 	{ "aw8697_old_steady_test_RTP_52_180Hz.bin" },
 };
 
-static char aw8697_old_steady_test_rtp_name_081538[11][60] = {
+static const char aw8697_old_steady_test_rtp_name_081538[11][60] = {
 	{ "aw8697_old_steady_test_RTP_52_145Hz.bin" },
 	{ "aw8697_old_steady_test_RTP_52_146Hz.bin" },
 	{ "aw8697_old_steady_test_RTP_52_147Hz.bin" },
@@ -155,7 +155,7 @@ static char aw8697_old_steady_test_rtp_name_081538[11][60] = {
 	{ "aw8697_old_steady_test_RTP_52_155Hz.bin" },
 };
 
-static char aw8697_high_temp_high_humidity_0815[11][60] = {
+static const char aw8697_high_temp_high_humidity_0815[11][60] = {
 	{ "aw8697_high_temp_high_humidity_channel_RTP_51_160Hz.bin" },
 	{ "aw8697_high_temp_high_humidity_channel_RTP_51_162Hz.bin" },
 	{ "aw8697_high_temp_high_humidity_channel_RTP_51_164Hz.bin" },
@@ -169,7 +169,7 @@ static char aw8697_high_temp_high_humidity_0815[11][60] = {
 	{ "aw8697_high_temp_high_humidity_channel_RTP_51_180Hz.bin" },
 };
 
-static char aw8697_high_temp_high_humidity_081538[11][60] = {
+static const char aw8697_high_temp_high_humidity_081538[11][60] = {
 	{ "aw8697_high_temp_high_humidity_channel_RTP_51_145Hz.bin" },
 	{ "aw8697_high_temp_high_humidity_channel_RTP_51_146Hz.bin" },
 	{ "aw8697_high_temp_high_humidity_channel_RTP_51_147Hz.bin" },
@@ -183,7 +183,7 @@ static char aw8697_high_temp_high_humidity_081538[11][60] = {
 	{ "aw8697_high_temp_high_humidity_channel_RTP_51_155Hz.bin" },
 };
 
-static char aw8697_old_steady_test_rtp_name_0832[11][60] = {
+static const char aw8697_old_steady_test_rtp_name_0832[11][60] = {
 	{ "aw8697_old_steady_test_RTP_52_225Hz.bin" },
 	{ "aw8697_old_steady_test_RTP_52_226Hz.bin" },
 	{ "aw8697_old_steady_test_RTP_52_227Hz.bin" },
@@ -197,7 +197,7 @@ static char aw8697_old_steady_test_rtp_name_0832[11][60] = {
 	{ "aw8697_old_steady_test_RTP_52_235Hz.bin" },
 };
 
-static char aw8697_high_temp_high_humidity_0832[11][60] = {
+static const char aw8697_high_temp_high_humidity_0832[11][60] = {
 	{ "aw8697_high_temp_high_humidity_channel_RTP_51_225Hz.bin" },
 	{ "aw8697_high_temp_high_humidity_channel_RTP_51_226Hz.bin" },
 	{ "aw8697_high_temp_high_humidity_channel_RTP_51_227Hz.bin" },
@@ -211,7 +211,7 @@ static char aw8697_high_temp_high_humidity_0832[11][60] = {
 	{ "aw8697_high_temp_high_humidity_channel_RTP_51_235Hz.bin" },
 };
 
-static char aw8697_ringtone_rtp_f0_170_name[][AW8697_RTP_NAME_MAX] = {
+static const char aw8697_ringtone_rtp_f0_170_name[][AW8697_RTP_NAME_MAX] = {
 	{ "aw8697_rtp.bin" },
 	{ "aw8697_Hearty_channel_RTP_1_170.bin" },
 	{ "aw8697_Instant_channel_RTP_2_170.bin" },
@@ -271,7 +271,7 @@ static char aw8697_ringtone_rtp_f0_170_name[][AW8697_RTP_NAME_MAX] = {
 };
 
 #ifdef OPLUS_FEATURE_CHG_BASIC
-static char aw8697_rtp_name_145Hz[][AW8697_RTP_NAME_MAX] = {
+static const char aw8697_rtp_name_145Hz[][AW8697_RTP_NAME_MAX] = {
 	{ "aw8697_rtp.bin" },
 	{ "aw8697_Hearty_channel_RTP_1.bin" },
 	{ "aw8697_Instant_channel_RTP_2_145Hz.bin" },
@@ -492,7 +492,7 @@ static char aw8697_rtp_name_145Hz[][AW8697_RTP_NAME_MAX] = {
 	{ "aw8697_reserved_200.bin" },
 };
 
-static char aw8697_rtp_name_150Hz[][AW8697_RTP_NAME_MAX] = {
+static const char aw8697_rtp_name_150Hz[][AW8697_RTP_NAME_MAX] = {
 	{ "aw8697_rtp.bin" },
 	{ "aw8697_Hearty_channel_RTP_1.bin" },
 	{ "aw8697_Instant_channel_RTP_2_150Hz.bin" },
@@ -713,7 +713,7 @@ static char aw8697_rtp_name_150Hz[][AW8697_RTP_NAME_MAX] = {
 	{ "aw8697_reserved_200.bin" },
 };
 
-static char aw8697_rtp_name_155Hz[][AW8697_RTP_NAME_MAX] = {
+static const char aw8697_rtp_name_155Hz[][AW8697_RTP_NAME_MAX] = {
 	{ "aw8697_rtp.bin" },
 	{ "aw8697_Hearty_channel_RTP_1.bin" },
 	{ "aw8697_Instant_channel_RTP_2_155Hz.bin" },
@@ -936,7 +936,7 @@ static char aw8697_rtp_name_155Hz[][AW8697_RTP_NAME_MAX] = {
 #endif /* OPLUS_FEATURE_CHG_BASIC */
 
 #ifdef OPLUS_FEATURE_CHG_BASIC
-static char aw8697_rtp_name_165Hz[][AW8697_RTP_NAME_MAX] = {
+static const char aw8697_rtp_name_165Hz[][AW8697_RTP_NAME_MAX] = {
 	{ "aw8697_rtp.bin" },
 	{ "aw8697_Hearty_channel_RTP_1.bin" },
 	{ "aw8697_Instant_channel_RTP_2_165Hz.bin" },
@@ -1126,7 +1126,7 @@ static char aw8697_rtp_name_165Hz[][AW8697_RTP_NAME_MAX] = {
 };
 #endif /* OPLUS_FEATURE_CHG_BASIC */
 
-static char aw8697_rtp_name[][AW8697_RTP_NAME_MAX] = {
+static const char aw8697_rtp_name[][AW8697_RTP_NAME_MAX] = {
 	{ "aw8697_rtp.bin" },
 #ifdef OPLUS_FEATURE_CHG_BASIC
 	{ "aw8697_Hearty_channel_RTP_1.bin" },
@@ -1445,7 +1445,7 @@ static char aw8697_rtp_name[][AW8697_RTP_NAME_MAX] = {
 };
 
 #ifdef OPLUS_FEATURE_CHG_BASIC
-static char aw8697_rtp_name_175Hz[][AW8697_RTP_NAME_MAX] = {
+static const char aw8697_rtp_name_175Hz[][AW8697_RTP_NAME_MAX] = {
 	{ "aw8697_rtp.bin" },
 	{ "aw8697_Hearty_channel_RTP_1.bin" },
 	{ "aw8697_Instant_channel_RTP_2_175Hz.bin" },
@@ -1731,27 +1731,27 @@ static char aw8697_rtp_name_175Hz[][AW8697_RTP_NAME_MAX] = {
 #endif /* OPLUS_FEATURE_CHG_BASIC */
 
 #if defined(CONFIG_OPLUS_HAPTIC_OOS) && defined(CONFIG_ARCH_LITO)
-static char aw8697_ram_name_0832[5][30] = {
+static const char aw8697_ram_name_0832[5][30] = {
 	{ "aw8697_haptic_166.bin" }, { "aw8697_haptic_168.bin" },
 	{ "aw8697_haptic_170.bin" }, { "aw8697_haptic_172.bin" },
 	{ "aw8697_haptic_174.bin" },
 };
 #else
-static char aw8697_ram_name_0832[5][30] = {
+static const char aw8697_ram_name_0832[5][30] = {
 	{ "aw8697_haptic_235.bin" }, { "aw8697_haptic_235.bin" },
 	{ "aw8697_haptic_235.bin" }, { "aw8697_haptic_235.bin" },
 	{ "aw8697_haptic_235.bin" },
 };
 #endif
 
-static char aw8697_ram_name_19161[5][30] = {
+static const char aw8697_ram_name_19161[5][30] = {
 	{ "aw8697_haptic_235_19161.bin" }, { "aw8697_haptic_235_19161.bin" },
 	{ "aw8697_haptic_235_19161.bin" }, { "aw8697_haptic_235_19161.bin" },
 	{ "aw8697_haptic_235_19161.bin" },
 };
 
 #ifdef OPLUS_FEATURE_CHG_BASIC
-static char aw8697_rtp_name_0832_226Hz[][AW8697_RTP_NAME_MAX] = {
+static const char aw8697_rtp_name_0832_226Hz[][AW8697_RTP_NAME_MAX] = {
 	{ "aw8697_rtp.bin" },
 	{ "aw8697_Hearty_channel_RTP_1.bin" },
 	{ "aw8697_Instant_channel_RTP_2_226Hz.bin" },
@@ -1941,7 +1941,7 @@ static char aw8697_rtp_name_0832_226Hz[][AW8697_RTP_NAME_MAX] = {
 #endif /* OPLUS_FEATURE_CHG_BASIC */
 
 #ifdef OPLUS_FEATURE_CHG_BASIC
-static char aw8697_rtp_name_0832_230Hz[][AW8697_RTP_NAME_MAX] = {
+static const char aw8697_rtp_name_0832_230Hz[][AW8697_RTP_NAME_MAX] = {
 	{ "aw8697_rtp.bin" },
 	{ "aw8697_Hearty_channel_RTP_1.bin" },
 	{ "aw8697_Instant_channel_RTP_2_230Hz.bin" },
@@ -2130,7 +2130,7 @@ static char aw8697_rtp_name_0832_230Hz[][AW8697_RTP_NAME_MAX] = {
 };
 #endif /* OPLUS_FEATURE_CHG_BASIC */
 
-static char aw8697_rtp_name_0832_234Hz[][AW8697_RTP_NAME_MAX] = {
+static const char aw8697_rtp_name_0832_234Hz[][AW8697_RTP_NAME_MAX] = {
 	{ "aw8697_rtp.bin" },
 #ifdef OPLUS_FEATURE_CHG_BASIC
 	{ "aw8697_Hearty_channel_RTP_1.bin" },
@@ -2449,7 +2449,7 @@ static char aw8697_rtp_name_0832_234Hz[][AW8697_RTP_NAME_MAX] = {
 	{ "500ms_RTP.bin" },
 };
 
-static char aw8697_rtp_name_0832_237Hz[][AW8697_RTP_NAME_MAX] = {
+static const char aw8697_rtp_name_0832_237Hz[][AW8697_RTP_NAME_MAX] = {
 	{ "aw8697_rtp.bin" },
 #ifdef OPLUS_FEATURE_CHG_BASIC
 	{ "aw8697_Hearty_channel_RTP_1.bin" },
@@ -2638,13 +2638,13 @@ static char aw8697_rtp_name_0832_237Hz[][AW8697_RTP_NAME_MAX] = {
 	{ "aw8697_reserved_170.bin" },
 };
 
-static char aw8697_ram_name_9595[5][30] = {
+static const char aw8697_ram_name_9595[5][30] = {
 	{ "aw8697_haptic_166.bin" }, { "aw8697_haptic_168.bin" },
 	{ "aw8697_haptic_170.bin" }, { "aw8697_haptic_172.bin" },
 	{ "aw8697_haptic_174.bin" },
 };
 
-static char aw8697_old_steady_test_rtp_name_9595[11][60] = {
+static const char aw8697_old_steady_test_rtp_name_9595[11][60] = {
 	{ "aw8697_old_steady_test_RTP_52_160Hz.bin" },
 	{ "aw8697_old_steady_test_RTP_52_162Hz.bin" },
 	{ "aw8697_old_steady_test_RTP_52_164Hz.bin" },
@@ -2658,7 +2658,7 @@ static char aw8697_old_steady_test_rtp_name_9595[11][60] = {
 	{ "aw8697_old_steady_test_RTP_52_180Hz.bin" },
 };
 
-static char aw8697_high_temp_high_humidity_9595[11][60] = {
+static const char aw8697_high_temp_high_humidity_9595[11][60] = {
 	{ "aw8697_high_temp_high_humidity_channel_RTP_51_160Hz.bin" },
 	{ "aw8697_high_temp_high_humidity_channel_RTP_51_162Hz.bin" },
 	{ "aw8697_high_temp_high_humidity_channel_RTP_51_164Hz.bin" },
@@ -2672,7 +2672,7 @@ static char aw8697_high_temp_high_humidity_9595[11][60] = {
 	{ "aw8697_high_temp_high_humidity_channel_RTP_51_180Hz.bin" },
 };
 
-static char aw8697_rtp_name_9595_170Hz[][AW8697_RTP_NAME_MAX] = {
+static const char aw8697_rtp_name_9595_170Hz[][AW8697_RTP_NAME_MAX] = {
 	{ "aw8697_rtp_170Hz.bin" },
 	{ "aw8697_Hearty_channel_RTP_1_170Hz.bin" },
 	{ "aw8697_Instant_channel_RTP_2_170Hz.bin" },
@@ -2950,13 +2950,13 @@ static char aw8697_rtp_name_9595_170Hz[][AW8697_RTP_NAME_MAX] = {
 };
 
 #ifdef CONFIG_OPLUS_HAPTIC_OOS
-static char aw8697_ram_name_1815[5][30] = {
+static const char aw8697_ram_name_1815[5][30] = {
 	{ "aw8697_haptic_166.bin" }, { "aw8697_haptic_168.bin" },
 	{ "aw8697_haptic_170.bin" }, { "aw8697_haptic_172.bin" },
 	{ "aw8697_haptic_174.bin" },
 };
 
-static char aw8697_old_steady_test_rtp_name_1815[11][60] = {
+static const char aw8697_old_steady_test_rtp_name_1815[11][60] = {
 	{ "aw8697_old_steady_test_RTP_52_160Hz.bin" },
 	{ "aw8697_old_steady_test_RTP_52_162Hz.bin" },
 	{ "aw8697_old_steady_test_RTP_52_164Hz.bin" },
@@ -2970,7 +2970,7 @@ static char aw8697_old_steady_test_rtp_name_1815[11][60] = {
 	{ "aw8697_old_steady_test_RTP_52_180Hz.bin" },
 };
 
-static char aw8697_high_temp_high_humidity_1815[11][60] = {
+static const char aw8697_high_temp_high_humidity_1815[11][60] = {
 	{ "aw8697_high_temp_high_humidity_channel_RTP_51_160Hz.bin" },
 	{ "aw8697_high_temp_high_humidity_channel_RTP_51_162Hz.bin" },
 	{ "aw8697_high_temp_high_humidity_channel_RTP_51_164Hz.bin" },
@@ -2984,7 +2984,7 @@ static char aw8697_high_temp_high_humidity_1815[11][60] = {
 	{ "aw8697_high_temp_high_humidity_channel_RTP_51_180Hz.bin" },
 };
 
-static char aw8697_rtp_name_1815_170Hz[][AW8697_RTP_NAME_MAX] = {
+static const char aw8697_rtp_name_1815_170Hz[][AW8697_RTP_NAME_MAX] = {
 	{ "aw8697_rtp.bin" },
 	{ "aw8697_Hearty_channel_RTP_1.bin" },
 	{ "aw8697_Instant_channel_RTP_2.bin" },
@@ -3286,7 +3286,7 @@ static char aw8697_rtp_name_1815_170Hz[][AW8697_RTP_NAME_MAX] = {
 	{ "500ms_RTP.bin" },
 };
 
-static char aw8697_rtp_name_0619_166Hz[][AW8697_RTP_NAME_MAX] = {
+static const char aw8697_rtp_name_0619_166Hz[][AW8697_RTP_NAME_MAX] = {
 	{ "aw8697_rtp.bin" },
 	{ "aw8697_Hearty_channel_RTP_1.bin" },
 	{ "aw8697_Instant_channel_RTP_2.bin" },
@@ -3586,7 +3586,7 @@ static char aw8697_rtp_name_0619_166Hz[][AW8697_RTP_NAME_MAX] = {
 	{ "500ms_RTP_166Hz.bin" },
 };
 
-static char aw8697_rtp_name_0619_170Hz[][AW8697_RTP_NAME_MAX] = {
+static const char aw8697_rtp_name_0619_170Hz[][AW8697_RTP_NAME_MAX] = {
 	{ "aw8697_rtp.bin" },
 	{ "aw8697_Hearty_channel_RTP_1.bin" },
 	{ "aw8697_Instant_channel_RTP_2.bin" },
@@ -3886,7 +3886,7 @@ static char aw8697_rtp_name_0619_170Hz[][AW8697_RTP_NAME_MAX] = {
 	{ "500ms_RTP_170Hz.bin" },
 };
 
-static char aw8697_rtp_name_0619_174Hz[][AW8697_RTP_NAME_MAX] = {
+static const char aw8697_rtp_name_0619_174Hz[][AW8697_RTP_NAME_MAX] = {
 	{ "aw8697_rtp.bin" },
 	{ "aw8697_Hearty_channel_RTP_1.bin" },
 	{ "aw8697_Instant_channel_RTP_2.bin" },
@@ -6357,7 +6357,7 @@ const struct firmware *aw8697_rtp_load_file_accord_f0(struct aw8697 *aw8697)
 }
 
 #ifdef CONFIG_OPLUS_HAPTIC_OOS
-unsigned char *one_sine_data;
+static const unsigned char *one_sine_data;
 unsigned int rtp_500ms_first_sine_place;
 unsigned int one_sine_data_length;
 unsigned int one_sine_data_time;
@@ -6365,7 +6365,7 @@ unsigned int one_sine_data_time;
 #define RTP_500MS_FIRST_SINE_PLACE_1815 141
 #define ONE_SINE_DATA_LENGTH_1815 141
 #define ONE_SINE_DATA_TIME_1815 588
-static unsigned char one_sine_data_1815[] = {
+static const unsigned char one_sine_data_1815[] = {
 	0x00, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x07, 0x08, 0x09,
 	0x0a, 0x0b, 0x0b, 0x0c, 0x0d, 0x0d, 0x0e, 0x0f, 0x0f, 0x10, 0x10, 0x11,
 	0x11, 0x12, 0x12, 0x12, 0x13, 0x13, 0x13, 0x13, 0x14, 0x14, 0x14, 0x14,
@@ -6383,7 +6383,7 @@ static unsigned char one_sine_data_1815[] = {
 #define RTP_500MS_FIRST_SINE_PLACE_0832 102
 #define ONE_SINE_DATA_LENGTH_0832 102
 #define ONE_SINE_DATA_TIME_0832 425
-static unsigned char one_sine_data_0832[] = {
+static const unsigned char one_sine_data_0832[] = {
 	0x00, 0x01, 0x04, 0x06, 0x08, 0x0a, 0x0c, 0x0e, 0x10, 0x12, 0x14, 0x16,
 	0x17, 0x19, 0x1a, 0x1c, 0x1d, 0x1e, 0x1f, 0x20, 0x21, 0x22, 0x22, 0x23,
 	0x23, 0x23, 0x23, 0x23, 0x23, 0x23, 0x22, 0x21, 0x21, 0x20, 0x1f, 0x1e,
@@ -6398,7 +6398,7 @@ static unsigned char one_sine_data_0832[] = {
 #define RTP_500MS_FIRST_SINE_PLACE_0619 141
 #define ONE_SINE_DATA_LENGTH_0619 141
 #define ONE_SINE_DATA_TIME_0619 588
-static unsigned char one_sine_data_0619[] = {
+static const unsigned char one_sine_data_0619[] = {
 	0x00, 0x00, 0x01, 0x03, 0x04, 0x05, 0x06, 0x07, 0x09, 0x0a, 0x0b, 0x0c,
 	0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x14, 0x15, 0x16, 0x16,
 	0x17, 0x18, 0x18, 0x19, 0x19, 0x19, 0x1a, 0x1a, 0x1a, 0x1a, 0x1b, 0x1b,
@@ -6416,7 +6416,7 @@ static unsigned char one_sine_data_0619[] = {
 #define RTP_500MS_FIRST_SINE_PLACE_1040 151
 #define ONE_SINE_DATA_LENGTH_1040 151
 #define ONE_SINE_DATA_TIME_1040 588
-static unsigned char one_sine_data_1040[] = {
+static const unsigned char one_sine_data_1040[] = {
 	0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x08, 0x09, 0x0a, 0x0b, 0x0c,
 	0x0d, 0x0e, 0x0f, 0x10, 0x10, 0x11, 0x12, 0x13, 0x14, 0x14, 0x15, 0x16,
 	0x16, 0x17, 0x17, 0x18, 0x18, 0x19, 0x19, 0x1a, 0x1a, 0x1a, 0x1a, 0x1a,
@@ -8867,7 +8867,7 @@ struct aw8697_vmax_map {
 	int gain;
 };
 #ifdef CONFIG_OPLUS_HAPTIC_OOS
-static struct aw8697_vmax_map vmax_map[] = {
+static const struct aw8697_vmax_map vmax_map[] = {
 	{ 800, 0x00, 0x30 },  { 900, 0x00, 0x36 },  { 1000, 0x00, 0x42 },
 	{ 1100, 0x00, 0x48 }, { 1200, 0x00, 0x54 }, { 1300, 0x00, 0x60 },
 	{ 1400, 0x00, 0x64 }, { 1500, 0x00, 0x70 }, { 1600, 0x00, 0x75 },
@@ -8876,7 +8876,7 @@ static struct aw8697_vmax_map vmax_map[] = {
 	{ 2300, 0x14, 0x75 }, { 2400, 0x16, 0x75 },
 };
 #else
-static struct aw8697_vmax_map vmax_map[] = {
+static const struct aw8697_vmax_map vmax_map[] = {
 	{ 800, 0x00, 0x40 },  { 900, 0x00, 0x49 },  { 1000, 0x00, 0x51 },
 	{ 1100, 0x00, 0x5A }, { 1200, 0x00, 0x62 }, { 1300, 0x00, 0x6B },
 	{ 1400, 0x00, 0x73 }, { 1500, 0x00, 0x7C }, { 1600, 0x01, 0x80 },
