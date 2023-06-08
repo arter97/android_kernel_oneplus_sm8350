@@ -1,3 +1,8 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
+/*
+ * Copyright (C) 2018-2020 Oplus. All rights reserved.
+ */
+
 #ifndef _AW8697_REG_H_
 #define _AW8697_REG_H_
 
@@ -230,7 +235,7 @@ const unsigned char aw8697_reg_access[AW8697_REG_MAX] = {
 /******************************************************
  * Register Detail
  *****************************************************/
-/* SYSST*/
+// SYSST: reg0x01
 #define AW8697_BIT_SYSST_BSTERRS (1 << 7)
 #define AW8697_BIT_SYSST_OVS (1 << 6)
 #define AW8697_BIT_SYSST_UVLS (1 << 5)
@@ -240,7 +245,7 @@ const unsigned char aw8697_reg_access[AW8697_REG_MAX] = {
 #define AW8697_BIT_SYSST_OTS (1 << 1)
 #define AW8697_BIT_SYSST_DONES (1 << 0)
 
-/* SYSINT*/
+// SYSINT: reg0x02
 #define AW8697_BIT_SYSINT_BSTERRI (1 << 7)
 #define AW8697_BIT_SYSINT_OVI (1 << 6)
 #define AW8697_BIT_SYSINT_UVLI (1 << 5)
@@ -250,7 +255,7 @@ const unsigned char aw8697_reg_access[AW8697_REG_MAX] = {
 #define AW8697_BIT_SYSINT_OTI (1 << 1)
 #define AW8697_BIT_SYSINT_DONEI (1 << 0)
 
-/*SYSINTM*/
+// SYSINTM: reg0x03
 #define AW8697_BIT_SYSINTM_BSTERR_MASK (~(1 << 7))
 #define AW8697_BIT_SYSINTM_BSTERR_OFF (1 << 7)
 #define AW8697_BIT_SYSINTM_BSTERR_EN (0 << 7)
@@ -276,7 +281,7 @@ const unsigned char aw8697_reg_access[AW8697_REG_MAX] = {
 #define AW8697_BIT_SYSINTM_DONE_OFF (1 << 0)
 #define AW8697_BIT_SYSINTM_DONE_EN (0 << 0)
 
-/*SYSCTRL*/
+// SYSCTRL: reg0x04
 #define AW8697_BIT_SYSCTRL_WAVDAT_MODE_MASK (~(3 << 6))
 #define AW8697_BIT_SYSCTRL_WAVDAT_MODE_4X (3 << 6)
 #define AW8697_BIT_SYSCTRL_WAVDAT_MODE_2X (0 << 6)
@@ -295,71 +300,71 @@ const unsigned char aw8697_reg_access[AW8697_REG_MAX] = {
 #define AW8697_BIT_SYSCTRL_STANDBY (1 << 0)
 #define AW8697_BIT_SYSCTRL_ACTIVE (0 << 0)
 
-/*GO*/
+// GO: reg0x05
 #define AW8697_BIT_GO_MASK (~(1 << 0))
 #define AW8697_BIT_GO_ENABLE (1 << 0)
 #define AW8697_BIT_GO_DISABLE (0 << 0)
 
-/* WAVSEQ1*/
+// WAVSEQ1: reg0x07
 #define AW8697_BIT_WAVSEQ1_WAIT (1 << 7)
 #define AW8697_BIT_WAVSEQ1_WAV_FRM_SEQ1_MASK (~(127 << 0))
 
-/* WAVSEQ2*/
+// WAVSEQ2: reg0x08
 #define AW8697_BIT_WAVSEQ2_WAIT (1 << 7)
 #define AW8697_BIT_WAVSEQ2_WAV_FRM_SEQ2_MASK (~(127 << 0))
 
-/* WAVSEQ3*/
+// WAVSEQ3: reg0x09
 #define AW8697_BIT_WAVSEQ3_WAIT (1 << 7)
 #define AW8697_BIT_WAVSEQ3_WAV_FRM_SEQ3_MASK (~(127 << 0))
 
-/* WAVSEQ4*/
+// WAVSEQ4: reg0x0a
 #define AW8697_BIT_WAVSEQ4_WAIT (1 << 7)
 #define AW8697_BIT_WAVSEQ4_WAV_FRM_SEQ4_MASK (~(127 << 0))
 
-/* WAVSEQ5*/
+// WAVSEQ5: reg0x0b
 #define AW8697_BIT_WAVSEQ5_WAIT (1 << 7)
 #define AW8697_BIT_WAVSEQ5_WAV_FRM_SEQ5_MASK (~(127 << 0))
 
-/* WAVSEQ6*/
+// WAVSEQ6: reg0x0c
 #define AW8697_BIT_WAVSEQ6_WAIT (1 << 7)
 #define AW8697_BIT_WAVSEQ6_WAV_FRM_SEQ6_MASK (~(127 << 0))
 
-/* WAVSEQ7*/
+// WAVSEQ7: reg0x0d
 #define AW8697_BIT_WAVSEQ7_WAIT (1 << 7)
 #define AW8697_BIT_WAVSEQ7_WAV_FRM_SEQ7_MASK (~(127 << 0))
 
-/* WAVSEQ8*/
+// WAVSEQ8: reg0x0e
 #define AW8697_BIT_WAVSEQ8_WAIT (1 << 7)
 #define AW8697_BIT_WAVSEQ8_WAV_FRM_SEQ8_MASK (~(127 << 0))
 
-/* WAVLOOP*/
+// WAVLOOP:
 #define AW8697_BIT_WAVLOOP_SEQN_MASK (~(15 << 4))
 #define AW8697_BIT_WAVLOOP_SEQNP1_MASK (~(15 << 0))
 #define AW8697_BIT_WAVLOOP_INIFINITELY (15 << 0)
 
-/* WAVLOOP1*/
+// WAVLOOP1: reg0x0f
 #define AW8697_BIT_WAVLOOP1_SEQ1_MASK (~(15 << 4))
 #define AW8697_BIT_WAVLOOP1_SEQ2_MASK (~(15 << 0))
 
-/* WAVLOOP2*/
+// WAVLOOP2: reg0x10
 #define AW8697_BIT_WAVLOOP2_SEQ3_MASK (~(15 << 4))
 #define AW8697_BIT_WAVLOOP2_SEQ4_MASK (~(15 << 0))
 
-/* WAVLOOP3*/
+// WAVLOOP3: reg0x11
 #define AW8697_BIT_WAVLOOP3_SEQ5_MASK (~(15 << 4))
 #define AW8697_BIT_WAVLOOP3_SEQ6_MASK (~(15 << 0))
 
-/* WAVLOOP4*/
+// WAVLOOP4: reg0x12
 #define AW8697_BIT_WAVLOOP4_SEQ7_MASK (~(15 << 4))
 #define AW8697_BIT_WAVLOOP4_SEQ8_MASK (~(15 << 0))
 
-/* PLAYPRIO*/
+// PLAYPRIO: reg0x1a
 #define AW8697_BIT_PLAYPRIO_GO_MASK (~(3 << 6))
 #define AW8697_BIT_PLAYPRIO_TRIG3_MASK (~(3 << 4))
 #define AW8697_BIT_PLAYPRIO_TRIG2_MASK (~(3 << 2))
 #define AW8697_BIT_PLAYPRIO_TRIG1_MASK (~(3 << 0))
 
-/* TRGCFG1*/
+// TRGCFG1: reg0x1b
 #define AW8697_BIT_TRGCFG1_TRG3_POLAR_MASK (~(1 << 5))
 #define AW8697_BIT_TRGCFG1_TRG3_POLAR_NEG (1 << 5)
 #define AW8697_BIT_TRGCFG1_TRG3_POLAR_POS (0 << 5)
@@ -379,7 +384,7 @@ const unsigned char aw8697_reg_access[AW8697_REG_MAX] = {
 #define AW8697_BIT_TRGCFG1_TRG1_EDGE_POS (1 << 0)
 #define AW8697_BIT_TRGCFG1_TRG1_EDGE_POS_NEG (0 << 0)
 
-/* TRGCFG2*/
+// TRGCFG2: reg0x1c
 #define AW8697_BIT_TRGCFG2_TRG3_ENABLE_MASK (~(1 << 2))
 #define AW8697_BIT_TRGCFG2_TRG3_ENABLE (1 << 2)
 #define AW8697_BIT_TRGCFG2_TRG3_DISABLE (0 << 2)
@@ -390,7 +395,7 @@ const unsigned char aw8697_reg_access[AW8697_REG_MAX] = {
 #define AW8697_BIT_TRGCFG2_TRG1_ENABLE (1 << 0)
 #define AW8697_BIT_TRGCFG2_TRG1_DISABLE (0 << 0)
 
-/* DBGCTRL*/
+// DBGCTRL: reg0x20
 #define AW8697_BIT_DBGCTRL_INT_EDGE_MODE_MASK (~(1 << 3))
 #define AW8697_BIT_DBGCTRL_INT_EDGE_MODE_POS (1 << 3)
 #define AW8697_BIT_DBGCTRL_INT_EDGE_MODE_BOTH (0 << 3)
@@ -398,7 +403,7 @@ const unsigned char aw8697_reg_access[AW8697_REG_MAX] = {
 #define AW8697_BIT_DBGCTRL_INT_MODE_EDGE (1 << 2)
 #define AW8697_BIT_DBGCTRL_INT_MODE_LEVEL (0 << 2)
 
-/* DATCTRL*/
+// DATCTRL: reg0x2b
 #define AW8697_BIT_DATCTRL_FC_MASK (~(1 << 6))
 #define AW8697_BIT_DATCTRL_FC_1000HZ (3 << 6)
 #define AW8697_BIT_DATCTRL_FC_800HZ (3 << 6)
@@ -411,13 +416,13 @@ const unsigned char aw8697_reg_access[AW8697_REG_MAX] = {
 #define AW8697_BIT_DATCTRL_WAKEMODE_ENABLE (1 << 0)
 #define AW8697_BIT_DATCTRL_WAKEMODE_DISABLE (0 << 0)
 
-/* PWMPRC*/
+// PWMPRC: reg0x2d
 #define AW8697_BIT_PWMPRC_PRC_MASK (~(1 << 7))
 #define AW8697_BIT_PWMPRC_PRC_ENABLE (1 << 7)
 #define AW8697_BIT_PWMPRC_PRC_DISABLE (0 << 7)
 #define AW8697_BIT_PWMPRC_PRCTIME_MASK (~(0x7f << 0))
 
-/* PWMDBG*/
+// PWMDBG: reg0x2e
 #define AW8697_BIT_PWMDBG_PWM_MODE_MASK (~(3 << 5))
 #define AW8697_BIT_PWMDBG_PWM_12K (3 << 5)
 #define AW8697_BIT_PWMDBG_PWM_24K (2 << 5)
@@ -433,17 +438,14 @@ const unsigned char aw8697_reg_access[AW8697_REG_MAX] = {
 #define AW8697_BIT_BSTCFG_PEAKCUR_2P5A (2 << 0)
 #define AW8697_BIT_BSTCFG_PEAKCUR_2A (1 << 0)
 #define AW8697_BIT_BSTCFG_PEAKCUR_1P5A (0 << 0)
-/* PRLVL*/
+
 // ANADBG: reg0x35
 #define AW8697_BIT_ANADBG_IOC_MASK (~(3 << 2))
 #define AW8697_BIT_ANADBG_IOC_4P65A (3 << 2)
 #define AW8697_BIT_ANADBG_IOC_4P15A (2 << 2)
 #define AW8697_BIT_ANADBG_IOC_3P65A (1 << 2)
 #define AW8697_BIT_ANADBG_IOC_3P15A (0 << 2)
-/*FOR OVER CURRENT*/
-#define AW8697_BIT_ANADBG_IOC_OCDT_MASK (~(3 << 0))
 
-#define AW8697_BIT_ANADBG_IOC_OCDT_150NS (3 << 0)
 // ANACTRL: reg0x36
 #define AW8697_BIT_ANACTRL_LRA_SRC_MASK (~(1 << 5))
 #define AW8697_BIT_ANACTRL_LRA_SRC_REG (1 << 5)
@@ -451,17 +453,20 @@ const unsigned char aw8697_reg_access[AW8697_REG_MAX] = {
 #define AW8697_BIT_ANACTRL_HD_PD_MASK (~(1 << 3))
 #define AW8697_BIT_ANACTRL_HD_PD_EN (1 << 3)
 #define AW8697_BIT_ANACTRL_HD_HZ_EN (0 << 3)
+
 // BSTDBG4: reg0x3a
 #define AW8697_BIT_BSTDBG4_BSTVOL_MASK (~(31 << 1))
+
+// PRLVL: reg0x3e
 #define AW8697_BIT_PRLVL_PR_MASK (~(1 << 7))
 #define AW8697_BIT_PRLVL_PR_ENABLE (1 << 7)
 #define AW8697_BIT_PRLVL_PR_DISABLE (0 << 7)
 #define AW8697_BIT_PRLVL_PRLVL_MASK (~(0x7f << 0))
 
-/*PRTIME*/
+//PRTIME: reg0x3f
 #define AW8697_BIT_PRTIME_PRTIME_MASK (~(0xff << 0))
 
-/* BST_AUTO*/
+// BST_AUTO: reg0x47
 #define AW8697_BIT_BST_AUTO_BST_AUTOSW_MASK (~(1 << 2))
 #define AW8697_BIT_BST_AUTO_BST_AUTOMATIC_BOOST (1 << 2)
 #define AW8697_BIT_BST_AUTO_BST_MANUAL_BOOST (0 << 2)
@@ -472,7 +477,7 @@ const unsigned char aw8697_reg_access[AW8697_REG_MAX] = {
 #define AW8697_BIT_BST_AUTO_BST_RAM_ENABLE (1 << 0)
 #define AW8697_BIT_BST_AUTO_BST_RAM_DISABLE (0 << 0)
 
-/* CONT_CTRL*/
+// CONT_CTRL: reg0x48
 #define AW8697_BIT_CONT_CTRL_ZC_DETEC_MASK (~(1 << 7))
 #define AW8697_BIT_CONT_CTRL_ZC_DETEC_ENABLE (1 << 7)
 #define AW8697_BIT_CONT_CTRL_ZC_DETEC_DISABLE (0 << 7)
@@ -497,6 +502,7 @@ const unsigned char aw8697_reg_access[AW8697_REG_MAX] = {
 #define AW8697_BIT_CONT_CTRL_AUTO_BRK_ENABLE (1 << 0)
 #define AW8697_BIT_CONT_CTRL_AUTO_BRK_DISABLE (0 << 0)
 
+// D2SCFG: reg0x5e
 #define AW8697_BIT_D2SCFG_CLK_ADC_MASK (~(7 << 5))
 #define AW8697_BIT_D2SCFG_CLK_ASC_0P09375MHZ (7 << 5)
 #define AW8697_BIT_D2SCFG_CLK_ASC_0P1875MHZ (6 << 5)
@@ -507,7 +513,7 @@ const unsigned char aw8697_reg_access[AW8697_REG_MAX] = {
 #define AW8697_BIT_D2SCFG_CLK_ASC_6MHZ (1 << 5)
 #define AW8697_BIT_D2SCFG_CLK_ASC_12MHZ (0 << 5)
 
-/* DETCTRL*/
+// DETCTRL: reg0x5f
 #define AW8697_BIT_DETCTRL_RL_OS_MASK (~(1 << 6))
 #define AW8697_BIT_DETCTRL_RL_DETECT (1 << 6)
 #define AW8697_BIT_DETCTRL_OS_DETECT (0 << 6)
@@ -524,14 +530,12 @@ const unsigned char aw8697_reg_access[AW8697_REG_MAX] = {
 #define AW8697_BIT_DETCTRL_DIAG_GO_ENABLE (1 << 0)
 #define AW8697_BIT_DETCTRL_DIAG_GO_DISABLE (0 << 0)
 
-/* VBAT MODE*/
+// ADCTEST: reg0x66
 #define AW8697_BIT_ADCTEST_VBAT_MODE_MASK (~(1 << 6))
 #define AW8697_BIT_ADCTEST_VBAT_HW_COMP (1 << 6)
 #define AW8697_BIT_ADCTEST_VBAT_SW_COMP (0 << 6)
 
-/* BSTCFG*/
+// BEMF_NUM: reg0x78
 #define AW8697_BIT_BEMF_NUM_BRK_MASK (~(15 << 0))
-#define AW8697_TRIM_MASK (~(3 << 6))
-#define AW8697_TRIM_DEFAULT (0x00)
 
 #endif
