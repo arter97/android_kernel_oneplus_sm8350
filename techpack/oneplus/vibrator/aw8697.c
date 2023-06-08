@@ -11356,7 +11356,7 @@ static int aw8697_parse_dt(struct device *dev, struct aw8697 *aw8697,
 	}
 #ifdef OPLUS_FEATURE_CHG_BASIC
 	if (of_property_read_u32(np, "qcom,device_id", &aw8697->device_id))
-		aw8697->device_id = 815;
+		aw8697->device_id = 9595;
 	dev_info(dev, "%s: aw8697->device_id=%d\n", __func__,
 		 aw8697->device_id);
 	if (of_property_read_u8(np, "qcom,aw8697_boost_voltage",

@@ -1922,7 +1922,7 @@ static int parse_dt(struct device *dev, struct aw_haptic *aw_haptic,
 			    aw_haptic->irq_gpio);
 #ifdef OPLUS_FEATURE_CHG_BASIC
 	if (of_property_read_u32(np, "qcom,device_id", &aw_haptic->device_id))
-		aw_haptic->device_id = 815;
+		aw_haptic->device_id = 9595;
 	aw_dev_info("%s: device_id=%d\n", __func__, aw_haptic->device_id);
 
 	if (of_property_read_u8(np, "oplus,aw86927_boost_voltage",
