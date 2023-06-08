@@ -757,6 +757,8 @@ int oneplus_hall_irq_handler(unsigned int id)
 		TRI_KEY_LOG("g_the_chip null\n ");
 		return -EINVAL;
 	} else {
+		g_the_chip->dhall_up_ops->enable_irq(false);
+		g_the_chip->dhall_down_ops->enable_irq(false);
 		schedule_work(&g_the_chip->dwork);
 	}
 	return IRQ_HANDLED;
