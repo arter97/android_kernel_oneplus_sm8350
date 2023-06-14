@@ -862,7 +862,6 @@ static int dsi_panel_update_backlight(struct dsi_panel *panel,
 	u32 bl_lvl)
 {
 	int rc = 0;
-	u32 count;
 	struct mipi_dsi_device *dsi;
 	struct dsi_display_mode *mode;
 	if (!panel || (bl_lvl > 0xffff) || !panel->cur_mode) {
@@ -878,11 +877,6 @@ static int dsi_panel_update_backlight(struct dsi_panel *panel,
 	mode = panel->cur_mode;
 
 	saved_backlight = bl_lvl;
-	if (panel->is_hbm_enabled) {
-		hbm_finger_print = true;
-		DSI_ERR("HBM is enabled\n");
-		return 0;
-	}
 
 	if (op_dimlayer_bl_enabled != op_dimlayer_bl_enable_real) {
 		op_dimlayer_bl_enable_real = op_dimlayer_bl_enabled;
@@ -894,27 +888,11 @@ static int dsi_panel_update_backlight(struct dsi_panel *panel,
 		bl_lvl = op_dimlayer_bl_alpha;
 
 	if (panel->bl_config.bl_high2bit) {
-		if (HBM_flag == true)
-			return 0;
-
 		if (((cur_backlight == bl_lvl) || (hbm_brightness_flag == 1))
 			&& (mode_fps != cur_fps || cur_h != panel->cur_mode->timing.h_active) && !hbm_finger_print) {
 			cur_fps = mode_fps;
 			cur_h = panel->cur_mode->timing.h_active;
 			return 0;
-		}
-
-		if (hbm_brightness_flag == 1) {
-			count = mode->priv_info->cmd_sets[DSI_CMD_SET_HBM_BRIGHTNESS_OFF].count;
-			if (!count) {
-				DSI_ERR("This panel does not support HBM brightness off mode.\n");
-				goto error;
-			}
-			else {
-				rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_HBM_BRIGHTNESS_OFF);
-				DSI_ERR("Send DSI_CMD_SET_HBM_BRIGHTNESS_OFF cmds.\n");
-				hbm_brightness_flag = 0;
-			}
 		}
 
 		if (dsi_panel_name == DSI_PANEL_SAMSUNG_AMB670YF01) {
@@ -938,7 +916,6 @@ static int dsi_panel_update_backlight(struct dsi_panel *panel,
 	if (rc < 0)
 		DSI_ERR("failed to update dcs backlight:%d\n", bl_lvl);
 
-error:
 	return rc;
 }
 
@@ -5873,7 +5850,6 @@ int dsi_panel_set_hbm_mode(struct dsi_panel *panel, int level)
 			return -EINVAL;
 		}
 
-		mutex_lock(&panel->panel_lock);
 		mode = panel->cur_mode;
 
 		switch (level) {
@@ -5963,7 +5939,6 @@ int dsi_panel_set_hbm_mode(struct dsi_panel *panel, int level)
 		}
 
 	error:
-		mutex_unlock(&panel->panel_lock);
 		return rc;
 }
 
