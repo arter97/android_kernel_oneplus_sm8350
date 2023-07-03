@@ -202,6 +202,9 @@ void operate_mode_switch(struct touchpanel_data *ts)
 		ts->ts_ops->mode_switch(ts->chip_data, MODE_LIMIT_SWITCH, ts->limit_switch);
 
 		ts->ts_ops->mode_switch(ts->chip_data, MODE_NORMAL, true);
+
+		if (ts->noise_level)
+			ts->ts_ops->mode_switch(ts->chip_data, MODE_GAME, true);
 	}
 }
 
@@ -5911,6 +5914,7 @@ int register_common_touch_device(struct touchpanel_data *pdata)
 		ts->corner_dead_zone_xp = 0x66;
 		ts->corner_dead_zone_yp = 0xC5;
 	}
+	ts->noise_level = 0;
 	if (ts->is_noflash_ic) {
 		ts->irq = ts->s_client->irq;
 	} else {
