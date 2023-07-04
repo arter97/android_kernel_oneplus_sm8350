@@ -7938,6 +7938,7 @@ typedef enum {
     WMI_CSWARP_IE_PRESENT = WMI_CSWRAP_IE_PRESENT, /* deprecated: typo */
     WMI_QSBW_ISE_PRESENT  = 0x00000010,
     WMI_CSWRAP_IE_EXTENDED_PRESENT = 0x00000020, /* Added bitmask to verify if the additional information is filled in */
+    WMI_CSWRAP_IE_EXT_VER_2_PRESENT = 0x00000040 /* Added bitmask to see if additional info is present in CS wrap IE */
 } WMI_CSA_EVENT_IES_PRESENT_FLAG;
 
 /* wmi CSA receive event from beacon frame */
@@ -7968,6 +7969,19 @@ typedef struct {
      * the second octet resides in bits 15:8 of cswrap_ie_extended[0] and so on.
      */
     A_UINT32 cswrap_ie_extended[5];
+
+    /* num_bytes_valid_in_cswrap_ie_ext_ver2:
+     * This fixed_param TLV can be followed by a VAR length TLV
+     * variable-length byte-array TLV for CS WRAP IE.
+     * Since the variable-length byte-array TLVs are always padded, if needed,
+     * to contain a multiple of 4 bytes, this field shows how many of the bytes
+     * contain valid data, versus how many are only for alignment padding.
+     */
+    A_UINT32 num_bytes_valid_in_cswrap_ie_ext_ver2;
+/*
+ * This initial fixed_param TLV may be followed by the below TLVs:
+ *   - cs_wrap_ie variable-length byte-array TLV
+ */
 } wmi_csa_event_fixed_param;
 
 #define WMI_GET_MLD_MAC_ADDRESS_PRESENT(mld_mac_address_present) \
@@ -21505,6 +21519,17 @@ typedef struct {
     /* Scoring for security mode */
     A_INT32 security_weightage_pcnt;
     wmi_roam_cnd_security_scoring security_scoring;
+    /* mlo_etp_weightage_pcnt:
+     * Give etp weightage to candidate based on MLO support.
+     * In host INI configuration, it will give boost(+) or reduction(-)
+     * percentage value and host will deliver actual weighted number
+     * based on 100. For example:
+     * If percentage value in INI is 20, then host will give 120 (100 * 1.2)
+     * as mlo_etp_weightage_pcnt.
+     * If percentage value in INI is -20, then host will give 80 (100 * 0.8)
+     * as mlo_etp_weightage_pcnt.
+     */
+    A_UINT32 mlo_etp_weightage_pcnt;
 } wmi_roam_cnd_scoring_param;
 
 typedef struct {
@@ -43556,6 +43581,8 @@ typedef struct {
     A_UINT32 pdev_id;
     /** reason_code: of type WMI_TEARDOWN_REASON_TYPE */
     A_UINT32 reason_code;
+    /* trigger_umac_reset : of type A_BOOL to indicate the umac reset for the partner chip. */
+    A_UINT32 trigger_umac_reset;
 } wmi_mlo_teardown_fixed_param;
 
 typedef struct {
