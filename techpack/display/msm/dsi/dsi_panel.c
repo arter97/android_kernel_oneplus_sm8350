@@ -5926,6 +5926,7 @@ int dsi_panel_set_hbm_mode(struct dsi_panel *panel, int level)
 				goto error;
 			}
 			else {
+				dsi_panel_update_backlight(panel, panel->hbm_backlight);
 				HBM_flag = true;
 				rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_HBM_ON_5);
 				DSI_ERR("Send DSI_CMD_SET_HBM_ON_5 cmds.\n");
