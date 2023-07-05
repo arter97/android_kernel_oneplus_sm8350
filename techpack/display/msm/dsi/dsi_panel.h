@@ -30,7 +30,7 @@ extern char dimming_gamma_120hz_500step[48];
 
 
 #define MAX_BL_LEVEL 4096
-#define MAX_BL_SCALE_LEVEL 2048
+#define MAX_BL_SCALE_LEVEL 1024
 #define MAX_SV_BL_SCALE_LEVEL 65535
 #define DSI_CMD_PPS_SIZE 135
 

@@ -292,10 +292,17 @@ int dsi_display_set_backlight(struct drm_connector *connector,
 	if (rc)
 		DSI_ERR("unable to set backlight\n");
 
-	if (bl_lvl > 1023 && panel->bl_config.bl_level <= 1023)
-		rc = dsi_panel_set_hbm_mode(panel, 5);
-	else if (bl_lvl <= 1023 && panel->bl_config.bl_level > 1023)
-		rc = dsi_panel_set_hbm_mode(panel, 0);
+	if (dsi_panel_name == DSI_PANEL_SAMSUNG_AMB670YF01) {
+		if (bl_lvl > 1376 && panel->bl_config.bl_level <= 1376)
+			rc = dsi_panel_set_hbm_mode(panel, 5);
+		else if (bl_lvl <= 1376 && panel->bl_config.bl_level > 1376)
+			rc = dsi_panel_set_hbm_mode(panel, 0);
+	} else {
+                if (bl_lvl > 1023 && panel->bl_config.bl_level <= 1023)
+                        rc = dsi_panel_set_hbm_mode(panel, 5);
+                else if (bl_lvl <= 1023 && panel->bl_config.bl_level > 1023)
+                        rc = dsi_panel_set_hbm_mode(panel, 0);
+	}
 
         if (bl_lvl != INVALID_BL_VALUE)
                 panel->bl_config.bl_level = bl_lvl;
