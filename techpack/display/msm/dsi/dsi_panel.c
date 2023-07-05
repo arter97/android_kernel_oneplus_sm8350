@@ -878,6 +878,9 @@ static int dsi_panel_update_backlight(struct dsi_panel *panel,
 
 	saved_backlight = bl_lvl;
 
+	if (panel->is_hbm_enabled || HBM_flag == true)
+		return 0;
+
 	if (op_dimlayer_bl_enabled != op_dimlayer_bl_enable_real) {
 		op_dimlayer_bl_enable_real = op_dimlayer_bl_enabled;
 		if (op_dimlayer_bl_enable_real && (bl_lvl != 0) && (bl_lvl < op_dimlayer_bl_alpha))
