@@ -129,10 +129,13 @@ static int sde_backlight_device_update_status(struct backlight_device *bd)
 	bl_lvl = mult_frac(brightness, display->panel->bl_config.bl_max_level,
 			display->panel->bl_config.brightness_max_level);
 
-	//Hack to workaround this range having artifacts or being lower brightness
-	//than 1023
-	if (bl_lvl > 1023 && bl_lvl < 1600)
-		bl_lvl = 1600;
+	if (dsi_panel_name == DSI_PANEL_SAMSUNG_AMB670YF01) {
+		if (bl_lvl > 1376)
+			bl_lvl = 2753;
+	} else {
+                if (bl_lvl > 1023)
+                        bl_lvl = 2047;
+	}
 
 	if (!bl_lvl && brightness)
 		bl_lvl = 1;
