@@ -49,6 +49,10 @@
 */
 };
 
+&pm8350c_switch2 {
+    /delete-property/ qcom,symmetry-en;
+};
+
 &L3I {
     regulator-always-on;
 };
@@ -150,7 +154,7 @@
         cam_vaf-supply = <&L6I>;
         cam_v_custom1-supply = <&pm8350c_l9>;
         cam_clk-supply = <&cam_cc_titan_top_gdsc>;
-        cam_vana-supply = <&pm8350c_l2>;
+        cam_vana-supply = <&pm8350c_l2>;//add for Msensor
         regulator-names ="cam_vio","cam_vaf","cam_v_custom1","cam_clk","cam_vana";
         rgltr-cntrl-support;
         rgltr-min-voltage = <0 2800000 2800000 0 1800000>;
@@ -184,8 +188,8 @@
         cam_vaf-supply = <&pm8350c_l9>;
         regulator-names = "cam_vio", "cam_vana", "cam_v_custom1", "cam_vdig", "cam_clk", "cam_vaf";
         rgltr-cntrl-support;
-        rgltr-min-voltage = <0 2000000 3200000 3200000 0 2800000>;
-        rgltr-max-voltage = <0 2000000 3960000 3960000 0 2800000>;
+        rgltr-min-voltage = <0 1880000 3200000 3200000 0 2800000>;
+        rgltr-max-voltage = <0 1952000 3960000 3960000 0 2800000>;
         rgltr-load-current = <200000 2000000 1000000 2000000 0 1000000>;
         gpio-no-mux = <0>;
         pinctrl-names = "cam_default", "cam_suspend";
@@ -218,7 +222,6 @@
         clock-cntl-level = "nominal";
         clock-rates = <19200000>;
         is-support-laser = <1>;
-        at-current-support = <1>;
     };
 
     actuator_rear_1: qcom,actuator@1 {
@@ -231,7 +234,6 @@
         rgltr-min-voltage = <3200000>;
         rgltr-max-voltage = <3960000>;
         rgltr-load-current = <1000000>;
-        need-check-pid;
     };
 
     eeprom_rear_1: qcom,eeprom@1 {
@@ -271,8 +273,8 @@
         cam_vdig-supply = <&pm8350c_bob>;
         regulator-names = "cam_vio", "cam_vana", "cam_v_custom1", "cam_clk", "cam_vaf","cam_vdig";
         rgltr-cntrl-support;
-        rgltr-min-voltage = <0 2000000 2800000 0 3200000 3200000>;
-        rgltr-max-voltage = <0 2000000 2800000 0 3960000 3960000>;
+        rgltr-min-voltage = <0 1880000 2800000 0 3200000 3200000>;
+        rgltr-max-voltage = <0 1952000 2800000 0 3960000 3960000>;
         rgltr-load-current = <200000 200000 200000 0 200000 200000>;
         gpio-no-mux = <0>;
         pinctrl-names = "cam_default", "cam_suspend";
@@ -304,8 +306,7 @@
         clock-names = "cam_clk";
         clock-cntl-level = "nominal";
         clock-rates = <19200000>;
-        at-current-support = <1>;
-        is-diff-af-support = <1>;
+	is-diff-af-support = <1>;
     };
 
 //Mono camera
