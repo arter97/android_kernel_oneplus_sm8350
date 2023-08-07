@@ -243,7 +243,7 @@ static int cam_tof_init_io_master(struct cam_tof_ctrl_t *tof_ctrl)
 
 static int cam_tof_get_dt_data(struct cam_tof_ctrl_t *tof_ctrl)
 {
-    int rc = 0;
+    int i, rc = 0;
     struct cam_hw_soc_info *soc_info;
     struct device_node *of_node = NULL;
     struct cam_sensor_cci_client *cci_client = NULL;
@@ -284,6 +284,24 @@ static int cam_tof_get_dt_data(struct cam_tof_ctrl_t *tof_ctrl)
         return rc;
     }
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+    /* Initialize regulators to default parameters */
+    for (i = 0; i < soc_info->num_rgltr; i++)
+    {
+        soc_info->rgltr[i] = devm_regulator_get(soc_info->dev,
+                              soc_info->rgltr_name[i]);
+        if (IS_ERR_OR_NULL(soc_info->rgltr[i]))
+        {
+            rc = PTR_ERR(soc_info->rgltr[i]);
+            rc = rc ? rc : -EINVAL;
+            CAM_ERR(CAM_TOF, "get failed for regulator %s",
+                              soc_info->rgltr_name[i]);
+            return rc;
+        }
+        CAM_DBG(CAM_TOF, "get for regulator %s",
+                              soc_info->rgltr_name[i]);
+    }
+#endif
     return rc;
 }
 

@@ -1977,7 +1977,8 @@ static void cam_cpas_update_monitor_array(struct cam_hw_info *cpas_hw,
 			(0x4 * soc_private->rpmh_info[CAM_RPMH_BCM_MNOC_INDEX]);
 		uint32_t be_shub_offset =
 			soc_private->rpmh_info[CAM_RPMH_BCM_BE_OFFSET] +
-			(0x4 * 1);
+			(0x4 * 1); /* i=1 for SHUB, hardcode for now */
+
 		/*
 		 * 0x4, 0x800 - DDR
 		 * 0x800, 0x810 - mmnoc

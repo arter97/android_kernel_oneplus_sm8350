@@ -27,6 +27,7 @@ static long cam_sensor_subdev_ioctl(struct v4l2_subdev *sd,
 				"Failed in Driver cmd: %d", rc);
 		break;
 #ifdef OPLUS_FEATURE_CAMERA_COMMON
+	/* Add for AT camera test */
 	case VIDIOC_CAM_FTM_POWNER_DOWN:
 		rc = cam_ftm_power_down(s_ctrl);
 		break;
@@ -184,6 +185,9 @@ static int32_t cam_sensor_driver_i2c_probe(struct i2c_client *client,
 	s_ctrl->is_probe_succeed = 0;
 	s_ctrl->last_flush_req = 0;
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	CAM_INFO(CAM_SENSOR, "calling sensor parse");
+#endif
 	rc = cam_sensor_parse_dt(s_ctrl);
 	if (rc < 0) {
 		CAM_ERR(CAM_SENSOR, "cam_sensor_parse_dt rc %d", rc);
@@ -271,6 +275,9 @@ static int cam_sensor_component_bind(struct device *dev,
 
 	s_ctrl->io_master_info.master_type = CCI_MASTER;
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	CAM_INFO(CAM_SENSOR, "calling parse_dt");
+#endif
 	rc = cam_sensor_parse_dt(s_ctrl);
 	if (rc < 0) {
 		CAM_ERR(CAM_SENSOR, "failed: cam_sensor_parse_dt rc %d", rc);

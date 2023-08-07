@@ -216,6 +216,7 @@ struct cam_flash_ctrl {
 	uint32_t                            last_flush_req;
 #ifdef OPLUS_FEATURE_CAMERA_COMMON
 	const char *                        flash_name;
+	/*Add by Fangyan @ Camera 2020/08/17 for flash current*/
 	uint32_t                            flash_current;
 #endif
 };

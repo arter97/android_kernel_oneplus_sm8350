@@ -215,6 +215,9 @@ struct cam_isp_context_state_monitor {
 
 struct cam_isp_context_req_id_info {
 	int64_t                          last_bufdone_req_id;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON //lanhe todo:
+	uint64_t                         last_rdi_req_id;
+#endif
 };
 
 /**
@@ -285,6 +288,9 @@ struct cam_isp_context_event_record {
 struct cam_isp_context {
 	struct cam_context              *base;
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON //lanhe todo:
+	uint64_t                         rdi_frame_id;
+#endif
 	int64_t                          frame_id;
 	uint32_t                         frame_id_meta;
 	uint32_t                         substate_activated;
@@ -302,6 +308,8 @@ struct cam_isp_context {
 	int64_t                          reported_req_id;
 	uint32_t                         subscribe_event;
 	int64_t                          last_applied_req_id;
+	int64_t                          bubble_req_id;
+	int64_t                          notified_req_id;
 	uint64_t                         last_sof_timestamp;
 	uint32_t                         bubble_frame_cnt;
 	atomic64_t                       state_monitor_head;
@@ -320,7 +328,7 @@ struct cam_isp_context {
 	bool                                  custom_enabled;
 	bool                                  use_frame_header_ts;
 	bool                                  support_consumed_addr;
-    bool                                  is_anchor_instance;
+	bool                                  is_anchor_instance;
 	atomic_t                              apply_in_progress;
 	unsigned int                          init_timestamp;
 	uint32_t                              isp_device_type;

@@ -70,7 +70,14 @@ static int32_t cam_actuator_power_up(struct cam_actuator_ctrl_t *a_ctrl)
 		(power_info->power_down_setting == NULL)) {
 		CAM_INFO(CAM_ACTUATOR,
 			"Using default power settings");
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		if (a_ctrl->io_master_info.cci_client->sid == (0x18 >> 1))
+			rc = oplus_cam_actuator_construct_default_power_setting(power_info);
+		else
+			rc = cam_actuator_construct_default_power_setting(power_info);
+#else
 		rc = cam_actuator_construct_default_power_setting(power_info);
+#endif
 		if (rc < 0) {
 			CAM_ERR(CAM_ACTUATOR,
 				"Construct default actuator power setting failed.");
@@ -114,6 +121,7 @@ static int32_t cam_actuator_power_up(struct cam_actuator_ctrl_t *a_ctrl)
 		CAM_ERR(CAM_ACTUATOR, "cci init failed: rc: %d", rc);
 		goto cci_failure;
 	}
+
 #ifdef OPLUS_FEATURE_CAMERA_COMMON
 	CAM_INFO(CAM_ACTUATOR,
 		"cam_actuator_power_up %x", a_ctrl->bridge_intf.device_hdl);

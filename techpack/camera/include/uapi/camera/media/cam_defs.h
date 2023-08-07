@@ -10,7 +10,6 @@
 #include <linux/types.h>
 #include <linux/ioctl.h>
 
-
 /* camera op codes */
 #define CAM_COMMON_OPCODE_BASE                  0x100
 #define CAM_QUERY_CAP                           (CAM_COMMON_OPCODE_BASE + 0x1)

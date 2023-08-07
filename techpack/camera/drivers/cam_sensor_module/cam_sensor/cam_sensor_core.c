@@ -25,8 +25,12 @@ static int cam_sensor_update_req_mgr(
 
 	add_req.link_hdl = s_ctrl->bridge_intf.link_hdl;
 	add_req.req_id = csl_packet->header.request_id;
-	CAM_DBG(CAM_SENSOR, " Rxed Req Id: %llu",
-		csl_packet->header.request_id);
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	//lanhe add
+	add_req.use_rdi_sof_apply = s_ctrl->use_rdi_sof_apply;
+#endif
+	CAM_DBG(CAM_SENSOR, " Rxed Req Id: %llu rdi:%d",
+		csl_packet->header.request_id, add_req.use_rdi_sof_apply);
 	add_req.dev_hdl = s_ctrl->bridge_intf.device_hdl;
 	add_req.skip_before_applying = 0;
 	add_req.trigger_eof = false;
@@ -740,11 +744,7 @@ int cam_sensor_match_id(struct cam_sensor_ctrl_t *s_ctrl)
 	}
 
 #ifdef OPLUS_FEATURE_CAMERA_COMMON
-	rc = camera_io_dev_read(
-		&(s_ctrl->io_master_info),
-		slave_info->sensor_id_reg_addr,
-		&chipid,slave_info->addr_type,
-		slave_info->data_type);
+	chipid = cam_override_chipid(s_ctrl);
 #else
 	rc = camera_io_dev_read(
 		&(s_ctrl->io_master_info),
@@ -788,6 +788,8 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 #ifdef OPLUS_FEATURE_CAMERA_COMMON
         int ret;
 #endif
+        char trace[64] = {0};
+
 	if (!s_ctrl || !arg) {
 		CAM_ERR(CAM_SENSOR, "s_ctrl is NULL");
 		return -EINVAL;
@@ -889,6 +891,7 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
                         CAM_INFO(CAM_SENSOR, "sensor power down!");
                         msleep(20);
                         s_ctrl->sensor_power_state = CAM_SENSOR_POWER_OFF;
+                        s_ctrl->sensor_initsetting_state = CAM_SENSOR_SETTING_WRITE_INVALID;
                         mutex_unlock(&(s_ctrl->sensor_power_state_mutex));
                         goto free_power_settings;
 #else
@@ -917,6 +920,7 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
                      } else {
                         CAM_ERR(CAM_SENSOR, "sensor power down success sensor id 0x%x",s_ctrl->sensordata->slave_info.sensor_id);
                         s_ctrl->sensor_power_state = CAM_SENSOR_POWER_OFF;
+                        s_ctrl->sensor_initsetting_state = CAM_SENSOR_SETTING_WRITE_INVALID;
                      }
                 } else {
                     CAM_ERR(CAM_SENSOR, "sensor have power down!");
@@ -997,12 +1001,21 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
                      } else {
                         CAM_ERR(CAM_SENSOR, "sensor power up success sensor id 0x%x",s_ctrl->sensordata->slave_info.sensor_id);
                         s_ctrl->sensor_power_state = CAM_SENSOR_POWER_ON;
+                        s_ctrl->sensor_initsetting_state = CAM_SENSOR_SETTING_WRITE_INVALID;
                      }
                 } else {
                     CAM_ERR(CAM_SENSOR, "sensor have power up!");
                 }
                 mutex_unlock(&(s_ctrl->sensor_power_state_mutex));
-
+		//lanhe add
+		if(sensor_acq_dev.reserved != 0)
+		{
+			s_ctrl->use_rdi_sof_apply = true;
+		}
+		else
+		{
+			s_ctrl->use_rdi_sof_apply = false;
+		}
                 oplus_cam_sensor_update_setting(s_ctrl);
 #else
 		rc = cam_sensor_power_up(s_ctrl);
@@ -1116,7 +1129,12 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 			s_ctrl->sensor_state);
 			goto release_mutex;
 		}
-
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+                trace_begin("0x%x sensor_stream_on", s_ctrl->sensordata->slave_info.sensor_id);
+                memset(trace, 0, sizeof(trace));
+                snprintf(trace, sizeof(trace), "6 StreamOn 0x%x", s_ctrl->sensordata->slave_info.sensor_id);
+                trace_int(trace, 1);
+#endif
 		if (s_ctrl->i2c_data.streamon_settings.is_settings_valid &&
 			(s_ctrl->i2c_data.streamon_settings.request_id == 0)) {
 			rc = cam_sensor_apply_settings(s_ctrl, 0,
@@ -1124,10 +1142,18 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 			if (rc < 0) {
 				CAM_ERR(CAM_SENSOR,
 					"cannot apply streamon settings");
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+                                trace_end();
+                                trace_int(trace, 0);
+#endif
 				goto release_mutex;
 			}
 		}
 		s_ctrl->sensor_state = CAM_SENSOR_START;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+                trace_end();
+                trace_int(trace, 0);
+#endif
 		CAM_INFO(CAM_SENSOR,
 			"CAM_START_DEV Success, sensor_id:0x%x,sensor_slave_addr:0x%x",
 			s_ctrl->sensordata->slave_info.sensor_id,
@@ -1142,6 +1168,12 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 			s_ctrl->sensor_state);
 			goto release_mutex;
 		}
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+                trace_begin("0x%x sensor_stream_off", s_ctrl->sensordata->slave_info.sensor_id);
+                memset(trace, 0, sizeof(trace));
+                snprintf(trace, sizeof(trace), "6 StreamOff 0x%x", s_ctrl->sensordata->slave_info.sensor_id);
+                trace_int(trace, 1);
+#endif
 		if (s_ctrl->i2c_data.streamoff_settings.is_settings_valid &&
 			(s_ctrl->i2c_data.streamoff_settings.request_id == 0)) {
 			rc = cam_sensor_apply_settings(s_ctrl, 0,
@@ -1152,6 +1184,10 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 			}
 		}
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+                trace_end();
+                trace_int(trace, 0);
+#endif
 		cam_sensor_release_per_frame_resource(s_ctrl);
 		s_ctrl->last_flush_req = 0;
 		s_ctrl->sensor_state = CAM_SENSOR_ACQUIRE;
@@ -1325,6 +1361,13 @@ int cam_sensor_publish_dev_info(struct cam_req_mgr_device_info *info)
 	else
 		info->p_delay = 2;
 	info->trigger = CAM_TRIGGER_POINT_SOF;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	//lanhe add
+	if(s_ctrl->use_rdi_sof_apply == true)
+	{
+		info->trigger = CAM_TRIGGER_POINT_RDI_SOF;
+	}
+#endif
 
 	return rc;
 }
@@ -1410,7 +1453,7 @@ int cam_sensor_power_up(struct cam_sensor_ctrl_t *s_ctrl)
 	}
 	trace_end();
 
-	trace_begin("%d_%d_0x%x Init", s_ctrl->cci_num, s_ctrl->cci_i2c_master, s_ctrl->sensordata->slave_info.sensor_id);
+	trace_begin("%u_%u_0x%x Init", s_ctrl->cci_num, s_ctrl->cci_i2c_master, s_ctrl->sensordata->slave_info.sensor_id);
 	rc = camera_io_init(&(s_ctrl->io_master_info));
 	if (rc < 0) {
 		CAM_ERR(CAM_SENSOR, "cci_init failed: rc: %d", rc);
@@ -1626,8 +1669,8 @@ int32_t cam_sensor_apply_request(struct cam_req_mgr_apply_request *apply)
 		return -EINVAL;
 	}
 
-	CAM_DBG(CAM_REQ, " Sensor[%d] update req id: %lld",
-		s_ctrl->soc_info.index, apply->request_id);
+	CAM_DBG(CAM_REQ, "trigger_point:%d Sensor[%d] update req id: %lld",
+		apply->trigger_point, s_ctrl->soc_info.index, apply->request_id);
 	trace_cam_apply_req("Sensor", apply->request_id);
 	mutex_lock(&(s_ctrl->cam_sensor_mutex));
 	rc = cam_sensor_apply_settings(s_ctrl, apply->request_id,

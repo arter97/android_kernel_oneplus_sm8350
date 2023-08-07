@@ -110,6 +110,7 @@ int cam_context_buf_done_from_hw(struct cam_context *ctx,
 			ctx->dev_name, ctx->ctx_id, req->request_id);
 
 	cam_cpas_notify_event(ctx->ctx_id_string, req->request_id);
+
 	/*
 	 * another thread may be adding/removing from free list,
 	 * so hold the lock
@@ -571,10 +572,11 @@ int32_t cam_context_acquire_dev_to_hw(struct cam_context *ctx,
 	ctx->hw_mgr_ctx_id = param.hw_mgr_ctx_id;
 
 	snprintf(ctx->ctx_id_string, sizeof(ctx->ctx_id_string),
-		"%s_ctx[%d]_hwmgrctx[%d]_Done",
+		"%s_ctx[%u]_hwmgrctx[%u]_Done",
 		ctx->dev_name,
 		ctx->ctx_id,
 		ctx->hw_mgr_ctx_id);
+
 	/* if hw resource acquire successful, acquire dev handle */
 	req_hdl_param.session_hdl = cmd->session_handle;
 	/* bridge is not ready for these flags. so false for now */

@@ -120,6 +120,7 @@ int32_t camera_io_dev_write(struct camera_io_master *io_master_info,
 	struct cam_sensor_i2c_reg_setting *write_setting)
 {
 	char trace[64] = {0};
+	int32_t rc = 0;
 
 	if (!write_setting || !io_master_info) {
 		CAM_ERR(CAM_SENSOR,
@@ -133,22 +134,28 @@ int32_t camera_io_dev_write(struct camera_io_master *io_master_info,
 		return -EINVAL;
 	}
 
-	snprintf(trace, sizeof(trace), "KMD %d_%d_0x%x Write", io_master_info->cci_client->cci_device, io_master_info->cci_client->cci_i2c_master, io_master_info->cci_client->sid*2);
+	snprintf(trace, sizeof(trace), "KMD %u_%u_0x%x Write", io_master_info->cci_client->cci_device, io_master_info->cci_client->cci_i2c_master, io_master_info->cci_client->sid*2);
 	trace_int(trace, write_setting->size);
-	trace_int(trace, 0);
 
 	if (io_master_info->master_type == CCI_MASTER) {
-		return cam_cci_i2c_write_table(io_master_info,
+		rc = cam_cci_i2c_write_table(io_master_info,
 			write_setting);
+		trace_int(trace, 0);
+		return rc;
 	} else if (io_master_info->master_type == I2C_MASTER) {
-		return cam_qup_i2c_write_table(io_master_info,
+		rc = cam_qup_i2c_write_table(io_master_info,
 			write_setting);
+		trace_int(trace, 0);
+		return rc;
 	} else if (io_master_info->master_type == SPI_MASTER) {
-		return cam_spi_write_table(io_master_info,
+		rc = cam_spi_write_table(io_master_info,
 			write_setting);
+		trace_int(trace, 0);
+		return rc;
 	} else {
 		CAM_ERR(CAM_SENSOR, "Invalid Comm. Master:%d",
 			io_master_info->master_type);
+		trace_int(trace, 0);
 		return -EINVAL;
 	}
 }
@@ -158,6 +165,7 @@ int32_t camera_io_dev_write_continuous(struct camera_io_master *io_master_info,
 	uint8_t cam_sensor_i2c_write_flag)
 {
 	char trace[64] = {0};
+	int32_t rc = 0;
 
 	if (!write_setting || !io_master_info) {
 		CAM_ERR(CAM_SENSOR,
@@ -171,22 +179,28 @@ int32_t camera_io_dev_write_continuous(struct camera_io_master *io_master_info,
 		return -EINVAL;
 	}
 
-	snprintf(trace, sizeof(trace), "KMD %d_%d_0x%x Continuous Write", io_master_info->cci_client->cci_device, io_master_info->cci_client->cci_i2c_master, io_master_info->cci_client->sid*2);
+	snprintf(trace, sizeof(trace), "KMD %u_%u_0x%x Continuous Write", io_master_info->cci_client->cci_device, io_master_info->cci_client->cci_i2c_master, io_master_info->cci_client->sid*2);
 	trace_int(trace, write_setting->size);
-	trace_int(trace, 0);
 
 	if (io_master_info->master_type == CCI_MASTER) {
-		return cam_cci_i2c_write_continuous_table(io_master_info,
+		rc = cam_cci_i2c_write_continuous_table(io_master_info,
 			write_setting, cam_sensor_i2c_write_flag);
+		trace_int(trace, 0);
+		return rc;
 	} else if (io_master_info->master_type == I2C_MASTER) {
-		return cam_qup_i2c_write_continuous_table(io_master_info,
+		rc = cam_qup_i2c_write_continuous_table(io_master_info,
 			write_setting, cam_sensor_i2c_write_flag);
+		trace_int(trace, 0);
+		return rc;
 	} else if (io_master_info->master_type == SPI_MASTER) {
-		return cam_spi_write_table(io_master_info,
+		rc = cam_spi_write_table(io_master_info,
 			write_setting);
+		trace_int(trace, 0);
+		return rc;
 	} else {
 		CAM_ERR(CAM_SENSOR, "Invalid Comm. Master:%d",
 			io_master_info->master_type);
+		trace_int(trace, 0);
 		return -EINVAL;
 	}
 }

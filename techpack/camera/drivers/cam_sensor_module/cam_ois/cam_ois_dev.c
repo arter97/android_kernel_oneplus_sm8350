@@ -14,56 +14,56 @@
 
 static int cam_ois_slaveInfo_pkt_parser_oem(struct cam_ois_ctrl_t *o_ctrl)
 {
-        o_ctrl->io_master_info.cci_client->i2c_freq_mode = I2C_FAST_PLUS_MODE;
-        o_ctrl->io_master_info.cci_client->sid = (0x7c >> 1);
-        o_ctrl->io_master_info.cci_client->retries = 3;
-        o_ctrl->io_master_info.cci_client->id_map = 0;
+	o_ctrl->io_master_info.cci_client->i2c_freq_mode = I2C_FAST_PLUS_MODE;
+	o_ctrl->io_master_info.cci_client->sid = (0x7c >> 1);
+	o_ctrl->io_master_info.cci_client->retries = 3;
+	o_ctrl->io_master_info.cci_client->id_map = 0;
 
-        return 0;
+	return 0;
 }
 
 int ois_download_fw_thread(void *arg)
 {
-        struct cam_ois_ctrl_t *o_ctrl = (struct cam_ois_ctrl_t *)arg;
-        int rc = -1;
-        mutex_lock(&(o_ctrl->ois_mutex));
-        cam_ois_slaveInfo_pkt_parser_oem(o_ctrl);
-        if (o_ctrl->cam_ois_state != CAM_OIS_CONFIG) {
-                mutex_lock(&(o_ctrl->ois_power_down_mutex));
-                o_ctrl->ois_power_down_thread_exit = true;
-                if (o_ctrl->ois_power_state == CAM_OIS_POWER_OFF){
-                        rc = cam_ois_power_up(o_ctrl);
-                        if(rc != 0) {
-                                CAM_ERR(CAM_OIS, "ois power up failed");
-                                mutex_unlock(&(o_ctrl->ois_power_down_mutex));
-                                mutex_unlock(&(o_ctrl->ois_mutex));
-                                return rc;
-                        }
-                } else {
-                        CAM_ERR(CAM_OIS, "ois type=%d,OIS already power on, no need to power on again",o_ctrl->ois_type);
-                }
-                CAM_ERR(CAM_OIS, "ois power up successful");
-                o_ctrl->ois_power_state = CAM_OIS_POWER_ON;
-                mutex_unlock(&(o_ctrl->ois_power_down_mutex));
-        }
-        o_ctrl->cam_ois_state = CAM_OIS_CONFIG;
-        mutex_unlock(&(o_ctrl->ois_mutex));
-        mutex_lock(&(o_ctrl->do_ioctl_ois));
-        if(o_ctrl->ois_download_fw_done == CAM_OIS_FW_NOT_DOWNLOAD){
-                rc = DownloadFW(o_ctrl);
-                if(rc != 0) {
-                        CAM_ERR(CAM_OIS, "ois download fw failed");
-                        o_ctrl->ois_download_fw_done = CAM_OIS_FW_NOT_DOWNLOAD;
-                        mutex_unlock(&(o_ctrl->do_ioctl_ois));
-                        return rc;
-                } else {
-                        o_ctrl->ois_download_fw_done = CAM_OIS_FW_DOWNLOAD_DONE;
-                }
-        }
-        RamWrite32A_oneplus(o_ctrl,0xf012,0x0);
-        RamWrite32A_oneplus(o_ctrl,0xf010,0x0);
-        mutex_unlock(&(o_ctrl->do_ioctl_ois));
-        return rc;
+	struct cam_ois_ctrl_t *o_ctrl = (struct cam_ois_ctrl_t *)arg;
+	int rc = -1;
+	mutex_lock(&(o_ctrl->ois_mutex));
+	cam_ois_slaveInfo_pkt_parser_oem(o_ctrl);
+	if (o_ctrl->cam_ois_state != CAM_OIS_CONFIG) {
+		mutex_lock(&(o_ctrl->ois_power_down_mutex));
+		o_ctrl->ois_power_down_thread_exit = true;
+		if (o_ctrl->ois_power_state == CAM_OIS_POWER_OFF){
+			rc = cam_ois_power_up(o_ctrl);
+			if(rc != 0) {
+				CAM_ERR(CAM_OIS, "ois power up failed");
+				mutex_unlock(&(o_ctrl->ois_power_down_mutex));
+				mutex_unlock(&(o_ctrl->ois_mutex));
+				return rc;
+			}
+		} else {
+			CAM_ERR(CAM_OIS, "ois type=%d,OIS already power on, no need to power on again",o_ctrl->ois_type);
+		}
+		CAM_ERR(CAM_OIS, "ois power up successful");
+		o_ctrl->ois_power_state = CAM_OIS_POWER_ON;
+		mutex_unlock(&(o_ctrl->ois_power_down_mutex));
+	}
+	o_ctrl->cam_ois_state = CAM_OIS_CONFIG;
+	mutex_unlock(&(o_ctrl->ois_mutex));
+	mutex_lock(&(o_ctrl->do_ioctl_ois));
+	if(o_ctrl->ois_download_fw_done == CAM_OIS_FW_NOT_DOWNLOAD){
+		rc = DownloadFW(o_ctrl);
+		if(rc != 0) {
+			CAM_ERR(CAM_OIS, "ois download fw failed");
+			o_ctrl->ois_download_fw_done = CAM_OIS_FW_NOT_DOWNLOAD;
+			mutex_unlock(&(o_ctrl->do_ioctl_ois));
+			return rc;
+		} else {
+			o_ctrl->ois_download_fw_done = CAM_OIS_FW_DOWNLOAD_DONE;
+		}
+	}
+	RamWrite32A_oneplus(o_ctrl,0xf012,0x0);
+	RamWrite32A_oneplus(o_ctrl,0xf010,0x0);
+	mutex_unlock(&(o_ctrl->do_ioctl_ois));
+	return rc;
 }
 #endif
 
@@ -72,7 +72,7 @@ static long cam_ois_subdev_ioctl(struct v4l2_subdev *sd,
 {
 	int                       rc     = 0;
 	struct cam_ois_ctrl_t *o_ctrl = v4l2_get_subdevdata(sd);
-
+	uint32_t gyro_vendor = 0;
 	switch (cmd) {
 	case VIDIOC_CAM_CONTROL:
 		rc = cam_ois_driver_cmd(o_ctrl, arg);
@@ -81,32 +81,41 @@ static long cam_ois_subdev_ioctl(struct v4l2_subdev *sd,
 				"Failed with driver cmd: %d", rc);
 		break;
 #ifdef OPLUS_FEATURE_CAMERA_COMMON
-        case VIDIOC_CAM_SENSOR_STATR:
-                mutex_lock(&(o_ctrl->ois_mutex));
-                mutex_lock(&(o_ctrl->ois_power_down_mutex));
-                if (o_ctrl->ois_power_state == CAM_OIS_POWER_ON){
-                        CAM_INFO(CAM_OIS, "do not need to create ois download fw thread");
-                        o_ctrl->ois_power_down_thread_exit = true;
-                        mutex_unlock(&(o_ctrl->ois_power_down_mutex));
-                        o_ctrl->cam_ois_state = CAM_OIS_CONFIG;
+	case VIDIOC_CAM_SENSOR_STATR:
+		if(arg)
+		{
+			if (copy_from_user(&gyro_vendor,(void  __user*)(arg),sizeof(gyro_vendor)))
+			{
+				CAM_ERR(CAM_OIS,"Failed to Copy User Handle");
+			}
+			CAM_DBG(CAM_OIS,"Gyro Vendor : %d",gyro_vendor);
+			o_ctrl->opcode.prog = gyro_vendor;
+		}
+		mutex_lock(&(o_ctrl->ois_mutex));
+		mutex_lock(&(o_ctrl->ois_power_down_mutex));
+		if (o_ctrl->ois_power_state == CAM_OIS_POWER_ON){
+			CAM_INFO(CAM_OIS, "do not need to create ois download fw thread");
+			o_ctrl->ois_power_down_thread_exit = true;
+			mutex_unlock(&(o_ctrl->ois_power_down_mutex));
+			o_ctrl->cam_ois_state = CAM_OIS_CONFIG;
                         mutex_unlock(&(o_ctrl->ois_mutex));
-                        return rc;
-                } else {
-                        CAM_INFO(CAM_OIS, "create ois download fw thread");
-                        o_ctrl->ois_downloadfw_thread = kthread_run(ois_download_fw_thread, o_ctrl, o_ctrl->ois_name);
-                        if (!o_ctrl->ois_downloadfw_thread) {
-                                CAM_ERR(CAM_OIS, "create ois download fw thread failed");
-                                mutex_unlock(&(o_ctrl->ois_power_down_mutex));
-                                mutex_unlock(&(o_ctrl->ois_mutex));
-                                return -1;
-                        }
-                }
-                mutex_unlock(&(o_ctrl->ois_power_down_mutex));
-                mutex_lock(&(o_ctrl->do_ioctl_ois));
-                o_ctrl->ois_fd_have_close_state = CAM_OIS_IS_OPEN;
-                mutex_unlock(&(o_ctrl->do_ioctl_ois));
-                mutex_unlock(&(o_ctrl->ois_mutex));
-                break;
+			return rc;
+		} else {
+			CAM_INFO(CAM_OIS, "create ois download fw thread");
+			o_ctrl->ois_downloadfw_thread = kthread_run(ois_download_fw_thread, o_ctrl, o_ctrl->ois_name);
+			if (!o_ctrl->ois_downloadfw_thread) {
+				CAM_ERR(CAM_OIS, "create ois download fw thread failed");
+				mutex_unlock(&(o_ctrl->ois_power_down_mutex));
+				mutex_unlock(&(o_ctrl->ois_mutex));
+				return -1;
+			}
+		}
+		mutex_unlock(&(o_ctrl->ois_power_down_mutex));
+		mutex_lock(&(o_ctrl->do_ioctl_ois));
+		o_ctrl->ois_fd_have_close_state = CAM_OIS_IS_OPEN;
+		mutex_unlock(&(o_ctrl->do_ioctl_ois));
+		mutex_unlock(&(o_ctrl->ois_mutex));
+		break;
 #endif
 	default:
 		CAM_ERR(CAM_OIS, "Wrong IOCTL cmd: %u", cmd);
@@ -130,17 +139,17 @@ static int cam_ois_subdev_close(struct v4l2_subdev *sd,
 
 	mutex_lock(&(o_ctrl->ois_mutex));
 #ifdef OPLUS_FEATURE_CAMERA_COMMON
-        if(o_ctrl->cam_ois_download_fw_in_advance){
-                //when close ois,should be disable ois
-                mutex_lock(&(o_ctrl->ois_power_down_mutex));
-                if (o_ctrl->ois_power_state == CAM_OIS_POWER_ON){
-                        RamWrite32A_oneplus(o_ctrl,0xf012,0x0);
-                }
-                mutex_unlock(&(o_ctrl->ois_power_down_mutex));
-                mutex_lock(&(o_ctrl->do_ioctl_ois));
-                o_ctrl->ois_fd_have_close_state = CAM_OIS_IS_DOING_CLOSE;
-                mutex_unlock(&(o_ctrl->do_ioctl_ois));
-        }
+	if(o_ctrl->cam_ois_download_fw_in_advance){
+		//when close ois,should be disable ois
+		mutex_lock(&(o_ctrl->ois_power_down_mutex));
+		if (o_ctrl->ois_power_state == CAM_OIS_POWER_ON){
+			RamWrite32A_oneplus(o_ctrl,0xf012,0x0);
+		}
+		mutex_unlock(&(o_ctrl->ois_power_down_mutex));
+		mutex_lock(&(o_ctrl->do_ioctl_ois));
+		o_ctrl->ois_fd_have_close_state = CAM_OIS_IS_DOING_CLOSE;
+		mutex_unlock(&(o_ctrl->do_ioctl_ois));
+	}
 #endif
 	cam_ois_shutdown(o_ctrl);
 	mutex_unlock(&(o_ctrl->ois_mutex));
@@ -388,9 +397,9 @@ static int cam_ois_component_bind(struct device *dev,
 	mutex_init(&(o_ctrl->ois_mutex));
 #ifdef OPLUS_FEATURE_CAMERA_COMMON
 	mutex_init(&(o_ctrl->ois_read_mutex));
-        mutex_init(&(o_ctrl->do_ioctl_ois));
-        o_ctrl->ois_download_fw_done = CAM_OIS_FW_NOT_DOWNLOAD;
-        o_ctrl->ois_fd_have_close_state = CAM_OIS_IS_OPEN;
+	mutex_init(&(o_ctrl->do_ioctl_ois));
+	o_ctrl->ois_download_fw_done = CAM_OIS_FW_NOT_DOWNLOAD;
+	o_ctrl->ois_fd_have_close_state = CAM_OIS_IS_OPEN;
 
 #ifdef ENABLE_OIS_DELAY_POWER_DOWN
 	o_ctrl->ois_power_down_thread_state = CAM_OIS_POWER_DOWN_THREAD_STOPPED;

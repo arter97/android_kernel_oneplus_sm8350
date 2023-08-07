@@ -14,6 +14,7 @@ const char* GetFileName(const char* pFilePath)
 
     if (NULL != pFileName)
     {
+        // StrRChr will return a pointer to the /, advance one to the filename
         pFileName += 1;
     }
     else

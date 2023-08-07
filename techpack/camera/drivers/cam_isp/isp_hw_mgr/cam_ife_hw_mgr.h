@@ -161,7 +161,11 @@ struct cam_ife_hw_mgr_ctx {
 	bool                            dsp_enabled;
 	bool                            internal_cdm;
 	bool                            pf_mid_found;
-    bool                            is_anchor_instance;
+	bool                            is_anchor_instance;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON//lanhe todo
+	bool                            use_rdi_sof;
+#endif
+
 };
 
 /**

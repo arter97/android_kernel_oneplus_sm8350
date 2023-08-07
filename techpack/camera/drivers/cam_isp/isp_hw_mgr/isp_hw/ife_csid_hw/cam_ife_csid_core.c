@@ -21,6 +21,10 @@
 #include "cam_cpas_api.h"
 #include "cam_subdev.h"
 #include "cam_tasklet_util.h"
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+//lanhe add
+#include "cam_vfe_hw_intf.h"
+#endif
 
 /* Timeout value in msec */
 #define IFE_CSID_TIMEOUT                               1000
@@ -2349,6 +2353,10 @@ static int cam_ife_csid_enable_pxl_path(
 
 	val |= (CSID_PATH_ERROR_PIX_COUNT |
 		CSID_PATH_ERROR_LINE_COUNT);
+#ifdef OPLUS_FEATURE_CAMERA_COMMON //lanhe todo:
+	if(csid_hw->use_rdi_sof)
+		val |= CSID_PATH_INFO_INPUT_SOF;//for hack RDI SOF just for timestamp backup
+#endif
 
 	cam_io_w_mb(val, soc_info->reg_map[0].mem_base +
 		pxl_reg->csid_pxl_irq_mask_addr);
@@ -3038,6 +3046,10 @@ static int cam_ife_csid_enable_rdi_path(
 
 	val |= (CSID_PATH_ERROR_PIX_COUNT |
 		CSID_PATH_ERROR_LINE_COUNT);
+#ifdef OPLUS_FEATURE_CAMERA_COMMON //lanhe todo:
+	if(csid_hw->use_rdi_sof)
+		val |= CSID_PATH_INFO_INPUT_SOF;//for hack RDI SOF just for timestamp backup
+#endif
 
 	cam_io_w_mb(val, soc_info->reg_map[0].mem_base +
 		csid_reg->rdi_reg[id]->csid_rdi_irq_mask_addr);
@@ -3615,6 +3627,9 @@ int cam_ife_csid_reserve(void *hw_priv,
 		rc = -EINVAL;
 		break;
 	}
+#ifdef OPLUS_FEATURE_CAMERA_COMMON //lanhe todo:
+	csid_hw->use_rdi_sof = reserv->use_rdi_sof;//for hack RDI SOF just for timestamp backup
+#endif
 	mutex_unlock(&csid_hw->hw_info->hw_mutex);
 	return rc;
 }
@@ -3659,7 +3674,13 @@ int cam_ife_csid_release(void *hw_priv,
 			csid_hw->hw_intf->hw_idx,
 			res->res_type, res->res_id,
 			res->res_state);
-		goto end;
+
+		if (res->res_type != CAM_ISP_RESOURCE_CID) {
+				goto end;
+		} else {
+				cid_data = (struct cam_ife_csid_cid_data	*) res->res_priv;
+				CAM_WARN(CAM_ISP, "cid data cnt %d", cid_data->cnt);
+		}
 	}
 
 	CAM_DBG(CAM_ISP, "CSID:%d res type :%d Resource id:%d",
@@ -3704,6 +3725,9 @@ int cam_ife_csid_release(void *hw_priv,
 		rc = -EINVAL;
 		break;
 	}
+#ifdef OPLUS_FEATURE_CAMERA_COMMON //lanhe todo:
+	csid_hw->use_rdi_sof = false;//for hack RDI SOF just for timestamp backup
+#endif
 
 end:
 	mutex_unlock(&csid_hw->hw_info->hw_mutex);
@@ -4729,6 +4753,21 @@ static int cam_csid_evt_bottom_half_handler(
 			evt_payload->evt_type);
 		break;
 	}
+
+#ifdef OPLUS_FEATURE_CAMERA_COMMON //lanhe todo:
+	if(csid_hw->use_rdi_sof &&
+		(evt_payload->evt_type == CAM_ISP_HW_ERROR_NONE))
+	{
+		CAM_DBG(CAM_ISP, "CSID[%d] RDI1 SOF %d", csid_hw->hw_intf->hw_idx, evt_payload->evt_type);
+
+		if(evt_payload->irq_status[CAM_IFE_CSID_IRQ_REG_RDI_2] & CSID_PATH_INFO_INPUT_SOF)
+		{
+		    event_info.res_id = CAM_ISP_HW_VFE_IN_RDI0;
+		    rc = csid_hw->event_cb(csid_hw->priv, CAM_ISP_HW_EVENT_SOF, (void *)&event_info);
+		}
+	}
+#endif
+
 end:
 	cam_csid_put_evt_payload(csid_hw, &evt_payload);
 	return 0;
@@ -5431,7 +5470,11 @@ handle_fatal_error:
 		cam_ife_csid_sof_irq_debug(csid_hw, &sof_irq_debug_en);
 		csid_hw->irq_debug_cnt = 0;
 	}
-
+#ifdef OPLUS_FEATURE_CAMERA_COMMON //lanhe todo:
+	if (csid_hw->use_rdi_sof)
+		cam_csid_handle_hw_err_irq(csid_hw,
+			CAM_ISP_HW_ERROR_NONE, irq_status);
+#endif
 	CAM_DBG(CAM_ISP, "IRQ Handling exit");
 	return IRQ_HANDLED;
 }

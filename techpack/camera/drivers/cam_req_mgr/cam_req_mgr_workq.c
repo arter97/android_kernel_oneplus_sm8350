@@ -281,7 +281,11 @@ void cam_req_mgr_thread_switch_delay_detect(ktime_t workq_scheduled)
 	cur_ts = ktime_to_timespec64(cur_time);
 
 	if (diff > CAM_WORKQ_RESPONSE_TIME_THRESHOLD) {
+#ifndef OPLUS_FEATURE_CAMERA_COMMON
 		CAM_WARN(CAM_CRM,
+#else
+		CAM_DBG(CAM_CRM,
+#endif
 			"Workq delay detected %ld:%06ld %ld:%06ld %ld:",
 			workq_scheduled_ts.tv_sec,
 			workq_scheduled_ts.tv_nsec/NSEC_PER_USEC,

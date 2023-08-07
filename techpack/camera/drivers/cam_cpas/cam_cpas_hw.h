@@ -212,6 +212,8 @@ struct cam_cpas_axi_port_debug_info {
  *           This indicates requested clock plan
  * @be_mnoc: RPMH MNOC BCM BE (back-end) status register value.
  *           This indicates actual current clock plan
+ * @be_shub: RPMH SHUB BCM BE (back-end) status register value.
+ *           This indicates actual current clock plan
  */
 struct cam_cpas_monitor {
 	struct timespec64                   timestamp;
