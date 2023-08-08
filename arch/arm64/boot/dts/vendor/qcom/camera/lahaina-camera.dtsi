@@ -253,7 +253,11 @@
 			hw-thd-dat = <22>;
 			hw-thd-sta = <35>;
 			hw-tbuf = <62>;
-			hw-scl-stretch-en = <0>;
+			/* #ifdef VENDOR_EDIT */
+			//hw-scl-stretch-en = <0>;
+			/* #else */
+			hw-scl-stretch-en = <1>;
+			/* #endif */
 			hw-trdhld = <6>;
 			hw-tsp = <3>;
 			cci-clk-src = <37500000>;
@@ -283,7 +287,11 @@
 			hw-thd-dat = <16>;
 			hw-thd-sta = <15>;
 			hw-tbuf = <24>;
-			hw-scl-stretch-en = <0>;
+			/* #ifdef VENDOR_EDIT */
+			//hw-scl-stretch-en = <0>;
+			/* #else */
+			hw-scl-stretch-en = <1>;
+			/* #endif */
 			hw-trdhld = <3>;
 			hw-tsp = <3>;
 			cci-clk-src = <37500000>;
@@ -1899,9 +1907,6 @@
 		clock-rates = <600000000 0>;
 		src-clock-name = "jpegenc_clk_src";
 		clock-cntl-level = "nominal";
-		cam_hw_pid = <25 26>;
-		cam_hw_rd_mid = <0>;
-		cam_hw_wr_mid = <1>;
 		status = "ok";
 	};
 
@@ -1925,9 +1930,6 @@
 		clock-rates = <600000000 0>;
 		src-clock-name = "jpegdma_clk_src";
 		clock-cntl-level = "nominal";
-		cam_hw_pid = <24 27>;
-		cam_hw_rd_mid = <0>;
-		cam_hw_wr_mid = <1>;
 		status = "ok";
 	};
 };

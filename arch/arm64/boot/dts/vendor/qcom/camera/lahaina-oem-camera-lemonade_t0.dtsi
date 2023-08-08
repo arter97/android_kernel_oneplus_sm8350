@@ -145,7 +145,6 @@
         clock-names = "cam_clk";
         clock-cntl-level = "nominal";
         clock-rates = <19200000>;
-        at-current-support = <1>;
     };
 
     actuator_rear_1: qcom,actuator@1 {
@@ -158,7 +157,6 @@
         rgltr-min-voltage = <2800000>;
         rgltr-max-voltage = <2800000>;
         rgltr-load-current = <1000000>;
-        need-check-pid;
     };
 
     eeprom_rear_1: qcom,eeprom@1 {
@@ -252,9 +250,9 @@
         clock-cntl-level = "nominal";
         clock-rates = <19200000>;
         is-read-eeprom = <1>;
-        at-current-support = <1>;
-        is-diff-af-support = <1>;
+	is-diff-af-support = <1>;
     };
+
 };
 
 &cam_cci1 {

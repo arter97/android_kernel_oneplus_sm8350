@@ -124,15 +124,17 @@ struct cam_sensor_ctrl_t {
 	uint32_t last_flush_req;
 	uint16_t pipeline_delay;
 #ifdef OPLUS_FEATURE_CAMERA_COMMON
+	uint32_t adv_powerup_vendor;
 	int is_support_laser;
         int is_read_eeprom;
+        int reg_setting_ver;
         struct mutex sensor_power_state_mutex;
         struct mutex sensor_initsetting_mutex;
         enum cam_sensor_power_state sensor_power_state;
         enum cam_sensor_setting_state sensor_initsetting_state;
         struct task_struct *sensor_open_thread;
-        int at_current_support;
-        int is_diff_af_support;
+	int is_diff_af_support;
+	bool use_rdi_sof_apply;  //lanhe add for explorer latency mipi tx.
 #endif
 };
 

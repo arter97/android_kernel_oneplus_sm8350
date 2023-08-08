@@ -151,6 +151,7 @@ static int cam_jpeg_process_next_hw_update(void *priv, void *data,
 		buf_data->evt_param = CAM_SYNC_JPEG_EVENT_START_HW_ERR;
 		goto end_error;
 	}
+
 	cam_cpas_notify_event("JPEG Submit", config_args->request_id);
 
 	return 0;

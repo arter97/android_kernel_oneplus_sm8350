@@ -382,6 +382,22 @@ int cam_eeprom_parse_dt(struct cam_eeprom_ctrl_t *e_ctrl)
 		}
 	}
 #ifdef OPLUS_FEATURE_CAMERA_COMMON
+	CAM_INFO(CAM_EEPROM, "calling eprom devm reg=%d", soc_info->num_rgltr);
+	/* Initialize regulators to default parameters */
+	for (i = 0; i < soc_info->num_rgltr; i++) {
+		soc_info->rgltr[i] = devm_regulator_get(soc_info->dev,
+					soc_info->rgltr_name[i]);
+		if (IS_ERR_OR_NULL(soc_info->rgltr[i])) {
+			rc = PTR_ERR(soc_info->rgltr[i]);
+			rc = rc ? rc : -EINVAL;
+			CAM_ERR(CAM_EEPROM, "get failed for regulator %s",
+				 soc_info->rgltr_name[i]);
+			return rc;
+		}
+		CAM_INFO(CAM_EEPROM, "get for regulator %s",
+			soc_info->rgltr_name[i]);
+	}
+
 	ret = of_property_read_u32(of_node, "change_cci", &id);
 	if (ret) {
 	    e_ctrl->change_cci = 0x00;

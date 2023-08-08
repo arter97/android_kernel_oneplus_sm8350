@@ -16,6 +16,10 @@
 #include <linux/time.h>
 #include <linux/types.h>
 
+#define OIS_FW_DOWNLOAD_INTIAL -1
+#define OIS_FW_DOWNLOAD_START   1
+#define OIS_FW_DOWNLOAD_COMPLETED     0
+
 //int RamWrite32A(uint32_t addr, uint32_t data);
 //int RamRead32A(uint32_t addr, uint32_t* data);
 int RamWrite32A_oneplus(struct cam_ois_ctrl_t *o_ctrl, uint32_t addr, uint32_t data);
@@ -34,6 +38,7 @@ int WRITE_QTIMER_TO_OIS (struct cam_ois_ctrl_t *o_ctrl);
 int OIS_READ_HALL_DATA_TO_UMD_NEW (struct cam_ois_ctrl_t *o_ctrl,struct i2c_settings_array *i2c_settings);
 
 int32_t oplus_cam_ois_construct_default_power_setting(struct cam_sensor_power_ctrl_t *power_info);
+void  ois_write_fwstate(int state );
 
 #endif
 /* _DOWNLOAD_OIS_FW_H_ */

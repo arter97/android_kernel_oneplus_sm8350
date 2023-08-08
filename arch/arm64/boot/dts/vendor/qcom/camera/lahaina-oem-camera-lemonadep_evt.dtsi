@@ -49,6 +49,10 @@
 */
 };
 
+&pm8350c_switch2 {
+    /delete-property/ qcom,symmetry-en;
+};
+
 &L3I {
     regulator-always-on;
 };
@@ -104,7 +108,6 @@
     };
 };
 &cam_cci0 {
-
     actuator_rear_0: qcom,actuator@0 {
         cell-index = <0>;
         compatible = "qcom,actuator";
@@ -196,7 +199,6 @@
         clock-cntl-level = "nominal";
         clock-rates = <19200000>;
         is-support-laser = <1>;
-        at-current-support = <1>;
     };
 
     actuator_rear_1: qcom,actuator@1 {
@@ -209,7 +211,6 @@
         rgltr-min-voltage = <3200000>;
         rgltr-max-voltage = <3960000>;
         rgltr-load-current = <1000000>;
-        need-check-pid;
     };
 
     eeprom_rear_1: qcom,eeprom@1 {
@@ -283,8 +284,7 @@
         clock-cntl-level = "nominal";
         clock-rates = <19200000>;
         is-read-eeprom = <1>;
-        at-current-support = <1>;
-        is-diff-af-support = <1>;
+	is-diff-af-support = <1>;
     };
 
 //Mono camera
@@ -363,7 +363,6 @@
 };
 
 &cam_cci1 {
-
     ois_rear_0: qcom,ois@0{
         cell-index = <0>;
         reg = <0>;

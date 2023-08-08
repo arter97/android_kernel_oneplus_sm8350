@@ -107,10 +107,12 @@ struct cam_hw_done_event_data {
  * struct cam_hw_acquire_args - Payload for acquire command
  *
  * @context_data:          Context data pointer for the callback function
+ * @ctx_id:                Core context id
  * @event_cb:              Callback function array
  * @num_acq:               Total number of acquire in the payload
  * @acquire_info:          Acquired resource array pointer
  * @ctxt_to_hw_map:        HW context (returned)
+ * @hw_mgr_ctx_id          HWMgr context id(returned)
  * @custom_enabled:        ctx has custom enabled
  * @use_frame_header_ts:   Use frame header for qtimer ts
  * @support_consumed_addr: The platform has last consumed addr register
@@ -133,6 +135,9 @@ struct cam_hw_acquire_args {
 	bool                         custom_enabled;
 	bool                         use_frame_header_ts;
 	bool                         support_consumed_addr;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON//lanhe todo
+	bool                         use_rdi_sof;
+#endif
 
 	uint32_t    acquired_hw_id[CAM_MAX_ACQ_RES];
 	uint32_t    acquired_hw_path[CAM_MAX_ACQ_RES][CAM_MAX_HW_SPLIT];

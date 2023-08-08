@@ -795,9 +795,15 @@ struct cam_isp_tpg_core_config {
 	__u32   tpg_params[6];
 } __attribute__((packed));
 
+/**
+ * struct cam_isp_anchor_config - ISP anchor configuration
+ *
+ * @anchor_instance   : Indicate whether it is anchor instance
+ * @reserved          : reserved
+ */
 struct cam_isp_anchor_config {
-    __u32   anchor_instance;
-    __u32   reserved;
+	__u32   anchor_instance;
+	__u32   reserved;
 } __attribute__((packed));
 
 /**

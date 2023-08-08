@@ -195,11 +195,11 @@ struct cam_ois_ctrl_t {
 	uint8_t ois_fw_flag;
 	uint8_t is_ois_calib;
 	struct cam_ois_opcode opcode;
-	enum cam_ois_type_vendor ois_type;
-	uint8_t ois_gyro_position;
-	uint8_t ois_gyro_vendor;
-	uint8_t ois_actuator_vendor;
-	uint8_t ois_module_vendor;
+	enum cam_ois_type_vendor ois_type;  //Master or Slave
+	uint8_t ois_gyro_position;          //Gyro positon
+	uint8_t ois_gyro_vendor;            //Gyro vendor
+	uint8_t ois_actuator_vendor;        //Actuator vendor
+	uint8_t ois_module_vendor;          //Module vendor
 	struct mutex ois_read_mutex;
 	bool ois_read_thread_start_to_read;
 	struct task_struct *ois_read_thread;
@@ -219,11 +219,12 @@ struct cam_ois_ctrl_t {
 #ifdef OPLUS_FEATURE_CAMERA_COMMON
         uint8_t ois_eis_function;
         uint8_t ois_change_cci;
-        struct task_struct *ois_downloadfw_thread;
-        struct mutex do_ioctl_ois;
-        enum cam_ois_download_fw_state ois_download_fw_done;
-        enum cam_ois_close_state ois_fd_have_close_state;
-        int  cam_ois_download_fw_in_advance;
+	/*ois download in advance*/
+	struct task_struct *ois_downloadfw_thread;
+	struct mutex do_ioctl_ois;
+	enum cam_ois_download_fw_state ois_download_fw_done;
+	enum cam_ois_close_state ois_fd_have_close_state;
+	int  cam_ois_download_fw_in_advance;
 
 #endif
 };

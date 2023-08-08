@@ -20,6 +20,10 @@
 #include "cam_isp_context.h"
 #include "cam_common_util.h"
 #include "cam_req_mgr_debug.h"
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+//lanhe add
+#include "cam_vfe_hw_intf.h"
+#endif
 
 static const char isp_dev_name[] = "cam-isp";
 
@@ -727,16 +731,16 @@ static void __cam_isp_ctx_send_sof_timestamp(
 	struct cam_req_mgr_message   req_msg;
 //	struct cam_context *ctx = ctx_isp->base;
 
-    if ((!ctx_isp->is_anchor_instance) &&
-        (sof_event_status == CAM_REQ_MGR_SOF_EVENT_SUCCESS)) {
-        CAM_DBG(CAM_ISP,
-            "CTX:%d isn't anchor instance, don't send sof event for req:%lld",
-            ctx->ctx_id, request_id);
-        return;
-    }
+	if ((!ctx_isp->is_anchor_instance) &&
+		(sof_event_status == CAM_REQ_MGR_SOF_EVENT_SUCCESS)) {
+		CAM_DBG(CAM_ISP,
+			"CTX:%d isn't anchor instance, don't send sof event for req:%lld",
+			ctx->ctx_id, request_id);
+		return;
+	}
 
-	if ((ctx_isp->use_frame_header_ts) && (request_id) &&
-		(sof_event_status == CAM_REQ_MGR_SOF_EVENT_SUCCESS))
+        if ((ctx_isp->use_frame_header_ts) && (request_id) &&
+            (sof_event_status == CAM_REQ_MGR_SOF_EVENT_SUCCESS))
 		goto end;
 
 	req_msg.session_hdl = ctx_isp->base->session_hdl;
@@ -746,6 +750,7 @@ static void __cam_isp_ctx_send_sof_timestamp(
 	req_msg.u.frame_msg.link_hdl = ctx_isp->base->link_hdl;
 	req_msg.u.frame_msg.sof_status = sof_event_status;
 	req_msg.u.frame_msg.frame_id_meta = ctx_isp->frame_id_meta;
+	ctx_isp->notified_req_id = request_id;
 
 	CAM_DBG(CAM_ISP,
 		"ctx:%d request id:%lld frame number:%lld SOF time stamp:0x%llx status:%u",
@@ -1459,6 +1464,21 @@ static int __cam_isp_ctx_handle_buf_done_verify_addr(
 				req->request_id);
 	}
 
+    /*
+     * we get the buf done before the reg upd.
+     * the consumed address for wait req, otherwise, we
+     * can't verify the consumed address.
+     */
+    if (ctx_isp->active_req_cnt == 1) {
+        if (!list_empty(&ctx->wait_req_list)) {
+        	next_req = list_first_entry(&ctx->wait_req_list,
+        			struct cam_ctx_request, list);
+
+        	__cam_isp_ctx_buf_done_match_req(next_req, done,
+        		&irq_delay_detected);
+        }
+	}
+
 	/*
 	 * If irq delay isn't detected, then we need to verify
 	 * the consumed address for current req, otherwise, we
@@ -1728,6 +1748,7 @@ static int __cam_isp_ctx_notify_sof_in_activated_state(
 	uint64_t last_cdm_done_req = 0;
 	struct cam_isp_hw_epoch_event_data *epoch_done_event_data =
 			(struct cam_isp_hw_epoch_event_data *)evt_data;
+	char trace[64] = {0};
 
 	if (!evt_data) {
 		CAM_ERR(CAM_ISP, "invalid event data");
@@ -1801,7 +1822,6 @@ static int __cam_isp_ctx_notify_sof_in_activated_state(
 					req->request_id,
 					ctx_isp->active_req_cnt, ctx->ctx_id);
 			}
-
 		} else if (req_isp->bubble_detected) {
 			ctx_isp->bubble_frame_cnt++;
 			CAM_DBG(CAM_ISP,
@@ -1853,8 +1873,13 @@ notify_only:
 			}
 		}
 
-		if (ctx_isp->substate_activated == CAM_ISP_CTX_ACTIVATED_BUBBLE)
+		if (ctx_isp->substate_activated == CAM_ISP_CTX_ACTIVATED_BUBBLE && ctx_isp->bubble_req_id - ctx_isp->notified_req_id <= 1) {
 			request_id = 0;
+			memset(trace, 0, sizeof(trace));
+			snprintf(trace, sizeof(trace), "KMD %d_4 Skip Frame", ctx->link_hdl);
+			trace_int(trace, 0);
+			trace_begin_end("Req[%lld] CAM_ISP_CTX_ACTIVATED_BUBBLE", req->request_id);
+		}
 
 		__cam_isp_ctx_send_sof_timestamp(ctx_isp, request_id,
 			CAM_REQ_MGR_SOF_EVENT_SUCCESS);
@@ -2095,6 +2120,7 @@ static int __cam_isp_ctx_epoch_in_applied(struct cam_isp_context *ctx_isp,
 	list_del_init(&req->list);
 	list_add_tail(&req->list, &ctx->active_req_list);
 	ctx_isp->active_req_cnt++;
+	ctx_isp->bubble_req_id = req->request_id;
 	CAM_DBG(CAM_REQ, "move request %lld to active list(cnt = %d), ctx %u",
 		req->request_id, ctx_isp->active_req_cnt, ctx->ctx_id);
 
@@ -2110,8 +2136,9 @@ static int __cam_isp_ctx_epoch_in_applied(struct cam_isp_context *ctx_isp,
 			break;
 		}
 	}
+
 	CAM_DBG(CAM_ISP,
-		"ctx %d req:%lld bubble_report:%d bubble_detected:%d reported_req_id:%d",
+		"ctx %d req:%lld bubble_report:%d bubble_detected:%d reported_req_id:%lld",
 		ctx->ctx_id, req->request_id, req_isp->bubble_report,
 		req_isp->bubble_detected, ctx_isp->reported_req_id);
 
@@ -2274,6 +2301,8 @@ static int __cam_isp_ctx_epoch_in_bubble_applied(
 		ctx->ctx_id, req_isp->bubble_report, req->request_id);
 	req_isp->reapply = true;
 	req_isp->cdm_reset_before_apply = false;
+	req_isp->num_acked = 0;
+	req_isp->num_deferred_acks = 0;
 
 	if (req_isp->bubble_report && ctx->ctx_crm_intf &&
 		ctx->ctx_crm_intf->notify_err) {
@@ -5053,6 +5082,9 @@ static int __cam_isp_ctx_acquire_hw_v2(struct cam_context *ctx,
 	param.num_acq = CAM_API_COMPAT_CONSTANT;
 	param.acquire_info_size = cmd->data_size;
 	param.acquire_info = (uint64_t) acquire_hw_info;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON//lanhe todo
+	param.use_rdi_sof = (cmd->reserved&CAM_IFE_CTX_RDI_SOF_EN)?true:false;
+#endif
 
 	/* call HW manager to reserve the resource */
 	rc = ctx->hw_mgr_intf->hw_acquire(ctx->hw_mgr_intf->hw_mgr_priv,
@@ -5323,8 +5355,8 @@ static int __cam_isp_ctx_start_dev_in_ready(struct cam_context *ctx,
 	struct cam_isp_ctx_req          *req_isp;
 	struct cam_isp_context          *ctx_isp =
 		(struct cam_isp_context *) ctx->ctx_priv;
-    struct cam_hw_cmd_args           hw_cmd_args;
-    struct cam_isp_hw_cmd_args       isp_hw_cmd_args;
+	struct cam_hw_cmd_args           hw_cmd_args;
+	struct cam_isp_hw_cmd_args       isp_hw_cmd_args;
 
 	if (cmd->session_handle != ctx->session_hdl ||
 		cmd->dev_handle != ctx->dev_hdl) {
@@ -5410,20 +5442,20 @@ static int __cam_isp_ctx_start_dev_in_ready(struct cam_context *ctx,
 			ctx_isp->offline_context);
 	}
 
-    hw_cmd_args.ctxt_to_hw_map = ctx_isp->hw_ctx;
-    hw_cmd_args.cmd_type = CAM_HW_MGR_CMD_INTERNAL;
-    isp_hw_cmd_args.cmd_type =
-        CAM_ISP_HW_MGR_GET_ANCHOR_CONFIG;
-    hw_cmd_args.u.internal_args = (void *)&isp_hw_cmd_args;
-    rc = ctx->hw_mgr_intf->hw_cmd(
-        ctx->hw_mgr_intf->hw_mgr_priv,
-        &hw_cmd_args);
-    if (rc) {
-        CAM_ERR(CAM_ISP, "HW command failed");
-        return rc;
-    }
+	hw_cmd_args.ctxt_to_hw_map = ctx_isp->hw_ctx;
+	hw_cmd_args.cmd_type = CAM_HW_MGR_CMD_INTERNAL;
+	isp_hw_cmd_args.cmd_type =
+		CAM_ISP_HW_MGR_GET_ANCHOR_CONFIG;
+	hw_cmd_args.u.internal_args = (void *)&isp_hw_cmd_args;
+	rc = ctx->hw_mgr_intf->hw_cmd(
+	ctx->hw_mgr_intf->hw_mgr_priv,
+		&hw_cmd_args);
+	if (rc) {
+		CAM_ERR(CAM_ISP, "HW command failed");
+		return rc;
+	}
 
-    ctx_isp->is_anchor_instance = isp_hw_cmd_args.u.is_anchor_instance;
+	ctx_isp->is_anchor_instance = isp_hw_cmd_args.u.is_anchor_instance;
 
 	/*
 	 * Only place to change state before calling the hw due to
@@ -5566,6 +5598,8 @@ static int __cam_isp_ctx_stop_dev_in_activated_unlock(
 	ctx_isp->active_req_cnt = 0;
 	ctx_isp->reported_req_id = 0;
 	ctx_isp->last_applied_req_id = 0;
+	ctx_isp->bubble_req_id = 0;
+	ctx_isp->notified_req_id = 0;
 	ctx_isp->req_info.last_bufdone_req_id = 0;
 	ctx_isp->bubble_frame_cnt = 0;
 	ctx_isp->apply_fail_cnt_on_bubble = 0;
@@ -5777,6 +5811,35 @@ static int __cam_isp_ctx_handle_irq_in_activated(void *context,
 		(struct cam_isp_context *)ctx->ctx_priv;
 
 	spin_lock(&ctx->lock);
+
+#ifdef OPLUS_FEATURE_CAMERA_COMMON //lanhe todo:
+	if(evt_id == CAM_ISP_HW_EVENT_SOF)
+	{
+		uint32_t res_id =
+			((struct cam_isp_hw_sof_event_data *)evt_data)->res_id;
+		if(res_id == CAM_ISP_HW_VFE_IN_RDI0)
+		{
+			struct cam_req_mgr_trigger_notify  notify;
+			ctx_isp->rdi_frame_id++;
+			//add process logic
+			if (ctx_isp->subscribe_event & CAM_TRIGGER_POINT_SOF) {
+				notify.link_hdl = ctx->link_hdl;
+				notify.dev_hdl = ctx->dev_hdl;
+				notify.frame_id = ctx_isp->rdi_frame_id;
+				notify.trigger = CAM_TRIGGER_POINT_RDI_SOF;
+				notify.req_id = ctx_isp->req_info.last_bufdone_req_id;
+				notify.sof_timestamp_val = ctx_isp->sof_timestamp_val;
+				notify.trigger_id = ctx_isp->trigger_id;
+
+				ctx->ctx_crm_intf->notify_trigger(&notify);
+				CAM_DBG(CAM_ISP, "Notify CRM  RDI SOF frame %lld",
+					ctx_isp->rdi_frame_id);
+			}
+			spin_unlock(&ctx->lock);
+			return rc;
+		}
+	}
+#endif
 
 	trace_cam_isp_activated_irq(ctx, ctx_isp->substate_activated, evt_id,
 		__cam_isp_ctx_get_event_ts(evt_id, evt_data));
@@ -6080,6 +6143,9 @@ int cam_isp_context_init(struct cam_isp_context *ctx,
 
 	ctx->base = ctx_base;
 	ctx->frame_id = 0;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON //lanhe todo:
+	ctx->rdi_frame_id = 0;
+#endif
 	ctx->custom_enabled = false;
 	ctx->use_frame_header_ts = false;
 	ctx->active_req_cnt = 0;

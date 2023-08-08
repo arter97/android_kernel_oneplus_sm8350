@@ -537,7 +537,7 @@ static void cam_eeprom_component_unbind(struct device *dev,
 	kfree(soc_info->soc_private);
 	kfree(e_ctrl->io_master_info.cci_client);
 #ifdef OPLUS_FEATURE_CAMERA_COMMON
-        kfree(e_ctrl->io_master_info.cci_client);
+        kfree(e_ctrl->io_master_info_ois.cci_client);
 #endif
 	platform_set_drvdata(pdev, NULL);
 	v4l2_set_subdevdata(&e_ctrl->v4l2_dev_str.sd, NULL);

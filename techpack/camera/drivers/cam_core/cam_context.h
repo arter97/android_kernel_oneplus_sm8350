@@ -194,6 +194,9 @@ struct cam_ctx_ops {
  * @state_machine:         Top level state machine
  * @ctx_priv:              Private context pointer
  * @ctxt_to_hw_map:        Context to hardware mapping pointer
+ * @hw_mgr_ctx_id:         Hw Mgr context id returned from hw mgr
+ * @ctx_id_string:         Context id string constructed with dev type,
+ *                         ctx id, hw mgr ctx id
  * @refcount:              Context object refcount
  * @node:                  The main node to which this context belongs
  * @sync_mutex:            mutex to sync with sync cb thread

@@ -272,6 +272,24 @@ int32_t cam_sensor_parse_dt(struct cam_sensor_ctrl_t *s_ctrl)
 			return rc;
 		}
 	}
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	CAM_INFO(CAM_SENSOR, "calling devm reg=%d", soc_info->num_rgltr);
+	/* Initialize regulators to default parameters */
+	for (i = 0; i < soc_info->num_rgltr; i++) {
+		soc_info->rgltr[i] = devm_regulator_get(soc_info->dev,
+					soc_info->rgltr_name[i]);
+		if (IS_ERR_OR_NULL(soc_info->rgltr[i])) {
+			rc = PTR_ERR(soc_info->rgltr[i]);
+			rc = rc ? rc : -EINVAL;
+			CAM_ERR(CAM_SENSOR, "get failed for regulator %s",
+				 soc_info->rgltr_name[i]);
+			return rc;
+		}
+		CAM_INFO(CAM_SENSOR, "get for regulator %s",
+			soc_info->rgltr_name[i]);
+	}
+#endif
+
 	rc = msm_sensor_init_default_params(s_ctrl);
 	if (rc < 0) {
 		CAM_ERR(CAM_SENSOR,

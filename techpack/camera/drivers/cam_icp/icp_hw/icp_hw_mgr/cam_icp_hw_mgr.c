@@ -5746,7 +5746,7 @@ static int cam_icp_mgr_acquire_hw(void *hw_mgr_priv, void *acquire_hw_args)
 	args->hw_mgr_ctx_id = ctx_data->ctx_id;
 
 	snprintf(ctx_data->ctx_id_string, sizeof(ctx_data->ctx_id_string),
-		"%s_ctx[%d]_hwmgrctx[%d]_Submit",
+		"%s_ctx[%u]_hwmgrctx[%u]_Submit",
 		cam_icp_dev_type_to_name(
 		ctx_data->icp_dev_acquire_info->dev_type),
 		args->ctx_id,

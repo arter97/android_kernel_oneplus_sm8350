@@ -171,6 +171,7 @@ camera-$(CONFIG_SPECTRA_SENSOR) += \
 	cam_sensor_module/cam_sensor_utils/cam_sensor_util.o \
 	cam_sensor_module/cam_res_mgr/cam_res_mgr.o
 
+
 camera-$(CONFIG_SPECTRA_OPLUS) += \
 	oplus/cam_sensor_module/cam_ois/onsemi_fw/fw_download_interface.o \
 	oplus/cam_sensor_module/cam_ois/onsemi_fw/LC898124/HighLevelCmd.o \

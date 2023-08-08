@@ -2175,6 +2175,11 @@ static int cam_ife_hw_mgr_acquire_res_ife_csid_rdi(
 		csid_acquire.drop_enable = true;
 		csid_acquire.crop_enable = true;
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		//lanhe add
+		csid_acquire.use_rdi_sof = ife_ctx->use_rdi_sof;
+#endif
+
 		if (in_port->usage_type)
 			csid_acquire.sync_mode = CAM_ISP_HW_SYNC_MASTER;
 		else
@@ -3102,6 +3107,10 @@ static int cam_ife_mgr_acquire_hw(void *hw_mgr_priv, void *acquire_hw_args)
 
 	ife_ctx->hw_mgr = ife_hw_mgr;
 	ife_ctx->cdm_ops =  cam_cdm_publish_ops();
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+    //lanhe add
+    ife_ctx->use_rdi_sof = acquire_args->use_rdi_sof;
+#endif
 
 	acquire_hw_info =
 		(struct cam_isp_acquire_hw_info *)acquire_args->acquire_info;
@@ -3524,7 +3533,7 @@ static int cam_ife_mgr_acquire_dev(void *hw_mgr_priv, void *acquire_hw_args)
 	acquire_args->ctxt_to_hw_map = ife_ctx;
 	ife_ctx->ctx_in_use = 1;
 	ife_ctx->num_reg_dump_buf = 0;
-    ife_ctx->is_anchor_instance = true;
+	ife_ctx->is_anchor_instance = true;
 
 	cam_ife_hw_mgr_print_acquire_info(ife_ctx, total_pix_port,
 		total_pd_port, total_rdi_port, rc);
@@ -4000,7 +4009,7 @@ static int cam_ife_mgr_config_hw(void *hw_mgr_priv,
 			(ctx->custom_config & CAM_IFE_CUSTOM_CFG_SW_SYNC_ON)) {
 			rem_jiffies = wait_for_completion_timeout(
 				&ctx->config_done_complete,
-				msecs_to_jiffies(60));
+				msecs_to_jiffies(120));
 			if (rem_jiffies == 0) {
 				CAM_ERR(CAM_ISP,
 					"config done completion timeout for req_id=%llu ctx_index %d",
@@ -4817,7 +4826,7 @@ static int cam_ife_mgr_release_hw(void *hw_mgr_priv,
 	ctx->is_offline = false;
 	ctx->pf_mid_found = false;
 	ctx->last_cdm_done_req = 0;
-    ctx->is_anchor_instance = 1;
+	ctx->is_anchor_instance = 1;
 	atomic_set(&ctx->overflow_pending, 0);
 	for (i = 0; i < CAM_IFE_HW_NUM_MAX; i++) {
 		ctx->sof_cnt[i] = 0;
@@ -5583,20 +5592,20 @@ end:
 }
 
 static int cam_isp_blob_anchor_config(
-    struct cam_isp_anchor_config        *anchor_config,
-    struct cam_hw_prepare_update_args   *prepare)
+	struct cam_isp_anchor_config        *anchor_config,
+	struct cam_hw_prepare_update_args   *prepare)
 {
-    int                                 rc = 0;
-    struct cam_ife_hw_mgr_ctx          *ctx = NULL;
+	int                                 rc = 0;
+	struct cam_ife_hw_mgr_ctx          *ctx = NULL;
 
-    ctx = prepare->ctxt_to_hw_map;
+	ctx = prepare->ctxt_to_hw_map;
 
-    ctx->is_anchor_instance = anchor_config->anchor_instance;
+	ctx->is_anchor_instance = anchor_config->anchor_instance;
 
-    CAM_INFO(CAM_ISP, "ctx is anchor instance %d",
-        ctx->is_anchor_instance);
+	CAM_INFO(CAM_ISP, "ctx is anchor instance %d",
+		ctx->is_anchor_instance);
 
-    return rc;
+	return rc;
 }
 
 static int cam_isp_blob_sensor_config(
@@ -6341,7 +6350,7 @@ static int cam_isp_packet_generic_blob_handler(void *user_data,
 		struct cam_isp_sensor_blanking_config  *sensor_blanking_config;
 
 		if (blob_size < sizeof(struct cam_isp_sensor_blanking_config)) {
-			CAM_ERR(CAM_ISP, "Invalid blob size %zu expected %zu",
+			CAM_ERR(CAM_ISP, "Invalid blob size %u expected %zu",
 				blob_size,
 				sizeof(struct cam_isp_sensor_blanking_config));
 			return -EINVAL;
@@ -6360,7 +6369,7 @@ static int cam_isp_packet_generic_blob_handler(void *user_data,
 		struct cam_isp_sensor_config *csid_dim_config;
 
 		if (blob_size < sizeof(struct cam_isp_sensor_config)) {
-			CAM_ERR(CAM_ISP, "Invalid blob size %zu expected %zu",
+			CAM_ERR(CAM_ISP, "Invalid blob size %u expected %zu",
 				blob_size,
 				sizeof(struct cam_isp_sensor_config));
 			return -EINVAL;
@@ -6380,7 +6389,7 @@ static int cam_isp_packet_generic_blob_handler(void *user_data,
 		struct cam_isp_tpg_core_config *tpg_config;
 
 		if (blob_size < sizeof(struct cam_isp_tpg_core_config)) {
-			CAM_ERR(CAM_ISP, "Invalid blob size %zu expected %zu",
+			CAM_ERR(CAM_ISP, "Invalid blob size %u expected %zu",
 				blob_size,
 				sizeof(struct cam_isp_tpg_core_config));
 			return -EINVAL;
@@ -6399,7 +6408,7 @@ static int cam_isp_packet_generic_blob_handler(void *user_data,
 		struct cam_isp_anchor_config *anchor_config;
 
 		if (blob_size < sizeof(struct cam_isp_anchor_config)) {
-			CAM_ERR(CAM_ISP, "Invalid blob size %zu expected %zu",
+			CAM_ERR(CAM_ISP, "Invalid blob size %u expected %zu",
 				blob_size,
 				sizeof(struct cam_isp_anchor_config));
 			return -EINVAL;
@@ -7932,8 +7941,20 @@ static int cam_ife_hw_mgr_handle_hw_sof(
 	case CAM_ISP_HW_VFE_IN_RDI1:
 	case CAM_ISP_HW_VFE_IN_RDI2:
 	case CAM_ISP_HW_VFE_IN_RDI3:
+#ifndef OPLUS_FEATURE_CAMERA_COMMON //lanhe todo:
 		if (!ife_hw_mgr_ctx->is_rdi_only_context)
 			break;
+#else
+		if (!ife_hw_mgr_ctx->is_rdi_only_context && !ife_hw_mgr_ctx->use_rdi_sof)
+			break;
+		if(ife_hw_mgr_ctx->use_rdi_sof)
+		{
+			sof_done_event_data.res_id = event_info->res_id;//for hack RDI SOF just for timestamp backup
+			ife_hw_irq_sof_cb(ife_hw_mgr_ctx->common.cb_priv,
+				CAM_ISP_HW_EVENT_SOF, (void *)&sof_done_event_data);
+			break;
+		}
+#endif
 		cam_ife_mgr_cmd_get_sof_timestamp(ife_hw_mgr_ctx,
 			&sof_done_event_data.timestamp,
 			&sof_done_event_data.boot_time);

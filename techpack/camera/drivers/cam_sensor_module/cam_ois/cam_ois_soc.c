@@ -35,6 +35,25 @@ static int cam_ois_get_dt_data(struct cam_ois_ctrl_t *o_ctrl)
 		return -EINVAL;
 	}
 	rc = cam_soc_util_get_dt_properties(soc_info);
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	/* Initialize regulators to default parameters */
+	CAM_INFO(CAM_OIS, "calling devm reg=%d", soc_info->num_rgltr);
+	for (i = 0; i < soc_info->num_rgltr; i++) {
+		soc_info->rgltr[i] = devm_regulator_get(soc_info->dev,
+					soc_info->rgltr_name[i]);
+		if (IS_ERR_OR_NULL(soc_info->rgltr[i])) {
+			rc = PTR_ERR(soc_info->rgltr[i]);
+			rc = rc ? rc : -EINVAL;
+			CAM_ERR(CAM_OIS, "get failed for regulator %s",
+				soc_info->rgltr_name[i]);
+			return rc;
+		}
+		CAM_INFO(CAM_OIS, "get for regulator %s",
+			soc_info->rgltr_name[i]);
+	}
+#endif
+
+
 	if (rc < 0) {
 		CAM_ERR(CAM_OIS, "cam_soc_util_get_dt_properties rc %d",
 			rc);

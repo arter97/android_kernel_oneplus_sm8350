@@ -529,8 +529,8 @@ static ssize_t capture_store(struct kobject *kobj,
 	}
 	if (capture) {
 		if (chip->app0_app.cap_settings.cmd == 0) {
-                        chip->xtalk_peak  = 0;
-                        chip->xtalk_count = 0;
+			chip->xtalk_peak  = 0;
+			chip->xtalk_count = 0;
 			error = tof8801_app0_capture((void *)chip, capture);
 		} else {
 			AMS_MUTEX_UNLOCK(&chip->lock);

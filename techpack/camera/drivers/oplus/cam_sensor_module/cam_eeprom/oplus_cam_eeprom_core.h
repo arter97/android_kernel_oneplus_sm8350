@@ -20,6 +20,12 @@
 		struct cam_write_eeprom_t *cam_write_eeprom);
 	int32_t EEPROM_CommonWrite(struct cam_eeprom_ctrl_t *e_ctrl,
 		struct cam_write_eeprom_t *cam_write_eeprom);
+	int32_t EEPROM_Fm24pc256eWrite(struct cam_eeprom_ctrl_t *e_ctrl,
+		struct cam_write_eeprom_t *cam_write_eeprom);
+	int32_t EEPROM_P24c256cWrite(struct cam_eeprom_ctrl_t *e_ctrl,
+		struct cam_write_eeprom_t *cam_write_eeprom);
+	int32_t EEPROM_ControlWrite(struct cam_eeprom_ctrl_t *e_ctrl,
+		struct cam_write_eeprom_t *cam_write_eeprom);
 	int32_t cam_eeprom_driver_cmd_oem(struct cam_eeprom_ctrl_t *e_ctrl, void *arg);
 	int oplus_cam_eeprom_read_memory(struct cam_eeprom_ctrl_t *e_ctrl,
 		struct cam_eeprom_memory_map_t *emap, int j, uint8_t *memptr);
